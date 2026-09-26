@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, useId, watch } from 'vue'
+import { computed, ref, useId, useTemplateRef, watch } from 'vue'
+import CreateEmployeeDialog from '@/components/users/CreateEmployeeDialog.vue'
 import DashboardLayout from '@/layout/DashboardLayout.vue'
 import type { UserRole } from '@/types/user'
 
 const role = ref<Exclude<UserRole, 'CLIENT'>>('ADMINISTRATOR')
 const activeSection = ref<'employees' | 'clients'>('employees')
 const roleId = useId()
+const employeeDialog = useTemplateRef<InstanceType<typeof CreateEmployeeDialog>>('employee-dialog')
 const availableSections = computed(() =>
   role.value === 'ADMINISTRATOR' ? ['employees', 'clients'] : ['clients'],
 )
@@ -61,13 +63,29 @@ function navigate(section: string) {
     </section>
 
     <section class="preview-content" aria-live="polite" aria-atomic="true">
-      <h1>{{ sectionTitle }}</h1>
+      <div class="section-heading">
+        <h1>{{ sectionTitle }}</h1>
+        <button
+          v-if="role === 'ADMINISTRATOR' && activeSection === 'employees'"
+          type="button"
+          class="add-employee-button"
+          aria-haspopup="dialog"
+          @click="employeeDialog?.open()"
+        >
+          <i class="bi bi-plus-lg" aria-hidden="true"></i>
+          Añadir empleado
+        </button>
+      </div>
       <div class="preview-placeholder">
         <h2>Sección en preparación</h2>
         <p>El contenido de esta sección se incorporará en próximos incrementos.</p>
         <p>Puedes probar el menú lateral, cambiar el rol y ajustar el tamaño de la ventana.</p>
       </div>
     </section>
+    <CreateEmployeeDialog
+      v-if="role === 'ADMINISTRATOR' && activeSection === 'employees'"
+      ref="employee-dialog"
+    />
   </DashboardLayout>
 </template>
 
@@ -148,9 +166,40 @@ function navigate(section: string) {
   box-shadow: none;
 }
 
-.preview-content h1 {
+.section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 20px;
+}
+
+.preview-content h1 {
+  margin: 0;
   font-size: clamp(1.5rem, 4vw, 2rem);
+}
+
+.add-employee-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-small);
+  color: var(--color-white);
+  background: var(--color-primary);
+}
+
+.add-employee-button:hover {
+  background: var(--color-dark);
+}
+
+.add-employee-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .preview-placeholder {

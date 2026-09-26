@@ -7,8 +7,28 @@ import DashboardLayout from '@/layout/DashboardLayout.vue'
 let wrapper: VueWrapper | undefined
 let router: Router
 const routeHistories: Router['options']['history'][] = []
+const dialogPrototype = HTMLDialogElement.prototype
+const originalShowModal = Object.getOwnPropertyDescriptor(dialogPrototype, 'showModal')
+const originalClose = Object.getOwnPropertyDescriptor(dialogPrototype, 'close')
 
 beforeEach(() => {
+  // jsdom does not implement the native dialog methods.
+  Object.defineProperties(dialogPrototype, {
+    showModal: {
+      configurable: true,
+      value: vi.fn(function (this: HTMLDialogElement) {
+        this.setAttribute('open', '')
+      }),
+    },
+    close: {
+      configurable: true,
+      value: vi.fn(function (this: HTMLDialogElement) {
+        if (!this.open) return
+        this.removeAttribute('open')
+        this.dispatchEvent(new Event('close'))
+      }),
+    },
+  })
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({
@@ -23,6 +43,13 @@ afterEach(() => {
   wrapper?.unmount()
   wrapper = undefined
   for (const history of routeHistories.splice(0)) history.destroy()
+  for (const [name, descriptor] of [
+    ['showModal', originalShowModal],
+    ['close', originalClose],
+  ] as const) {
+    if (descriptor) Object.defineProperty(dialogPrototype, name, descriptor)
+    else Reflect.deleteProperty(dialogPrototype, name)
+  }
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
   document.body.innerHTML = ''
@@ -54,10 +81,12 @@ describe('DashboardPreview', () => {
     expect(view.get('h1').text()).toBe('Empleados')
     expect(view.get<HTMLSelectElement>('select').element.value).toBe('ADMINISTRATOR')
     expect(view.get('label').attributes('for')).toBe(view.get('select').attributes('id'))
-    expect(view.findAll('option').map((option) => option.attributes('value'))).toEqual([
-      'ADMINISTRATOR',
-      'EMPLOYEE',
-    ])
+    expect(
+      view
+        .get('.preview-controls select')
+        .findAll('option')
+        .map((option) => option.attributes('value')),
+    ).toEqual(['ADMINISTRATOR', 'EMPLOYEE'])
   })
 
   it('switches between the two preview sections and updates the active menu item', async () => {
@@ -131,6 +160,47 @@ describe('DashboardPreview', () => {
     await flushPromises()
 
     expect(router.currentRoute.value.path).toBe('/')
+  })
+
+  it('opens the creation dialog from employees and returns focus when closed', async () => {
+    const view = await renderPreview()
+    const button = view.get<HTMLButtonElement>('.add-employee-button')
+    const dialog = view.get<HTMLDialogElement>('.employee-dialog')
+    expect(dialog.element.open).toBe(false)
+
+    button.element.focus()
+    await button.trigger('click')
+
+    expect(dialog.element.open).toBe(true)
+    expect(document.activeElement).toBe(view.get('[name="firstName"]').element)
+    await view.get('[aria-label="Cerrar formulario"]').trigger('click')
+    expect(dialog.element.open).toBe(false)
+    expect(document.activeElement).toBe(button.element)
+  })
+
+  it('does not offer employee creation in clients or to the employee role', async () => {
+    const view = await renderPreview()
+    await view.get('[aria-label="Clientes"]').trigger('click')
+
+    expect(view.find('.add-employee-button').exists()).toBe(false)
+    expect(view.find('.employee-dialog').exists()).toBe(false)
+    await view.get('[aria-label="Empleados"]').trigger('click')
+    expect(view.find('.add-employee-button').exists()).toBe(true)
+    await view.get('.preview-controls select').setValue('EMPLOYEE')
+    expect(view.find('.add-employee-button').exists()).toBe(false)
+    expect(view.find('.employee-dialog').exists()).toBe(false)
+  })
+
+  it('closes the dialog if the preview identity changes while it is open', async () => {
+    const view = await renderPreview()
+    await view.get('.add-employee-button').trigger('click')
+    const dialog = view.get<HTMLDialogElement>('.employee-dialog').element
+
+    await view.get('.preview-controls select').setValue('EMPLOYEE')
+
+    expect(dialog.open).toBe(false)
+    expect(view.find('.employee-dialog').exists()).toBe(false)
+    expect(view.get('h1').text()).toBe('Clientes')
   })
 })
 
