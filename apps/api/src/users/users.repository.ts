@@ -3,6 +3,7 @@ import oracle from 'oracledb';
 import { ORACLE_POOL } from '../database/database.module';
 import type { CreateClientRecord } from './types/create-client-record.type';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
+import type { CreateAddressDto } from './dto/create-address.dto';
 
 @Injectable()
 export class UsersRepository {
@@ -25,6 +26,10 @@ export class UsersRepository {
 
   async createClient(data: CreateClientRecord): Promise<number> {
     return this.withTransaction(async (connection) => {
+      const addressId =
+        data.address == null
+          ? null
+          : await this.insertAddress(connection, data.address);
       const binds: Record<string, oracle.BindParameter> = {
         email: { val: data.email, type: oracle.STRING },
         firstName: { val: data.firstName, type: oracle.STRING },
@@ -33,7 +38,7 @@ export class UsersRepository {
         secondSurname: { val: data.secondSurname ?? null, type: oracle.STRING },
         birthday: { val: data.birthday ?? null, type: oracle.STRING },
         phoneNumber: { val: data.phoneNumber ?? null, type: oracle.STRING },
-        addressId: { val: data.addressId ?? null, type: oracle.NUMBER },
+        addressId: { val: addressId, type: oracle.NUMBER },
         clientId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
       };
       const hasLanguage = data.language !== undefined;
@@ -92,6 +97,7 @@ export class UsersRepository {
 
   async createEmployee(data: CreateEmployeeRecord): Promise<number> {
     return this.withTransaction(async (connection) => {
+      const addressId = await this.insertAddress(connection, data.address);
       const result = await connection.execute<{ employeeId?: unknown }>(
         `INSERT INTO EMPLOYEES (
           FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME,
@@ -110,7 +116,7 @@ export class UsersRepository {
           phoneNumber: { val: data.phoneNumber, type: oracle.STRING },
           email: { val: data.email, type: oracle.STRING },
           role: { val: data.role, type: oracle.STRING },
-          addressId: { val: data.addressId, type: oracle.NUMBER },
+          addressId: { val: addressId, type: oracle.NUMBER },
           branchId: { val: data.branchId, type: oracle.NUMBER },
           employeeId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
         },
@@ -152,6 +158,43 @@ export class UsersRepository {
 
       return employeeId;
     });
+  }
+
+  private async insertAddress(
+    connection: oracle.Connection,
+    data: CreateAddressDto,
+  ): Promise<number> {
+    const result = await connection.execute<{ addressId?: unknown }>(
+      `INSERT INTO ADDRESSES (ID_DISTRICT, DETAILS)
+       VALUES (:districtId, :details)
+       RETURNING ID_ADDRESS INTO :addressId`,
+      {
+        districtId: { val: data.districtId, type: oracle.NUMBER },
+        details: { val: data.details ?? null, type: oracle.STRING },
+        addressId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
+      },
+      { autoCommit: false },
+    );
+
+    const returnedIds = result.outBinds?.addressId;
+    if (
+      result.rowsAffected !== 1 ||
+      !Array.isArray(returnedIds) ||
+      returnedIds.length !== 1
+    ) {
+      throw new Error('Oracle did not return a single created address.');
+    }
+
+    const addressId: unknown = returnedIds[0];
+    if (
+      typeof addressId !== 'number' ||
+      !Number.isSafeInteger(addressId) ||
+      addressId < 1
+    ) {
+      throw new Error('Oracle returned an invalid address identifier.');
+    }
+
+    return addressId;
   }
 
   private async withTransaction<T>(

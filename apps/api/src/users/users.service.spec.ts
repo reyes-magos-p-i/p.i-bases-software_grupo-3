@@ -36,7 +36,7 @@ describe('UsersService', () => {
     secondSurname: 'Solano',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
-    addressId: 7,
+    address: { districtId: 7, details: 'Casa azul' },
     language: 'es',
   };
   const employee: CreateEmployeeDto = {
@@ -48,7 +48,7 @@ describe('UsersService', () => {
     secondSurname: 'Solano',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
-    addressId: 7,
+    address: { districtId: 7, details: 'Casa azul' },
     branchId: 3,
   };
   const profiles = [
@@ -134,6 +134,35 @@ describe('UsersService', () => {
     },
   );
 
+  it('preserves a null client address', async () => {
+    await service.create({ ...client, address: null });
+    expect(repository.createClient).toHaveBeenCalledWith(
+      expect.objectContaining({ address: null }),
+    );
+  });
+
+  it.each(profiles)(
+    'maps only allowed address fields for $role',
+    async (profile) => {
+      await service.create({
+        ...profile,
+        address: Object.assign(
+          { districtId: 7, details: 'Casa azul' },
+          { id: 999, privateField: 'secret' },
+        ),
+      });
+      const create =
+        profile.role === UserRole.CLIENT
+          ? repository.createClient
+          : repository.createEmployee;
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: { districtId: 7, details: 'Casa azul' },
+        }),
+      );
+    },
+  );
+
   it('creates a client with only the required profile fields', async () => {
     await expect(
       service.create({
@@ -156,7 +185,7 @@ describe('UsersService', () => {
       secondSurname: undefined,
       birthday: undefined,
       phoneNumber: undefined,
-      addressId: undefined,
+      address: undefined,
       language: undefined,
       ...credentials,
     });

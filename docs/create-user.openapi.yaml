@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Creación administrativa de usuarios
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Contrato preliminar para la comunicación HTTP entre Vue y NestJS.
     El controlador todavía no está registrado en AppModule y esta ruta no
@@ -29,9 +29,13 @@ paths:
       x-required-role: ADMINISTRATOR
       description: |
         Valida los datos, genera una contraseña inicial y guarda el perfil
-        con su hash y salt. Después solicita la entrega por correo.
+        con su hash y salt. Si se proporciona una dirección, se crea junto con
+        el perfil y las credenciales en una misma transacción. Un fallo durante
+        esas inserciones revierte la operación completa. Después del commit
+        solicita la entrega por correo.
         La contraseña, el hash y el salt no forman parte de la respuesta.
-        No se admiten propiedades adicionales en el cuerpo.
+        No se admiten propiedades adicionales en el cuerpo ni en address.
+        Se recibe address con districtId y details; ya no se admite addressId.
 
         Los clientes se guardan en CLIENTS; empleados y administradores,
         en EMPLOYEES. Los identificadores se generan en Oracle y no se envían
@@ -59,7 +63,7 @@ paths:
                   email: cliente@example.com
                   firstName: Ana
               employee:
-                summary: Empleado con dirección y sucursal existentes
+                summary: Empleado con dirección nueva y sucursal existente
                 value:
                   role: EMPLOYEE
                   email: empleado@example.com
@@ -68,10 +72,12 @@ paths:
                   secondSurname: Solano
                   birthday: "2000-02-29"
                   phoneNumber: "+506 8888-8888"
-                  addressId: 7
+                  address:
+                    districtId: 7
+                    details: Casa con portón azul
                   branchId: 3
               administrator:
-                summary: Administrador con dirección y sucursal existentes
+                summary: Administrador con dirección nueva y sucursal existente
                 value:
                   role: ADMINISTRATOR
                   email: administrador@example.com
@@ -80,7 +86,9 @@ paths:
                   secondSurname: Solano
                   birthday: "1990-05-20"
                   phoneNumber: "+506 8888-8888"
-                  addressId: 7
+                  address:
+                    districtId: 7
+                    details: Casa con portón azul
                   branchId: 3
       responses:
         "201":
@@ -178,15 +186,15 @@ components:
           nullable: true
           x-max-utf8-bytes: 20
           description: Máximo 20 bytes UTF-8; permite cadena vacía.
-        addressId:
-          type: integer
-          nullable: true
-          minimum: -9007199254740991
-          maximum: 9007199254740991
+        address:
           description: |
-            Si se proporciona, debe referenciar ADDRESSES.ID_ADDRESS.
-            La validación de formato admite enteros seguros; Oracle comprueba
-            que la dirección exista.
+            Dirección nueva opcional. Si se omite o es null, no se crea una
+            dirección y CLIENTS.ID_ADDRESS se guarda como null.
+          anyOf:
+            - $ref: "#/components/schemas/CreateAddress"
+            - type: object
+              nullable: true
+              enum: [null]
         language:
           type: string
           pattern: '\S'
@@ -207,7 +215,7 @@ components:
         - secondSurname
         - birthday
         - phoneNumber
-        - addressId
+        - address
         - branchId
       description: |
         Contrato compartido por empleados y administradores.
@@ -239,16 +247,34 @@ components:
           pattern: '\S'
           x-max-utf8-bytes: 20
           description: Máximo 20 bytes UTF-8; no admite vacío ni solo espacios.
-        addressId:
-          type: integer
-          minimum: -9007199254740991
-          maximum: 9007199254740991
-          description: Referencia obligatoria a una dirección existente en ADDRESSES.ID_ADDRESS.
+        address:
+          $ref: "#/components/schemas/CreateAddress"
         branchId:
           type: integer
           minimum: -9007199254740991
           maximum: 9007199254740991
           description: Referencia obligatoria a una sucursal existente en CINEMAS.BRANCH_ID.
+    CreateAddress:
+      type: object
+      additionalProperties: false
+      required: [districtId]
+      description: |
+        Se crea en ADDRESSES y Oracle genera ID_ADDRESS. No se reciben
+        identificadores de provincia o cantón: se deducen del distrito.
+        El distrito debe existir; Oracle comprueba la clave foránea.
+      properties:
+        districtId:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Referencia obligatoria a DISTRICTS.ID_DISTRICT.
+        details:
+          type: string
+          nullable: true
+          x-max-utf8-bytes: 255
+          description: |
+            Detalle opcional, máximo 255 bytes UTF-8. Permite cadena vacía.
+            Si se omite, es null o es una cadena vacía, Oracle guarda NULL.
     Email:
       type: string
       format: email

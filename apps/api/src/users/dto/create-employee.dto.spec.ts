@@ -12,12 +12,44 @@ describe('CreateEmployeeDto', () => {
     secondSurname: 'Solano',
     birthday: '2000-02-29',
     phoneNumber: '+506 8888-8888',
-    addressId: 1,
+    address: { districtId: 1 },
     branchId: 2,
   };
 
   const validatePayload = (payload: Record<string, unknown>) =>
     validate(plainToInstance(CreateEmployeeDto, payload));
+
+  it.each([
+    {},
+    [],
+    [{ districtId: 7 }],
+    7,
+    '7',
+    false,
+    { districtId: undefined },
+    { districtId: null },
+    { districtId: '7' },
+    { districtId: 1.5 },
+    { districtId: Number.MAX_SAFE_INTEGER + 1 },
+    { districtId: 7, details: 123 },
+    { districtId: 7, details: 'é'.repeat(128) },
+    { districtId: 7, details: '\uD800' },
+  ])('rejects an invalid nested address %p', async (address) => {
+    const errors = await validatePayload({ ...validPayload, address });
+    expect(errors.map((error) => error.property)).toEqual(['address']);
+  });
+
+  it.each([undefined, null, '', 'é'.repeat(127) + 'a'])(
+    'accepts a nested address with optional details %p',
+    async (details) => {
+      await expect(
+        validatePayload({
+          ...validPayload,
+          address: { districtId: 7, details },
+        }),
+      ).resolves.toEqual([]);
+    },
+  );
 
   it.each(['ADMINISTRATOR', 'EMPLOYEE'])(
     'accepts a valid %s profile',
@@ -58,7 +90,7 @@ describe('CreateEmployeeDto', () => {
     'secondSurname',
     'birthday',
     'phoneNumber',
-    'addressId',
+    'address',
     'branchId',
   ])('requires %s', async (field) => {
     for (const value of [undefined, null]) {
@@ -124,7 +156,7 @@ describe('CreateEmployeeDto', () => {
     expect(errors.map((error) => error.property)).toEqual(['birthday']);
   });
 
-  it.each(['addressId', 'branchId'])(
+  it.each(['branchId'])(
     'rejects non-integer, non-numeric or unsafe values for %s',
     async (field) => {
       for (const value of [
@@ -146,7 +178,7 @@ describe('CreateEmployeeDto', () => {
     },
   );
 
-  it.each(['addressId', 'branchId'])(
+  it.each(['branchId'])(
     'accepts safe integer boundaries for %s',
     async (field) => {
       for (const value of [Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]) {

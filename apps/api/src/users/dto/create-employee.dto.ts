@@ -1,17 +1,21 @@
+import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsDefined,
   IsIn,
   IsInt,
+  IsObject,
   IsString,
   Length,
   Matches,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { MaxUtf8Bytes } from '../../common/validation/max-utf8-bytes.decorator';
 import { UserRole } from '../enums/user-role.enum';
 import { CreateUserBaseDto } from './create-user-base.dto';
+import { CreateAddressDto } from './create-address.dto';
 
 export class CreateEmployeeDto extends CreateUserBaseDto {
   @IsIn([UserRole.ADMINISTRATOR, UserRole.EMPLOYEE], {
@@ -58,17 +62,11 @@ export class CreateEmployeeDto extends CreateUserBaseDto {
   @MaxUtf8Bytes(20)
   phoneNumber: string;
 
-  @IsDefined({ message: 'El identificador de la dirección es obligatorio.' })
-  @IsInt({
-    message: 'El identificador de la dirección debe ser un número entero.',
-  })
-  @Min(Number.MIN_SAFE_INTEGER, {
-    message: 'El identificador de la dirección está fuera del rango admitido.',
-  })
-  @Max(Number.MAX_SAFE_INTEGER, {
-    message: 'El identificador de la dirección está fuera del rango admitido.',
-  })
-  addressId: number;
+  @IsDefined({ message: 'La dirección es obligatoria.' })
+  @IsObject({ message: 'La dirección debe ser un objeto válido.' })
+  @ValidateNested({ message: 'La dirección debe ser un objeto válido.' })
+  @Type(() => CreateAddressDto)
+  address: CreateAddressDto;
 
   @IsDefined({ message: 'El identificador de la sucursal es obligatorio.' })
   @IsInt({

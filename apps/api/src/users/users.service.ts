@@ -55,7 +55,13 @@ export class UsersService {
         secondSurname: data.secondSurname,
         birthday: data.birthday,
         phoneNumber: data.phoneNumber,
-        addressId: data.addressId,
+        address:
+          data.address == null
+            ? data.address
+            : {
+                districtId: data.address.districtId,
+                details: data.address.details,
+              },
         language: data.language,
         passwordHash,
         salt,
@@ -70,7 +76,10 @@ export class UsersService {
         secondSurname: data.secondSurname,
         birthday: data.birthday,
         phoneNumber: data.phoneNumber,
-        addressId: data.addressId,
+        address: {
+          districtId: data.address.districtId,
+          details: data.address.details,
+        },
         branchId: data.branchId,
         passwordHash,
         salt,

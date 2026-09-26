@@ -28,7 +28,7 @@ describe('createUser', () => {
     secondSurname: 'Solano',
     birthday: '2000-02-29',
     phoneNumber: '+506 8888-8888',
-    addressId: 7,
+    address: { districtId: 7, details: 'Casa azul' },
     branchId: 3,
   }
 
@@ -60,6 +60,14 @@ describe('createUser', () => {
     },
   )
 
+  it('posts a client with a new address and preserves optional details', async () => {
+    const { createUser } = await import('@/services/user.service')
+    const payload: CreateClientRequest = { ...client, address: { districtId: 7, details: null } }
+    post.mockResolvedValue({ data: { id: 42, role: 'CLIENT', email: client.email } })
+    await createUser(payload)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/users', payload)
+  })
+
   it('preserves optional client fields and nulls in the request', async () => {
     const { createUser } = await import('@/services/user.service')
     const payload: CreateClientRequest = {
@@ -69,7 +77,7 @@ describe('createUser', () => {
       secondSurname: null,
       birthday: '2000-02-29',
       phoneNumber: '+506 8888-8888',
-      addressId: null,
+      address: null,
       language: 'es-CR',
     }
     post.mockResolvedValue({ data: { id: 42, role: 'CLIENT', email: client.email } })

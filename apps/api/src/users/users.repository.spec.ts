@@ -38,6 +38,8 @@ describe('UsersRepository', () => {
     await module.close();
   });
 
+  const insertedAddress = { rowsAffected: 1, outBinds: { addressId: [7] } };
+
   describe('createClient', () => {
     const client: CreateClientRecord = {
       email: 'cliente@example.com',
@@ -64,20 +66,26 @@ describe('UsersRepository', () => {
         secondSurname: 'Solano',
         birthday: '2000-02-29',
         phoneNumber: '+506 8888-8888',
-        addressId: 7,
+        address: { districtId: 71, details: 'Casa azul' },
         language: 'es-CR',
       };
+
+      connection.execute
+        .mockReset()
+        .mockResolvedValueOnce(insertedAddress)
+        .mockResolvedValueOnce(insertedClient)
+        .mockResolvedValueOnce({ rowsAffected: 1 });
 
       await expect(repository.createClient(data)).resolves.toBe(42);
 
       expect(pool.getConnection).toHaveBeenCalledTimes(1);
-      expect(connection.execute).toHaveBeenCalledTimes(2);
-      const profileSql: string = connection.execute.mock.calls[0][0];
+      expect(connection.execute).toHaveBeenCalledTimes(3);
+      const profileSql: string = connection.execute.mock.calls[1][0];
       expect(profileSql.replace(/\s+/gu, ' ').trim()).toBe(
         "INSERT INTO CLIENTS ( EMAIL, FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME, BIRTHDAY, PHONE_NUMBER, ID_ADDRESS, LANGUAGE ) VALUES ( :email, :firstName, :secondName, :firstSurname, :secondSurname, TO_DATE(:birthday, 'FXYYYY-MM-DD'), :phoneNumber, :addressId, :language ) RETURNING CLIENT_ID INTO :clientId",
       );
       expect(connection.execute).toHaveBeenNthCalledWith(
-        1,
+        2,
         profileSql,
         {
           email: { val: data.email, type: oracle.STRING },
@@ -87,19 +95,19 @@ describe('UsersRepository', () => {
           secondSurname: { val: data.secondSurname, type: oracle.STRING },
           birthday: { val: data.birthday, type: oracle.STRING },
           phoneNumber: { val: data.phoneNumber, type: oracle.STRING },
-          addressId: { val: data.addressId, type: oracle.NUMBER },
+          addressId: { val: 7, type: oracle.NUMBER },
           language: { val: data.language, type: oracle.STRING },
           clientId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
         },
         { autoCommit: false },
       );
 
-      const credentialsSql: string = connection.execute.mock.calls[1][0];
+      const credentialsSql: string = connection.execute.mock.calls[2][0];
       expect(credentialsSql.replace(/\s+/gu, ' ').trim()).toBe(
         'INSERT INTO CLIENT_LOCAL_CREDENTIALS ( CLIENT_ID, PASSWORD_HASH, SALT ) VALUES (:clientId, :passwordHash, :salt)',
       );
       expect(connection.execute).toHaveBeenNthCalledWith(
-        2,
+        3,
         credentialsSql,
         {
           clientId: { val: 42, type: oracle.NUMBER },
@@ -111,7 +119,7 @@ describe('UsersRepository', () => {
       expect(connection.commit).toHaveBeenCalledTimes(1);
       expect(connection.rollback).not.toHaveBeenCalled();
       expect(connection.close).toHaveBeenCalledTimes(1);
-      expect(connection.execute.mock.invocationCallOrder[1]).toBeLessThan(
+      expect(connection.execute.mock.invocationCallOrder[2]).toBeLessThan(
         connection.commit.mock.invocationCallOrder[0],
       );
       expect(connection.commit.mock.invocationCallOrder[0]).toBeLessThan(
@@ -130,7 +138,7 @@ describe('UsersRepository', () => {
             secondSurname: value,
             birthday: value,
             phoneNumber: value,
-            addressId: value,
+            address: value,
           }),
         ).resolves.toBe(42);
 
@@ -148,6 +156,8 @@ describe('UsersRepository', () => {
           expect(binds[field]).toEqual({ val: null, type: oracle.STRING });
         }
         expect(binds.addressId).toEqual({ val: null, type: oracle.NUMBER });
+        expect(connection.execute).toHaveBeenCalledTimes(2);
+        expect(sql).toContain('INSERT INTO CLIENTS');
         expect(binds).not.toHaveProperty('language');
         expect(sql).not.toMatch(/\bLANGUAGE\b|:language/u);
         expect(sql).toContain("TO_DATE(:birthday, 'FXYYYY-MM-DD')");
@@ -335,7 +345,7 @@ describe('UsersRepository', () => {
       secondSurname: 'Solano',
       birthday: '2000-02-29',
       phoneNumber: '+506 8888-8888',
-      addressId: 7,
+      address: { districtId: 71, details: 'Casa azul' },
       branchId: 3,
       passwordHash: 'test-password-hash',
       salt: 'test-salt',
@@ -347,6 +357,7 @@ describe('UsersRepository', () => {
 
     beforeEach(() => {
       connection.execute
+        .mockResolvedValueOnce(insertedAddress)
         .mockResolvedValueOnce(insertedEmployee)
         .mockResolvedValueOnce({ rowsAffected: 1 });
     });
@@ -359,13 +370,13 @@ describe('UsersRepository', () => {
         await expect(repository.createEmployee(data)).resolves.toBe(84);
 
         expect(pool.getConnection).toHaveBeenCalledTimes(1);
-        expect(connection.execute).toHaveBeenCalledTimes(2);
-        const profileSql: string = connection.execute.mock.calls[0][0];
+        expect(connection.execute).toHaveBeenCalledTimes(3);
+        const profileSql: string = connection.execute.mock.calls[1][0];
         expect(profileSql.replace(/\s+/gu, ' ').trim()).toBe(
           "INSERT INTO EMPLOYEES ( FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME, BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID ) VALUES ( :firstName, :secondName, :firstSurname, :secondSurname, TO_DATE(:birthday, 'FXYYYY-MM-DD'), :phoneNumber, :email, :role, :addressId, :branchId ) RETURNING EMPLOYEE_ID INTO :employeeId",
         );
         expect(connection.execute).toHaveBeenNthCalledWith(
-          1,
+          2,
           profileSql,
           {
             firstName: { val: data.firstName, type: oracle.STRING },
@@ -376,18 +387,18 @@ describe('UsersRepository', () => {
             phoneNumber: { val: data.phoneNumber, type: oracle.STRING },
             email: { val: data.email, type: oracle.STRING },
             role: { val: role, type: oracle.STRING },
-            addressId: { val: data.addressId, type: oracle.NUMBER },
+            addressId: { val: 7, type: oracle.NUMBER },
             branchId: { val: data.branchId, type: oracle.NUMBER },
             employeeId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
           },
           { autoCommit: false },
         );
-        const credentialsSql: string = connection.execute.mock.calls[1][0];
+        const credentialsSql: string = connection.execute.mock.calls[2][0];
         expect(credentialsSql.replace(/\s+/gu, ' ').trim()).toBe(
           'INSERT INTO EMPLOYEE_LOCAL_CREDENTIALS ( EMPLOYEE_ID, PASSWORD_HASH, SALT ) VALUES (:employeeId, :passwordHash, :salt)',
         );
         expect(connection.execute).toHaveBeenNthCalledWith(
-          2,
+          3,
           credentialsSql,
           {
             employeeId: { val: 84, type: oracle.NUMBER },
@@ -399,7 +410,7 @@ describe('UsersRepository', () => {
         expect(connection.commit).toHaveBeenCalledTimes(1);
         expect(connection.rollback).not.toHaveBeenCalled();
         expect(connection.close).toHaveBeenCalledTimes(1);
-        expect(connection.execute.mock.invocationCallOrder[1]).toBeLessThan(
+        expect(connection.execute.mock.invocationCallOrder[2]).toBeLessThan(
           connection.commit.mock.invocationCallOrder[0],
         );
         expect(connection.commit.mock.invocationCallOrder[0]).toBeLessThan(
@@ -414,7 +425,7 @@ describe('UsersRepository', () => {
         await expect(
           repository.createEmployee({ ...employee, secondName }),
         ).resolves.toBe(84);
-        expect(connection.execute.mock.calls[0][1].secondName).toEqual({
+        expect(connection.execute.mock.calls[1][1].secondName).toEqual({
           val: null,
           type: oracle.STRING,
         });
@@ -433,7 +444,7 @@ describe('UsersRepository', () => {
         expect(sql).not.toContain(data.passwordHash);
         expect(sql).not.toContain(data.salt);
       }
-      expect(connection.execute.mock.calls[0][1].firstName.val).toBe(
+      expect(connection.execute.mock.calls[1][1].firstName.val).toBe(
         data.firstName,
       );
     });
@@ -448,12 +459,15 @@ describe('UsersRepository', () => {
       { rowsAffected: 1, outBinds: { employeeId: [] } },
       { rowsAffected: 1, outBinds: { employeeId: [1, 2] } },
     ])('rolls back unexpected employee insert results: %p', async (result) => {
-      connection.execute.mockReset().mockResolvedValueOnce(result);
+      connection.execute
+        .mockReset()
+        .mockResolvedValueOnce(insertedAddress)
+        .mockResolvedValueOnce(result);
 
       await expect(repository.createEmployee(employee)).rejects.toThrow(
         'Oracle did not return a single created employee.',
       );
-      expect(connection.execute).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenCalledTimes(2);
       expect(connection.commit).not.toHaveBeenCalled();
       expect(connection.rollback).toHaveBeenCalledTimes(1);
       expect(connection.close).toHaveBeenCalledTimes(1);
@@ -472,15 +486,18 @@ describe('UsersRepository', () => {
     ])(
       'rolls back an invalid generated employee identifier: %p',
       async (employeeId) => {
-        connection.execute.mockReset().mockResolvedValueOnce({
-          rowsAffected: 1,
-          outBinds: { employeeId: [employeeId] },
-        });
+        connection.execute
+          .mockReset()
+          .mockResolvedValueOnce(insertedAddress)
+          .mockResolvedValueOnce({
+            rowsAffected: 1,
+            outBinds: { employeeId: [employeeId] },
+          });
 
         await expect(repository.createEmployee(employee)).rejects.toThrow(
           'Oracle returned an invalid employee identifier.',
         );
-        expect(connection.execute).toHaveBeenCalledTimes(1);
+        expect(connection.execute).toHaveBeenCalledTimes(2);
         expect(connection.commit).not.toHaveBeenCalled();
         expect(connection.rollback).toHaveBeenCalledTimes(1);
         expect(connection.close).toHaveBeenCalledTimes(1);
@@ -490,6 +507,7 @@ describe('UsersRepository', () => {
     it('preserves a generated employee identifier at the safe integer boundary', async () => {
       connection.execute
         .mockReset()
+        .mockResolvedValueOnce(insertedAddress)
         .mockResolvedValueOnce({
           rowsAffected: 1,
           outBinds: { employeeId: [Number.MAX_SAFE_INTEGER] },
@@ -498,7 +516,7 @@ describe('UsersRepository', () => {
       await expect(repository.createEmployee(employee)).resolves.toBe(
         Number.MAX_SAFE_INTEGER,
       );
-      expect(connection.execute.mock.calls[1][1].employeeId.val).toBe(
+      expect(connection.execute.mock.calls[2][1].employeeId.val).toBe(
         Number.MAX_SAFE_INTEGER,
       );
     });
@@ -508,6 +526,7 @@ describe('UsersRepository', () => {
       async (rowsAffected) => {
         connection.execute
           .mockReset()
+          .mockResolvedValueOnce(insertedAddress)
           .mockResolvedValueOnce(insertedEmployee)
           .mockResolvedValueOnce({ rowsAffected });
         await expect(repository.createEmployee(employee)).rejects.toThrow(
@@ -524,10 +543,14 @@ describe('UsersRepository', () => {
       async (step) => {
         const error = new Error('Oracle operation failed');
         if (step === 'profile') {
-          connection.execute.mockReset().mockRejectedValueOnce(error);
+          connection.execute
+            .mockReset()
+            .mockResolvedValueOnce(insertedAddress)
+            .mockRejectedValueOnce(error);
         } else if (step === 'credentials') {
           connection.execute
             .mockReset()
+            .mockResolvedValueOnce(insertedAddress)
             .mockResolvedValueOnce(insertedEmployee)
             .mockRejectedValueOnce(error);
         } else {
@@ -535,7 +558,7 @@ describe('UsersRepository', () => {
         }
         await expect(repository.createEmployee(employee)).rejects.toBe(error);
         expect(connection.execute).toHaveBeenCalledTimes(
-          step === 'profile' ? 1 : 2,
+          step === 'profile' ? 2 : 3,
         );
         expect(connection.commit).toHaveBeenCalledTimes(
           step === 'commit' ? 1 : 0,
@@ -556,7 +579,10 @@ describe('UsersRepository', () => {
       'preserves the operation error when rollback fails=%p and close fails=%p',
       async (rollbackFails, closeFails) => {
         const error = new Error('Original employee insert failure');
-        connection.execute.mockReset().mockRejectedValueOnce(error);
+        connection.execute
+          .mockReset()
+          .mockResolvedValueOnce(insertedAddress)
+          .mockRejectedValueOnce(error);
         if (rollbackFails) {
           connection.rollback.mockRejectedValueOnce(
             new Error('Rollback failed'),
@@ -593,9 +619,12 @@ describe('UsersRepository', () => {
 
   describe('foreign key failures', () => {
     it.each([
+      ['CLIENT', 'FK_ADDRESSES_DISTRICT'],
       ['CLIENT', 'FK_CLIENT_ADDRESS'],
+      ['EMPLOYEE', 'FK_ADDRESSES_DISTRICT'],
       ['EMPLOYEE', 'FK_EMPLOYEES_ADDRESS'],
       ['EMPLOYEE', 'FK_EMPLOYEES_BRANCH'],
+      ['ADMINISTRATOR', 'FK_ADDRESSES_DISTRICT'],
       ['ADMINISTRATOR', 'FK_EMPLOYEES_ADDRESS'],
       ['ADMINISTRATOR', 'FK_EMPLOYEES_BRANCH'],
     ])(
@@ -605,6 +634,8 @@ describe('UsersRepository', () => {
           new Error('Parent key not found: ' + constraint),
           { errorNum: 2291 },
         );
+        if (constraint !== 'FK_ADDRESSES_DISTRICT')
+          connection.execute.mockResolvedValueOnce(insertedAddress);
         connection.execute.mockRejectedValueOnce(error);
         const data = {
           email: 'persona@example.com',
@@ -613,7 +644,7 @@ describe('UsersRepository', () => {
           secondSurname: 'Solano',
           birthday: '2000-02-29',
           phoneNumber: '88888888',
-          addressId: 999,
+          address: { districtId: 999 },
           branchId: 999,
           passwordHash: 'test-password-hash',
           salt: 'test-salt',
@@ -630,12 +661,203 @@ describe('UsersRepository', () => {
               });
 
         await expect(creation).rejects.toBe(error);
+        expect(connection.execute).toHaveBeenCalledTimes(
+          constraint === 'FK_ADDRESSES_DISTRICT' ? 1 : 2,
+        );
+        expect(connection.commit).not.toHaveBeenCalled();
+        expect(connection.rollback).toHaveBeenCalledTimes(1);
+        expect(connection.close).toHaveBeenCalledTimes(1);
+      },
+    );
+  });
+
+  describe('new address transaction', () => {
+    const profile = {
+      email: 'persona@example.com',
+      firstName: 'Ana',
+      firstSurname: 'Núñez',
+      secondSurname: 'Solano',
+      birthday: '2000-02-29',
+      phoneNumber: '88888888',
+      branchId: 3,
+      passwordHash: 'test-hash',
+      salt: 'test-salt',
+    };
+    const address = {
+      districtId: 71,
+      details: "Casa'); DROP TABLE ADDRESSES; --",
+    };
+    const roles = [
+      UserRole.CLIENT,
+      UserRole.EMPLOYEE,
+      UserRole.ADMINISTRATOR,
+    ] as const;
+    const create = (role: (typeof roles)[number]) => {
+      const data = { ...profile, address };
+      return role === UserRole.CLIENT
+        ? repository.createClient(data)
+        : repository.createEmployee({ ...data, role });
+    };
+    const insertedProfile = (role: (typeof roles)[number]) => ({
+      rowsAffected: 1,
+      outBinds:
+        role === UserRole.CLIENT ? { clientId: [42] } : { employeeId: [42] },
+    });
+
+    it.each(roles)(
+      'binds a new address and uses its generated ID for %s on one connection',
+      async (role) => {
+        connection.execute
+          .mockResolvedValueOnce(insertedAddress)
+          .mockResolvedValueOnce(insertedProfile(role))
+          .mockResolvedValueOnce({ rowsAffected: 1 });
+        await expect(create(role)).resolves.toBe(42);
+        expect(pool.getConnection).toHaveBeenCalledTimes(1);
+        expect(connection.execute).toHaveBeenCalledTimes(3);
+        const [sql, binds, options] = connection.execute.mock.calls[0] as [
+          string,
+          Record<string, oracle.BindParameter>,
+          oracle.ExecuteOptions,
+        ];
+        expect(sql.replace(/\s+/gu, ' ').trim()).toBe(
+          'INSERT INTO ADDRESSES (ID_DISTRICT, DETAILS) VALUES (:districtId, :details) RETURNING ID_ADDRESS INTO :addressId',
+        );
+        expect(sql).not.toContain(address.details);
+        expect(binds).toEqual({
+          districtId: { val: 71, type: oracle.NUMBER },
+          details: { val: address.details, type: oracle.STRING },
+          addressId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
+        });
+        expect(options).toEqual({ autoCommit: false });
+        expect(connection.execute.mock.calls[1][1].addressId).toEqual({
+          val: 7,
+          type: oracle.NUMBER,
+        });
+        expect(
+          connection.execute.mock.calls[2][1][
+            role === UserRole.CLIENT ? 'clientId' : 'employeeId'
+          ],
+        ).toEqual({ val: 42, type: oracle.NUMBER });
+        for (const call of connection.execute.mock.calls)
+          expect(call[2]).toEqual({ autoCommit: false });
+        expect(connection.execute.mock.invocationCallOrder[2]).toBeLessThan(
+          connection.commit.mock.invocationCallOrder[0],
+        );
+        expect(connection.commit).toHaveBeenCalledTimes(1);
+        expect(connection.rollback).not.toHaveBeenCalled();
+        expect(connection.close).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each([undefined, null, ''])(
+      'binds optional address details %p',
+      async (details) => {
+        connection.execute
+          .mockResolvedValueOnce(insertedAddress)
+          .mockResolvedValueOnce(insertedProfile(UserRole.CLIENT))
+          .mockResolvedValueOnce({ rowsAffected: 1 });
+        await repository.createClient({
+          ...profile,
+          address: { districtId: 71, details },
+        });
+        expect(connection.execute.mock.calls[0][1].details).toEqual({
+          val: details ?? null,
+          type: oracle.STRING,
+        });
+      },
+    );
+
+    it.each(roles)(
+      'rolls back the complete %s creation at every failed step',
+      async (role) => {
+        for (const step of ['address', 'profile', 'credentials', 'commit']) {
+          jest.clearAllMocks();
+          connection.execute.mockReset();
+          const error = new Error('Insert or commit failed');
+          if (step !== 'address')
+            connection.execute.mockResolvedValueOnce(insertedAddress);
+          if (step === 'credentials' || step === 'commit')
+            connection.execute.mockResolvedValueOnce(insertedProfile(role));
+          if (step === 'commit') {
+            connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
+            connection.commit.mockRejectedValueOnce(error);
+          } else connection.execute.mockRejectedValueOnce(error);
+          await expect(create(role)).rejects.toBe(error);
+          expect(connection.execute).toHaveBeenCalledTimes(
+            step === 'address' ? 1 : step === 'profile' ? 2 : 3,
+          );
+          expect(connection.commit).toHaveBeenCalledTimes(
+            step === 'commit' ? 1 : 0,
+          );
+          expect(connection.rollback).toHaveBeenCalledTimes(1);
+          expect(connection.close).toHaveBeenCalledTimes(1);
+          expect(connection.rollback.mock.invocationCallOrder[0]).toBeLessThan(
+            connection.close.mock.invocationCallOrder[0],
+          );
+        }
+      },
+    );
+
+    it.each([
+      {},
+      { rowsAffected: 0, outBinds: { addressId: [7] } },
+      { rowsAffected: 2, outBinds: { addressId: [7] } },
+      { rowsAffected: 1 },
+      { rowsAffected: 1, outBinds: {} },
+      { rowsAffected: 1, outBinds: { addressId: 7 } },
+      { rowsAffected: 1, outBinds: { addressId: [] } },
+      { rowsAffected: 1, outBinds: { addressId: [7, 8] } },
+    ])(
+      'stops before inserting a user on an unexpected address result %p',
+      async (result) => {
+        connection.execute.mockResolvedValueOnce(result);
+        await expect(create(UserRole.CLIENT)).rejects.toThrow(
+          'Oracle did not return a single created address.',
+        );
         expect(connection.execute).toHaveBeenCalledTimes(1);
         expect(connection.commit).not.toHaveBeenCalled();
         expect(connection.rollback).toHaveBeenCalledTimes(1);
         expect(connection.close).toHaveBeenCalledTimes(1);
       },
     );
+
+    it.each([
+      undefined,
+      null,
+      '7',
+      0,
+      -1,
+      1.5,
+      NaN,
+      Infinity,
+      Number.MAX_SAFE_INTEGER + 1,
+    ])('rolls back an invalid generated address ID %p', async (addressId) => {
+      connection.execute.mockResolvedValueOnce({
+        rowsAffected: 1,
+        outBinds: { addressId: [addressId] },
+      });
+      await expect(create(UserRole.EMPLOYEE)).rejects.toThrow(
+        'Oracle returned an invalid address identifier.',
+      );
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+      expect(connection.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves a generated address ID at the safe integer boundary', async () => {
+      connection.execute
+        .mockResolvedValueOnce({
+          rowsAffected: 1,
+          outBinds: { addressId: [Number.MAX_SAFE_INTEGER] },
+        })
+        .mockResolvedValueOnce(insertedProfile(UserRole.CLIENT))
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+      await create(UserRole.CLIENT);
+      expect(connection.execute.mock.calls[1][1].addressId.val).toBe(
+        Number.MAX_SAFE_INTEGER,
+      );
+    });
   });
 
   describe('clientEmailExists', () => {

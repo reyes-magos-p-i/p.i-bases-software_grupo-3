@@ -6,13 +6,18 @@ interface CreateUserBase {
   secondName?: string | null
 }
 
+export interface CreateAddressRequest {
+  districtId: number
+  details?: string | null
+}
+
 export interface CreateClientRequest extends CreateUserBase {
   role: 'CLIENT'
   firstSurname?: string | null
   secondSurname?: string | null
   birthday?: string | null
   phoneNumber?: string | null
-  addressId?: number | null
+  address?: CreateAddressRequest | null
   language?: string
 }
 
@@ -22,7 +27,7 @@ export interface CreateEmployeeRequest extends CreateUserBase {
   secondSurname: string
   birthday: string
   phoneNumber: string
-  addressId: number
+  address: CreateAddressRequest
   branchId: number
 }
 

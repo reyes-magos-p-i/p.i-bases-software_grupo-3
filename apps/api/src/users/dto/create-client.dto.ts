@@ -1,19 +1,19 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsIn,
-  IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Length,
   Matches,
-  Max,
-  Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { MaxUtf8Bytes } from '../../common/validation/max-utf8-bytes.decorator';
 import { UserRole } from '../enums/user-role.enum';
 import { CreateUserBaseDto } from './create-user-base.dto';
+import { CreateAddressDto } from './create-address.dto';
 
 export class CreateClientDto extends CreateUserBaseDto {
   @IsIn([UserRole.CLIENT], {
@@ -57,16 +57,10 @@ export class CreateClientDto extends CreateUserBaseDto {
   phoneNumber?: string | null;
 
   @IsOptional()
-  @IsInt({
-    message: 'El identificador de la dirección debe ser un número entero.',
-  })
-  @Min(Number.MIN_SAFE_INTEGER, {
-    message: 'El identificador de la dirección está fuera del rango admitido.',
-  })
-  @Max(Number.MAX_SAFE_INTEGER, {
-    message: 'El identificador de la dirección está fuera del rango admitido.',
-  })
-  addressId?: number | null;
+  @IsObject({ message: 'La dirección debe ser un objeto válido.' })
+  @ValidateNested({ message: 'La dirección debe ser un objeto válido.' })
+  @Type(() => CreateAddressDto)
+  address?: CreateAddressDto | null;
 
   @ValidateIf((_object: unknown, value: unknown) => value !== undefined)
   @IsString({ message: 'El idioma debe ser texto.' })

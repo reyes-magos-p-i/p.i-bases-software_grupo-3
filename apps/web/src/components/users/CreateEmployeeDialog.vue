@@ -21,7 +21,7 @@ const props = withDefaults(
 const id = useId()
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
 const draft = reactive<
-  Omit<CreateEmployeeRequest, 'addressId' | 'branchId' | 'secondName'> & {
+  Omit<CreateEmployeeRequest, 'address' | 'branchId' | 'secondName'> & {
     secondName: string
     branchId: number | ''
     provinceId: number | ''

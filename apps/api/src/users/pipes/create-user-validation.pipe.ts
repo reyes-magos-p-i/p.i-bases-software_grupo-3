@@ -7,6 +7,18 @@ import {
 import { CreateClientDto } from '../dto/create-client.dto';
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
 import { UserRole } from '../enums/user-role.enum';
+import type { ValidationError } from 'class-validator';
+
+function validationMessages(errors: ValidationError[]): string[] {
+  return errors.flatMap((error) => [
+    ...Object.entries(error.constraints ?? {}).map(([constraint, message]) =>
+      constraint === 'whitelistValidation'
+        ? 'La solicitud contiene campos no permitidos.'
+        : message,
+    ),
+    ...validationMessages(error.children ?? []),
+  ]);
+}
 
 @Injectable()
 export class CreateUserValidationPipe implements PipeTransform<
@@ -21,13 +33,7 @@ export class CreateUserValidationPipe implements PipeTransform<
     forbidUnknownValues: true,
     validationError: { target: false, value: false },
     exceptionFactory: (errors) => {
-      const messages = errors.flatMap((error) =>
-        Object.entries(error.constraints ?? {}).map(([constraint, message]) =>
-          constraint === 'whitelistValidation'
-            ? 'La solicitud contiene campos no permitidos.'
-            : message,
-        ),
-      );
+      const messages = validationMessages(errors);
       return new BadRequestException(
         [...new Set(messages)],
         'Solicitud inválida',
@@ -52,8 +58,13 @@ export class CreateUserValidationPipe implements PipeTransform<
 
     // These keys can be stripped by Nest or class-transformer before validation.
     if (
-      ['__proto__', 'constructor', 'prototype'].some((key) =>
-        Object.hasOwn(value, key),
+      [value, 'address' in value ? value.address : undefined].some(
+        (object: unknown) =>
+          typeof object === 'object' &&
+          object !== null &&
+          ['__proto__', 'constructor', 'prototype'].some((key) =>
+            Object.hasOwn(object, key),
+          ),
       )
     ) {
       throw new BadRequestException(

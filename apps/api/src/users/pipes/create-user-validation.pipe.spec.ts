@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { BadRequestException } from '@nestjs/common';
 import { CreateClientDto } from '../dto/create-client.dto';
 import { CreateEmployeeDto } from '../dto/create-employee.dto';
+import { CreateAddressDto } from '../dto/create-address.dto';
 import { CreateUserValidationPipe } from './create-user-validation.pipe';
 
 describe('CreateUserValidationPipe', () => {
@@ -19,7 +20,7 @@ describe('CreateUserValidationPipe', () => {
     secondSurname: 'Solano',
     birthday: '2000-02-29',
     phoneNumber: '+506 8888-8888',
-    addressId: 7,
+    address: { districtId: 7, details: 'Casa azul' },
     branchId: 3,
   };
 
@@ -48,6 +49,86 @@ describe('CreateUserValidationPipe', () => {
     expect(result).toMatchObject({ ...client, email: 'cliente@example.com' });
   });
 
+  it.each(['CLIENT', 'EMPLOYEE', 'ADMINISTRATOR'])(
+    'transforms the nested address for %s and rejects the former addressId field',
+    async (role) => {
+      const payload = role === 'CLIENT' ? client : employee;
+      const address = { districtId: 71, details: 'Casa azul' };
+      const result = await pipe.transform({ ...payload, role, address });
+      expect(result.address).toBeInstanceOf(CreateAddressDto);
+      expect(result.address).toEqual(address);
+      const error = await rejection({ ...payload, role, addressId: 7 });
+      expect(error.getResponse()).toHaveProperty('message', [
+        'La solicitud contiene campos no permitidos.',
+      ]);
+    },
+  );
+
+  it('includes nested validation messages without exposing address data', async () => {
+    const error = await rejection({
+      ...employee,
+      address: {
+        districtId: 'private-district',
+        details: { secret: 'private-details' },
+      },
+    });
+    expect(error.getResponse()).toHaveProperty(
+      'message',
+      expect.arrayContaining([
+        'El identificador del distrito debe ser un número entero.',
+        'El detalle de la dirección debe ser texto.',
+      ]),
+    );
+    const body = JSON.stringify(error.getResponse());
+    expect(body).not.toContain('private-district');
+    expect(body).not.toContain('private-details');
+  });
+
+  it.each(['CLIENT', 'EMPLOYEE', 'ADMINISTRATOR'])(
+    'rejects invalid address structures for %s',
+    async (role) => {
+      for (const address of [
+        {},
+        [],
+        [{ districtId: 7 }],
+        { districtId: '7' },
+        { districtId: 7, details: 'é'.repeat(128) },
+      ]) {
+        const error = await rejection({
+          ...(role === 'CLIENT' ? client : employee),
+          role,
+          address,
+        });
+        const response = error.getResponse() as { message: string[] };
+        expect(response.message.length).toBeGreaterThan(0);
+      }
+    },
+  );
+
+  it.each([
+    'provinceId',
+    'cantonId',
+    'id',
+    'addressId',
+    '__proto__',
+    'constructor',
+    'prototype',
+  ])(
+    'rejects an extra nested field %s without disclosing it',
+    async (field) => {
+      const error = await rejection({
+        ...client,
+        address: { districtId: 7, [field]: 'private-extra-value' },
+      });
+      expect(error.getResponse()).toHaveProperty('message', [
+        'La solicitud contiene campos no permitidos.',
+      ]);
+      expect(JSON.stringify(error.getResponse())).not.toContain(
+        'private-extra-value',
+      );
+    },
+  );
+
   it.each(['EMPLOYEE', 'ADMINISTRATOR'])(
     'creates a validated employee instance for %s without changing email casing',
     async (role) => {
@@ -64,7 +145,7 @@ describe('CreateUserValidationPipe', () => {
       secondSurname: 'Solano',
       birthday: '2000-02-29',
       phoneNumber: '88888888',
-      addressId: 7,
+      address: { districtId: 7, details: 'Casa azul' },
       language: 'es-CR',
     };
     const result = await pipe.transform({ ...client, ...fields });
@@ -78,7 +159,7 @@ describe('CreateUserValidationPipe', () => {
       secondSurname: null,
       birthday: null,
       phoneNumber: null,
-      addressId: null,
+      address: null,
     };
     const result = await pipe.transform({ ...client, ...fields });
     expect(result).toMatchObject(fields);
@@ -144,7 +225,7 @@ describe('CreateUserValidationPipe', () => {
         'secondSurname',
         'birthday',
         'phoneNumber',
-        'addressId',
+        'address',
         'branchId',
       ]) {
         await rejection({ ...employee, role, [field]: undefined });
@@ -159,9 +240,9 @@ describe('CreateUserValidationPipe', () => {
     ['secondName', {}],
     ['firstSurname', []],
     ['phoneNumber', 88888888],
-    ['addressId', '7'],
-    ['addressId', 1.5],
-    ['addressId', Number.MAX_SAFE_INTEGER + 1],
+    ['address', '7'],
+    ['address', 1.5],
+    ['address', Number.MAX_SAFE_INTEGER + 1],
     ['birthday', '2023-02-29'],
     ['birthday', '2000-02-29T00:00:00Z'],
     ['firstName', 'á'.repeat(51)],
@@ -176,7 +257,7 @@ describe('CreateUserValidationPipe', () => {
     },
   );
 
-  it.each(['addressId', 'branchId'])(
+  it.each(['address', 'branchId'])(
     'does not coerce an employee %s into a number',
     async (field) => {
       await rejection({ ...employee, [field]: '7' });

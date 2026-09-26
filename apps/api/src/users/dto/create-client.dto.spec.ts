@@ -13,6 +13,38 @@ describe('CreateClientDto', () => {
   const validatePayload = (payload: Record<string, unknown>) =>
     validate(plainToInstance(CreateClientDto, payload));
 
+  it.each([
+    {},
+    [],
+    [{ districtId: 7 }],
+    7,
+    '7',
+    false,
+    { districtId: undefined },
+    { districtId: null },
+    { districtId: '7' },
+    { districtId: 1.5 },
+    { districtId: Number.MAX_SAFE_INTEGER + 1 },
+    { districtId: 7, details: 123 },
+    { districtId: 7, details: 'é'.repeat(128) },
+    { districtId: 7, details: '\uD800' },
+  ])('rejects an invalid nested address %p', async (address) => {
+    const errors = await validatePayload({ ...validPayload, address });
+    expect(errors.map((error) => error.property)).toEqual(['address']);
+  });
+
+  it.each([undefined, null, '', 'é'.repeat(127) + 'a'])(
+    'accepts a nested address with optional details %p',
+    async (details) => {
+      await expect(
+        validatePayload({
+          ...validPayload,
+          address: { districtId: 7, details },
+        }),
+      ).resolves.toEqual([]);
+    },
+  );
+
   it('accepts a client with only the required fields', async () => {
     await expect(validatePayload(validPayload)).resolves.toEqual([]);
   });
@@ -26,7 +58,7 @@ describe('CreateClientDto', () => {
         secondSurname: 'Solano',
         birthday: '2000-02-29',
         phoneNumber: '+506 8888-8888',
-        addressId: 1,
+        address: { districtId: 1 },
       }),
     ).resolves.toEqual([]);
   });
@@ -37,7 +69,7 @@ describe('CreateClientDto', () => {
     'secondSurname',
     'birthday',
     'phoneNumber',
-    'addressId',
+    'address',
   ])('allows an undefined or null %s', async (field) => {
     for (const value of [undefined, null]) {
       await expect(
@@ -118,19 +150,22 @@ describe('CreateClientDto', () => {
     Number.MIN_SAFE_INTEGER - 1,
     Number.MAX_SAFE_INTEGER + 1,
   ])(
-    'rejects a non-integer, non-numeric or unsafe address ID %p',
-    async (addressId) => {
-      const errors = await validatePayload({ ...validPayload, addressId });
+    'rejects a non-integer, non-numeric or unsafe district ID %p',
+    async (districtId) => {
+      const errors = await validatePayload({
+        ...validPayload,
+        address: { districtId },
+      });
 
-      expect(errors.map((error) => error.property)).toEqual(['addressId']);
+      expect(errors.map((error) => error.property)).toEqual(['address']);
     },
   );
 
   it.each([Number.MIN_SAFE_INTEGER, 0, Number.MAX_SAFE_INTEGER])(
-    'accepts the safe integer address ID %p',
-    async (addressId) => {
+    'accepts the safe integer district ID %p',
+    async (districtId) => {
       await expect(
-        validatePayload({ ...validPayload, addressId }),
+        validatePayload({ ...validPayload, address: { districtId } }),
       ).resolves.toEqual([]);
     },
   );
