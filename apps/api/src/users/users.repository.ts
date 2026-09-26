@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import oracle from 'oracledb';
 import { ORACLE_POOL } from '../database/database.module';
 import type { CreateClientRecord } from './types/create-client-record.type';
+import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 
 @Injectable()
 export class UsersRepository {
@@ -23,12 +24,7 @@ export class UsersRepository {
   }
 
   async createClient(data: CreateClientRecord): Promise<number> {
-    const connection = await this.oraclePool.getConnection();
-    let createdClientId: number;
-    let closeFailed = false;
-    let closeError: unknown;
-
-    try {
+    return this.withTransaction(async (connection) => {
       const binds: Record<string, oracle.BindParameter> = {
         email: { val: data.email, type: oracle.STRING },
         firstName: { val: data.firstName, type: oracle.STRING },
@@ -90,8 +86,85 @@ export class UsersRepository {
         throw new Error('Oracle did not create a single credentials record.');
       }
 
+      return clientId;
+    });
+  }
+
+  async createEmployee(data: CreateEmployeeRecord): Promise<number> {
+    return this.withTransaction(async (connection) => {
+      const result = await connection.execute<{ employeeId?: unknown }>(
+        `INSERT INTO EMPLOYEES (
+          FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME,
+          BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID
+        ) VALUES (
+          :firstName, :secondName, :firstSurname, :secondSurname,
+          TO_DATE(:birthday, 'FXYYYY-MM-DD'), :phoneNumber, :email, :role,
+          :addressId, :branchId
+        ) RETURNING EMPLOYEE_ID INTO :employeeId`,
+        {
+          firstName: { val: data.firstName, type: oracle.STRING },
+          secondName: { val: data.secondName ?? null, type: oracle.STRING },
+          firstSurname: { val: data.firstSurname, type: oracle.STRING },
+          secondSurname: { val: data.secondSurname, type: oracle.STRING },
+          birthday: { val: data.birthday, type: oracle.STRING },
+          phoneNumber: { val: data.phoneNumber, type: oracle.STRING },
+          email: { val: data.email, type: oracle.STRING },
+          role: { val: data.role, type: oracle.STRING },
+          addressId: { val: data.addressId, type: oracle.NUMBER },
+          branchId: { val: data.branchId, type: oracle.NUMBER },
+          employeeId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
+        },
+        { autoCommit: false },
+      );
+
+      const returnedIds = result.outBinds?.employeeId;
+      if (
+        result.rowsAffected !== 1 ||
+        !Array.isArray(returnedIds) ||
+        returnedIds.length !== 1
+      ) {
+        throw new Error('Oracle did not return a single created employee.');
+      }
+
+      const employeeId: unknown = returnedIds[0];
+      if (
+        typeof employeeId !== 'number' ||
+        !Number.isSafeInteger(employeeId) ||
+        employeeId < 1
+      ) {
+        throw new Error('Oracle returned an invalid employee identifier.');
+      }
+
+      const credentialsResult = await connection.execute(
+        `INSERT INTO EMPLOYEE_LOCAL_CREDENTIALS (
+          EMPLOYEE_ID, PASSWORD_HASH, SALT
+        ) VALUES (:employeeId, :passwordHash, :salt)`,
+        {
+          employeeId: { val: employeeId, type: oracle.NUMBER },
+          passwordHash: { val: data.passwordHash, type: oracle.STRING },
+          salt: { val: data.salt, type: oracle.STRING },
+        },
+        { autoCommit: false },
+      );
+      if (credentialsResult.rowsAffected !== 1) {
+        throw new Error('Oracle did not create a single credentials record.');
+      }
+
+      return employeeId;
+    });
+  }
+
+  private async withTransaction<T>(
+    operation: (connection: oracle.Connection) => Promise<T>,
+  ): Promise<T> {
+    const connection = await this.oraclePool.getConnection();
+    let result: T;
+    let closeFailed = false;
+    let closeError: unknown;
+
+    try {
+      result = await operation(connection);
       await connection.commit();
-      createdClientId = clientId;
     } catch (error) {
       try {
         await connection.rollback();
@@ -112,6 +185,6 @@ export class UsersRepository {
     if (closeFailed) {
       throw closeError;
     }
-    return createdClientId;
+    return result;
   }
 }
