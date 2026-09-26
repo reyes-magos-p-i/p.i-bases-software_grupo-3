@@ -1,0 +1,295 @@
+openapi: 3.0.3
+info:
+  title: Creación administrativa de usuarios
+  version: 0.1.0
+  description: |
+    Contrato preliminar para la comunicación HTTP entre Vue y NestJS.
+    El controlador todavía no está registrado en AppModule y esta ruta no
+    está disponible en la aplicación principal. Las pruebas HTTP utilizan
+    un servicio simulado.
+
+    La operación está destinada exclusivamente a administradores.
+    La autorización del solicitante y el proveedor real de correo están
+    pendientes de integración. Este documento no define todavía un esquema
+    de autenticación; su ausencia no autoriza el acceso público a la operación.
+    El campo role del cuerpo identifica la cuenta que se desea crear y no
+    acredita los permisos de quien hace la solicitud.
+
+    Los límites de texto se expresan en bytes UTF-8 mediante la extensión
+    x-max-utf8-bytes. No equivalen a límites de caracteres: por ejemplo,
+    una letra acentuada puede ocupar varios bytes. Las herramientas OpenAPI
+    no validan automáticamente esta extensión; el backend aplica los límites.
+    No se convierten implícitamente cadenas en números.
+x-integration-status: pending
+paths:
+  /users:
+    post:
+      operationId: createUser
+      summary: Crear un cliente, empleado o administrador
+      x-required-role: ADMINISTRATOR
+      description: |
+        Valida los datos, genera una contraseña inicial y guarda el perfil
+        con su hash y salt. Después solicita la entrega por correo.
+        La contraseña, el hash y el salt no forman parte de la respuesta.
+        No se admiten propiedades adicionales en el cuerpo.
+
+        Los clientes se guardan en CLIENTS; empleados y administradores,
+        en EMPLOYEES. Los identificadores se generan en Oracle y no se envían
+        en la solicitud. La respuesta id identifica el registro en la tabla
+        correspondiente al role, no un identificador global entre ambas tablas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/CreateClient"
+                - $ref: "#/components/schemas/CreateEmployee"
+              discriminator:
+                propertyName: role
+                mapping:
+                  CLIENT: "#/components/schemas/CreateClient"
+                  EMPLOYEE: "#/components/schemas/CreateEmployee"
+                  ADMINISTRATOR: "#/components/schemas/CreateEmployee"
+            examples:
+              client:
+                summary: Cliente con campos mínimos
+                value:
+                  role: CLIENT
+                  email: cliente@example.com
+                  firstName: Ana
+              employee:
+                summary: Empleado con dirección y sucursal existentes
+                value:
+                  role: EMPLOYEE
+                  email: empleado@example.com
+                  firstName: José
+                  firstSurname: Núñez
+                  secondSurname: Solano
+                  birthday: "2000-02-29"
+                  phoneNumber: "+506 8888-8888"
+                  addressId: 7
+                  branchId: 3
+              administrator:
+                summary: Administrador con dirección y sucursal existentes
+                value:
+                  role: ADMINISTRATOR
+                  email: administrador@example.com
+                  firstName: María
+                  firstSurname: Núñez
+                  secondSurname: Solano
+                  birthday: "1990-05-20"
+                  phoneNumber: "+506 8888-8888"
+                  addressId: 7
+                  branchId: 3
+      responses:
+        "201":
+          description: Usuario creado y solicitud de entrega de credenciales completada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedUser"
+              example:
+                id: 42
+                role: CLIENT
+                email: cliente@example.com
+        "400":
+          description: Cuerpo inválido, rol desconocido o campos no permitidos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 400
+                error: Solicitud inválida
+                message:
+                  - El primer nombre es obligatorio.
+        "409":
+          description: La comprobación previa detectó un cliente con el mismo correo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 409
+                error: Conflict
+                message: Ya existe un cliente con ese correo electrónico.
+        "500":
+          description: |
+            Error interno con detalles ocultos. Actualmente incluye errores de
+            persistencia sin traducción específica, como rechazos de claves
+            foráneas o un correo duplicado detectado por Oracle tras la
+            comprobación previa. No presupone que sea seguro repetir la creación.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 500
+                message: Internal server error
+        "502":
+          description: |
+            La cuenta ya fue creada, pero falló el envío de sus credenciales.
+            No repetir automáticamente POST /users para resolver este error:
+            la persistencia ya terminó. La recuperación de la entrega queda
+            pendiente de la integración de correo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 502
+                error: Bad Gateway
+                message: El usuario fue creado, pero no se pudo enviar el correo con sus credenciales.
+components:
+  schemas:
+    CreateClient:
+      type: object
+      additionalProperties: false
+      required: [role, email, firstName]
+      description: |
+        El correo se convierte a minúsculas antes de validarse y guardarse.
+        Los campos opcionales, salvo language, admiten null.
+        No se reciben género, aceptación de términos ni contraseñas.
+      properties:
+        role:
+          type: string
+          enum: [CLIENT]
+        email:
+          $ref: "#/components/schemas/Email"
+        firstName:
+          $ref: "#/components/schemas/RequiredName"
+        secondName:
+          $ref: "#/components/schemas/OptionalName"
+        firstSurname:
+          $ref: "#/components/schemas/OptionalName"
+        secondSurname:
+          $ref: "#/components/schemas/OptionalName"
+        birthday:
+          type: string
+          format: date
+          nullable: true
+          minLength: 10
+          maxLength: 10
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Fecha real con formato YYYY-MM-DD, sin hora ni zona horaria.
+        phoneNumber:
+          type: string
+          nullable: true
+          x-max-utf8-bytes: 20
+          description: Máximo 20 bytes UTF-8; permite cadena vacía.
+        addressId:
+          type: integer
+          nullable: true
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: |
+            Si se proporciona, debe referenciar ADDRESSES.ID_ADDRESS.
+            La validación de formato admite enteros seguros; Oracle comprueba
+            que la dirección exista.
+        language:
+          type: string
+          pattern: '\S'
+          x-max-utf8-bytes: 5
+          default: es
+          description: |
+            Máximo 5 bytes UTF-8. Puede omitirse para usar el valor predeterminado
+            es de Oracle; no admite null, vacío ni solo espacios.
+            Actualmente no se restringe a un catálogo de idiomas.
+    CreateEmployee:
+      type: object
+      additionalProperties: false
+      required:
+        - role
+        - email
+        - firstName
+        - firstSurname
+        - secondSurname
+        - birthday
+        - phoneNumber
+        - addressId
+        - branchId
+      description: |
+        Contrato compartido por empleados y administradores.
+        La dirección y la sucursal son obligatorias para ambos roles.
+        El correo conserva sus mayúsculas y minúsculas.
+      properties:
+        role:
+          type: string
+          enum: [EMPLOYEE, ADMINISTRATOR]
+        email:
+          $ref: "#/components/schemas/Email"
+        firstName:
+          $ref: "#/components/schemas/RequiredName"
+        secondName:
+          $ref: "#/components/schemas/OptionalName"
+        firstSurname:
+          $ref: "#/components/schemas/RequiredName"
+        secondSurname:
+          $ref: "#/components/schemas/RequiredName"
+        birthday:
+          type: string
+          format: date
+          minLength: 10
+          maxLength: 10
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Fecha real con formato YYYY-MM-DD, sin hora ni zona horaria.
+        phoneNumber:
+          type: string
+          pattern: '\S'
+          x-max-utf8-bytes: 20
+          description: Máximo 20 bytes UTF-8; no admite vacío ni solo espacios.
+        addressId:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Referencia obligatoria a una dirección existente en ADDRESSES.ID_ADDRESS.
+        branchId:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Referencia obligatoria a una sucursal existente en CINEMAS.BRANCH_ID.
+    Email:
+      type: string
+      format: email
+      x-max-utf8-bytes: 150
+      description: Correo válido, máximo 150 bytes UTF-8.
+    RequiredName:
+      type: string
+      pattern: '\S'
+      x-max-utf8-bytes: 100
+      description: Máximo 100 bytes UTF-8; no admite vacío ni solo espacios.
+    OptionalName:
+      type: string
+      nullable: true
+      x-max-utf8-bytes: 100
+      description: Máximo 100 bytes UTF-8; permite null y cadena vacía.
+    CreatedUser:
+      type: object
+      additionalProperties: false
+      required: [id, role, email]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        role:
+          type: string
+          enum: [CLIENT, EMPLOYEE, ADMINISTRATOR]
+        email:
+          $ref: "#/components/schemas/Email"
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [statusCode, message]
+      properties:
+        statusCode:
+          type: integer
+        error:
+          type: string
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
