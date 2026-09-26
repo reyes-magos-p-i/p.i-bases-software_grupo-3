@@ -1,27 +1,33 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, useId, useTemplateRef } from 'vue'
+import { computed, onBeforeUnmount, reactive, useId, useTemplateRef, watch } from 'vue'
 import type { CreateEmployeeRequest } from '@/types/user'
+import type { CantonOption, DistrictOption, ProvinceOption } from '@/types/address'
 
 interface CatalogOption {
   id: number
   label: string
 }
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
-    addresses?: readonly CatalogOption[]
+    provinces?: readonly ProvinceOption[]
+    cantons?: readonly CantonOption[]
+    districts?: readonly DistrictOption[]
     branches?: readonly CatalogOption[]
   }>(),
-  { addresses: () => [], branches: () => [] },
+  { provinces: () => [], cantons: () => [], districts: () => [], branches: () => [] },
 )
 
 const id = useId()
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
-const firstNameInput = useTemplateRef<HTMLInputElement>('first-name')
 const draft = reactive<
-  Omit<CreateEmployeeRequest, 'addressId' | 'branchId'> & {
-    addressId: number | ''
+  Omit<CreateEmployeeRequest, 'addressId' | 'branchId' | 'secondName'> & {
+    secondName: string
     branchId: number | ''
+    provinceId: number | ''
+    cantonId: number | ''
+    districtId: number | ''
+    details: string
   }
 >({
   firstName: '',
@@ -32,19 +38,198 @@ const draft = reactive<
   email: '',
   phoneNumber: '',
   role: 'EMPLOYEE',
-  addressId: '',
   branchId: '',
+  provinceId: '',
+  cantonId: '',
+  districtId: '',
+  details: '',
 })
+type FieldName = keyof typeof draft
+type TextField = Exclude<FieldName, 'role' | 'branchId' | 'provinceId' | 'cantonId' | 'districtId'>
+interface TextFieldDefinition {
+  name: TextField
+  label: string
+  type: 'text' | 'date' | 'email' | 'tel'
+  required: boolean
+  maxBytes?: number
+}
+
+const groups: { label: string; fields: TextFieldDefinition[] }[] = [
+  {
+    label: 'Datos personales',
+    fields: [
+      { name: 'firstName', label: 'Primer nombre', type: 'text', required: true, maxBytes: 100 },
+      { name: 'secondName', label: 'Segundo nombre', type: 'text', required: false, maxBytes: 100 },
+      {
+        name: 'firstSurname',
+        label: 'Primer apellido',
+        type: 'text',
+        required: true,
+        maxBytes: 100,
+      },
+      {
+        name: 'secondSurname',
+        label: 'Segundo apellido',
+        type: 'text',
+        required: true,
+        maxBytes: 100,
+      },
+      { name: 'birthday', label: 'Fecha de nacimiento', type: 'date', required: true },
+    ],
+  },
+  {
+    label: 'Contacto',
+    fields: [
+      { name: 'email', label: 'Correo electrónico', type: 'email', required: true, maxBytes: 150 },
+      { name: 'phoneNumber', label: 'Teléfono', type: 'tel', required: true, maxBytes: 20 },
+    ],
+  },
+]
+const textFields: TextFieldDefinition[] = [
+  ...groups.flatMap((group) => group.fields),
+  { name: 'details', label: 'Detalle de dirección', type: 'text', required: false, maxBytes: 255 },
+]
+const dirty = reactive<Partial<Record<FieldName, boolean>>>({})
+const touched = reactive<Partial<Record<FieldName, boolean>>>({})
+const errors = reactive<Partial<Record<FieldName, string>>>({})
+const encoder = new TextEncoder()
 const title = computed(() =>
   draft.role === 'ADMINISTRATOR' ? 'Crear administrador' : 'Crear empleado',
 )
+const availableCantons = computed(() =>
+  props.cantons.filter((canton) => canton.provinceId === draft.provinceId),
+)
+const availableDistricts = computed(() =>
+  props.districts.filter((district) => district.cantonId === draft.cantonId),
+)
+const cantonHelp = computed(() =>
+  draft.provinceId === ''
+    ? 'Selecciona primero una provincia.'
+    : !availableCantons.value.length
+      ? 'No hay cantones disponibles para esta provincia.'
+      : '',
+)
+const districtHelp = computed(() =>
+  draft.cantonId === ''
+    ? 'Selecciona primero un cantón.'
+    : !availableDistricts.value.length
+      ? 'No hay distritos disponibles para este cantón.'
+      : '',
+)
+
+function clearField(field: 'cantonId' | 'districtId') {
+  draft[field] = ''
+  delete errors[field]
+  delete dirty[field]
+  delete touched[field]
+}
+
+watch(
+  () => draft.provinceId,
+  () => {
+    clearField('cantonId')
+    clearField('districtId')
+  },
+)
+watch(
+  () => draft.cantonId,
+  () => clearField('districtId'),
+)
+
+function description(field: FieldName, hasHelp = false) {
+  const references = []
+  if (hasHelp) references.push(id + '-' + field + '-help')
+  if (errors[field]) references.push(id + '-' + field + '-error')
+  return references.join(' ') || undefined
+}
+
+function validateField(
+  field: FieldName,
+  control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+) {
+  if (control.disabled) return ''
+  const definition = textFields.find((item) => item.name === field)
+  if (definition) {
+    const value = draft[definition.name]
+    if (definition.type === 'date' && control.validity.badInput)
+      return 'Introduce una fecha válida.'
+    if (definition.required && !value.trim()) return 'Este campo es obligatorio.'
+    if (/[\uD800-\uDFFF]/u.test(value)) return 'El texto contiene un carácter no válido.'
+    if (definition.maxBytes && encoder.encode(value).length > definition.maxBytes) {
+      return 'El texto es demasiado largo. Reduce su longitud.'
+    }
+    if (definition.type === 'email') {
+      const localPart = value.split('@')[0] ?? ''
+      const topLevelDomain = value.split('.').pop() ?? ''
+      if (
+        control.validity.typeMismatch ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value) ||
+        !/^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/iu.test(topLevelDomain) ||
+        localPart.startsWith('.') ||
+        localPart.endsWith('.') ||
+        localPart.includes('..') ||
+        encoder.encode(localPart).length > 64
+      )
+        return 'Introduce un correo electrónico válido, por ejemplo: nombre@ejemplo.com.'
+    }
+    if (definition.type === 'date') {
+      const date = new Date(value + 'T00:00:00Z')
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/u.test(value) ||
+        Number.isNaN(date.getTime()) ||
+        date.toISOString().slice(0, 10) !== value
+      )
+        return 'Introduce una fecha válida.'
+    }
+    return ''
+  }
+
+  const choices = {
+    role: ['EMPLOYEE', 'ADMINISTRATOR'],
+    branchId: props.branches.map((branch) => branch.id),
+    provinceId: props.provinces.map((province) => province.id),
+    cantonId: availableCantons.value.map((canton) => canton.id),
+    districtId: availableDistricts.value.map((district) => district.id),
+  }
+  const options: readonly (string | number)[] = choices[field as keyof typeof choices]
+  return options.includes(draft[field]) ? '' : 'Selecciona una opción válida.'
+}
+
+function fieldControl(event: Event) {
+  const control = event.target
+  if (
+    !(
+      control instanceof HTMLInputElement ||
+      control instanceof HTMLSelectElement ||
+      control instanceof HTMLTextAreaElement
+    ) ||
+    !Object.prototype.hasOwnProperty.call(draft, control.name)
+  )
+    return
+  return { control, field: control.name as FieldName }
+}
+
+function onEdit(event: Event) {
+  const target = fieldControl(event)
+  if (!target) return
+  dirty[target.field] = true
+  if (touched[target.field]) errors[target.field] = validateField(target.field, target.control)
+}
+
+function onBlur(event: FocusEvent) {
+  const target = fieldControl(event)
+  if (!target || !dirty[target.field]) return
+  touched[target.field] = true
+  errors[target.field] = validateField(target.field, target.control)
+}
+
 let opener: HTMLElement | null = null
 
 function open() {
   if (!dialog.value || dialog.value.open) return
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
   dialog.value.showModal()
-  firstNameInput.value?.focus()
+  dialog.value.querySelector<HTMLInputElement>('[name="firstName"]')?.focus()
   dialog.value.scrollTop = 0
 }
 
@@ -60,7 +245,7 @@ function close() {
 
 function keepFocus(event: KeyboardEvent) {
   const controls = dialog.value?.querySelectorAll<HTMLElement>(
-    ':is(button, input, select):not(:disabled)',
+    ':is(button, input, select, textarea):not(:disabled)',
   )
   const first = controls?.[0]
   const last = controls?.[controls.length - 1]
@@ -95,126 +280,85 @@ defineExpose({ open })
       </button>
     </header>
 
-    <form autocomplete="off" @submit.prevent.stop>
-      <p class="required-note">Los campos con * son obligatorios.</p>
+    <form
+      autocomplete="off"
+      novalidate
+      @submit.prevent.stop
+      @input="onEdit"
+      @change="onEdit"
+      @focusout="onBlur"
+    >
+      <p class="required-note">
+        Los campos con <span class="required-marker">*</span> son obligatorios.
+      </p>
 
-      <fieldset>
-        <legend>Datos personales</legend>
+      <fieldset v-for="group in groups" :key="group.label">
+        <legend>{{ group.label }}</legend>
         <div class="field-grid">
-          <div class="field">
-            <label :for="id + '-first-name'">Primer nombre <span aria-hidden="true">*</span></label>
+          <div v-for="field in group.fields" :key="field.name" class="field">
+            <label :for="id + '-' + field.name">
+              {{ field.label }}
+              <span v-if="field.required" class="required-marker" aria-hidden="true">*</span>
+              <span v-else>(opcional)</span>
+            </label>
             <input
-              :id="id + '-first-name'"
-              ref="first-name"
-              v-model="draft.firstName"
-              name="firstName"
+              :id="id + '-' + field.name"
+              v-model="draft[field.name]"
+              :name="field.name"
+              :type="field.type"
               class="form-control"
-              required
+              :required="field.required"
+              :aria-invalid="!!errors[field.name]"
+              :aria-describedby="description(field.name)"
             />
-          </div>
-          <div class="field">
-            <label :for="id + '-second-name'">Segundo nombre (opcional)</label>
-            <input
-              :id="id + '-second-name'"
-              v-model="draft.secondName"
-              name="secondName"
-              class="form-control"
-            />
-          </div>
-          <div class="field">
-            <label :for="id + '-first-surname'"
-              >Primer apellido <span aria-hidden="true">*</span></label
+            <p
+              v-if="errors[field.name]"
+              :id="id + '-' + field.name + '-error'"
+              class="field-error"
+              aria-live="polite"
             >
-            <input
-              :id="id + '-first-surname'"
-              v-model="draft.firstSurname"
-              name="firstSurname"
-              class="form-control"
-              required
-            />
-          </div>
-          <div class="field">
-            <label :for="id + '-second-surname'"
-              >Segundo apellido <span aria-hidden="true">*</span></label
-            >
-            <input
-              :id="id + '-second-surname'"
-              v-model="draft.secondSurname"
-              name="secondSurname"
-              class="form-control"
-              required
-            />
-          </div>
-          <div class="field">
-            <label :for="id + '-birthday'"
-              >Fecha de nacimiento <span aria-hidden="true">*</span></label
-            >
-            <input
-              :id="id + '-birthday'"
-              v-model="draft.birthday"
-              name="birthday"
-              type="date"
-              class="form-control"
-              required
-            />
+              {{ errors[field.name] }}
+            </p>
           </div>
         </div>
       </fieldset>
 
       <fieldset>
-        <legend>Contacto</legend>
+        <legend>Rol y sucursal</legend>
         <div class="field-grid">
           <div class="field">
-            <label :for="id + '-email'">Correo electrónico <span aria-hidden="true">*</span></label>
-            <input
-              :id="id + '-email'"
-              v-model="draft.email"
-              name="email"
-              type="email"
-              class="form-control"
-              required
-            />
-          </div>
-          <div class="field">
-            <label :for="id + '-phone'">Teléfono <span aria-hidden="true">*</span></label>
-            <input
-              :id="id + '-phone'"
-              v-model="draft.phoneNumber"
-              name="phoneNumber"
-              type="tel"
-              class="form-control"
-              required
-            />
-          </div>
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Rol y ubicación</legend>
-        <div class="field-grid">
-          <div class="field">
-            <label :for="id + '-role'">Rol <span aria-hidden="true">*</span></label>
+            <label :for="id + '-role'"
+              >Rol <span class="required-marker" aria-hidden="true">*</span></label
+            >
             <select
               :id="id + '-role'"
               v-model="draft.role"
               name="role"
               class="form-select"
               required
+              :aria-invalid="!!errors.role"
+              :aria-describedby="description('role')"
             >
               <option value="EMPLOYEE">Empleado</option>
               <option value="ADMINISTRATOR">Administrador</option>
             </select>
+            <p v-if="errors.role" :id="id + '-role-error'" class="field-error" aria-live="polite">
+              {{ errors.role }}
+            </p>
           </div>
           <div class="field">
-            <label :for="id + '-branch'">Sucursal <span aria-hidden="true">*</span></label>
+            <label :for="id + '-branchId'"
+              >Sucursal <span class="required-marker" aria-hidden="true">*</span></label
+            >
             <select
-              :id="id + '-branch'"
+              :id="id + '-branchId'"
               v-model="draft.branchId"
               name="branchId"
               class="form-select"
               required
               :disabled="!branches.length"
-              :aria-describedby="!branches.length ? id + '-branch-help' : undefined"
+              :aria-invalid="!!errors.branchId"
+              :aria-describedby="description('branchId', !branches.length)"
             >
               <option value="" disabled>
                 {{ branches.length ? 'Seleccione una sucursal' : 'Sin sucursales disponibles' }}
@@ -223,30 +367,142 @@ defineExpose({ open })
                 {{ branch.label }}
               </option>
             </select>
-            <p v-if="!branches.length" :id="id + '-branch-help'" class="field-help">
+            <p v-if="!branches.length" :id="id + '-branchId-help'" class="field-help">
               Todavía no hay sucursales disponibles para seleccionar en esta vista.
+            </p>
+            <p
+              v-if="errors.branchId"
+              :id="id + '-branchId-error'"
+              class="field-error"
+              aria-live="polite"
+            >
+              {{ errors.branchId }}
+            </p>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Dirección</legend>
+        <div class="field-grid">
+          <div class="field">
+            <label :for="id + '-provinceId'"
+              >Provincia <span class="required-marker" aria-hidden="true">*</span></label
+            >
+            <select
+              :id="id + '-provinceId'"
+              v-model="draft.provinceId"
+              name="provinceId"
+              class="form-select"
+              required
+              :disabled="!provinces.length"
+              :aria-invalid="!!errors.provinceId"
+              :aria-describedby="description('provinceId', !provinces.length)"
+            >
+              <option value="" disabled>
+                {{ provinces.length ? 'Seleccione una provincia' : 'Sin provincias disponibles' }}
+              </option>
+              <option v-for="province in provinces" :key="province.id" :value="province.id">
+                {{ province.label }}
+              </option>
+            </select>
+            <p v-if="!provinces.length" :id="id + '-provinceId-help'" class="field-help">
+              Todavía no hay provincias disponibles para seleccionar en esta vista.
+            </p>
+            <p
+              v-if="errors.provinceId"
+              :id="id + '-provinceId-error'"
+              class="field-error"
+              aria-live="polite"
+            >
+              {{ errors.provinceId }}
+            </p>
+          </div>
+          <div class="field">
+            <label :for="id + '-cantonId'"
+              >Cantón <span class="required-marker" aria-hidden="true">*</span></label
+            >
+            <select
+              :id="id + '-cantonId'"
+              v-model="draft.cantonId"
+              name="cantonId"
+              class="form-select"
+              required
+              :disabled="draft.provinceId === '' || !availableCantons.length"
+              :aria-invalid="!!errors.cantonId"
+              :aria-describedby="description('cantonId', !!cantonHelp)"
+            >
+              <option value="" disabled>Seleccione un cantón</option>
+              <option v-for="canton in availableCantons" :key="canton.id" :value="canton.id">
+                {{ canton.label }}
+              </option>
+            </select>
+            <p v-if="cantonHelp" :id="id + '-cantonId-help'" class="field-help">{{ cantonHelp }}</p>
+            <p
+              v-if="errors.cantonId"
+              :id="id + '-cantonId-error'"
+              class="field-error"
+              aria-live="polite"
+            >
+              {{ errors.cantonId }}
+            </p>
+          </div>
+          <div class="field">
+            <label :for="id + '-districtId'"
+              >Distrito <span class="required-marker" aria-hidden="true">*</span></label
+            >
+            <select
+              :id="id + '-districtId'"
+              v-model="draft.districtId"
+              name="districtId"
+              class="form-select"
+              required
+              :disabled="draft.cantonId === '' || !availableDistricts.length"
+              :aria-invalid="!!errors.districtId"
+              :aria-describedby="description('districtId', !!districtHelp)"
+            >
+              <option value="" disabled>Seleccione un distrito</option>
+              <option
+                v-for="district in availableDistricts"
+                :key="district.id"
+                :value="district.id"
+              >
+                {{ district.label }}
+              </option>
+            </select>
+            <p v-if="districtHelp" :id="id + '-districtId-help'" class="field-help">
+              {{ districtHelp }}
+            </p>
+            <p
+              v-if="errors.districtId"
+              :id="id + '-districtId-error'"
+              class="field-error"
+              aria-live="polite"
+            >
+              {{ errors.districtId }}
             </p>
           </div>
           <div class="field full-width">
-            <label :for="id + '-address'">Dirección <span aria-hidden="true">*</span></label>
-            <select
-              :id="id + '-address'"
-              v-model="draft.addressId"
-              name="addressId"
-              class="form-select"
-              required
-              :disabled="!addresses.length"
-              :aria-describedby="!addresses.length ? id + '-address-help' : undefined"
+            <label :for="id + '-details'">Detalle de dirección (opcional)</label>
+            <textarea
+              :id="id + '-details'"
+              v-model="draft.details"
+              name="details"
+              class="form-control"
+              rows="3"
+              :aria-invalid="!!errors.details"
+              :aria-describedby="description('details', true)"
+            ></textarea>
+            <p :id="id + '-details-help'" class="field-help">
+              Escribe las señas u otras referencias de la dirección.
+            </p>
+            <p
+              v-if="errors.details"
+              :id="id + '-details-error'"
+              class="field-error"
+              aria-live="polite"
             >
-              <option value="" disabled>
-                {{ addresses.length ? 'Seleccione una dirección' : 'Sin direcciones disponibles' }}
-              </option>
-              <option v-for="address in addresses" :key="address.id" :value="address.id">
-                {{ address.label }}
-              </option>
-            </select>
-            <p v-if="!addresses.length" :id="id + '-address-help'" class="field-help">
-              Todavía no hay direcciones disponibles para seleccionar en esta vista.
+              {{ errors.details }}
             </p>
           </div>
         </div>
@@ -380,8 +636,29 @@ label {
   min-height: 44px;
 }
 
-.field-help {
+.field-help,
+.field-error {
   margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.required-marker {
+  color: var(--bs-danger, #dc3545);
+  font-weight: 700;
+}
+
+.field-error {
+  color: var(--bs-danger-text-emphasis, #b02a37);
+  font-size: 0.875rem;
+}
+
+.form-control[aria-invalid='true'],
+.form-select[aria-invalid='true'] {
+  border-color: var(--bs-danger, #dc3545);
+}
+
+textarea {
+  resize: vertical;
 }
 
 .form-control:focus,
