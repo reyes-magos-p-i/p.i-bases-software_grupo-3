@@ -224,23 +224,69 @@ function onBlur(event: FocusEvent) {
 }
 
 let opener: HTMLElement | null = null
+let releasePageScroll: (() => void) | undefined
+
+function lockPageScroll() {
+  const { scrollX, scrollY } = window
+  const root = document.documentElement.style
+  const body = document.body.style
+  const changes: [CSSStyleDeclaration, string, string][] = [
+    [root, 'scrollbar-gutter', 'stable'],
+    [root, 'overflow-x', 'hidden'],
+    [root, 'overflow-y', 'hidden'],
+    [body, 'position', 'fixed'],
+    [body, 'top', -scrollY + 'px'],
+    [body, 'left', -scrollX + 'px'],
+    [body, 'right', '0'],
+    [body, 'overflow-x', 'hidden'],
+    [body, 'overflow-y', 'hidden'],
+  ]
+  const previousStyles = changes.map(([style, property]) => ({
+    style,
+    property,
+    value: style.getPropertyValue(property),
+    priority: style.getPropertyPriority(property),
+  }))
+  for (const [style, property, value] of changes) style.setProperty(property, value)
+
+  releasePageScroll = () => {
+    for (const { style, property, value, priority } of previousStyles) {
+      if (value) style.setProperty(property, value, priority)
+      else style.removeProperty(property)
+    }
+    // Ignore the page's smooth scrolling when restoring its position after unlocking.
+    if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
+      window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' })
+    }
+    releasePageScroll = undefined
+  }
+}
 
 function open() {
   if (!dialog.value || dialog.value.open) return
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-  dialog.value.showModal()
+  lockPageScroll()
+  try {
+    dialog.value.showModal()
+  } catch (error) {
+    releasePageScroll?.()
+    opener = null
+    throw error
+  }
   dialog.value.querySelector<HTMLInputElement>('[name="firstName"]')?.focus()
   dialog.value.scrollTop = 0
 }
 
-function restoreFocus() {
-  if (opener?.isConnected) opener.focus()
+function onClosed() {
+  if (dialog.value?.open) return
+  releasePageScroll?.()
+  if (opener?.isConnected) opener.focus({ preventScroll: true })
   opener = null
 }
 
 function close() {
   dialog.value?.close()
-  restoreFocus()
+  onClosed()
 }
 
 function keepFocus(event: KeyboardEvent) {
@@ -260,7 +306,7 @@ function keepFocus(event: KeyboardEvent) {
   }
 }
 
-onBeforeUnmount(() => dialog.value?.close())
+onBeforeUnmount(close)
 defineExpose({ open })
 </script>
 
@@ -270,7 +316,7 @@ defineExpose({ open })
     class="employee-dialog"
     :aria-labelledby="id + '-title'"
     @cancel.prevent="close"
-    @close="restoreFocus"
+    @close="onClosed"
     @keydown.tab="keepFocus"
   >
     <header class="dialog-heading">
@@ -590,6 +636,7 @@ form {
   min-height: 0;
   padding: 24px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .required-note,

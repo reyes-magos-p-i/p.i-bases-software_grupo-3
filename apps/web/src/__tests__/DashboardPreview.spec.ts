@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import DashboardPreview from '@/views/DashboardPreview.vue'
-import DashboardLayout from '@/layout/DashboardLayout.vue'
+import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 
 let wrapper: VueWrapper | undefined
 let router: Router

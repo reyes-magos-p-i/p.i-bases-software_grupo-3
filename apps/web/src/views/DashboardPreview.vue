@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, useId, useTemplateRef, watch } from 'vue'
 import CreateEmployeeDialog from '@/components/users/CreateEmployeeDialog.vue'
-import DashboardLayout from '@/layout/DashboardLayout.vue'
+import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import type { UserRole } from '@/types/user'
 
 const role = ref<Exclude<UserRole, 'CLIENT'>>('ADMINISTRATOR')

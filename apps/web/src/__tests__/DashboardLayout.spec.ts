@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import DashboardLayout from '@/layout/DashboardLayout.vue'
+import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import type { UserRole } from '@/types/user'
 
 const sections = [

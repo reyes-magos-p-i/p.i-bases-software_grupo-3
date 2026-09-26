@@ -21,11 +21,16 @@ const districts: DistrictOption[] = [
 
 let wrapper: VueWrapper<InstanceType<typeof CreateEmployeeDialog>> | undefined
 let opener: HTMLButtonElement
+let originalRootStyle: string | null
+let originalBodyStyle: string | null
 const dialogPrototype = HTMLDialogElement.prototype
 const originalShowModal = Object.getOwnPropertyDescriptor(dialogPrototype, 'showModal')
 const originalClose = Object.getOwnPropertyDescriptor(dialogPrototype, 'close')
 
 beforeEach(() => {
+  originalRootStyle = document.documentElement.getAttribute('style')
+  originalBodyStyle = document.body.getAttribute('style')
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   opener = document.createElement('button')
   opener.textContent = 'Añadir empleado'
   document.body.append(opener)
@@ -59,6 +64,14 @@ afterEach(() => {
     else Reflect.deleteProperty(dialogPrototype, name)
   }
   document.body.innerHTML = ''
+  for (const [element, style] of [
+    [document.documentElement, originalRootStyle],
+    [document.body, originalBodyStyle],
+  ] as const) {
+    if (style === null) element.removeAttribute('style')
+    else element.setAttribute('style', style)
+  }
+  vi.restoreAllMocks()
 })
 
 async function renderDialog(
@@ -82,6 +95,77 @@ describe('CreateEmployeeDialog', () => {
     expect(document.activeElement).toBe(view.get('[name="firstName"]').element)
     view.vm.open()
     expect(dialog.element.showModal).toHaveBeenCalledOnce()
+  })
+
+  it('locks the page at its current position and restores existing styles and scroll on close', async () => {
+    document.documentElement.style.setProperty('overflow-y', 'scroll', 'important')
+    document.documentElement.style.setProperty('scrollbar-gutter', 'stable both-edges')
+    document.body.style.setProperty('position', 'relative')
+    document.body.style.setProperty('top', '2px')
+    document.body.style.setProperty('left', '3px')
+    document.body.style.setProperty('right', '4px')
+    document.body.style.setProperty('overflow-x', 'clip')
+    document.body.style.setProperty('color', 'red')
+    const rootStyle = document.documentElement.style.cssText
+    const bodyStyle = document.body.style.cssText
+    const scrollX = vi.spyOn(window, 'scrollX', 'get').mockReturnValue(12)
+    const scrollY = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(360)
+    const view = await renderDialog()
+
+    expect(document.documentElement.style.overflowY).toBe('hidden')
+    expect(document.body.style.position).toBe('fixed')
+    expect(document.body.style.top).toBe('-360px')
+    expect(document.body.style.left).toBe('-12px')
+    expect(document.body.style.overflowY).toBe('hidden')
+    scrollX.mockReturnValue(0)
+    scrollY.mockReturnValue(0)
+    // Opening an already open dialog must not replace its saved page position.
+    view.vm.open()
+    const focus = vi.spyOn(opener, 'focus')
+    await view.get('.cancel-button').trigger('click')
+
+    expect(document.documentElement.style.cssText).toBe(rootStyle)
+    expect(document.body.style.cssText).toBe(bodyStyle)
+    expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
+      left: 12,
+      top: 360,
+      behavior: 'instant',
+    })
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+  })
+
+  it('releases and reapplies the lock on reopening without accepting a stale close event', async () => {
+    const view = await renderDialog()
+    await view.get('.close-button').trigger('click')
+    expect(document.body.style.position).toBe('')
+    view.vm.open()
+    await view.get('dialog').trigger('close')
+
+    expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(true)
+    expect(document.body.style.position).toBe('fixed')
+    await view.get('.cancel-button').trigger('click')
+    expect(document.body.style.position).toBe('')
+    expect(document.documentElement.style.overflowY).toBe('')
+  })
+
+  it('restores scrolling if the native modal fails to open', () => {
+    wrapper = mount(CreateEmployeeDialog, { attachTo: document.body })
+    vi.mocked(dialogPrototype.showModal).mockImplementationOnce(() => {
+      throw new Error('Cannot open dialog')
+    })
+
+    expect(() => wrapper?.vm.open()).toThrow('Cannot open dialog')
+    expect(document.body.style.position).toBe('')
+    expect(document.documentElement.style.overflowY).toBe('')
+  })
+
+  it('does not change page styles when an unopened dialog is removed', () => {
+    document.body.style.position = 'relative'
+    wrapper = mount(CreateEmployeeDialog, { attachTo: document.body })
+    wrapper.unmount()
+
+    expect(document.body.style.position).toBe('relative')
+    expect(window.scrollTo).not.toHaveBeenCalled()
   })
 
   it('labels required fields with an asterisk and leaves second name and address details optional', async () => {
@@ -200,6 +284,8 @@ describe('CreateEmployeeDialog', () => {
 
       expect(dialog.element.open).toBe(false)
       expect(document.activeElement).toBe(opener)
+      expect(document.body.style.position).toBe('')
+      expect(document.documentElement.style.overflowY).toBe('')
     },
   )
 
@@ -260,6 +346,8 @@ describe('CreateEmployeeDialog', () => {
     view.unmount()
 
     expect(dialog.open).toBe(false)
+    expect(document.body.style.position).toBe('')
+    expect(document.documentElement.style.overflowY).toBe('')
   })
 
   it('filters cantons and districts and clears dependent selections when a parent changes', async () => {
