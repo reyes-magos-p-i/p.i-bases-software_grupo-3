@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import logo from '@/assets/logos/cinetadel-logo.png'
+import RegisterModal from '@/components/auth/RegisterModal.vue'
+
+const showRegister = ref(false)
 </script>
 
 <template>
@@ -11,7 +15,13 @@ import logo from '@/assets/logos/cinetadel-logo.png'
       </RouterLink>
       <div class="navbar-actions">
         <button type="button" class="login-button">Iniciar sesión</button>
-        <button type="button" class="register-button">Registrarse</button>
+        <button class="register-button" @click="showRegister = true">Registrarse</button>
+        <!-- TODO(any): Handle the registered user and update the UI accordingly, ref -> SCRUM-106, SCRUM-37. -->
+        <RegisterModal
+          :open="showRegister"
+          @close="showRegister = false"
+          @registered="showRegister = false"
+        />
       </div>
     </nav>
   </header>

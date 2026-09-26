@@ -1,59 +1,45 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthRepository } from './health.repository';
-import { ORACLE_POOL } from '../../database/database.module';
-
+import { DatabaseService } from '../../database/database.service';
+ 
 describe('HealthRepository', () => {
   let provider: HealthRepository;
-
+  let db: { query: jest.Mock };
+ 
   beforeEach(async () => {
+    db = { query: jest.fn() };
+ 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [HealthRepository, {
-        provide: ORACLE_POOL,
-        useValue: {
-          getConnection: jest.fn().mockResolvedValue({
-            close: jest.fn(),
-          }),
-        },
-      }],
+      providers: [
+        HealthRepository,
+        { provide: DatabaseService, useValue: db },
+      ],
     }).compile();
-
+ 
     provider = module.get<HealthRepository>(HealthRepository);
   });
-
+ 
   it('should be defined', () => {
     expect(provider).toBeDefined();
   });
-
+ 
   describe('checkDatabaseConnection', () => {
     it('should return true when the database connection is successful', async () => {
-      const mockConnection = {
-        execute: jest.fn().mockResolvedValue({ rows: [1] }),
-        close: jest.fn(),
-      };
-      (provider as any).oraclePool.getConnection = jest.fn().mockResolvedValue(mockConnection);
-
+      db.query.mockResolvedValue({ rows: [{ '1': 1 }] });
+ 
       const result = await provider.checkDatabaseConnection();
+ 
       expect(result).toBe(true);
-      expect(mockConnection.execute).toHaveBeenCalledWith('SELECT 1 FROM dual');
-      expect(mockConnection.close).toHaveBeenCalled();
+      expect(db.query).toHaveBeenCalledWith('SELECT 1 FROM dual');
     });
-
+ 
     it('should return false when the database connection fails', async () => {
-      const consoleError = jest
-        .spyOn(console, 'error')
-        .mockImplementation(() => undefined);
-      const mockConnection = {
-        execute: jest.fn().mockRejectedValue(new Error('Database error')),
-        close: jest.fn(),
-      };
-      (provider as any).oraclePool.getConnection = jest.fn().mockResolvedValue(mockConnection);
+      db.query.mockRejectedValue(new Error('Database error'));
+ 
       const result = await provider.checkDatabaseConnection();
+ 
       expect(result).toBe(false);
-      expect(consoleError).toHaveBeenCalledWith(
-        'Error checking database connection:',
-        expect.any(Error),
-      );
-      consoleError.mockRestore();
     });
   });
 });
+ 
