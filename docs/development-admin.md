@@ -88,9 +88,11 @@ el hasher Argon2id y el envío de credenciales por SMTP. El servidor necesita la
 configuración de Oracle y SMTP para arrancar.
 
 La vista de desarrollo carga los catálogos mediante Axios al abrir el formulario
-y permite crear empleados y administradores mediante `POST /users`. Valida los
-campos, bloquea envíos duplicados y comunica el resultado. El formulario de clientes
-sigue pendiente, aunque el backend ya admite ese tipo de cuenta.
+y permite crear clientes, empleados y administradores mediante `POST /users`. Valida
+los campos, bloquea envíos duplicados y comunica el resultado. `CreateUserDialog.vue`
+comparte el comportamiento modal y las validaciones entre las dos variantes.
+En Clientes, «Añadir cliente» está disponible para el rol visual Administrador;
+el guard del backend sigue siendo quien autoriza cada solicitud.
 
 La integración del formulario está lista para preparar las pruebas manuales. Antes
 de realizarlas es necesario configurar los entornos locales de Vue y Nest, el
@@ -369,7 +371,7 @@ La verificación SMTP de conexión y autenticación no envía mensajes ni garant
 el proveedor acepte un remitente o entregue un correo; eso se verifica en la prueba
 real de creación.
 
-## Prueba manual de creación
+## Prueba manual de creación de empleados y administradores
 
 1. Usar un correo de prueba controlado que permita identificar la nueva cuenta.
 2. Completar los datos, seleccionar una sucursal existente y una dirección, e
@@ -381,8 +383,40 @@ real de creación.
    Ante un resultado incierto, comprobar Oracle antes de efectuar otro intento.
 
 Estas pruebas sí crean datos reales y envían correos. No requieren iniciar sesión:
-el guard usa al administrador configurado. El formulario de clientes y el listado
-de empleados siguen pendientes; esta vista confirma la creación mediante mensajes.
+el guard usa al administrador configurado. Los listados reales de clientes y
+empleados siguen pendientes; esta vista confirma la creación mediante mensajes.
+
+## Prueba manual de creación de clientes
+
+1. En `/dev/dashboard`, mantener Administrador como rol de prueba, abrir Clientes
+   y pulsar «Añadir cliente». La página del fondo debe quedar bloqueada mientras
+   el diálogo esté abierto.
+2. Completar primer nombre y un correo controlado y único. Son los únicos campos
+   obligatorios, marcados con un asterisco rojo. Probar un correo mal formado y
+   comprobar la retroalimentación al salir del campo y al corregirlo.
+3. Dejar vacíos los datos opcionales y mantener desactivado «Añadir dirección».
+   Pulsar «Crear cliente». Este caso no requiere sucursal ni catálogos geográficos.
+   Comprobar el resultado, el correo recibido, el registro en `CLIENTS` y su
+   relación con `CLIENT_LOCAL_CREDENTIALS`; `ID_ADDRESS` debe permanecer nulo.
+4. Con otro correo controlado, repetir completando segundo nombre, apellidos,
+   fecha de nacimiento, teléfono e idioma. Activar «Añadir dirección», seleccionar
+   provincia → cantón → distrito e introducir el detalle si corresponde. Verificar
+   la dirección creada en `ADDRESSES` y su relación con `CLIENTS`. Si se activa
+   la dirección, debe completarse la selección geográfica antes de enviar.
+5. Intentar crear otro cliente con un correo ya utilizado: debe aparecer el mensaje
+   de duplicado y conservarse lo escrito para corregirlo. Cambiar de sección tras
+   cerrar el diálogo debe abrir un formulario limpio y sin errores del anterior.
+6. Cambiar el rol visual a Empleado: puede ver Clientes, pero no «Añadir cliente».
+
+Los campos opcionales vacíos no se envían y una dirección desactivada tampoco.
+El idioma inicial es español (`es`); también puede elegirse inglés (`en`). El alta
+administrativa genera la contraseña en el backend y no declara una aceptación de
+términos por parte del cliente. No solicita contraseña, género, rol ni sucursal.
+
+Ante la respuesta contractual de cuenta creada sin correo confirmado, verificar
+la cuenta sin repetir el envío. Ante un resultado incierto por conexión o servidor,
+el bloqueo de nuevos envíos se conserva aunque se cambie de sección o rol visual.
+Verificar primero Oracle; cambiar de formulario no confirma ni revierte la operación.
 
 La API también admite solicitudes JSON directas a `POST /users` con el contrato de
 `create-user.openapi.yaml`. No requiere un token en este modo: actúa el administrador
