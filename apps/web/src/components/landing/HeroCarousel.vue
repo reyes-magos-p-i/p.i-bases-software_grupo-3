@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { getMovieFunctions } from '../../services/movieFunctions'
+import placeholderImage from '../../assets/images/placeholder.svg'
 
 interface CarouselSlide {
   image: string
@@ -27,15 +28,35 @@ function stopAutoSlide(): void {
   }
 }
 
-onMounted(async () => {
-  const movies = await getMovieFunctions()
 
-  slides.value = movies.map((movie: { title: string; posterImage: string }) => ({
-    image: `${import.meta.env.VITE_API_BASE_URL}image/${movie.posterImage}`,
-    alt: movie.title,
-    title: movie.title,
-    description: 'Disponible próximamente en Cinetadel',
-  }))
+function setPlaceholderSlides(): void {
+  slides.value = [
+    {
+      image: placeholderImage,
+      alt: 'Cinetadel',
+      title: 'Cinetadel',
+      description: 'Disponible próximamente en Cinetadel',
+    },
+  ]
+}
+
+onMounted(async () => {
+  try {
+    const movies = await getMovieFunctions()
+
+    if (!movies?.length) {
+      setPlaceholderSlides()
+    } else {
+      slides.value = movies.map((movie: { title: string; posterImage: string }) => ({
+        image: `${import.meta.env.VITE_API_BASE_URL}image/${movie.posterImage}`,
+        alt: movie.title,
+        title: movie.title,
+        description: 'Disponible próximamente en Cinetadel',
+      }))
+    }
+  } catch {
+    setPlaceholderSlides()
+  }
 
   startAutoSlide()
 })
@@ -62,6 +83,15 @@ function previousSlide(): void {
 function selectSlide(index: number): void {
   currentIndex.value = index
 }
+
+function handleImageError(): void {
+  const slide = slides.value[currentIndex.value]
+
+  if (!slide || slide.image === placeholderImage) return
+
+  slide.image = placeholderImage
+}
+
 </script>
 
 <template>
@@ -82,6 +112,7 @@ function selectSlide(index: number): void {
       :src="currentSlide.image"
       :alt="currentSlide.alt"
       class="hero-image"
+      @error="handleImageError"
     />
 
     <div class="hero-overlay"></div>

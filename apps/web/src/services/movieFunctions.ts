@@ -6,7 +6,7 @@ export async function getMovieFunctions() {
     throw new Error('VITE_API_BASE_URL is not defined')
   }
 
-  const response = await fetch(`${API_BASE_URL}/movie-functions`)
+  const response = await fetch(`${API_BASE_URL}/movie-fuctions`)
 
   if (!response.ok) {
     throw new Error(`Failed to load movie functions: ${response.status}`)
