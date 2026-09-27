@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-import { getMovies } from '@/services/movie.service'
 import type { Movie } from '@/types/movie'
-
+import { getMovieFunctions } from '@/services/movieFunctions'
+const imagesBaseUrl = `${import.meta.env.VITE_API_BASE_URL}image`
 const search = ref('')
-
 const movies = ref<Movie[]>([])
-
 const isLoading = ref(true)
 const errorMessage = ref('')
 
@@ -29,7 +27,7 @@ const filteredMovies = computed(() => {
 
 async function loadMovies(): Promise<void> {
   try {
-    movies.value = await getMovies()
+    movies.value = await getMovieFunctions()
   } catch {
     errorMessage.value =
       'No fue posible cargar las películas.'
@@ -86,11 +84,11 @@ onMounted(() => {
     >
       <article
         v-for="movie in filteredMovies"
-        :key="movie.id"
+        :key="movie.title"
         class="movie-card"
       >
         <img
-          :src="movie.posterUrl"
+          :src="`${imagesBaseUrl}/${movie.posterImage}`"
           :alt="movie.title"
           class="movie-poster"
         />
