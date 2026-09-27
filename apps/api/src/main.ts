@@ -1,39 +1,25 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
-import oracle from 'oracledb';
-import path from 'node:path';
-
-
-export function buildOracleInitOptions(): oracle.InitialiseOptions {
-  const initOptions: oracle.InitialiseOptions = {
-    configDir: path.resolve(__dirname, '../Wallet'),
-  };
-
-  if (process.env.ORACLE_CLIENT_LIB_DIR) {
-    initOptions.libDir = process.env.ORACLE_CLIENT_LIB_DIR;
-  }
-
-  return initOptions;
-}
-
-export function initOracleClient(): void {
-  try {
-    const initOptions = buildOracleInitOptions();
-    oracle.initOracleClient(initOptions);
-  } catch (error) {
-    console.error('Error initializing Oracle client:', error);
-    process.exit(1);
-  }
-}
 
 export async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableShutdownHooks();
-  await app.listen(process.env.PORT ?? 3000);
-  return app;
-}
 
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  app.enableCors({ origin: process.env.FRONTEND_URL ?? 'http://localhost:5173' });
+  app.enableShutdownHooks();  // To ensure a gently close
+
+  await app.listen(process.env.PORT ?? 3000);
+}
+// Safeguard for the unit test in CI to avoid the test suite starting the real nest server
+// when main.ts is imported by main.spec.ts (require.main !== module in that case).
 if (require.main === module) {
-  initOracleClient();
   void bootstrap();
 }

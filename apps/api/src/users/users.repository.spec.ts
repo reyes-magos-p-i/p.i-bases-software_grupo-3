@@ -1,6 +1,12 @@
+jest.mock('oracledb', () => ({
+  ...jest.requireActual('oracledb'),
+  createPool: jest.fn(),
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import oracle from 'oracledb';
-import { ORACLE_POOL } from '../database/database.module';
+import { DatabaseService } from '../database/database.service';
+import { ConfigService } from '@nestjs/config';
 import { UserRole } from './enums/user-role.enum';
 import type { CreateClientRecord } from './types/create-client-record.type';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
@@ -17,6 +23,7 @@ describe('UsersRepository', () => {
   };
   const pool = {
     getConnection: jest.fn(),
+    close: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -27,10 +34,25 @@ describe('UsersRepository', () => {
     connection.rollback.mockResolvedValue(undefined);
     pool.getConnection.mockResolvedValue(connection);
 
+    (oracle.createPool as jest.Mock<Promise<oracle.Pool>>).mockResolvedValue(
+      pool as unknown as oracle.Pool,
+    );
     module = await Test.createTestingModule({
-      providers: [UsersRepository, { provide: ORACLE_POOL, useValue: pool }],
+      providers: [
+        UsersRepository,
+        DatabaseService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: () => undefined,
+            getOrThrow: (key: string) => 'test-' + key,
+          },
+        },
+      ],
     }).compile();
 
+    await module.init();
+    jest.clearAllMocks();
     repository = module.get(UsersRepository);
   });
 
@@ -64,17 +86,17 @@ describe('UsersRepository', () => {
         districts: [{ id: 102, label: 'Curridabat', cantonId: 19 }],
         branches: [{ id: 1, label: 'Cinépolis Multiplaza del Este' }],
       });
-      expect(pool.getConnection).toHaveBeenCalledTimes(1);
+      expect(pool.getConnection).toHaveBeenCalledTimes(4);
       expect(connection.execute).toHaveBeenCalledTimes(4);
       queries.forEach((sql, index) => {
         expect(connection.execute).toHaveBeenNthCalledWith(
           index + 1,
           sql,
           {},
-          { outFormat: oracle.OUT_FORMAT_OBJECT },
+          { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: true },
         );
       });
-      expect(connection.close).toHaveBeenCalledTimes(1);
+      expect(connection.close).toHaveBeenCalledTimes(4);
       expect(connection.commit).not.toHaveBeenCalled();
       expect(connection.rollback).not.toHaveBeenCalled();
     });
@@ -89,7 +111,7 @@ describe('UsersRepository', () => {
           districts: [],
           branches: [],
         });
-        expect(connection.close).toHaveBeenCalledTimes(1);
+        expect(connection.close).toHaveBeenCalledTimes(4);
       },
     );
 
@@ -119,7 +141,7 @@ describe('UsersRepository', () => {
         connection.execute.mockRejectedValueOnce(error);
         await expect(repository.getCreationOptions()).rejects.toBe(error);
         expect(connection.execute).toHaveBeenCalledTimes(index + 1);
-        expect(connection.close).toHaveBeenCalledTimes(1);
+        expect(connection.close).toHaveBeenCalledTimes(index + 1);
         expect(connection.commit).not.toHaveBeenCalled();
         expect(connection.rollback).not.toHaveBeenCalled();
       },
@@ -155,7 +177,7 @@ describe('UsersRepository', () => {
         expect(connection.execute).toHaveBeenCalledWith(
           'SELECT EMPLOYEE_ID, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
           { employeeId: { val: 21, type: oracle.NUMBER } },
-          { outFormat: oracle.OUT_FORMAT_OBJECT },
+          { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: true },
         );
         expect(connection.close).toHaveBeenCalledTimes(1);
         expect(connection.commit).not.toHaveBeenCalled();
@@ -1075,6 +1097,7 @@ describe('UsersRepository', () => {
       expect(connection.execute).toHaveBeenCalledWith(
         'SELECT 1 AS FOUND FROM CLIENTS WHERE EMAIL = :email AND ROWNUM = 1',
         { email },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: true },
       );
     });
 

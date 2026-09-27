@@ -1,9 +1,14 @@
+jest.mock('oracledb', () => ({
+  ...jest.requireActual('oracledb'),
+  createPool: jest.fn(),
+}));
+
 jest.mock('nodemailer', () => ({
   __esModule: true,
   default: { createTransport: jest.fn() },
 }));
 
-import type { INestApplication } from '@nestjs/common';
+import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import nodemailer, {
@@ -11,7 +16,7 @@ import nodemailer, {
   type SMTPSentMessageInfo,
   type SendMailOptions,
 } from 'nodemailer';
-import type oracle from 'oracledb';
+import oracle from 'oracledb';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../app.module';
@@ -19,7 +24,6 @@ import { PasswordGenerator } from '../common/security/password-generator';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { RandomPasswordGenerator } from '../common/security/random-password-generator.service';
 import { Argon2PasswordHasher } from '../common/security/argon2-password-hasher.service';
-import { ORACLE_POOL } from '../database/database.module';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { SmtpInitialCredentialsSender } from './notifications/smtp-initial-credentials-sender';
 
@@ -35,7 +39,10 @@ describe('UsersModule (application HTTP integration)', () => {
     close: jest.fn(),
   };
   const pool = { getConnection: jest.fn(), close: jest.fn() };
-  const config = { get: (key: string) => settings[key] };
+  const config = {
+    get: (key: string) => settings[key],
+    getOrThrow: (key: string) => settings[key] ?? 'test-' + key,
+  };
   const client = {
     role: 'CLIENT',
     email: 'Cliente@Example.com',
@@ -57,8 +64,6 @@ describe('UsersModule (application HTTP integration)', () => {
     return Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ConfigService)
       .useValue(config)
-      .overrideProvider(ORACLE_POOL)
-      .useValue(pool)
       .compile();
   }
 
@@ -76,6 +81,9 @@ describe('UsersModule (application HTTP integration)', () => {
       SMTP_PASSWORD: 'test-password',
       SMTP_FROM: 'cuentas@example.com',
     };
+    (oracle.createPool as jest.Mock<Promise<oracle.Pool>>).mockResolvedValue(
+      pool as unknown as oracle.Pool,
+    );
     pool.getConnection.mockResolvedValue(connection);
     pool.close.mockResolvedValue(undefined);
     connection.close.mockResolvedValue(undefined);
@@ -85,6 +93,8 @@ describe('UsersModule (application HTTP integration)', () => {
       return Promise.resolve();
     });
     connection.execute.mockImplementation((sql: string) => {
+      if (sql.startsWith('SELECT SYS_CONTEXT'))
+        return Promise.resolve({ rows: [{ schema: 'TEST' }] });
       if (sql.startsWith('SELECT EMPLOYEE_ID')) {
         return Promise.resolve({
           rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR' }],
@@ -123,7 +133,15 @@ describe('UsersModule (application HTTP integration)', () => {
       .mockReturnValue({ sendMail } as unknown as Mail<SMTPSentMessageInfo>);
     const module = await buildModule();
     app = module.createNestApplication({ logger: false });
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     await app.init();
+    jest.clearAllMocks();
   });
 
   afterEach(async () => {
@@ -165,8 +183,8 @@ describe('UsersModule (application HTTP integration)', () => {
         unknown,
       ][];
       expect(statements.every(([sql]) => sql.startsWith('SELECT '))).toBe(true);
-      expect(pool.getConnection).toHaveBeenCalledTimes(2);
-      expect(connection.close).toHaveBeenCalledTimes(2);
+      expect(pool.getConnection).toHaveBeenCalledTimes(5);
+      expect(connection.close).toHaveBeenCalledTimes(5);
       expect(connection.commit).not.toHaveBeenCalled();
       expect(connection.rollback).not.toHaveBeenCalled();
       expect(generate).not.toHaveBeenCalled();
@@ -198,7 +216,7 @@ describe('UsersModule (application HTTP integration)', () => {
         statusCode: 500,
         message: 'Internal server error',
       });
-      expect(connection.close).toHaveBeenCalledTimes(2);
+      expect(connection.close).toHaveBeenCalledTimes(3);
       expect(sendMail).not.toHaveBeenCalled();
     });
   });

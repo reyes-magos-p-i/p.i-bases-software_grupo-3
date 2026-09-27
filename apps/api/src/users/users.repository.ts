@@ -1,131 +1,115 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import oracle from 'oracledb';
 import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
 import type { UserIdentity } from './types/user-identity.type';
-import { ORACLE_POOL } from '../database/database.module';
+import { DatabaseService } from '../database/database.service';
 import type { CreateClientRecord } from './types/create-client-record.type';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import type { CreateAddressDto } from './dto/create-address.dto';
 
 @Injectable()
 export class UsersRepository {
-  constructor(@Inject(ORACLE_POOL) private readonly oraclePool: oracle.Pool) {}
+  constructor(private readonly db: DatabaseService) {}
 
   async getCreationOptions(): Promise<UserCreationOptionsDto> {
-    const connection = await this.oraclePool.getConnection();
-    try {
-      const options = { outFormat: oracle.OUT_FORMAT_OBJECT };
-      const provinces = await connection.execute<{
-        ID_PROVINCE: number;
-        NAME: string;
-      }>(
-        'SELECT ID_PROVINCE, NAME FROM PROVINCES ORDER BY NAME, ID_PROVINCE',
-        {},
-        options,
-      );
-      const cantons = await connection.execute<{
-        ID_CANTON: number;
-        NAME: string;
-        ID_PROVINCE: number;
-      }>(
-        'SELECT ID_CANTON, NAME, ID_PROVINCE FROM CANTONS ORDER BY NAME, ID_CANTON',
-        {},
-        options,
-      );
-      const districts = await connection.execute<{
-        ID_DISTRICT: number;
-        NAME: string;
-        ID_CANTON: number;
-      }>(
-        'SELECT ID_DISTRICT, NAME, ID_CANTON FROM DISTRICTS ORDER BY NAME, ID_DISTRICT',
-        {},
-        options,
-      );
-      const branches = await connection.execute<{
-        BRANCH_ID: number;
-        NAME: string;
-      }>(
-        'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
-        {},
-        options,
-      );
+    const options = { outFormat: oracle.OUT_FORMAT_OBJECT };
+    const provinces = await this.db.query<{
+      ID_PROVINCE: number;
+      NAME: string;
+    }>(
+      'SELECT ID_PROVINCE, NAME FROM PROVINCES ORDER BY NAME, ID_PROVINCE',
+      {},
+      options,
+    );
+    const cantons = await this.db.query<{
+      ID_CANTON: number;
+      NAME: string;
+      ID_PROVINCE: number;
+    }>(
+      'SELECT ID_CANTON, NAME, ID_PROVINCE FROM CANTONS ORDER BY NAME, ID_CANTON',
+      {},
+      options,
+    );
+    const districts = await this.db.query<{
+      ID_DISTRICT: number;
+      NAME: string;
+      ID_CANTON: number;
+    }>(
+      'SELECT ID_DISTRICT, NAME, ID_CANTON FROM DISTRICTS ORDER BY NAME, ID_DISTRICT',
+      {},
+      options,
+    );
+    const branches = await this.db.query<{
+      BRANCH_ID: number;
+      NAME: string;
+    }>(
+      'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
+      {},
+      options,
+    );
 
-      return new UserCreationOptionsDto({
-        provinces: (provinces.rows ?? []).map((row) => ({
-          id: row.ID_PROVINCE,
-          label: row.NAME,
-        })),
-        cantons: (cantons.rows ?? []).map((row) => ({
-          id: row.ID_CANTON,
-          label: row.NAME,
-          provinceId: row.ID_PROVINCE,
-        })),
-        districts: (districts.rows ?? []).map((row) => ({
-          id: row.ID_DISTRICT,
-          label: row.NAME,
-          cantonId: row.ID_CANTON,
-        })),
-        branches: (branches.rows ?? []).map((row) => ({
-          id: row.BRANCH_ID,
-          label: row.NAME,
-        })),
-      });
-    } finally {
-      await connection.close();
-    }
+    return new UserCreationOptionsDto({
+      provinces: (provinces.rows ?? []).map((row) => ({
+        id: row.ID_PROVINCE,
+        label: row.NAME,
+      })),
+      cantons: (cantons.rows ?? []).map((row) => ({
+        id: row.ID_CANTON,
+        label: row.NAME,
+        provinceId: row.ID_PROVINCE,
+      })),
+      districts: (districts.rows ?? []).map((row) => ({
+        id: row.ID_DISTRICT,
+        label: row.NAME,
+        cantonId: row.ID_CANTON,
+      })),
+      branches: (branches.rows ?? []).map((row) => ({
+        id: row.BRANCH_ID,
+        label: row.NAME,
+      })),
+    });
   }
 
   async clientEmailExists(email: string): Promise<boolean> {
-    const connection = await this.oraclePool.getConnection();
+    const result = await this.db.query(
+      'SELECT 1 AS FOUND FROM CLIENTS WHERE EMAIL = :email AND ROWNUM = 1',
+      { email },
+    );
 
-    try {
-      const result = await connection.execute(
-        'SELECT 1 AS FOUND FROM CLIENTS WHERE EMAIL = :email AND ROWNUM = 1',
-        { email },
-      );
-
-      return !!result.rows?.length;
-    } finally {
-      await connection.close();
-    }
+    return !!result.rows?.length;
   }
 
   async findEmployeeIdentityById(
     employeeId: number,
   ): Promise<UserIdentity | null> {
-    const connection = await this.oraclePool.getConnection();
-    try {
-      const result = await connection.execute<{
-        EMPLOYEE_ID: unknown;
-        ROLE: unknown;
-      }>(
-        'SELECT EMPLOYEE_ID, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
-        { employeeId: { val: employeeId, type: oracle.NUMBER } },
-        { outFormat: oracle.OUT_FORMAT_OBJECT },
-      );
-      if (result.rows?.length !== 1) {
-        return null;
-      }
-
-      const row = result.rows[0];
-      if (
-        typeof row.EMPLOYEE_ID !== 'number' ||
-        !Number.isSafeInteger(row.EMPLOYEE_ID) ||
-        row.EMPLOYEE_ID < 1 ||
-        row.EMPLOYEE_ID !== employeeId ||
-        (row.ROLE !== UserRole.ADMINISTRATOR && row.ROLE !== UserRole.EMPLOYEE)
-      ) {
-        return null;
-      }
-      return { id: row.EMPLOYEE_ID, role: row.ROLE };
-    } finally {
-      await connection.close();
+    const result = await this.db.query<{
+      EMPLOYEE_ID: unknown;
+      ROLE: unknown;
+    }>(
+      'SELECT EMPLOYEE_ID, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
+      { employeeId: { val: employeeId, type: oracle.NUMBER } },
+      { outFormat: oracle.OUT_FORMAT_OBJECT },
+    );
+    if (result.rows?.length !== 1) {
+      return null;
     }
+
+    const row = result.rows[0];
+    if (
+      typeof row.EMPLOYEE_ID !== 'number' ||
+      !Number.isSafeInteger(row.EMPLOYEE_ID) ||
+      row.EMPLOYEE_ID < 1 ||
+      row.EMPLOYEE_ID !== employeeId ||
+      (row.ROLE !== UserRole.ADMINISTRATOR && row.ROLE !== UserRole.EMPLOYEE)
+    ) {
+      return null;
+    }
+    return { id: row.EMPLOYEE_ID, role: row.ROLE };
   }
 
   async createClient(data: CreateClientRecord): Promise<number> {
-    return this.withTransaction(async (connection) => {
+    return this.db.transaction(async (connection) => {
       const addressId =
         data.address == null
           ? null
@@ -196,7 +180,7 @@ export class UsersRepository {
   }
 
   async createEmployee(data: CreateEmployeeRecord): Promise<number> {
-    return this.withTransaction(async (connection) => {
+    return this.db.transaction(async (connection) => {
       const addressId = await this.insertAddress(connection, data.address);
       const result = await connection.execute<{ employeeId?: unknown }>(
         `INSERT INTO EMPLOYEES (
@@ -295,39 +279,5 @@ export class UsersRepository {
     }
 
     return addressId;
-  }
-
-  private async withTransaction<T>(
-    operation: (connection: oracle.Connection) => Promise<T>,
-  ): Promise<T> {
-    const connection = await this.oraclePool.getConnection();
-    let result: T;
-    let closeFailed = false;
-    let closeError: unknown;
-
-    try {
-      result = await operation(connection);
-      await connection.commit();
-    } catch (error) {
-      try {
-        await connection.rollback();
-      } catch {
-        // Preserve the operation error if rollback also fails.
-      }
-      throw error;
-    } finally {
-      try {
-        await connection.close();
-      } catch (error) {
-        // Defer this error so it cannot replace an operation error in flight.
-        closeFailed = true;
-        closeError = error;
-      }
-    }
-
-    if (closeFailed) {
-      throw closeError;
-    }
-    return result;
   }
 }

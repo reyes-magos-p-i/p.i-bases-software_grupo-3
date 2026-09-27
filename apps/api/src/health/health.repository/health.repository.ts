@@ -1,23 +1,20 @@
-import { Inject, Injectable } from '@nestjs/common';
-import oracle from 'oracledb';
-import { ORACLE_POOL } from '../../database/database.module';
-
-
+import { Injectable, Logger } from '@nestjs/common';
+import { DatabaseService } from '../../database/database.service';
+ 
 @Injectable()
 export class HealthRepository {
-    constructor(
-        @Inject(ORACLE_POOL) private readonly oraclePool: oracle.Pool,
-    ) {}
-    async checkDatabaseConnection(): Promise<boolean> {
-        const connection = await this.oraclePool.getConnection();
-        try {
-            const result = await connection.execute('SELECT 1 FROM dual');
-            return !!result.rows?.length;
-        } catch (error) {
-            console.error('Error checking database connection:', error);
-            return false;
-        } finally {
-            await connection.close();
-        }
+  private readonly logger = new Logger('HealthRepository');
+ 
+  constructor(private readonly db: DatabaseService) {}
+ 
+  async checkDatabaseConnection(): Promise<boolean> {
+    try {
+      const result = await this.db.query('SELECT 1 FROM dual');
+      return !!result.rows?.length;
+    } catch (error) {
+      this.logger.error('Error checking database connection:', error as Error);
+      return false;
     }
+  }
 }
+ 

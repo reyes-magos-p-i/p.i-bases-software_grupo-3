@@ -30,6 +30,9 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run lint
       - run: npm run test:cov
+      - name: Typecheck
+        if: matrix.app == 'web'
+        run: npm run type-check
       - run: npm run build
       - name: Upload coverage
         if: always()
@@ -78,13 +81,16 @@ jobs:
             cd /opt/app/p.i-bases-software_grupo-3
             git fetch origin main
 
+            git checkout main
+            git reset --hard origin/main
+
             cd apps/api
             npm ci
             npm run build
 
             cd ../web
             npm ci
-            npm run build
+            npm run build-only
 
             sudo systemctl restart cinetadel-api.service
             sudo systemctl --no-pager --full status cinetadel-api.service

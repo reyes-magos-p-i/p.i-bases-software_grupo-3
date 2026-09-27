@@ -1,44 +1,29 @@
-jest.mock('oracledb', () => ({
-  __esModule: true,
-  default: {
-    OUT_FORMAT_OBJECT: 4002,
-    outFormat: undefined,
-    createPool: jest.fn(),
-  },
-}));
+import { Test, TestingModule } from '@nestjs/testing';
+import { DatabaseModule } from './database.module';
+import { DatabaseService } from './database.service';
 
-import oracle from 'oracledb';
-import { ConfigService } from '@nestjs/config';
-import { createOraclePool } from './database.module';
+describe('DatabaseModule', () => {
+  let module: TestingModule;
 
-describe('createOraclePool', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+  beforeEach(async () => {
+    module = await Test.createTestingModule({
+      imports: [DatabaseModule],
+    })
+      // Override DatabaseService with a mock to avoid real DB connections during testing
+      .overrideProvider(DatabaseService)
+      .useValue({
+        query: jest.fn(),
+        transaction: jest.fn(),
+      })
+      .compile();
   });
 
-  it('creates a pool from config', async () => {
-    const pool = { close: jest.fn() };
-    (oracle.createPool as jest.Mock).mockResolvedValue(pool);
+  it('should be defined and compile the module', () => {
+    expect(module).toBeDefined();
+  });
 
-    const config = {
-      getOrThrow: jest.fn((key: string) =>
-        ({
-          DB_USER: 'user',
-          DB_PASSWORD: 'pass',
-          DB_CONNECTION_STRING: 'db.example.com/aasasa',
-        })[key],
-      ),
-    } as unknown as ConfigService;
-
-    await expect(createOraclePool(config)).resolves.toBe(pool);
-    expect(oracle.outFormat).toBe(oracle.OUT_FORMAT_OBJECT);
-    expect(oracle.createPool).toHaveBeenCalledWith({
-      user: 'user',
-      password: 'pass',
-      connectString: 'db.example.com/aasasa',
-      poolMin: 2,
-      poolMax: 10,
-      poolIncrement: 1,
-    });
+  it('should export and resolve DatabaseService', () => {
+    const service = module.get<DatabaseService>(DatabaseService);
+    expect(service).toBeDefined();
   });
 });
