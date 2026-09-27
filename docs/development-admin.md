@@ -79,8 +79,8 @@ ni parámetros y responde con estas cuatro listas:
 
 Se consultan todos los registros y cada lista se ordena por nombre e identificador
 en Oracle. No se renombran sucursales ni se crean datos. Una tabla vacía devuelve
-una lista vacía. Las consultas de los cuatro catálogos utilizan una conexión que
-se libera al terminar; si alguna consulta falla, la respuesta es `500` genérico y
+una lista vacía. Cada consulta obtiene y libera una conexión mediante
+`DatabaseService.query()`; si alguna consulta falla, la respuesta es `500` genérico y
 no se envían catálogos parciales. Un rechazo del guard devuelve `403`.
 
 Vue filtra cantones por `provinceId` y distritos por `cantonId` utilizando
@@ -104,6 +104,17 @@ retirando el prefijo `/api`. Así el navegador consulta su mismo origen durante
 el desarrollo local. Si se cambia el puerto del backend, también debe ajustarse
 el destino en `vite.config.ts`. El proxy no se incluye en los archivos de producción:
 el despliegue debe configurar su propia URL y enrutamiento hacia la API.
+
+El registro público y la creación administrativa comparten la instancia Axios de
+`apps/web/src/services/api.ts`. Ambos utilizan `VITE_API_BASE_URL`; la variable
+anterior `VITE_API_URL` ya no se lee. Si un entorno la utilizaba, trasladar su URL
+a `VITE_API_BASE_URL` y reiniciar Vite (o volver a compilar para producción).
+Los servicios conservan sus contratos y mensajes; no hay reintentos automáticos.
+
+El módulo `AuthModule` incorporado desde `dev` todavía no está registrado en
+`AppModule`. Esta integración conserva ese estado: compartir Axios no habilita
+por sí solo `/auth/register` ni implementa inicio de sesión. La conexión de ese
+módulo se debe coordinar con la historia correspondiente.
 
 En `/dev/dashboard`, «Añadir empleado» abre el diálogo y consulta los catálogos.
 Mientras espera, muestra un aviso de carga y permite escribir los datos personales.
@@ -197,10 +208,51 @@ el mensaje. La recuperación o reenvío de credenciales requiere un incremento p
 
 ## Preparación local para las pruebas manuales
 
-Los archivos `apps/api/.env` y `apps/web/.env.local` están excluidos de Git. La
-configuración Oracle existente se conserva. Para el entorno acordado, el backend
+Los archivos `apps/api/.env` y `apps/web/.env.local` están excluidos de Git. Tras
+integrar `dev`, adaptar Oracle a modo Thin según los pasos siguientes. Para el entorno acordado, el backend
 usa `NODE_ENV=development`, `DEV_ADMIN_ENABLED=true` y `DEV_ADMIN_EMPLOYEE_ID=21`.
 El frontend usa `VITE_API_BASE_URL=/api`.
+
+### Migración de Oracle a modo Thin
+
+El backend utiliza `DatabaseService` de `dev`, que administra un único pool.
+`UsersRepository` utiliza `query()` para las lecturas y `transaction()` para crear
+dirección, perfil y credenciales con una misma conexión y un único commit. Un fallo
+de escritura produce rollback. Los fallos de limpieza no sustituyen el error
+original de la transacción.
+
+1. Detener el backend anterior. Reiniciar el proceso es necesario para que deje
+   de utilizar el cliente Thick que ya había cargado.
+2. Conservar la wallet fuera de Git. Para la ubicación local existente,
+   `apps/api/Wallet/` debe contener `tnsnames.ora` y `ewallet.pem`. No borrar la wallet
+   ni modificar las tablas o los registros existentes.
+3. Editar **`apps/api/.env`**, conservando `DB_USER`, `DB_PASSWORD`, las variables
+   `DEV_ADMIN_*` y las de SMTP. El ejemplo general `apps/.env.example` no se carga
+   automáticamente: Nest lee `.env` desde `apps/api/` al arrancar allí.
+4. Renombrar `DB_CONNECTION_STRING` a `DB_CONNECT_STRING`, conservando el alias
+   válido que ya usabas y que aparece en `tnsnames.ora`.
+5. Añadir `DB_WALLET_DIR=./Wallet` al iniciar Nest desde `apps/api/`. También se puede
+   usar una ruta absoluta; la carpeta debe contener los dos archivos anteriores.
+6. Añadir `DB_WALLET_PASSWORD` con la contraseña de la wallet, introducida
+   directamente en el archivo privado. Es la contraseña que protege `ewallet.pem`,
+   no la contraseña SMTP, la de la cuenta Cinetadel ni necesariamente `DB_PASSWORD`.
+   Si contiene `#` o espacios, escribir el valor entre comillas para conservarlo.
+7. Si `DB_USER` es el propietario `PRODUCTION`, no hace falta `DB_SCHEMA`. Si usas
+   otro usuario con permisos sobre esas tablas, configurar `DB_SCHEMA=PRODUCTION`.
+   Esta variable selecciona el esquema; no concede permisos.
+8. Eliminar del entorno del backend las variables antiguas `DB_CONNECTION_STRING`
+   y `ORACLE_CLIENT_LIB_DIR`, que ya no se utilizan. No es necesario desinstalar
+   Instant Client ni cambiar SQL Developer.
+9. Tras instalar las dependencias con `npm ci` en cada aplicación, arrancar Nest y
+   Vue con los comandos indicados abajo. Confirmar el mensaje de conexión a Oracle
+   y abrir el formulario para comprobar los catálogos antes de crear otra cuenta.
+
+El modo Thin es el modo predeterminado de node-oracledb cuando no se llama a
+`initOracleClient()` y no requiere Instant Client. La configuración de esta rama
+utiliza la wallet para la conexión mTLS. Referencia:
+[documentación oficial de node-oracledb](https://node-oracledb.readthedocs.io/en/latest/user_guide/connection_handling.html#connecting-to-oracle-cloud-autonomous-databases).
+
+### Correo y arranque
 
 Para Gmail, configurar `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465` y
 `SMTP_SECURE=true`. `SMTP_USER` y `SMTP_FROM` deben contener la cuenta remitente
