@@ -54,6 +54,27 @@ describe('ClientsService', () => {
     });
   });
 
+  describe('findWithLocalCredentials', () => {
+    it('returns null when the client has no local credentials row', async () => {
+      db.query.mockResolvedValue({ rows: [] });
+
+      expect(await service.findWithLocalCredentials('nope@x.com')).toBeNull();
+    });
+
+    it('returns the client with its password hash when found', async () => {
+      const withHash = { ...client, passwordHash: 'hash' };
+      db.query.mockResolvedValue({ rows: [withHash] });
+
+      const result = await service.findWithLocalCredentials(client.email);
+
+      expect(db.query).toHaveBeenCalledWith(
+        expect.stringContaining('Client_local_credentials'),
+        { email: client.email },
+      );
+      expect(result).toEqual(withHash);
+    });
+  });
+
   describe('createWithLocalCredentials', () => {
     it('inserts the client and its credentials inside a transaction', async () => {
       conn.execute
@@ -70,6 +91,27 @@ describe('ClientsService', () => {
       expect(db.transaction).toHaveBeenCalled();
       expect(conn.execute).toHaveBeenCalledTimes(2);
       expect(result).toEqual({ ...client, id: 7 });
+    });
+
+    it('defaults every optional field to null and language to "es" when omitted', async () => {
+      conn.execute
+        .mockResolvedValueOnce({ outBinds: { id: [8] } })
+        .mockResolvedValueOnce({});
+      db.query.mockResolvedValue({ rows: [{ ...client, id: 8 }] });
+
+      await service.createWithLocalCredentials({ email: client.email, firstName: 'Ana' }, 'hash', 'salt');
+
+      const insertClientBinds = conn.execute.mock.calls[0][1];
+      expect(insertClientBinds).toMatchObject({
+        secondName: null,
+        firstSurname: null,
+        secondSurname: null,
+        birthday: null,
+        phoneNumber: null,
+        gender: null,
+        language: 'es',
+        terms: 0,
+      });
     });
 
     it('translates a duplicate email UNIQUE violation into ConflictException', async () => {
