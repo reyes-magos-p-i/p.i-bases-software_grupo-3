@@ -13,11 +13,16 @@ controlador, la validación, el guard, el repositorio Oracle, el generador aleat
 el hasher Argon2id y el envío de credenciales por SMTP. El servidor necesita la
 configuración de Oracle y SMTP para arrancar.
 
-La vista de desarrollo carga los catálogos mediante Axios al abrir el formulario.
-Sigue pendiente conectar el envío del formulario y gestionar sus resultados.
-Las pruebas manuales del flujo se realizarán
-cuando esa integración esté lista. No se modifica automáticamente la base de datos
-ni el archivo `.env` al incorporar este módulo.
+La vista de desarrollo carga los catálogos mediante Axios al abrir el formulario
+y permite crear empleados y administradores mediante `POST /users`. Valida los
+campos, bloquea envíos duplicados y comunica el resultado. El formulario de clientes
+sigue pendiente, aunque el backend ya admite ese tipo de cuenta.
+
+La integración del formulario está lista para preparar las pruebas manuales. Antes
+de realizarlas es necesario configurar los entornos locales de Vue y Nest, el
+administrador de desarrollo y un proveedor SMTP real, y arrancar ambos servidores.
+No se modifica automáticamente la base de datos ni el archivo `.env` al incorporar
+este módulo; enviar el formulario sí crea registros reales y solicita un correo.
 
 ## Configuración prevista
 
@@ -114,8 +119,37 @@ la vista también se cancela la solicitud. Las respuestas tardías de solicitude
 canceladas no cambian el formulario actual. No hay reintentos automáticos.
 
 El rol de la vista sigue siendo una simulación visual: no se envía como autorización.
-El backend comprueba el administrador configurado en su propio entorno. El botón
-«Crear usuario» continúa deshabilitado hasta el próximo incremento.
+El backend comprueba el administrador configurado en su propio entorno.
+
+## Envío del formulario
+
+«Crear usuario» valida todos los campos y enfoca el primer campo inválido. El cuerpo
+incluye el rol de la cuenta, sus datos personales, `branchId` y la dirección anidada
+con `districtId` y `details`. No envía los identificadores auxiliares de provincia
+y cantón ni una contraseña. Los textos opcionales vacíos se omiten.
+
+Mientras la solicitud está pendiente se bloquean los campos, el cierre del diálogo
+y los nuevos envíos. Axios espera como máximo sesenta segundos para el POST, sin
+reintentos automáticos. Este límite no cancela una transacción que el servidor ya
+esté procesando. Salir del navegador tampoco garantiza cancelar la creación.
+
+| Resultado                                                          | Comportamiento de la interfaz                                                                                                      |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `201`                                                              | Cierra y limpia el formulario, y anuncia la cuenta creada y la aceptación del correo por SMTP.                                     |
+| `400`                                                              | Muestra la validación recibida y conserva los campos para corregirlos.                                                             |
+| `403`                                                              | Informa de la falta de permisos y conserva los campos.                                                                             |
+| `409`                                                              | Informa del conflicto de correo y conserva los campos.                                                                             |
+| `502` con el mensaje contractual de cuenta creada                  | Cierra y limpia el formulario; informa que la cuenta existe pero no se confirmó el envío del correo y pide no repetir su creación. |
+| Error de red, tiempo agotado, `500` u otra respuesta no reconocida | Informa que no pudo confirmar la creación y bloquea nuevos envíos en esa vista para evitar duplicados. Conserva los datos.         |
+
+Un `502` genérico de un proxy no confirma una cuenta creada: se trata como resultado
+incierto. Tras un resultado incierto, cerrar y abrir el diálogo no desbloquea el envío.
+Se debe comprobar el estado real antes de recargar la vista y efectuar otra creación;
+el bloqueo de la interfaz no reemplaza la idempotencia del servidor. La comprobación
+de cuentas existentes y la recuperación del correo no se implementan en este incremento.
+
+La confirmación se muestra como un mensaje accesible; todavía no hay un listado de
+empleados que se actualice después de crear la cuenta.
 
 ## Configuración de correo
 
@@ -161,13 +195,67 @@ repetir `POST /users`: podría crear otra cuenta o provocar un conflicto. Una co
 interrumpida también puede impedir confirmar el envío aunque el servidor haya aceptado
 el mensaje. La recuperación o reenvío de credenciales requiere un incremento posterior.
 
-## Prueba manual futura
+## Preparación local para las pruebas manuales
 
-Una vez integrado el frontend y configurado el entorno local, usar un correo de
-prueba controlado y los catálogos reales para crear una cuenta. Verificar el resultado
-en pantalla, el registro en Oracle y la recepción del mensaje. Una respuesta `502`
-debe comunicarse como creación completada con fallo de correo, sin ofrecer repetir
-la creación automáticamente. Estas pruebas sí crean datos reales y envían correos.
+Los archivos `apps/api/.env` y `apps/web/.env.local` están excluidos de Git. La
+configuración Oracle existente se conserva. Para el entorno acordado, el backend
+usa `NODE_ENV=development`, `DEV_ADMIN_ENABLED=true` y `DEV_ADMIN_EMPLOYEE_ID=21`.
+El frontend usa `VITE_API_BASE_URL=/api`.
+
+Para Gmail, configurar `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465` y
+`SMTP_SECURE=true`. `SMTP_USER` y `SMTP_FROM` deben contener la cuenta remitente
+acordada. Introducir `SMTP_PASSWORD` directamente en el archivo local: no usar la
+contraseña del administrador del sistema ni compartir esta credencial en el chat.
+
+Google requiere verificación en dos pasos para crear una contraseña de aplicación.
+Desde la cuenta remitente, abrir [Contraseñas de aplicación](https://myaccount.google.com/apppasswords),
+crear una para el entorno de desarrollo y copiarla a `SMTP_PASSWORD`. Si no aparece
+esa opción, consultar las restricciones de la cuenta en la
+[ayuda de Google](https://support.google.com/mail/answer/185833?hl=es).
+Mientras `SMTP_PASSWORD` esté vacío, Nest no puede iniciar.
+
+En una terminal ubicada en `apps/api/`, iniciar el backend con:
+
+```sh
+npm run start:dev
+```
+
+En otra terminal ubicada en `apps/web/`, iniciar Vue con:
+
+```sh
+npm run dev -- --host 127.0.0.1 --port 5178 --strictPort
+```
+
+Si el frontend ya está ejecutándose en ese puerto, utilizar esa instancia; no
+iniciar otra. Reiniciar los procesos si sus variables de entorno no se actualizan.
+El proxy presupone que Nest escucha en el puerto 3000.
+
+Abrir `http://127.0.0.1:5178/dev/dashboard` y seleccionar «Añadir empleado». Comprobar
+que aparecen las sucursales y provincias, y que provincia → cantón → distrito filtra
+las opciones. Esta consulta no crea registros ni envía correo. Si falla, revisar:
+
+- Que Vue tenga `VITE_API_BASE_URL=/api` y Nest esté escuchando en 3000.
+- Que la configuración SMTP esté completa, pues es necesaria para arrancar Nest.
+- Que el guard encuentre al empleado 21 con rol `ADMINISTRATOR`.
+
+La verificación SMTP de conexión y autenticación no envía mensajes ni garantiza que
+el proveedor acepte un remitente o entregue un correo; eso se verifica en la prueba
+real de creación.
+
+## Prueba manual de creación
+
+1. Usar un correo de prueba controlado que permita identificar la nueva cuenta.
+2. Completar los datos, seleccionar una sucursal existente y una dirección, e
+   introducir sus señas si corresponde. Elegir empleado o administrador.
+3. Pulsar «Crear usuario» una sola vez. Comprobar el estado de envío y su resultado.
+4. Si se confirma la creación, verificar el registro y sus relaciones en Oracle,
+   y revisar la bandeja de entrada y correo no deseado del destinatario.
+5. Ante `502` contractual, verificar la cuenta existente sin repetir su creación.
+   Ante un resultado incierto, comprobar Oracle antes de efectuar otro intento.
+
+Estas pruebas sí crean datos reales y envían correos. No requieren iniciar sesión:
+el guard usa al administrador configurado. El formulario de clientes y el listado
+de empleados siguen pendientes; esta vista confirma la creación mediante mensajes.
 
 La API también admite solicitudes JSON directas a `POST /users` con el contrato de
 `create-user.openapi.yaml`. No requiere un token en este modo: actúa el administrador
@@ -194,3 +282,6 @@ No crean registros en Oracle ni envían correos reales.
 En el frontend, los specs de Axios, la vista de desarrollo y el diálogo simulan
 las respuestas HTTP. Verifican carga, selección geográfica, listas vacías, errores,
 reintentos, conservación del texto y cancelación de solicitudes obsoletas.
+También verifican el envío de empleados y administradores, el cuerpo enviado,
+la validación completa, la prevención de duplicados, la limpieza tras una creación
+confirmada y el tratamiento de errores corregibles o resultados inciertos.
