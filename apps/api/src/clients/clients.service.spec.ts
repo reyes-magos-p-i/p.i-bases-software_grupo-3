@@ -129,6 +129,43 @@ describe('ClientsService', () => {
         service.createWithLocalCredentials({ email: client.email, firstName: 'Ana' }, 'hash', 'salt'),
       ).rejects.toThrow('connection lost');
     });
+
+    it('passes all provided optional fields through to the insert', async () => {
+      conn.execute
+        .mockResolvedValueOnce({ outBinds: { id: [9] } })
+        .mockResolvedValueOnce({});
+      db.query.mockResolvedValue({ rows: [{ ...client, id: 9 }] });
+
+      await service.createWithLocalCredentials(
+        {
+          email: client.email,
+          firstName: 'Ana',
+          secondName: 'Maria',
+          firstSurname: 'Perez',
+          secondSurname: 'Mora',
+          birthday: '2000-05-10',
+          phoneNumber: '88881234',
+          gender: 'F',
+          language: 'en',
+          acceptedTerms: true,
+        },
+        'hash',
+        'salt',
+      );
+
+      const insertBinds = conn.execute.mock.calls[0][1];
+      expect(insertBinds).toMatchObject({
+        firstName: 'Ana',
+        secondName: 'Maria',
+        firstSurname: 'Perez',
+        secondSurname: 'Mora',
+        birthday: '2000-05-10',
+        phoneNumber: '88881234',
+        gender: 'F',
+        language: 'en',
+        terms: 1,
+      });
+    });
   });
 
   describe('findOrCreateSocial', () => {
@@ -201,6 +238,48 @@ describe('ClientsService', () => {
 
       expect(db.transaction).toHaveBeenCalled();
       expect(result).toEqual({ ...client, id: 9 });
+    });
+
+    it('rethrows non-UNIQUE errors when linking external credentials', async () => {
+      db.query
+        .mockResolvedValueOnce({ rows: [] })   // findByExternal miss
+        .mockResolvedValueOnce({ rows: [client] }) // findByEmail hit
+        .mockRejectedValueOnce(new Error('connection lost')); // non-UNIQUE error
+
+      await expect(
+        service.findOrCreateSocial({
+          provider: 'GOOGLE',
+          providerUserId: 'gid-1',
+          email: client.email,
+          firstName: 'Ana',
+          lastName: '',
+        }),
+      ).rejects.toThrow('connection lost');
+    });
+
+    it('falls back to email prefix when firstName is empty and skips lastName split when absent', async () => {
+      db.query
+        .mockResolvedValueOnce({ rows: [] })  // findByExternal miss
+        .mockResolvedValueOnce({ rows: [] })  // findByEmail miss
+        .mockResolvedValueOnce({ rows: [{ ...client, id: 10 }] }); // findById after commit
+      conn.execute
+        .mockResolvedValueOnce({ outBinds: { id: [10] } }) // insertClient
+        .mockResolvedValueOnce({});  // external credentials insert
+
+      await service.findOrCreateSocial({
+        provider: 'FACEBOOK',
+        providerUserId: 'fb-1',
+        email: 'fallback@example.com',
+        firstName: '',   // falsy → uses 'fallback' from email
+        lastName: '',    // falsy → [null, null]
+      });
+
+      const insertBinds = conn.execute.mock.calls[0][1];
+      expect(insertBinds).toMatchObject({
+        firstName: 'fallback',
+        firstSurname: null,
+        secondSurname: null,
+      });
     });
   });
 });

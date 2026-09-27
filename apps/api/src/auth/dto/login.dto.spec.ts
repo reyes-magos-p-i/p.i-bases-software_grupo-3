@@ -17,6 +17,12 @@ describe('LoginDto', () => {
     expect(dto.email).toBe('user@example.com');
   });
 
+  it('leaves a non-string email value as-is (Transform else-branch)', () => {
+    const dto = plainToInstance(LoginDto, { email: 123, password: 'x' });
+
+    expect(dto.email).toBe(123);
+  });
+
   it('rejects an invalid email', async () => {
     const dto = plainToInstance(LoginDto, { email: 'not-an-email', password: 'x' });
 
