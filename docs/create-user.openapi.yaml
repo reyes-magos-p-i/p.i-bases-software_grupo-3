@@ -1,10 +1,11 @@
 openapi: 3.0.3
 info:
   title: Creación administrativa de usuarios
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Contrato preliminar para la comunicación HTTP entre Vue y NestJS.
-    UsersModule está registrado en AppModule y expone POST /users.
+    UsersModule está registrado en AppModule y expone POST /users y
+    GET /users/creation-options para cargar los catálogos del formulario.
     El backend necesita configuración válida de Oracle y SMTP para arrancar.
     Las pruebas de integración del módulo ejecutan las capas de usuarios reales
     con Oracle y SMTP simulados. La integración con el formulario sigue pendiente.
@@ -30,6 +31,56 @@ info:
 x-integration-status: backend-integrated
 x-frontend-integration-status: pending
 paths:
+  /users/creation-options:
+    get:
+      operationId: getUserCreationOptions
+      summary: Consultar los catálogos para crear usuarios
+      x-required-role: ADMINISTRATOR
+      description: |
+        Devuelve provincias, cantones, distritos y sucursales existentes.
+        Cada lista se ordena en Oracle por NAME y luego por su identificador.
+        Los nombres se conservan como están almacenados. provinceId relaciona
+        un cantón con su provincia y cantonId relaciona un distrito con su cantón.
+        Las sucursales provienen de CINEMAS, sin inferir vínculos geográficos.
+        No recibe parámetros de filtrado ni paginación. Cada tabla vacía produce
+        una lista vacía. Si falla una consulta, no se devuelve un resultado parcial.
+        Reutiliza el guard de administrador de desarrollo de POST /users.
+        No crea usuarios ni direcciones, no genera contraseñas y no envía correos.
+      responses:
+        "200":
+          description: Catálogos consultados; las listas pueden estar vacías.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserCreationOptions"
+              example:
+                provinces:
+                  - { id: 1, label: San José }
+                cantons:
+                  - { id: 19, label: Curridabat, provinceId: 1 }
+                districts:
+                  - { id: 102, label: Curridabat, cantonId: 19 }
+                branches:
+                  - { id: 1, label: Cinépolis Multiplaza del Este }
+        "403":
+          description: Modo de desarrollo deshabilitado, configuración inválida o empleado configurado sin permisos de administrador.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 403
+                error: Forbidden
+                message: No tiene permiso para crear usuarios.
+        "500":
+          description: Fallo al comprobar la identidad o consultar los catálogos; no incluye detalles internos ni resultados parciales.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 500
+                message: Internal server error
   /users:
     post:
       operationId: createUser
@@ -175,6 +226,62 @@ paths:
                 message: El usuario fue creado, pero no se pudo enviar el correo con sus credenciales.
 components:
   schemas:
+    UserCreationOptions:
+      type: object
+      additionalProperties: false
+      required: [provinces, cantons, districts, branches]
+      properties:
+        provinces:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogOption"
+        cantons:
+          type: array
+          items:
+            $ref: "#/components/schemas/CantonOption"
+        districts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DistrictOption"
+        branches:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogOption"
+    CatalogOption:
+      type: object
+      additionalProperties: false
+      required: [id, label]
+      properties:
+        id:
+          type: integer
+          description: Identificador existente de la provincia o sucursal.
+        label:
+          type: string
+          description: Nombre almacenado en Oracle.
+    CantonOption:
+      type: object
+      additionalProperties: false
+      required: [id, label, provinceId]
+      properties:
+        id:
+          type: integer
+        label:
+          type: string
+        provinceId:
+          type: integer
+          description: Referencia a PROVINCES.ID_PROVINCE.
+    DistrictOption:
+      type: object
+      additionalProperties: false
+      required: [id, label, cantonId]
+      properties:
+        id:
+          type: integer
+        label:
+          type: string
+        cantonId:
+          type: integer
+          description: Referencia a CANTONS.ID_CANTON.
     CreateClient:
       type: object
       additionalProperties: false

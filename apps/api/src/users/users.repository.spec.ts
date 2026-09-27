@@ -38,6 +38,108 @@ describe('UsersRepository', () => {
     await module.close();
   });
 
+  describe('getCreationOptions', () => {
+    const queries = [
+      'SELECT ID_PROVINCE, NAME FROM PROVINCES ORDER BY NAME, ID_PROVINCE',
+      'SELECT ID_CANTON, NAME, ID_PROVINCE FROM CANTONS ORDER BY NAME, ID_CANTON',
+      'SELECT ID_DISTRICT, NAME, ID_CANTON FROM DISTRICTS ORDER BY NAME, ID_DISTRICT',
+      'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
+    ];
+
+    it('returns labels and geographic parent IDs using only catalog columns', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
+        .mockResolvedValueOnce({
+          rows: [{ ID_CANTON: 19, NAME: 'Curridabat', ID_PROVINCE: 1 }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ ID_DISTRICT: 102, NAME: 'Curridabat', ID_CANTON: 19 }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ BRANCH_ID: 1, NAME: 'Cinépolis Multiplaza del Este' }],
+        });
+      await expect(repository.getCreationOptions()).resolves.toEqual({
+        provinces: [{ id: 1, label: 'San José' }],
+        cantons: [{ id: 19, label: 'Curridabat', provinceId: 1 }],
+        districts: [{ id: 102, label: 'Curridabat', cantonId: 19 }],
+        branches: [{ id: 1, label: 'Cinépolis Multiplaza del Este' }],
+      });
+      expect(pool.getConnection).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenCalledTimes(4);
+      queries.forEach((sql, index) => {
+        expect(connection.execute).toHaveBeenNthCalledWith(
+          index + 1,
+          sql,
+          {},
+          { outFormat: oracle.OUT_FORMAT_OBJECT },
+        );
+      });
+      expect(connection.close).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(connection.rollback).not.toHaveBeenCalled();
+    });
+
+    it.each([{ rows: [] }, {}])(
+      'returns empty arrays for empty query results %p',
+      async (result) => {
+        connection.execute.mockResolvedValue(result);
+        await expect(repository.getCreationOptions()).resolves.toEqual({
+          provinces: [],
+          cantons: [],
+          districts: [],
+          branches: [],
+        });
+        expect(connection.close).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('preserves the remaining catalogs when one table is empty', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [{ BRANCH_ID: 1, NAME: 'Sucursal existente' }],
+        });
+      await expect(repository.getCreationOptions()).resolves.toEqual({
+        provinces: [{ id: 1, label: 'San José' }],
+        cantons: [],
+        districts: [],
+        branches: [{ id: 1, label: 'Sucursal existente' }],
+      });
+    });
+
+    it.each([0, 1, 2, 3])(
+      'rejects the entire result and releases the connection when query %i fails',
+      async (index) => {
+        const error = new Error('Query failed');
+        for (let successful = 0; successful < index; successful++) {
+          connection.execute.mockResolvedValueOnce({ rows: [] });
+        }
+        connection.execute.mockRejectedValueOnce(error);
+        await expect(repository.getCreationOptions()).rejects.toBe(error);
+        expect(connection.execute).toHaveBeenCalledTimes(index + 1);
+        expect(connection.close).toHaveBeenCalledTimes(1);
+        expect(connection.commit).not.toHaveBeenCalled();
+        expect(connection.rollback).not.toHaveBeenCalled();
+      },
+    );
+
+    it('propagates connection acquisition failures without running queries', async () => {
+      const error = new Error('Connection unavailable');
+      pool.getConnection.mockRejectedValue(error);
+      await expect(repository.getCreationOptions()).rejects.toBe(error);
+      expect(connection.execute).not.toHaveBeenCalled();
+      expect(connection.close).not.toHaveBeenCalled();
+    });
+
+    it('propagates connection release failures', async () => {
+      const error = new Error('Connection close failed');
+      connection.close.mockRejectedValue(error);
+      await expect(repository.getCreationOptions()).rejects.toBe(error);
+    });
+  });
+
   describe('findEmployeeIdentityById', () => {
     it.each([UserRole.ADMINISTRATOR, UserRole.EMPLOYEE])(
       'reads a minimal employee identity with role %s using a bound ID',

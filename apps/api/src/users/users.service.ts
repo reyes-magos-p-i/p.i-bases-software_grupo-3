@@ -9,6 +9,7 @@ import { PasswordHasher } from '../common/security/password-hasher';
 import type { CreateClientDto } from './dto/create-client.dto';
 import type { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreatedUserDto } from './dto/created-user.dto';
+import type { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { UsersRepository } from './users.repository';
@@ -21,6 +22,10 @@ export class UsersService {
     private readonly passwordHasher: PasswordHasher,
     private readonly credentialsSender: InitialCredentialsSender,
   ) {}
+
+  getCreationOptions(): Promise<UserCreationOptionsDto> {
+    return this.usersRepository.getCreationOptions();
+  }
 
   async create(
     data: CreateClientDto | CreateEmployeeDto,

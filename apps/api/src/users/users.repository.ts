@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import oracle from 'oracledb';
+import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
 import type { UserIdentity } from './types/user-identity.type';
 import { ORACLE_POOL } from '../database/database.module';
@@ -10,6 +11,70 @@ import type { CreateAddressDto } from './dto/create-address.dto';
 @Injectable()
 export class UsersRepository {
   constructor(@Inject(ORACLE_POOL) private readonly oraclePool: oracle.Pool) {}
+
+  async getCreationOptions(): Promise<UserCreationOptionsDto> {
+    const connection = await this.oraclePool.getConnection();
+    try {
+      const options = { outFormat: oracle.OUT_FORMAT_OBJECT };
+      const provinces = await connection.execute<{
+        ID_PROVINCE: number;
+        NAME: string;
+      }>(
+        'SELECT ID_PROVINCE, NAME FROM PROVINCES ORDER BY NAME, ID_PROVINCE',
+        {},
+        options,
+      );
+      const cantons = await connection.execute<{
+        ID_CANTON: number;
+        NAME: string;
+        ID_PROVINCE: number;
+      }>(
+        'SELECT ID_CANTON, NAME, ID_PROVINCE FROM CANTONS ORDER BY NAME, ID_CANTON',
+        {},
+        options,
+      );
+      const districts = await connection.execute<{
+        ID_DISTRICT: number;
+        NAME: string;
+        ID_CANTON: number;
+      }>(
+        'SELECT ID_DISTRICT, NAME, ID_CANTON FROM DISTRICTS ORDER BY NAME, ID_DISTRICT',
+        {},
+        options,
+      );
+      const branches = await connection.execute<{
+        BRANCH_ID: number;
+        NAME: string;
+      }>(
+        'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
+        {},
+        options,
+      );
+
+      return new UserCreationOptionsDto({
+        provinces: (provinces.rows ?? []).map((row) => ({
+          id: row.ID_PROVINCE,
+          label: row.NAME,
+        })),
+        cantons: (cantons.rows ?? []).map((row) => ({
+          id: row.ID_CANTON,
+          label: row.NAME,
+          provinceId: row.ID_PROVINCE,
+        })),
+        districts: (districts.rows ?? []).map((row) => ({
+          id: row.ID_DISTRICT,
+          label: row.NAME,
+          cantonId: row.ID_CANTON,
+        })),
+        branches: (branches.rows ?? []).map((row) => ({
+          id: row.BRANCH_ID,
+          label: row.NAME,
+        })),
+      });
+    } finally {
+      await connection.close();
+    }
+  }
 
   async clientEmailExists(email: string): Promise<boolean> {
     const connection = await this.oraclePool.getConnection();

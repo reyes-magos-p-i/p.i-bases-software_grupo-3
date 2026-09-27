@@ -19,7 +19,7 @@ import { UserRole } from './enums/user-role.enum';
 
 describe('UsersController (HTTP integration)', () => {
   let app: INestApplication<App>;
-  const service = { create: jest.fn() };
+  const service = { create: jest.fn(), getCreationOptions: jest.fn() };
   const repository = { findEmployeeIdentityById: jest.fn() };
   let settings: Record<string, unknown>;
   const client = {
@@ -57,6 +57,12 @@ describe('UsersController (HTTP integration)', () => {
   });
 
   beforeEach(() => {
+    service.getCreationOptions.mockReset().mockResolvedValue({
+      provinces: [],
+      cantons: [],
+      districts: [],
+      branches: [],
+    });
     settings = {
       NODE_ENV: 'development',
       DEV_ADMIN_ENABLED: 'true',
@@ -73,6 +79,71 @@ describe('UsersController (HTTP integration)', () => {
           new CreatedUserDto({ id: 42, role: data.role, email: data.email }),
         ),
       );
+  });
+
+  describe('GET /users/creation-options', () => {
+    it('returns all catalogs for an authorized administrator', async () => {
+      const options = {
+        provinces: [{ id: 1, label: 'San José' }],
+        cantons: [{ id: 19, label: 'Curridabat', provinceId: 1 }],
+        districts: [{ id: 102, label: 'Curridabat', cantonId: 19 }],
+        branches: [{ id: 1, label: 'Sucursal existente' }],
+      };
+      service.getCreationOptions.mockResolvedValue(options);
+      const response = await request(app.getHttpServer())
+        .get('/users/creation-options')
+        .expect(200);
+      expect(response.body).toEqual(options);
+      expect(repository.findEmployeeIdentityById).toHaveBeenCalledWith(21);
+      expect(service.getCreationOptions).toHaveBeenCalledTimes(1);
+      expect(service.create).not.toHaveBeenCalled();
+    });
+
+    it('returns empty lists with 200 when no catalog data exists', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/users/creation-options')
+        .expect(200);
+      expect(response.body).toEqual({
+        provinces: [],
+        cantons: [],
+        districts: [],
+        branches: [],
+      });
+    });
+
+    it('rejects disabled development mode before reading catalogs', async () => {
+      settings.DEV_ADMIN_ENABLED = 'false';
+      await request(app.getHttpServer())
+        .get('/users/creation-options')
+        .expect(403);
+      expect(service.getCreationOptions).not.toHaveBeenCalled();
+    });
+
+    it.each([null, { id: 21, role: UserRole.EMPLOYEE }])(
+      'rejects an unauthorized identity %p',
+      async (identity) => {
+        repository.findEmployeeIdentityById.mockResolvedValue(identity);
+        await request(app.getHttpServer())
+          .get('/users/creation-options')
+          .set('x-user-role', 'ADMINISTRATOR')
+          .expect(403);
+        expect(service.getCreationOptions).not.toHaveBeenCalled();
+      },
+    );
+
+    it('returns a generic 500 without leaking database details or partial catalogs', async () => {
+      service.getCreationOptions.mockRejectedValue(
+        new Error('Private SQL details'),
+      );
+      const response = await request(app.getHttpServer())
+        .get('/users/creation-options')
+        .expect(500);
+      expect(response.body).toEqual({
+        statusCode: 500,
+        message: 'Internal server error',
+      });
+      expect(service.create).not.toHaveBeenCalled();
+    });
   });
 
   afterAll(async () => {

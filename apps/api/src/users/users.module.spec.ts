@@ -130,6 +130,79 @@ describe('UsersModule (application HTTP integration)', () => {
     await app.close();
   });
 
+  describe('GET /users/creation-options', () => {
+    it('reads Oracle catalogs through the registered route without creating users or sending credentials', async () => {
+      const generate = jest.spyOn(app.get(PasswordGenerator), 'generate');
+      const hash = jest.spyOn(app.get(PasswordHasher), 'hash');
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR' }],
+        })
+        .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
+        .mockResolvedValueOnce({
+          rows: [{ ID_CANTON: 19, NAME: 'Curridabat', ID_PROVINCE: 1 }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ ID_DISTRICT: 102, NAME: 'Curridabat', ID_CANTON: 19 }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ BRANCH_ID: 1, NAME: 'Cinépolis Multiplaza del Este' }],
+        });
+
+      const response = await request(app.getHttpServer())
+        .get('/users/creation-options')
+        .expect(200);
+      expect(response.body).toEqual({
+        provinces: [{ id: 1, label: 'San José' }],
+        cantons: [{ id: 19, label: 'Curridabat', provinceId: 1 }],
+        districts: [{ id: 102, label: 'Curridabat', cantonId: 19 }],
+        branches: [{ id: 1, label: 'Cinépolis Multiplaza del Este' }],
+      });
+      expect(connection.execute).toHaveBeenCalledTimes(5);
+      const statements = connection.execute.mock.calls as [
+        string,
+        unknown,
+        unknown,
+      ][];
+      expect(statements.every(([sql]) => sql.startsWith('SELECT '))).toBe(true);
+      expect(pool.getConnection).toHaveBeenCalledTimes(2);
+      expect(connection.close).toHaveBeenCalledTimes(2);
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(connection.rollback).not.toHaveBeenCalled();
+      expect(generate).not.toHaveBeenCalled();
+      expect(hash).not.toHaveBeenCalled();
+      expect(sendMail).not.toHaveBeenCalled();
+      generate.mockRestore();
+      hash.mockRestore();
+    });
+
+    it('denies access outside development before any Oracle query', async () => {
+      settings.NODE_ENV = 'production';
+      await request(app.getHttpServer())
+        .get('/users/creation-options')
+        .expect(403);
+      expect(pool.getConnection).not.toHaveBeenCalled();
+    });
+
+    it('does not return partial catalogs if a later query fails', async () => {
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR' }],
+        })
+        .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
+        .mockRejectedValueOnce(new Error('Private Oracle catalog error'));
+      const response = await request(app.getHttpServer())
+        .get('/users/creation-options')
+        .expect(500);
+      expect(response.body).toEqual({
+        statusCode: 500,
+        message: 'Internal server error',
+      });
+      expect(connection.close).toHaveBeenCalledTimes(2);
+      expect(sendMail).not.toHaveBeenCalled();
+    });
+  });
+
   it('resolves the real password generator, hasher and SMTP sender', () => {
     expect(app.get(PasswordGenerator)).toBeInstanceOf(RandomPasswordGenerator);
     expect(app.get(PasswordHasher)).toBeInstanceOf(Argon2PasswordHasher);

@@ -7,7 +7,8 @@ de comprobar al administrador configurado.
 
 ## Estado de integración
 
-`UsersModule` está registrado en `AppModule` y expone `POST /users`. Conecta el
+`UsersModule` está registrado en `AppModule` y expone `POST /users` y
+`GET /users/creation-options`. Conecta el
 controlador, la validación, el guard, el repositorio Oracle, el generador aleatorio,
 el hasher Argon2id y el envío de credenciales por SMTP. El servidor necesita la
 configuración de Oracle y SMTP para arrancar.
@@ -56,6 +57,35 @@ esa comprobación en caché.
 Para deshabilitarlo, establecer `DEV_ADMIN_ENABLED=false` o eliminar esa variable
 y reiniciar el backend. Las solicitudes seguirán
 recibiendo `403` mientras no exista otro mecanismo de autorización aprobado.
+
+## Catálogos del formulario
+
+`GET /users/creation-options` devuelve los datos existentes en Oracle, con el mismo
+guard de administrador de desarrollo que protege la creación. No requiere cuerpo
+ni parámetros y responde con estas cuatro listas:
+
+| Lista       | Tabla       | Campos de cada opción       |
+| ----------- | ----------- | --------------------------- |
+| `provinces` | `PROVINCES` | `id`, `label`               |
+| `cantons`   | `CANTONS`   | `id`, `label`, `provinceId` |
+| `districts` | `DISTRICTS` | `id`, `label`, `cantonId`   |
+| `branches`  | `CINEMAS`   | `id`, `label`               |
+
+Se consultan todos los registros y cada lista se ordena por nombre e identificador
+en Oracle. No se renombran sucursales ni se crean datos. Una tabla vacía devuelve
+una lista vacía. Las consultas de los cuatro catálogos utilizan una conexión que
+se libera al terminar; si alguna consulta falla, la respuesta es `500` genérico y
+no se envían catálogos parciales. Un rechazo del guard devuelve `403`.
+
+Vue podrá filtrar cantones por `provinceId` y distritos por `cantonId` utilizando
+los selectores existentes. La dirección exacta sigue siendo texto introducido por
+el usuario; al crear la cuenta se envían `address.districtId` y `address.details`.
+La sucursal se elige de forma independiente, sin atribuirle relaciones geográficas
+que no están definidas en este contrato.
+
+Este endpoint solo consulta datos: no genera contraseñas ni envía correos. La
+configuración SMTP sigue siendo necesaria para iniciar el backend. La carga de
+estas opciones en Vue se implementará en el siguiente incremento.
 
 ## Configuración de correo
 
@@ -126,4 +156,7 @@ servicio, repositorio, generador, hasher y emisor reales; solo sustituye configu
 pool/conexiones Oracle y transporte SMTP. Comprueba los tres roles, la protección,
 la validación, el rollback y el envío posterior al commit. Los specs del emisor
 verifican configuración, cifrado, contenido, destinatarios rechazados y errores.
+Las pruebas de catálogos cubren el mapeo de las cuatro tablas, los resultados vacíos,
+la liberación de conexiones ante errores y la ruta GET protegida dentro de la
+aplicación. Comprueban que consultar opciones no invoque creación ni credenciales.
 No crean registros en Oracle ni envían correos reales.

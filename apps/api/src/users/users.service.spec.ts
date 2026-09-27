@@ -18,6 +18,7 @@ describe('UsersService', () => {
   let module: TestingModule;
   let service: UsersService;
   const repository = {
+    getCreationOptions: jest.fn(),
     clientEmailExists: jest.fn(),
     createClient: jest.fn(),
     createEmployee: jest.fn(),
@@ -80,6 +81,36 @@ describe('UsersService', () => {
 
   afterEach(async () => {
     await module.close();
+  });
+
+  describe('getCreationOptions', () => {
+    afterEach(() => {
+      expect(repository.createClient).not.toHaveBeenCalled();
+      expect(repository.createEmployee).not.toHaveBeenCalled();
+      expect(repository.clientEmailExists).not.toHaveBeenCalled();
+      expect(generator.generate).not.toHaveBeenCalled();
+      expect(hasher.hash).not.toHaveBeenCalled();
+      expect(sender.send).not.toHaveBeenCalled();
+    });
+
+    it('returns catalog data without invoking creation or credential operations', async () => {
+      const options = {
+        provinces: [{ id: 1, label: 'San José' }],
+        cantons: [{ id: 19, label: 'Curridabat', provinceId: 1 }],
+        districts: [{ id: 102, label: 'Curridabat', cantonId: 19 }],
+        branches: [{ id: 1, label: 'Sucursal existente' }],
+      };
+      repository.getCreationOptions.mockResolvedValue(options);
+      await expect(service.getCreationOptions()).resolves.toEqual(options);
+      expect(repository.getCreationOptions).toHaveBeenCalledTimes(1);
+      expect(repository.getCreationOptions).toHaveBeenCalledWith();
+    });
+
+    it('propagates query errors without starting user creation', async () => {
+      const error = new Error('Catalog unavailable');
+      repository.getCreationOptions.mockRejectedValue(error);
+      await expect(service.getCreationOptions()).rejects.toBe(error);
+    });
   });
 
   it.each(profiles)(
