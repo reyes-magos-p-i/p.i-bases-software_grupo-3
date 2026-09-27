@@ -1,12 +1,13 @@
 openapi: 3.0.3
 info:
   title: Creación administrativa de usuarios
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Contrato preliminar para la comunicación HTTP entre Vue y NestJS.
-    El controlador todavía no está registrado en AppModule y esta ruta no
-    está disponible en la aplicación principal. Las pruebas HTTP utilizan
-    un servicio simulado.
+    UsersModule está registrado en AppModule y expone POST /users.
+    El backend necesita configuración válida de Oracle y SMTP para arrancar.
+    Las pruebas de integración del módulo ejecutan las capas de usuarios reales
+    con Oracle y SMTP simulados. La integración con el formulario sigue pendiente.
 
     La operación está destinada exclusivamente a administradores.
     El controlador utiliza DevelopmentAdminGuard: solo permite solicitudes con
@@ -14,7 +15,8 @@ info:
     Consulta el empleado configurado en Oracle en cada solicitud y exige que
     su rol sea ADMINISTRATOR. Este modo local asigna esa identidad a todas las
     solicitudes que alcancen el controlador habilitado; no autentica a la persona.
-    La autorización de producción y el proveedor real de correo siguen pendientes.
+    La autorización de producción sigue pendiente. El envío de credenciales usa
+    un proveedor SMTP configurable, con conexión cifrada y validación de certificados.
     Este documento no define todavía un esquema de autenticación; su ausencia
     no autoriza el acceso público a la operación. Véase development-admin.md.
     El campo role del cuerpo identifica la cuenta que se desea crear y no
@@ -25,7 +27,8 @@ info:
     una letra acentuada puede ocupar varios bytes. Las herramientas OpenAPI
     no validan automáticamente esta extensión; el backend aplica los límites.
     No se convierten implícitamente cadenas en números.
-x-integration-status: pending
+x-integration-status: backend-integrated
+x-frontend-integration-status: pending
 paths:
   /users:
     post:
@@ -37,7 +40,8 @@ paths:
         con su hash y salt. Si se proporciona una dirección, se crea junto con
         el perfil y las credenciales en una misma transacción. Un fallo durante
         esas inserciones revierte la operación completa. Después del commit
-        solicita la entrega por correo.
+        solicita la entrega por SMTP. La aceptación por el servidor SMTP no
+        garantiza que el mensaje llegue a la bandeja de entrada.
         La contraseña, el hash y el salt no forman parte de la respuesta.
         No se admiten propiedades adicionales en el cuerpo ni en address.
         Se recibe address con districtId y details; ya no se admite addressId.
@@ -97,7 +101,7 @@ paths:
                   branchId: 3
       responses:
         "201":
-          description: Usuario creado y solicitud de entrega de credenciales completada.
+          description: Usuario creado y correo de credenciales aceptado por el servidor SMTP para el destinatario.
           content:
             application/json:
               schema:
@@ -157,8 +161,10 @@ paths:
           description: |
             La cuenta ya fue creada, pero falló el envío de sus credenciales.
             No repetir automáticamente POST /users para resolver este error:
-            la persistencia ya terminó. La recuperación de la entrega queda
-            pendiente de la integración de correo.
+            la persistencia ya terminó. No se realiza ningún reintento automático
+            del envío. Un corte de conexión puede impedir confirmar la aceptación
+            aunque el servidor haya recibido el correo. La recuperación de la
+            entrega sigue pendiente; este endpoint no permite reenviar credenciales.
           content:
             application/json:
               schema:
