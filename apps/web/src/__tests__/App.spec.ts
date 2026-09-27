@@ -1,8 +1,11 @@
-import { describe, it, expect } from 'vitest'
-
+import { vi, describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import App from '../App.vue'
 import router from '../router'
+
+vi.mock('@/services/movieFunctions', () => ({
+  getMovieFunctions: vi.fn().mockResolvedValue([]),
+}))
 
 describe('App', () => {
   it('renders the home page through the router', async () => {
