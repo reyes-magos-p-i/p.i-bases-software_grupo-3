@@ -332,6 +332,48 @@ describe('UsersModule (application HTTP integration)', () => {
     expect(operations).toEqual(['insert', 'insert', 'commit']);
   });
 
+  it('persists an administrative client address without asserting terms acceptance', async () => {
+    await request(app.getHttpServer())
+      .post('/users')
+      .send({ ...client, address: { districtId: 102, details: 'Casa azul' } })
+      .expect(201);
+    const [, binds] = connection.execute.mock.calls.find(([sql]: [string]) =>
+      sql.startsWith('INSERT INTO CLIENTS'),
+    )!;
+    expect(binds.addressId.val).toBe(55);
+    expect(binds.terms.val).toBe(0);
+    expect(binds.gender.val).toBeNull();
+    expect(binds).not.toHaveProperty('language');
+    expect(operations).toEqual([
+      'insert',
+      'insert',
+      'insert',
+      'commit',
+      'email',
+    ]);
+  });
+
+  it('returns 409 and does not send credentials when a client email races with another creation', async () => {
+    const execute = connection.execute.getMockImplementation()!;
+    connection.execute.mockImplementation((sql: string, ...args: unknown[]) => {
+      if (sql.startsWith('INSERT INTO CLIENTS')) {
+        return Promise.reject({
+          errorNum: 1,
+          message: 'ORA-00001: (PRODUCTION.UQ_CLIENTS_EMAIL)',
+        });
+      }
+      return execute(sql, ...args);
+    });
+    const response = await request(app.getHttpServer())
+      .post('/users')
+      .send(client)
+      .expect(409);
+    expect(response.text).not.toContain('ORA-00001');
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
   it('prevents module initialization when required SMTP configuration is missing', async () => {
     delete settings.SMTP_PASSWORD;
     await expect(buildModule()).rejects.toThrow(

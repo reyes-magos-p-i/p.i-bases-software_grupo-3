@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ClientsModule } from '../clients/clients.module';
 import { PasswordGenerator } from '../common/security/password-generator';
 import { PasswordHashingModule } from '../common/security/password-hashing.module';
 import { RandomPasswordGenerator } from '../common/security/random-password-generator.service';
@@ -13,7 +14,7 @@ import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule, PasswordHashingModule],
+  imports: [ConfigModule, DatabaseModule, PasswordHashingModule, ClientsModule],
   controllers: [UsersController],
   providers: [
     UsersService,

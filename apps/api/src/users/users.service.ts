@@ -13,11 +13,13 @@ import type { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { UsersRepository } from './users.repository';
+import { ClientsRepository } from '../clients/clients.repository';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly usersRepository: UsersRepository,
+    private readonly clientsRepository: ClientsRepository,
     private readonly passwordGenerator: PasswordGenerator,
     private readonly passwordHasher: PasswordHasher,
     private readonly credentialsSender: InitialCredentialsSender,
@@ -40,7 +42,7 @@ export class UsersService {
 
     if (
       data.role === UserRole.CLIENT &&
-      (await this.usersRepository.clientEmailExists(data.email))
+      (await this.clientsRepository.clientEmailExists(data.email))
     ) {
       throw new ConflictException(
         'Ya existe un cliente con ese correo electrónico.',
@@ -52,7 +54,7 @@ export class UsersService {
     let id: number;
 
     if (data.role === UserRole.CLIENT) {
-      id = await this.usersRepository.createClient({
+      id = await this.clientsRepository.createClient({
         email: data.email,
         firstName: data.firstName,
         secondName: data.secondName,

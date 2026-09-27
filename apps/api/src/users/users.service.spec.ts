@@ -13,15 +13,18 @@ import { UserRole } from './enums/user-role.enum';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
+import { ClientsRepository } from '../clients/clients.repository';
 
 describe('UsersService', () => {
   let module: TestingModule;
   let service: UsersService;
   const repository = {
     getCreationOptions: jest.fn(),
+    createEmployee: jest.fn(),
+  };
+  const clientsRepository = {
     clientEmailExists: jest.fn(),
     createClient: jest.fn(),
-    createEmployee: jest.fn(),
   };
   const generator = { generate: jest.fn() };
   const hasher = { hash: jest.fn() };
@@ -60,8 +63,8 @@ describe('UsersService', () => {
 
   beforeEach(async () => {
     jest.resetAllMocks();
-    repository.clientEmailExists.mockResolvedValue(false);
-    repository.createClient.mockResolvedValue(42);
+    clientsRepository.clientEmailExists.mockResolvedValue(false);
+    clientsRepository.createClient.mockResolvedValue(42);
     repository.createEmployee.mockResolvedValue(84);
     generator.generate.mockReturnValue(password);
     hasher.hash.mockResolvedValue(credentials);
@@ -70,6 +73,7 @@ describe('UsersService', () => {
     module = await Test.createTestingModule({
       providers: [
         UsersService,
+        { provide: ClientsRepository, useValue: clientsRepository },
         { provide: UsersRepository, useValue: repository },
         { provide: PasswordGenerator, useValue: generator },
         { provide: PasswordHasher, useValue: hasher },
@@ -85,9 +89,9 @@ describe('UsersService', () => {
 
   describe('getCreationOptions', () => {
     afterEach(() => {
-      expect(repository.createClient).not.toHaveBeenCalled();
+      expect(clientsRepository.createClient).not.toHaveBeenCalled();
       expect(repository.createEmployee).not.toHaveBeenCalled();
-      expect(repository.clientEmailExists).not.toHaveBeenCalled();
+      expect(clientsRepository.clientEmailExists).not.toHaveBeenCalled();
       expect(generator.generate).not.toHaveBeenCalled();
       expect(hasher.hash).not.toHaveBeenCalled();
       expect(sender.send).not.toHaveBeenCalled();
@@ -119,11 +123,11 @@ describe('UsersService', () => {
       const response = await service.create(profile);
       const isClient = profile.role === UserRole.CLIENT;
       const create = isClient
-        ? repository.createClient
+        ? clientsRepository.createClient
         : repository.createEmployee;
       const unusedCreate = isClient
         ? repository.createEmployee
-        : repository.createClient;
+        : clientsRepository.createClient;
       const { role, ...clientFields } = profile;
 
       expect(create).toHaveBeenCalledTimes(1);
@@ -133,14 +137,14 @@ describe('UsersService', () => {
       });
       expect(unusedCreate).not.toHaveBeenCalled();
       if (isClient) {
-        expect(repository.clientEmailExists).toHaveBeenCalledWith(
+        expect(clientsRepository.clientEmailExists).toHaveBeenCalledWith(
           profile.email,
         );
         expect(
-          repository.clientEmailExists.mock.invocationCallOrder[0],
+          clientsRepository.clientEmailExists.mock.invocationCallOrder[0],
         ).toBeLessThan(generator.generate.mock.invocationCallOrder[0]);
       } else {
-        expect(repository.clientEmailExists).not.toHaveBeenCalled();
+        expect(clientsRepository.clientEmailExists).not.toHaveBeenCalled();
       }
       expect(generator.generate).toHaveBeenCalledTimes(1);
       expect(hasher.hash).toHaveBeenCalledTimes(1);
@@ -167,7 +171,7 @@ describe('UsersService', () => {
 
   it('preserves a null client address', async () => {
     await service.create({ ...client, address: null });
-    expect(repository.createClient).toHaveBeenCalledWith(
+    expect(clientsRepository.createClient).toHaveBeenCalledWith(
       expect.objectContaining({ address: null }),
     );
   });
@@ -184,7 +188,7 @@ describe('UsersService', () => {
       });
       const create =
         profile.role === UserRole.CLIENT
-          ? repository.createClient
+          ? clientsRepository.createClient
           : repository.createEmployee;
       expect(create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -208,7 +212,7 @@ describe('UsersService', () => {
         email: client.email,
       }),
     );
-    expect(repository.createClient).toHaveBeenCalledWith({
+    expect(clientsRepository.createClient).toHaveBeenCalledWith({
       email: client.email,
       firstName: client.firstName,
       secondName: undefined,
@@ -235,7 +239,7 @@ describe('UsersService', () => {
       const response = await service.create(supplied);
       const create =
         profile.role === UserRole.CLIENT
-          ? repository.createClient
+          ? clientsRepository.createClient
           : repository.createEmployee;
       expect(create.mock.calls[0][0]).not.toHaveProperty('password');
       expect(create.mock.calls[0][0]).not.toHaveProperty('internalData');
@@ -248,23 +252,23 @@ describe('UsersService', () => {
   );
 
   it('rejects an existing client email before generating credentials', async () => {
-    repository.clientEmailExists.mockResolvedValue(true);
+    clientsRepository.clientEmailExists.mockResolvedValue(true);
     await expect(service.create(client)).rejects.toThrow(
       new ConflictException('Ya existe un cliente con ese correo electrónico.'),
     );
     expect(generator.generate).not.toHaveBeenCalled();
     expect(hasher.hash).not.toHaveBeenCalled();
-    expect(repository.createClient).not.toHaveBeenCalled();
+    expect(clientsRepository.createClient).not.toHaveBeenCalled();
     expect(sender.send).not.toHaveBeenCalled();
   });
 
   it('propagates lookup failures without generating credentials', async () => {
     const error = new Error('Lookup failed');
-    repository.clientEmailExists.mockRejectedValue(error);
+    clientsRepository.clientEmailExists.mockRejectedValue(error);
     await expect(service.create(client)).rejects.toBe(error);
     expect(generator.generate).not.toHaveBeenCalled();
     expect(hasher.hash).not.toHaveBeenCalled();
-    expect(repository.createClient).not.toHaveBeenCalled();
+    expect(clientsRepository.createClient).not.toHaveBeenCalled();
     expect(sender.send).not.toHaveBeenCalled();
   });
 
@@ -277,7 +281,7 @@ describe('UsersService', () => {
       });
       await expect(service.create(profile)).rejects.toBe(error);
       expect(hasher.hash).not.toHaveBeenCalled();
-      expect(repository.createClient).not.toHaveBeenCalled();
+      expect(clientsRepository.createClient).not.toHaveBeenCalled();
       expect(repository.createEmployee).not.toHaveBeenCalled();
       expect(sender.send).not.toHaveBeenCalled();
     },
@@ -287,7 +291,7 @@ describe('UsersService', () => {
     const error = new Error('Hashing failed');
     hasher.hash.mockRejectedValue(error);
     await expect(service.create(profile)).rejects.toBe(error);
-    expect(repository.createClient).not.toHaveBeenCalled();
+    expect(clientsRepository.createClient).not.toHaveBeenCalled();
     expect(repository.createEmployee).not.toHaveBeenCalled();
     expect(sender.send).not.toHaveBeenCalled();
   });
@@ -296,7 +300,7 @@ describe('UsersService', () => {
     'does not send credentials when persistence fails for $role',
     async (profile) => {
       const error = new Error('Persistence failed');
-      repository.createClient.mockRejectedValue(error);
+      clientsRepository.createClient.mockRejectedValue(error);
       repository.createEmployee.mockRejectedValue(error);
       await expect(service.create(profile)).rejects.toBe(error);
       expect(sender.send).not.toHaveBeenCalled();
@@ -319,7 +323,7 @@ describe('UsersService', () => {
         'El usuario fue creado, pero no se pudo enviar el correo con sus credenciales.',
       );
       expect(JSON.stringify(exception.getResponse())).not.toContain(password);
-      expect(repository.createClient).toHaveBeenCalledTimes(
+      expect(clientsRepository.createClient).toHaveBeenCalledTimes(
         profile.role === UserRole.CLIENT ? 1 : 0,
       );
       expect(repository.createEmployee).toHaveBeenCalledTimes(
@@ -357,10 +361,10 @@ describe('UsersService', () => {
     await expect(service.create(profile)).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    expect(repository.clientEmailExists).not.toHaveBeenCalled();
+    expect(clientsRepository.clientEmailExists).not.toHaveBeenCalled();
     expect(generator.generate).not.toHaveBeenCalled();
     expect(hasher.hash).not.toHaveBeenCalled();
-    expect(repository.createClient).not.toHaveBeenCalled();
+    expect(clientsRepository.createClient).not.toHaveBeenCalled();
     expect(repository.createEmployee).not.toHaveBeenCalled();
     expect(sender.send).not.toHaveBeenCalled();
   });

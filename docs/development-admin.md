@@ -7,6 +7,80 @@ de comprobar al administrador configurado.
 
 ## Estado de integración
 
+### Runtime y política de contraseñas
+
+El backend declara Node `^24.15.0`: versiones 24.x desde 24.15.0. La API
+`node:crypto.argon2` existe desde Node 24.7.0, pero las herramientas de desarrollo
+incluidas en el lockfile requieren como mínimo 24.15.0 dentro de esa serie.
+Referencia: [Node 24.7.0](https://nodejs.org/download/release/v24.7.0/docs/api/crypto.html#cryptoargon2algorithm-parameters-callback).
+
+CI utiliza el mismo rango y comprueba que `crypto.argon2` esté disponible antes de
+instalar. El paso de despliegue comprueba también el Node de la sesión SSH antes de
+instalar y compilar. Una incompatibilidad detiene ese paso; no instala ni cambia
+Node en el servidor.
+
+La versión del runtime de `cinetadel-api.service` todavía debe confirmarse en el
+servidor: `setup-node` solo prepara CI, y systemd puede usar un ejecutable diferente
+del de la sesión SSH. Inspeccionar allí, sin modificar el servicio:
+
+```sh
+node --version
+systemctl show cinetadel-api.service -p ExecStart -p User -p WorkingDirectory
+```
+
+Comprobar la versión y la disponibilidad de `crypto.argon2` con el ejecutable Node
+que realmente inicia el servicio. Si `ExecStart` utiliza npm o un script, revisar
+su resolución de Node y el entorno del servicio localmente, sin publicar secretos.
+No se considera verificado el runtime de producción solo porque CI pase.
+
+`AuthService` y `UsersService` delegan el hashing en `PasswordHasher`. Su
+implementación compartida genera Argon2id v19 con memoria de 65536 KiB (64 MiB),
+3 pasadas, paralelismo 4, salt aleatorio de 16 bytes y resultado de 32 bytes.
+Son los parámetros que ya utilizaba el registro público y la segunda configuración
+recomendada en [RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html#section-4).
+
+Se conserva el formato PHC, que incluye los parámetros en cada hash. Las
+credenciales anteriores no se migran ni se recalculan. Las pruebas comprueban la
+verificación tanto del perfil administrativo anterior (19456 KiB, 2 pasadas,
+paralelismo 1) como del perfil de registro y del nuevo perfil compartido, incluyendo
+el rechazo de contraseñas incorrectas. El registro público conserva el relleno
+Base64 `==` de su columna `SALT`; el alta administrativa conserva la representación
+sin relleno. Ambas codificaciones representan los mismos bytes del salt.
+
+Las altas administrativas nuevas tienen un coste de hashing mayor. La capacidad
+bajo concurrencia y las protecciones frente a muchas solicitudes quedan pendientes
+de un incremento específico: medición de CPU/memoria, límites de solicitudes y de
+hashes simultáneos, y saturación del pool de Oracle. Este incremento no añade esas
+protecciones ni reduce parámetros automáticamente por carga.
+
+### Persistencia compartida de clientes
+
+El registro público sigue `AuthService → ClientsService → ClientsRepository`.
+El alta administrativa sigue `UsersService → ClientsRepository`. El repositorio
+de clientes usa `DatabaseService.transaction()` para guardar dirección opcional,
+perfil y credenciales locales en una única transacción. Devuelve el identificador
+después del commit; el envío de credenciales permanece en `UsersService`.
+
+La inserción de perfiles sociales también reutiliza `ClientsRepository` dentro de
+la transacción iniciada por `ClientsService`, que conserva las reglas de vinculación
+y la escritura de credenciales externas. Las operaciones de empleados permanecen
+en `UsersRepository`.
+
+Se conservan campos opcionales y valores nulos. El registro público y social
+mantienen su idioma predeterminado `es`; el alta administrativa puede omitirlo para
+usar el valor predeterminado de Oracle. `ACCEPTED_TERMS_AT` solo se completa ante
+`acceptedTerms === true`; un alta administrativa no representa consentimiento del
+cliente. El género existente del registro público se conserva sin añadirlo al
+formulario administrativo.
+
+Las comprobaciones previas de correo se mantienen. Si dos solicitudes superan la
+comprobación al mismo tiempo, `UQ_CLIENTS_EMAIL` resuelve la carrera: se revierte la
+transacción perdedora y se devuelve `409`, sin enviar credenciales ni revelar el
+mensaje privado de Oracle. Otros errores de integridad no se convierten en un
+conflicto de correo.
+
+### Flujos disponibles
+
 `UsersModule` está registrado en `AppModule` y expone `POST /users` y
 `GET /users/creation-options`. Conecta el
 controlador, la validación, el guard, el repositorio Oracle, el generador aleatorio,
@@ -216,8 +290,9 @@ El frontend usa `VITE_API_BASE_URL=/api`.
 ### Migración de Oracle a modo Thin
 
 El backend utiliza `DatabaseService` de `dev`, que administra un único pool.
-`UsersRepository` utiliza `query()` para las lecturas y `transaction()` para crear
-dirección, perfil y credenciales con una misma conexión y un único commit. Un fallo
+`UsersRepository` y `ClientsRepository` utilizan `query()` para las lecturas y
+`transaction()` para crear dirección, perfil y credenciales con una misma conexión
+y un único commit, para empleados y clientes respectivamente. Un fallo
 de escritura produce rollback. Los fallos de limpieza no sustituyen el error
 original de la transacción.
 
