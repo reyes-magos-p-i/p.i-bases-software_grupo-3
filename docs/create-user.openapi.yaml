@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Creación administrativa de usuarios
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Contrato preliminar para la comunicación HTTP entre Vue y NestJS.
     El controlador todavía no está registrado en AppModule y esta ruta no
@@ -9,9 +9,14 @@ info:
     un servicio simulado.
 
     La operación está destinada exclusivamente a administradores.
-    La autorización del solicitante y el proveedor real de correo están
-    pendientes de integración. Este documento no define todavía un esquema
-    de autenticación; su ausencia no autoriza el acceso público a la operación.
+    El controlador utiliza DevelopmentAdminGuard: solo permite solicitudes con
+    NODE_ENV=development, DEV_ADMIN_ENABLED=true y DEV_ADMIN_EMPLOYEE_ID válido.
+    Consulta el empleado configurado en Oracle en cada solicitud y exige que
+    su rol sea ADMINISTRATOR. Este modo local asigna esa identidad a todas las
+    solicitudes que alcancen el controlador habilitado; no autentica a la persona.
+    La autorización de producción y el proveedor real de correo siguen pendientes.
+    Este documento no define todavía un esquema de autenticación; su ausencia
+    no autoriza el acceso público a la operación. Véase development-admin.md.
     El campo role del cuerpo identifica la cuenta que se desea crear y no
     acredita los permisos de quien hace la solicitud.
 
@@ -112,6 +117,19 @@ paths:
                 error: Solicitud inválida
                 message:
                   - El primer nombre es obligatorio.
+        "403":
+          description: |
+            Modo de desarrollo deshabilitado, configuración inválida o empleado
+            configurado inexistente o sin rol ADMINISTRATOR. No se crea ningún
+            registro; los encabezados y el rol del cuerpo no conceden permisos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 403
+                error: Forbidden
+                message: No tiene permiso para crear usuarios.
         "409":
           description: La comprobación previa detectó un cliente con el mismo correo.
           content:

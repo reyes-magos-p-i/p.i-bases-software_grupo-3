@@ -4,6 +4,7 @@ import {
   type INestApplication,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -13,10 +14,14 @@ import { CreateAddressDto } from './dto/create-address.dto';
 import { CreateUserValidationPipe } from './pipes/create-user-validation.pipe';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
+import { UsersRepository } from './users.repository';
+import { UserRole } from './enums/user-role.enum';
 
 describe('UsersController (HTTP integration)', () => {
   let app: INestApplication<App>;
   const service = { create: jest.fn() };
+  const repository = { findEmployeeIdentityById: jest.fn() };
+  let settings: Record<string, unknown>;
   const client = {
     role: 'CLIENT',
     email: 'Cliente@Example.COM',
@@ -40,6 +45,11 @@ describe('UsersController (HTTP integration)', () => {
       providers: [
         CreateUserValidationPipe,
         { provide: UsersService, useValue: service },
+        { provide: UsersRepository, useValue: repository },
+        {
+          provide: ConfigService,
+          useValue: { get: (key: string) => settings[key] },
+        },
       ],
     }).compile();
     app = module.createNestApplication({ logger: false });
@@ -47,6 +57,15 @@ describe('UsersController (HTTP integration)', () => {
   });
 
   beforeEach(() => {
+    settings = {
+      NODE_ENV: 'development',
+      DEV_ADMIN_ENABLED: 'true',
+      DEV_ADMIN_EMPLOYEE_ID: '21',
+    };
+    repository.findEmployeeIdentityById.mockReset().mockResolvedValue({
+      id: 21,
+      role: UserRole.ADMINISTRATOR,
+    });
     service.create
       .mockReset()
       .mockImplementation((data: CreateClientDto | CreateEmployeeDto) =>
@@ -60,6 +79,68 @@ describe('UsersController (HTTP integration)', () => {
     await app.close();
   });
 
+  it.each([
+    ['NODE_ENV', 'production'],
+    ['NODE_ENV', 'test'],
+    ['DEV_ADMIN_ENABLED', undefined],
+    ['DEV_ADMIN_ENABLED', 'false'],
+    ['DEV_ADMIN_EMPLOYEE_ID', 'invalid'],
+  ])(
+    'returns 403 for %s=%p before invoking the service or repository',
+    async (key, value) => {
+      settings[key] = value;
+      const response = await request(app.getHttpServer())
+        .post('/users')
+        .set('x-user-id', '21')
+        .set('x-user-role', 'ADMINISTRATOR')
+        .send({ ...employee, role: 'ADMINISTRATOR' })
+        .expect(403);
+      expect(response.body).toEqual({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'No tiene permiso para crear usuarios.',
+      });
+      expect(repository.findEmployeeIdentityById).not.toHaveBeenCalled();
+      expect(service.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([null, { id: 21, role: UserRole.EMPLOYEE }])(
+    'returns 403 when Oracle does not confirm an administrator: %p',
+    async (identity) => {
+      repository.findEmployeeIdentityById.mockResolvedValue(identity);
+      await request(app.getHttpServer())
+        .post('/users')
+        .set('x-user-id', '999')
+        .set('x-user-role', 'ADMINISTRATOR')
+        .send({ ...employee, role: 'ADMINISTRATOR' })
+        .expect(403);
+      expect(repository.findEmployeeIdentityById).toHaveBeenCalledWith(21);
+      expect(service.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects unauthorized requests before body validation', async () => {
+    settings.DEV_ADMIN_ENABLED = 'false';
+    await request(app.getHttpServer()).post('/users').send({}).expect(403);
+    expect(service.create).not.toHaveBeenCalled();
+  });
+
+  it('hides identity query failures and never invokes the creation service', async () => {
+    repository.findEmployeeIdentityById.mockRejectedValue(
+      new Error('Private SQL details'),
+    );
+    const response = await request(app.getHttpServer())
+      .post('/users')
+      .send(client)
+      .expect(500);
+    expect(response.body).toEqual({
+      statusCode: 500,
+      message: 'Internal server error',
+    });
+    expect(service.create).not.toHaveBeenCalled();
+  });
+
   it('returns 201 for a client and sends the normalized DTO to the service', async () => {
     const response = await request(app.getHttpServer())
       .post('/users')
@@ -67,6 +148,7 @@ describe('UsersController (HTTP integration)', () => {
       .expect(201);
 
     expect(service.create).toHaveBeenCalledTimes(1);
+    expect(repository.findEmployeeIdentityById).toHaveBeenCalledWith(21);
     expect(service.create.mock.calls[0][0]).toBeInstanceOf(CreateClientDto);
     expect(service.create).toHaveBeenCalledWith(
       expect.objectContaining({ ...client, email: 'cliente@example.com' }),

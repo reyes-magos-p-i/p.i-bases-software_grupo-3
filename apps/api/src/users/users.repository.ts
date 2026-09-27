@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import oracle from 'oracledb';
+import { UserRole } from './enums/user-role.enum';
+import type { UserIdentity } from './types/user-identity.type';
 import { ORACLE_POOL } from '../database/database.module';
 import type { CreateClientRecord } from './types/create-client-record.type';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
@@ -19,6 +21,39 @@ export class UsersRepository {
       );
 
       return !!result.rows?.length;
+    } finally {
+      await connection.close();
+    }
+  }
+
+  async findEmployeeIdentityById(
+    employeeId: number,
+  ): Promise<UserIdentity | null> {
+    const connection = await this.oraclePool.getConnection();
+    try {
+      const result = await connection.execute<{
+        EMPLOYEE_ID: unknown;
+        ROLE: unknown;
+      }>(
+        'SELECT EMPLOYEE_ID, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
+        { employeeId: { val: employeeId, type: oracle.NUMBER } },
+        { outFormat: oracle.OUT_FORMAT_OBJECT },
+      );
+      if (result.rows?.length !== 1) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      if (
+        typeof row.EMPLOYEE_ID !== 'number' ||
+        !Number.isSafeInteger(row.EMPLOYEE_ID) ||
+        row.EMPLOYEE_ID < 1 ||
+        row.EMPLOYEE_ID !== employeeId ||
+        (row.ROLE !== UserRole.ADMINISTRATOR && row.ROLE !== UserRole.EMPLOYEE)
+      ) {
+        return null;
+      }
+      return { id: row.EMPLOYEE_ID, role: row.ROLE };
     } finally {
       await connection.close();
     }
