@@ -1,3 +1,17 @@
+import type { CantonOption, DistrictOption, ProvinceOption } from './address'
+
+export interface BranchOption {
+  id: number
+  label: string
+}
+
+export interface UserCreationOptions {
+  provinces: ProvinceOption[]
+  cantons: CantonOption[]
+  districts: DistrictOption[]
+  branches: BranchOption[]
+}
+
 export type UserRole = 'CLIENT' | 'EMPLOYEE' | 'ADMINISTRATOR'
 
 interface CreateUserBase {

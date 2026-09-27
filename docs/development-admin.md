@@ -13,8 +13,9 @@ controlador, la validación, el guard, el repositorio Oracle, el generador aleat
 el hasher Argon2id y el envío de credenciales por SMTP. El servidor necesita la
 configuración de Oracle y SMTP para arrancar.
 
-La integración con el frontend sigue pendiente: cargar catálogos, conectar el
-formulario y gestionar sus resultados. Las pruebas manuales del flujo se realizarán
+La vista de desarrollo carga los catálogos mediante Axios al abrir el formulario.
+Sigue pendiente conectar el envío del formulario y gestionar sus resultados.
+Las pruebas manuales del flujo se realizarán
 cuando esa integración esté lista. No se modifica automáticamente la base de datos
 ni el archivo `.env` al incorporar este módulo.
 
@@ -77,15 +78,44 @@ una lista vacía. Las consultas de los cuatro catálogos utilizan una conexión 
 se libera al terminar; si alguna consulta falla, la respuesta es `500` genérico y
 no se envían catálogos parciales. Un rechazo del guard devuelve `403`.
 
-Vue podrá filtrar cantones por `provinceId` y distritos por `cantonId` utilizando
+Vue filtra cantones por `provinceId` y distritos por `cantonId` utilizando
 los selectores existentes. La dirección exacta sigue siendo texto introducido por
 el usuario; al crear la cuenta se envían `address.districtId` y `address.details`.
 La sucursal se elige de forma independiente, sin atribuirle relaciones geográficas
 que no están definidas en este contrato.
 
 Este endpoint solo consulta datos: no genera contraseñas ni envía correos. La
-configuración SMTP sigue siendo necesaria para iniciar el backend. La carga de
-estas opciones en Vue se implementará en el siguiente incremento.
+configuración SMTP sigue siendo necesaria para iniciar el backend.
+
+## Conexión local con Vue
+
+El ejemplo `apps/web/.env.example` utiliza `VITE_API_BASE_URL=/api`. Para la futura
+prueba integrada, configurar ese valor en el entorno local de Vite y reiniciar
+el servidor de desarrollo si se modifica. No se editan automáticamente archivos
+`.env` privados. El backend se espera en `http://127.0.0.1:3000`.
+
+Vite reenvía `/api/users/creation-options` a `/users/creation-options` de Nest,
+retirando el prefijo `/api`. Así el navegador consulta su mismo origen durante
+el desarrollo local. Si se cambia el puerto del backend, también debe ajustarse
+el destino en `vite.config.ts`. El proxy no se incluye en los archivos de producción:
+el despliegue debe configurar su propia URL y enrutamiento hacia la API.
+
+En `/dev/dashboard`, «Añadir empleado» abre el diálogo y consulta los catálogos.
+Mientras espera, muestra un aviso de carga y permite escribir los datos personales.
+Si ocurre un error, muestra un mensaje en español y permite reintentar sin borrar
+lo escrito. Los errores de permisos y de tiempo de espera tienen mensajes específicos.
+Una respuesta exitosa con listas vacías muestra las opciones no disponibles, sin
+presentarla como un fallo de conexión.
+
+Las solicitudes GET tienen un tiempo de espera de diez segundos. Los catálogos se
+reutilizan al cerrar y abrir el diálogo dentro de la misma sección; al cambiar de
+sección o rol visual se descartan y se cancelan las cargas pendientes. Al salir de
+la vista también se cancela la solicitud. Las respuestas tardías de solicitudes
+canceladas no cambian el formulario actual. No hay reintentos automáticos.
+
+El rol de la vista sigue siendo una simulación visual: no se envía como autorización.
+El backend comprueba el administrador configurado en su propio entorno. El botón
+«Crear usuario» continúa deshabilitado hasta el próximo incremento.
 
 ## Configuración de correo
 
@@ -160,3 +190,7 @@ Las pruebas de catálogos cubren el mapeo de las cuatro tablas, los resultados v
 la liberación de conexiones ante errores y la ruta GET protegida dentro de la
 aplicación. Comprueban que consultar opciones no invoque creación ni credenciales.
 No crean registros en Oracle ni envían correos reales.
+
+En el frontend, los specs de Axios, la vista de desarrollo y el diálogo simulan
+las respuestas HTTP. Verifican carga, selección geográfica, listas vacías, errores,
+reintentos, conservación del texto y cancelación de solicitudes obsoletas.

@@ -6,9 +6,10 @@ import type {
   UserApiError,
 } from '@/types/user'
 
-const { create, post } = vi.hoisted(() => ({
+const { create, post, get } = vi.hoisted(() => ({
   create: vi.fn(),
   post: vi.fn(),
+  get: vi.fn(),
 }))
 
 vi.mock('axios', () => ({ default: { create } }))
@@ -39,6 +40,7 @@ describe('createUser', () => {
     create.mockImplementation((config: { baseURL?: string }) => ({
       defaults: config,
       post,
+      get,
     }))
   })
 
@@ -144,6 +146,52 @@ describe('createUser', () => {
       expect(post).toHaveBeenCalledExactlyOnceWith('/users', client)
     },
   )
+
+  describe('getUserCreationOptions', () => {
+    it('loads catalog data through the same Axios instance with a timeout and signal', async () => {
+      vi.stubEnv('VITE_API_BASE_URL', '/api')
+      const { getUserCreationOptions } = await import('@/services/user.service')
+      const data = {
+        provinces: [{ id: 1, label: 'San José' }],
+        cantons: [],
+        districts: [],
+        branches: [],
+      }
+      const controller = new AbortController()
+      get.mockResolvedValue({ data })
+      await expect(getUserCreationOptions(controller.signal)).resolves.toEqual(data)
+      expect(create).toHaveBeenCalledExactlyOnceWith({ baseURL: '/api' })
+      expect(get).toHaveBeenCalledExactlyOnceWith('/users/creation-options', {
+        signal: controller.signal,
+        timeout: 10000,
+      })
+      expect(post).not.toHaveBeenCalled()
+    })
+
+    it.each([undefined, '', '   '])(
+      'rejects missing configuration %p before requesting catalogs',
+      async (baseURL) => {
+        vi.stubEnv('VITE_API_BASE_URL', baseURL)
+        const { getUserCreationOptions } = await import('@/services/user.service')
+        await expect(getUserCreationOptions()).rejects.toThrow('Falta configurar VITE_API_BASE_URL')
+        expect(get).not.toHaveBeenCalled()
+      },
+    )
+
+    it.each(['ERR_NETWORK', 'ECONNABORTED', 'ERR_CANCELED', 'HTTP_403', 'HTTP_500'])(
+      'propagates %s without automatic retries',
+      async (code) => {
+        const { getUserCreationOptions } = await import('@/services/user.service')
+        const failure = Object.assign(new Error('Request failed'), { code })
+        get.mockRejectedValue(failure)
+        await expect(getUserCreationOptions()).rejects.toBe(failure)
+        expect(get).toHaveBeenCalledExactlyOnceWith('/users/creation-options', {
+          signal: undefined,
+          timeout: 10000,
+        })
+      },
+    )
+  })
 
   it('propagates a network error without retrying or reporting success', async () => {
     const { createUser } = await import('@/services/user.service')

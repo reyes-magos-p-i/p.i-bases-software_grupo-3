@@ -1,13 +1,67 @@
 <script setup lang="ts">
-import { computed, ref, useId, useTemplateRef, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, useTemplateRef, watch } from 'vue'
+import { isAxiosError } from 'axios'
 import CreateEmployeeDialog from '@/components/users/CreateEmployeeDialog.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
-import type { UserRole } from '@/types/user'
+import type { UserRole, UserCreationOptions } from '@/types/user'
+import { getUserCreationOptions } from '@/services/user.service'
 
 const role = ref<Exclude<UserRole, 'CLIENT'>>('ADMINISTRATOR')
 const activeSection = ref<'employees' | 'clients'>('employees')
 const roleId = useId()
 const employeeDialog = useTemplateRef<InstanceType<typeof CreateEmployeeDialog>>('employee-dialog')
+const catalogs = ref<UserCreationOptions | null>(null)
+const catalogsLoading = ref(false)
+const catalogsError = ref('')
+let catalogRequest: AbortController | undefined
+
+function cancelCatalogRequest() {
+  catalogRequest?.abort()
+  catalogRequest = undefined
+  catalogsLoading.value = false
+}
+
+async function loadCatalogs() {
+  if (catalogsLoading.value || catalogs.value) return
+  const request = new AbortController()
+  catalogRequest = request
+  catalogsLoading.value = true
+  catalogsError.value = ''
+  try {
+    const options = await getUserCreationOptions(request.signal)
+    if (!request.signal.aborted) catalogs.value = options
+  } catch (error) {
+    if (request.signal.aborted) return
+    if (isAxiosError(error) && error.response?.status === 403) {
+      catalogsError.value = 'No tienes permiso para cargar las opciones del formulario.'
+    } else if (
+      isAxiosError(error) &&
+      (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT')
+    ) {
+      catalogsError.value = 'La carga está tardando demasiado. Puedes volver a intentarlo.'
+    } else {
+      catalogsError.value =
+        'No se pudieron cargar las opciones. Comprueba la conexión y vuelve a intentarlo.'
+    }
+  } finally {
+    if (catalogRequest === request) {
+      catalogsLoading.value = false
+      catalogRequest = undefined
+    }
+  }
+}
+
+function openEmployeeDialog() {
+  employeeDialog.value?.open()
+  void loadCatalogs()
+}
+
+watch([role, activeSection], () => {
+  cancelCatalogRequest()
+  catalogs.value = null
+  catalogsError.value = ''
+})
+onBeforeUnmount(cancelCatalogRequest)
 const availableSections = computed(() =>
   role.value === 'ADMINISTRATOR' ? ['employees', 'clients'] : ['clients'],
 )
@@ -45,7 +99,11 @@ function navigate(section: string) {
           <i class="bi bi-tools" aria-hidden="true"></i>
           Vista de desarrollo
         </p>
-        <p>Datos simulados para explorar el dashboard. No se consultan ni guardan usuarios.</p>
+        <p>
+          El rol de esta vista es simulado. El formulario consulta catálogos reales, con los
+          permisos del administrador configurado en el servidor. La creación todavía no está
+          habilitada.
+        </p>
       </div>
       <div class="preview-controls">
         <div class="role-field">
@@ -70,7 +128,7 @@ function navigate(section: string) {
           type="button"
           class="add-employee-button"
           aria-haspopup="dialog"
-          @click="employeeDialog?.open()"
+          @click="openEmployeeDialog"
         >
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
           Añadir empleado
@@ -85,6 +143,13 @@ function navigate(section: string) {
     <CreateEmployeeDialog
       v-if="role === 'ADMINISTRATOR' && activeSection === 'employees'"
       ref="employee-dialog"
+      :provinces="catalogs?.provinces"
+      :cantons="catalogs?.cantons"
+      :districts="catalogs?.districts"
+      :branches="catalogs?.branches"
+      :catalogs-loading="catalogsLoading"
+      :catalogs-error="catalogsError"
+      @retry-catalogs="loadCatalogs"
     />
   </DashboardLayout>
 </template>

@@ -3,6 +3,37 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import DashboardPreview from '@/views/DashboardPreview.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
+import CreateEmployeeDialog from '@/components/users/CreateEmployeeDialog.vue'
+import type { UserCreationOptions } from '@/types/user'
+
+const { getUserCreationOptions } = vi.hoisted(() => ({ getUserCreationOptions: vi.fn() }))
+vi.mock('@/services/user.service', () => ({ getUserCreationOptions }))
+const catalogs: UserCreationOptions = {
+  provinces: [
+    { id: 1, label: 'San José' },
+    { id: 4, label: 'Heredia' },
+  ],
+  cantons: [
+    { id: 19, label: 'Curridabat', provinceId: 1 },
+    { id: 40, label: 'Heredia', provinceId: 4 },
+  ],
+  districts: [
+    { id: 102, label: 'Curridabat', cantonId: 19 },
+    { id: 200, label: 'Heredia', cantonId: 40 },
+  ],
+  branches: [{ id: 1, label: 'Cinépolis Multiplaza del Este' }],
+}
+
+function pendingCatalogs() {
+  let resolve!: (data: UserCreationOptions) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<UserCreationOptions>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  getUserCreationOptions.mockReturnValueOnce(promise)
+  return { resolve, reject }
+}
 
 let wrapper: VueWrapper | undefined
 let router: Router
@@ -12,6 +43,7 @@ const originalShowModal = Object.getOwnPropertyDescriptor(dialogPrototype, 'show
 const originalClose = Object.getOwnPropertyDescriptor(dialogPrototype, 'close')
 
 beforeEach(() => {
+  getUserCreationOptions.mockReset().mockResolvedValue(catalogs)
   // jsdom does not implement the native dialog methods.
   Object.defineProperties(dialogPrototype, {
     showModal: {
@@ -75,7 +107,8 @@ describe('DashboardPreview', () => {
     const view = await renderPreview()
 
     expect(view.text()).toContain('Vista de desarrollo')
-    expect(view.text()).toContain('Datos simulados')
+    expect(view.text()).toContain('El rol de esta vista es simulado')
+    expect(getUserCreationOptions).not.toHaveBeenCalled()
     expect(view.get('header').text()).toContain('Usuario de prueba')
     expect(view.get('header').text()).toContain('Rol: Administrador')
     expect(view.get('h1').text()).toBe('Empleados')
@@ -201,6 +234,126 @@ describe('DashboardPreview', () => {
     expect(dialog.open).toBe(false)
     expect(view.find('.employee-dialog').exists()).toBe(false)
     expect(view.get('h1').text()).toBe('Clientes')
+  })
+})
+
+describe('catalog loading', () => {
+  it('loads on first open, fills dependent selectors and reuses the result when reopening', async () => {
+    const view = await renderPreview()
+    await view.get('.add-employee-button').trigger('click')
+    await flushPromises()
+    expect(getUserCreationOptions).toHaveBeenCalledTimes(1)
+    expect(view.get('[name="branchId"]').text()).toContain(catalogs.branches[0]!.label)
+    await view.get('[name="provinceId"]').setValue('1')
+    expect(
+      view
+        .get('[name="cantonId"]')
+        .findAll('option')
+        .map((option) => option.element.value),
+    ).toEqual(['', '19'])
+    await view.get('[name="cantonId"]').setValue('19')
+    expect(
+      view
+        .get('[name="districtId"]')
+        .findAll('option')
+        .map((option) => option.element.value),
+    ).toEqual(['', '102'])
+    await view.get('[name="districtId"]').setValue('102')
+    await view.get('[name="provinceId"]').setValue('4')
+    expect(view.get<HTMLSelectElement>('[name="districtId"]').element.value).toBe('')
+    await view.get('[aria-label="Cerrar formulario"]').trigger('click')
+    await view.get('.add-employee-button').trigger('click')
+    expect(getUserCreationOptions).toHaveBeenCalledTimes(1)
+    expect(view.get('.create-button').attributes('disabled')).toBeDefined()
+  })
+
+  it('keeps the form editable while loading and prevents duplicate loads', async () => {
+    const pending = pendingCatalogs()
+    const view = await renderPreview()
+    await view.get('.add-employee-button').trigger('click')
+    expect(view.get('[role="status"]').text()).toContain('Cargando')
+    await view.get('[name="firstName"]').setValue('Ana')
+    view.getComponent(CreateEmployeeDialog).vm.$emit('retryCatalogs')
+    await flushPromises()
+    expect(getUserCreationOptions).toHaveBeenCalledTimes(1)
+    pending.resolve(catalogs)
+    await flushPromises()
+    expect(view.find('[role="status"]').exists()).toBe(false)
+    expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('Ana')
+  })
+
+  it.each([
+    [{ isAxiosError: true, response: { status: 403 } }, 'No tienes permiso'],
+    [{ isAxiosError: true, code: 'ECONNABORTED' }, 'tardando demasiado'],
+    [{ isAxiosError: true, code: 'ETIMEDOUT' }, 'tardando demasiado'],
+    [{ isAxiosError: true, response: { status: 500 } }, 'No se pudieron cargar'],
+    [new Error('Private configuration details'), 'No se pudieron cargar'],
+  ])('shows a useful error and preserves input after retry: %p', async (error, message) => {
+    const pending = pendingCatalogs()
+    const view = await renderPreview()
+    await view.get('.add-employee-button').trigger('click')
+    await view.get('[name="firstName"]').setValue('Ana')
+    pending.reject(error)
+    await flushPromises()
+    expect(view.get('[role="alert"]').text()).toContain(message)
+    expect(view.text()).not.toContain('Private configuration details')
+    await view.get('.catalog-notice button').trigger('click')
+    await flushPromises()
+    expect(getUserCreationOptions).toHaveBeenCalledTimes(2)
+    expect(view.find('[role="alert"]').exists()).toBe(false)
+    expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('Ana')
+    expect(view.get('[name="branchId"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('distinguishes successfully loaded empty catalogs from an error', async () => {
+    getUserCreationOptions.mockResolvedValue({
+      provinces: [],
+      cantons: [],
+      districts: [],
+      branches: [],
+    })
+    const view = await renderPreview()
+    await view.get('.add-employee-button').trigger('click')
+    await flushPromises()
+    expect(view.find('[role="alert"]').exists()).toBe(false)
+    expect(view.find('[role="status"]').exists()).toBe(false)
+    expect(view.get('[name="provinceId"]').text()).toContain('Sin provincias disponibles')
+  })
+
+  it.each(['resolve', 'reject'] as const)(
+    'cancels on navigation and ignores late %s from a previous request',
+    async (outcome) => {
+      const pending = pendingCatalogs()
+      const view = await renderPreview()
+      await view.get('.add-employee-button').trigger('click')
+      const signal = getUserCreationOptions.mock.calls[0]![0] as AbortSignal
+      await view.get('[aria-label="Clientes"]').trigger('click')
+      expect(signal.aborted).toBe(true)
+      await view.get('[aria-label="Empleados"]').trigger('click')
+      const current = pendingCatalogs()
+      await view.get('.add-employee-button').trigger('click')
+      if (outcome === 'resolve')
+        pending.resolve({ ...catalogs, branches: [{ id: 99, label: 'Obsolete' }] })
+      else pending.reject(new Error('Obsolete failure'))
+      await flushPromises()
+      expect(view.get('[role="status"]').text()).toContain('Cargando')
+      expect(view.text()).not.toContain('Obsolete')
+      current.resolve(catalogs)
+      await flushPromises()
+      expect(view.get('[name="branchId"]').text()).toContain(catalogs.branches[0]!.label)
+    },
+  )
+
+  it('cancels the pending request when leaving the view', async () => {
+    const pending = pendingCatalogs()
+    const view = await renderPreview()
+    await view.get('.add-employee-button').trigger('click')
+    const signal = getUserCreationOptions.mock.calls[0]![0] as AbortSignal
+    view.unmount()
+    wrapper = undefined
+    expect(signal.aborted).toBe(true)
+    pending.reject(new Error('Canceled'))
+    await flushPromises()
   })
 })
 

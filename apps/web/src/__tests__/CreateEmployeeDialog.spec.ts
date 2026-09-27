@@ -547,6 +547,43 @@ describe('CreateEmployeeDialog', () => {
     validity.mockRestore()
   })
 
+  it('announces catalog loading without disabling personal fields or showing empty-state messages', async () => {
+    const view = await renderDialog({ catalogsLoading: true })
+    expect(view.get('[role="status"]').text()).toContain('Cargando sucursales')
+    expect(view.text()).not.toContain('Sin provincias disponibles')
+    expect(view.text()).not.toContain('Todavía no hay sucursales')
+    for (const name of ['branchId', 'provinceId', 'cantonId', 'districtId']) {
+      expect(view.get('[name="' + name + '"]').attributes('disabled')).toBeDefined()
+    }
+    await view.get('[name="firstName"]').setValue('Ana')
+    expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('Ana')
+    expect(view.get('[name="firstName"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('emits retry and retains personal data and focus as catalogs become available', async () => {
+    const view = await renderDialog({ catalogsError: 'No se pudieron cargar las opciones.' })
+    expect(view.get('[role="alert"]').text()).toContain('No se pudieron cargar')
+    await view.get('[name="firstName"]').setValue('Ana')
+    await view.get('.catalog-notice button').trigger('click')
+    expect(view.emitted('retryCatalogs')).toHaveLength(1)
+    expect(document.activeElement).toBe(view.get('[name="firstName"]').element)
+    await view.setProps({ catalogsError: '', catalogsLoading: true })
+    await view.setProps({
+      catalogsLoading: false,
+      provinces,
+      cantons,
+      districts,
+      branches: [{ id: 1, label: 'Sucursal' }],
+    })
+    expect(view.find('[role="alert"]').exists()).toBe(false)
+    expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('Ana')
+    expect(view.get('[name="branchId"]').attributes('disabled')).toBeUndefined()
+    expect(view.get('[name="provinceId"]').attributes('disabled')).toBeUndefined()
+    await view.get('[name="provinceId"]').setValue('1')
+    await view.get('[name="cantonId"]').setValue('11')
+    expect(view.get('[name="districtId"]').text()).toContain('Distrito A1')
+  })
+
   it('validates available selections and clears child errors after changing province', async () => {
     const view = await renderDialog({
       provinces,

@@ -1,21 +1,34 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, useId, useTemplateRef, watch } from 'vue'
-import type { CreateEmployeeRequest } from '@/types/user'
+import type { BranchOption, CreateEmployeeRequest } from '@/types/user'
 import type { CantonOption, DistrictOption, ProvinceOption } from '@/types/address'
-
-interface CatalogOption {
-  id: number
-  label: string
-}
 
 const props = withDefaults(
   defineProps<{
     provinces?: readonly ProvinceOption[]
     cantons?: readonly CantonOption[]
     districts?: readonly DistrictOption[]
-    branches?: readonly CatalogOption[]
+    branches?: readonly BranchOption[]
+    catalogsLoading?: boolean
+    catalogsError?: string
   }>(),
-  { provinces: () => [], cantons: () => [], districts: () => [], branches: () => [] },
+  {
+    provinces: () => [],
+    cantons: () => [],
+    districts: () => [],
+    branches: () => [],
+    catalogsLoading: false,
+    catalogsError: '',
+  },
+)
+const emit = defineEmits<{ retryCatalogs: [] }>()
+const catalogsUnavailable = computed(() => props.catalogsLoading || !!props.catalogsError)
+const catalogPlaceholder = computed(() =>
+  props.catalogsLoading
+    ? 'Cargando opciones…'
+    : props.catalogsError
+      ? 'Opciones no disponibles'
+      : '',
 )
 
 const id = useId()
@@ -103,18 +116,22 @@ const availableDistricts = computed(() =>
   props.districts.filter((district) => district.cantonId === draft.cantonId),
 )
 const cantonHelp = computed(() =>
-  draft.provinceId === ''
-    ? 'Selecciona primero una provincia.'
-    : !availableCantons.value.length
-      ? 'No hay cantones disponibles para esta provincia.'
-      : '',
+  catalogsUnavailable.value
+    ? ''
+    : draft.provinceId === ''
+      ? 'Selecciona primero una provincia.'
+      : !availableCantons.value.length
+        ? 'No hay cantones disponibles para esta provincia.'
+        : '',
 )
 const districtHelp = computed(() =>
-  draft.cantonId === ''
-    ? 'Selecciona primero un cantón.'
-    : !availableDistricts.value.length
-      ? 'No hay distritos disponibles para este cantón.'
-      : '',
+  catalogsUnavailable.value
+    ? ''
+    : draft.cantonId === ''
+      ? 'Selecciona primero un cantón.'
+      : !availableDistricts.value.length
+        ? 'No hay distritos disponibles para este cantón.'
+        : '',
 )
 
 function clearField(field: 'cantonId' | 'districtId') {
@@ -122,6 +139,11 @@ function clearField(field: 'cantonId' | 'districtId') {
   delete errors[field]
   delete dirty[field]
   delete touched[field]
+}
+
+function retryCatalogs() {
+  dialog.value?.querySelector<HTMLInputElement>('[name="firstName"]')?.focus()
+  emit('retryCatalogs')
 }
 
 watch(
@@ -338,6 +360,14 @@ defineExpose({ open })
         Los campos con <span class="required-marker">*</span> son obligatorios.
       </p>
 
+      <p v-if="catalogsLoading" class="catalog-notice" role="status">
+        Cargando sucursales y opciones de dirección… Puedes completar los demás campos.
+      </p>
+      <div v-else-if="catalogsError" class="catalog-notice">
+        <p role="alert">{{ catalogsError }}</p>
+        <button type="button" class="cancel-button" @click="retryCatalogs">Reintentar</button>
+      </div>
+
       <fieldset v-for="group in groups" :key="group.label">
         <legend>{{ group.label }}</legend>
         <div class="field-grid">
@@ -402,18 +432,25 @@ defineExpose({ open })
               name="branchId"
               class="form-select"
               required
-              :disabled="!branches.length"
+              :disabled="catalogsUnavailable || !branches.length"
               :aria-invalid="!!errors.branchId"
-              :aria-describedby="description('branchId', !branches.length)"
+              :aria-describedby="description('branchId', !catalogsUnavailable && !branches.length)"
             >
               <option value="" disabled>
-                {{ branches.length ? 'Seleccione una sucursal' : 'Sin sucursales disponibles' }}
+                {{
+                  catalogPlaceholder ||
+                  (branches.length ? 'Seleccione una sucursal' : 'Sin sucursales disponibles')
+                }}
               </option>
               <option v-for="branch in branches" :key="branch.id" :value="branch.id">
                 {{ branch.label }}
               </option>
             </select>
-            <p v-if="!branches.length" :id="id + '-branchId-help'" class="field-help">
+            <p
+              v-if="!catalogsUnavailable && !branches.length"
+              :id="id + '-branchId-help'"
+              class="field-help"
+            >
               Todavía no hay sucursales disponibles para seleccionar en esta vista.
             </p>
             <p
@@ -441,18 +478,27 @@ defineExpose({ open })
               name="provinceId"
               class="form-select"
               required
-              :disabled="!provinces.length"
+              :disabled="catalogsUnavailable || !provinces.length"
               :aria-invalid="!!errors.provinceId"
-              :aria-describedby="description('provinceId', !provinces.length)"
+              :aria-describedby="
+                description('provinceId', !catalogsUnavailable && !provinces.length)
+              "
             >
               <option value="" disabled>
-                {{ provinces.length ? 'Seleccione una provincia' : 'Sin provincias disponibles' }}
+                {{
+                  catalogPlaceholder ||
+                  (provinces.length ? 'Seleccione una provincia' : 'Sin provincias disponibles')
+                }}
               </option>
               <option v-for="province in provinces" :key="province.id" :value="province.id">
                 {{ province.label }}
               </option>
             </select>
-            <p v-if="!provinces.length" :id="id + '-provinceId-help'" class="field-help">
+            <p
+              v-if="!catalogsUnavailable && !provinces.length"
+              :id="id + '-provinceId-help'"
+              class="field-help"
+            >
               Todavía no hay provincias disponibles para seleccionar en esta vista.
             </p>
             <p
@@ -474,11 +520,11 @@ defineExpose({ open })
               name="cantonId"
               class="form-select"
               required
-              :disabled="draft.provinceId === '' || !availableCantons.length"
+              :disabled="catalogsUnavailable || draft.provinceId === '' || !availableCantons.length"
               :aria-invalid="!!errors.cantonId"
               :aria-describedby="description('cantonId', !!cantonHelp)"
             >
-              <option value="" disabled>Seleccione un cantón</option>
+              <option value="" disabled>{{ catalogPlaceholder || 'Seleccione un cantón' }}</option>
               <option v-for="canton in availableCantons" :key="canton.id" :value="canton.id">
                 {{ canton.label }}
               </option>
@@ -503,11 +549,13 @@ defineExpose({ open })
               name="districtId"
               class="form-select"
               required
-              :disabled="draft.cantonId === '' || !availableDistricts.length"
+              :disabled="catalogsUnavailable || draft.cantonId === '' || !availableDistricts.length"
               :aria-invalid="!!errors.districtId"
               :aria-describedby="description('districtId', !!districtHelp)"
             >
-              <option value="" disabled>Seleccione un distrito</option>
+              <option value="" disabled>
+                {{ catalogPlaceholder || 'Seleccione un distrito' }}
+              </option>
               <option
                 v-for="district in availableDistricts"
                 :key="district.id"
@@ -716,7 +764,8 @@ textarea {
   box-shadow: none;
 }
 
-.preview-note {
+.preview-note,
+.catalog-notice {
   padding: 12px;
   border-left: 3px solid var(--color-primary);
   background: var(--color-white);
