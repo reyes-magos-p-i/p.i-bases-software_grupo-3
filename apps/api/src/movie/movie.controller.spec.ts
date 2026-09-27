@@ -17,4 +17,12 @@ describe('MovieController', () => {
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
+
+  it('should be defined', () => {
+    expect(controller.create).toBeDefined();
+    expect(controller.findAll).toBeDefined();
+    expect(controller.findOne).toBeDefined();
+    expect(controller.update).toBeDefined();
+    expect(controller.remove).toBeDefined();
+  })
 });
