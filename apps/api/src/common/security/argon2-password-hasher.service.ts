@@ -3,9 +3,9 @@ import { argon2, randomBytes } from 'node:crypto';
 import { PasswordHasher, type PasswordHashResult } from './password-hasher';
 
 const ARGON2_PARAMETERS = {
-  memory: 19456,
-  passes: 2,
-  parallelism: 1,
+  memory: 65536,
+  passes: 3,
+  parallelism: 4,
   tagLength: 32,
 } as const;
 

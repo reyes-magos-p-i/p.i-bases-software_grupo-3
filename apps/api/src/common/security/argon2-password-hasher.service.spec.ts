@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import crypto from 'node:crypto';
+import { verify } from 'argon2';
 import { Argon2PasswordHasher } from './argon2-password-hasher.service';
 import { PasswordHasher } from './password-hasher';
 
@@ -29,7 +30,7 @@ describe('Argon2PasswordHasher', () => {
 
     await expect(hasher.hash('Cinema test password')).resolves.toEqual({
       passwordHash:
-        '$argon2id$v=19$m=19456,t=2,p=1$AAECAwQFBgcICQoLDA0ODw$jcC029sCs78ZIUTOoSZP6yTYhGTlvGuhTSfDDgUOuaM',
+        '$argon2id$v=19$m=65536,t=3,p=4$AAECAwQFBgcICQoLDA0ODw$/tXTH42HzfyOlS8JzgvppUM1iWQlrRk8rqbsEK11dfE',
       salt: 'AAECAwQFBgcICQoLDA0ODw',
     });
   });
@@ -42,6 +43,28 @@ describe('Argon2PasswordHasher', () => {
     expect(first.passwordHash).not.toBe(second.passwordHash);
   });
 
+  it.each([
+    '$argon2id$v=19$m=19456,t=2,p=1$AAECAwQFBgcICQoLDA0ODw$jcC029sCs78ZIUTOoSZP6yTYhGTlvGuhTSfDDgUOuaM',
+    '$argon2id$v=19$m=65536,t=3,p=4$AAECAwQFBgcICQoLDA0ODw$/tXTH42HzfyOlS8JzgvppUM1iWQlrRk8rqbsEK11dfE',
+  ])('keeps historical PHC profiles verifiable: %s', async (hash) => {
+    await expect(verify(hash, 'Cinema test password')).resolves.toBe(true);
+    await expect(verify(hash, 'Incorrect password')).resolves.toBe(false);
+  });
+
+  it('produces hashes interoperable with the existing Argon2 verifier', async () => {
+    const password = 'Contraseña de prueba 🎬';
+    const { passwordHash, salt } = await hasher.hash(password);
+    await expect(verify(passwordHash, password)).resolves.toBe(true);
+    await expect(verify(passwordHash, 'Incorrect password')).resolves.toBe(
+      false,
+    );
+    const paddedSalt = Buffer.from(salt, 'base64').toString('base64');
+    expect(paddedSalt).toMatch(/==$/u);
+    expect(Buffer.from(paddedSalt, 'base64')).toEqual(
+      Buffer.from(salt, 'base64'),
+    );
+  });
+
   it('returns a self-contained hash and salt that fit the credential columns', async () => {
     const { passwordHash, salt } = await hasher.hash('Cinema test password');
     const parts = passwordHash.split('$');
@@ -51,7 +74,7 @@ describe('Argon2PasswordHasher', () => {
       '',
       'argon2id',
       'v=19',
-      'm=19456,t=2,p=1',
+      'm=65536,t=3,p=4',
     ]);
     expect(parts[4]).toBe(salt);
     expect(Buffer.from(salt, 'base64')).toHaveLength(16);

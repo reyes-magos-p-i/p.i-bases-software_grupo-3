@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ClientsModule } from '../clients/clients.module';
+import { PasswordHashingModule } from '../common/security/password-hashing.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -10,6 +11,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 @Module({
   imports: [
     ClientsModule,
+    PasswordHashingModule,
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
