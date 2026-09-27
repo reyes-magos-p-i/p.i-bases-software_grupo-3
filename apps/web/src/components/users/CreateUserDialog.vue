@@ -9,11 +9,12 @@ import {
   useTemplateRef,
   watch,
 } from 'vue'
-import type { BranchOption, CreateEmployeeRequest } from '@/types/user'
+import type { BranchOption, CreateEmployeeRequest, CreateUserRequest } from '@/types/user'
 import type { CantonOption, DistrictOption, ProvinceOption } from '@/types/address'
 
 const props = withDefaults(
   defineProps<{
+    mode?: 'employee' | 'client'
     provinces?: readonly ProvinceOption[]
     cantons?: readonly CantonOption[]
     districts?: readonly DistrictOption[]
@@ -25,6 +26,7 @@ const props = withDefaults(
     submissionBlocked?: boolean
   }>(),
   {
+    mode: 'employee',
     provinces: () => [],
     cantons: () => [],
     districts: () => [],
@@ -36,7 +38,10 @@ const props = withDefaults(
     submissionBlocked: false,
   },
 )
-const emit = defineEmits<{ retryCatalogs: []; submit: [data: CreateEmployeeRequest] }>()
+const emit = defineEmits<{ retryCatalogs: []; submit: [data: CreateUserRequest] }>()
+const isClient = computed(() => props.mode === 'client')
+const addressEnabled = ref(false)
+const needsAddress = computed(() => !isClient.value || addressEnabled.value)
 const submitted = ref(false)
 const sending = computed(() => props.submitting || submitted.value)
 watch(
@@ -46,6 +51,11 @@ watch(
   },
 )
 const catalogsUnavailable = computed(() => props.catalogsLoading || !!props.catalogsError)
+const requiredCatalogsUnavailable = computed(
+  () =>
+    (needsAddress.value && (catalogsUnavailable.value || !props.provinces.length)) ||
+    (!isClient.value && (catalogsUnavailable.value || !props.branches.length)),
+)
 const catalogPlaceholder = computed(() =>
   props.catalogsLoading
     ? 'Cargando opciones…'
@@ -74,6 +84,7 @@ const draft = reactive<
     cantonId: number | ''
     districtId: number | ''
     details: string
+    language: string
   }
 >({
   firstName: '',
@@ -89,9 +100,13 @@ const draft = reactive<
   cantonId: '',
   districtId: '',
   details: '',
+  language: 'es',
 })
 type FieldName = keyof typeof draft
-type TextField = Exclude<FieldName, 'role' | 'branchId' | 'provinceId' | 'cantonId' | 'districtId'>
+type TextField = Exclude<
+  FieldName,
+  'role' | 'branchId' | 'provinceId' | 'cantonId' | 'districtId' | 'language'
+>
 interface TextFieldDefinition {
   name: TextField
   label: string
@@ -100,7 +115,7 @@ interface TextFieldDefinition {
   maxBytes?: number
 }
 
-const groups: { label: string; fields: TextFieldDefinition[] }[] = [
+const groups = computed<{ label: string; fields: TextFieldDefinition[] }[]>(() => [
   {
     label: 'Datos personales',
     fields: [
@@ -110,37 +125,47 @@ const groups: { label: string; fields: TextFieldDefinition[] }[] = [
         name: 'firstSurname',
         label: 'Primer apellido',
         type: 'text',
-        required: true,
+        required: !isClient.value,
         maxBytes: 100,
       },
       {
         name: 'secondSurname',
         label: 'Segundo apellido',
         type: 'text',
-        required: true,
+        required: !isClient.value,
         maxBytes: 100,
       },
-      { name: 'birthday', label: 'Fecha de nacimiento', type: 'date', required: true },
+      { name: 'birthday', label: 'Fecha de nacimiento', type: 'date', required: !isClient.value },
     ],
   },
   {
     label: 'Contacto',
     fields: [
       { name: 'email', label: 'Correo electrónico', type: 'email', required: true, maxBytes: 150 },
-      { name: 'phoneNumber', label: 'Teléfono', type: 'tel', required: true, maxBytes: 20 },
+      {
+        name: 'phoneNumber',
+        label: 'Teléfono',
+        type: 'tel',
+        required: !isClient.value,
+        maxBytes: 20,
+      },
     ],
   },
-]
-const textFields: TextFieldDefinition[] = [
-  ...groups.flatMap((group) => group.fields),
+])
+const textFields = computed<TextFieldDefinition[]>(() => [
+  ...groups.value.flatMap((group) => group.fields),
   { name: 'details', label: 'Detalle de dirección', type: 'text', required: false, maxBytes: 255 },
-]
+])
 const dirty = reactive<Partial<Record<FieldName, boolean>>>({})
 const touched = reactive<Partial<Record<FieldName, boolean>>>({})
 const errors = reactive<Partial<Record<FieldName, string>>>({})
 const encoder = new TextEncoder()
 const title = computed(() =>
-  draft.role === 'ADMINISTRATOR' ? 'Crear administrador' : 'Crear empleado',
+  isClient.value
+    ? 'Crear cliente'
+    : draft.role === 'ADMINISTRATOR'
+      ? 'Crear administrador'
+      : 'Crear empleado',
 )
 const availableCantons = computed(() =>
   props.cantons.filter((canton) => canton.provinceId === draft.provinceId),
@@ -204,12 +229,13 @@ function validateField(
   includeDisabled = false,
 ) {
   if (control.disabled && !includeDisabled) return ''
-  const definition = textFields.find((item) => item.name === field)
+  const definition = textFields.value.find((item) => item.name === field)
   if (definition) {
     const value = draft[definition.name]
     if (definition.type === 'date' && control.validity.badInput)
       return 'Introduce una fecha válida.'
     if (definition.required && !value.trim()) return 'Este campo es obligatorio.'
+    if (!definition.required && !value) return ''
     if (/[\uD800-\uDFFF]/u.test(value)) return 'El texto contiene un carácter no válido.'
     if (definition.maxBytes && encoder.encode(value).length > definition.maxBytes) {
       return 'El texto es demasiado largo. Reduce su longitud.'
@@ -241,6 +267,7 @@ function validateField(
   }
 
   const choices = {
+    language: ['es', 'en'],
     role: ['EMPLOYEE', 'ADMINISTRATOR'],
     branchId: props.branches.map((branch) => branch.id),
     provinceId: props.provinces.map((province) => province.id),
@@ -280,7 +307,7 @@ function onBlur(event: FocusEvent) {
 }
 
 async function submit() {
-  if (sending.value || props.submissionBlocked || catalogsUnavailable.value) return
+  if (sending.value || props.submissionBlocked || requiredCatalogsUnavailable.value) return
   const controls = dialog.value?.querySelectorAll<
     HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
   >('[name]')
@@ -297,24 +324,50 @@ async function submit() {
     firstInvalid.focus()
     return
   }
-  if (draft.branchId === '' || draft.districtId === '') return
-  submitted.value = true
-  emit('submit', {
-    role: draft.role,
+  if (needsAddress.value && draft.districtId === '') return
+  const base = {
     email: draft.email,
     firstName: draft.firstName,
     ...(draft.secondName ? { secondName: draft.secondName } : {}),
+  }
+  const address =
+    draft.districtId === ''
+      ? undefined
+      : {
+          districtId: draft.districtId,
+          ...(draft.details ? { details: draft.details } : {}),
+        }
+  if (isClient.value) {
+    submitted.value = true
+    emit('submit', {
+      ...base,
+      role: 'CLIENT',
+      ...(draft.firstSurname ? { firstSurname: draft.firstSurname } : {}),
+      ...(draft.secondSurname ? { secondSurname: draft.secondSurname } : {}),
+      ...(draft.birthday ? { birthday: draft.birthday } : {}),
+      ...(draft.phoneNumber ? { phoneNumber: draft.phoneNumber } : {}),
+      ...(addressEnabled.value ? { address } : {}),
+      language: draft.language,
+    })
+    return
+  }
+  if (draft.branchId === '' || !address) return
+  submitted.value = true
+  emit('submit', {
+    ...base,
+    role: draft.role,
     firstSurname: draft.firstSurname,
     secondSurname: draft.secondSurname,
     birthday: draft.birthday,
     phoneNumber: draft.phoneNumber,
     branchId: draft.branchId,
-    address: { districtId: draft.districtId, ...(draft.details ? { details: draft.details } : {}) },
+    address,
   })
 }
 
 function complete() {
   submitted.value = false
+  addressEnabled.value = false
   Object.assign(draft, {
     firstName: '',
     secondName: '',
@@ -329,6 +382,7 @@ function complete() {
     cantonId: '',
     districtId: '',
     details: '',
+    language: 'es',
   })
   for (const field of Object.keys(draft) as FieldName[]) {
     delete errors[field]
@@ -433,7 +487,7 @@ defineExpose({ open, complete })
 <template>
   <dialog
     ref="dialog"
-    class="employee-dialog"
+    class="user-dialog"
     :aria-labelledby="id + '-title'"
     @cancel.prevent="close"
     @close="onClosed"
@@ -465,10 +519,15 @@ defineExpose({ open, complete })
         Los campos con <span class="required-marker">*</span> son obligatorios.
       </p>
 
-      <p v-if="catalogsLoading" class="catalog-notice" role="status">
-        Cargando sucursales y opciones de dirección… Puedes completar los demás campos.
+      <p v-if="needsAddress && catalogsLoading" class="catalog-notice" role="status">
+        {{
+          isClient
+            ? 'Cargando opciones de dirección…'
+            : 'Cargando sucursales y opciones de dirección…'
+        }}
+        Puedes completar los demás campos.
       </p>
-      <div v-else-if="catalogsError" class="catalog-notice">
+      <div v-else-if="needsAddress && catalogsError" class="catalog-notice">
         <p role="alert">{{ catalogsError }}</p>
         <button type="button" class="cancel-button" @click="retryCatalogs">Reintentar</button>
       </div>
@@ -514,7 +573,7 @@ defineExpose({ open, complete })
         </div>
       </fieldset>
 
-      <fieldset :disabled="sending">
+      <fieldset v-if="!isClient" :disabled="sending">
         <legend>Rol y sucursal</legend>
         <div class="field-grid">
           <div class="field">
@@ -580,7 +639,45 @@ defineExpose({ open, complete })
         </div>
       </fieldset>
 
-      <fieldset :disabled="sending">
+      <fieldset v-if="isClient" :disabled="sending">
+        <legend>Preferencias</legend>
+        <div class="field-grid">
+          <div class="field">
+            <label :for="id + '-language'">Idioma</label>
+            <select
+              :id="id + '-language'"
+              v-model="draft.language"
+              name="language"
+              class="form-select"
+              :aria-invalid="!!errors.language"
+              :aria-describedby="description('language')"
+            >
+              <option value="es">Español</option>
+              <option value="en">Inglés</option>
+            </select>
+            <p
+              v-if="errors.language"
+              :id="id + '-language-error'"
+              class="field-error"
+              aria-live="polite"
+            >
+              {{ errors.language }}
+            </p>
+          </div>
+        </div>
+      </fieldset>
+
+      <label v-if="isClient" class="address-toggle" :for="id + '-address-enabled'">
+        <input
+          :id="id + '-address-enabled'"
+          v-model="addressEnabled"
+          type="checkbox"
+          :disabled="sending"
+        />
+        Añadir dirección (opcional)
+      </label>
+
+      <fieldset v-if="needsAddress" :disabled="sending">
         <legend>Dirección</legend>
         <div class="field-grid">
           <div class="field">
@@ -730,15 +827,9 @@ defineExpose({ open, complete })
         <button
           type="submit"
           class="create-button"
-          :disabled="
-            sending ||
-            submissionBlocked ||
-            catalogsUnavailable ||
-            !provinces.length ||
-            !branches.length
-          "
+          :disabled="sending || submissionBlocked || requiredCatalogsUnavailable"
         >
-          {{ sending ? 'Creando usuario…' : 'Crear usuario' }}
+          {{ sending ? 'Creando usuario…' : isClient ? 'Crear cliente' : 'Crear usuario' }}
         </button>
       </footer>
     </form>
@@ -746,7 +837,7 @@ defineExpose({ open, complete })
 </template>
 
 <style scoped>
-.employee-dialog {
+.user-dialog {
   width: min(880px, calc(100% - 32px));
   max-width: none;
   max-height: calc(100dvh - 32px);
@@ -758,12 +849,12 @@ defineExpose({ open, complete })
   overflow: hidden;
 }
 
-.employee-dialog[open] {
+.user-dialog[open] {
   display: flex;
   flex-direction: column;
 }
 
-.employee-dialog::backdrop {
+.user-dialog::backdrop {
   background: color-mix(in srgb, var(--color-black) 55%, transparent);
 }
 
@@ -845,6 +936,20 @@ label {
   display: block;
   margin-bottom: 6px;
   font-weight: 500;
+}
+
+.address-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin-bottom: 24px;
+}
+
+.address-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-primary);
 }
 
 .form-control,

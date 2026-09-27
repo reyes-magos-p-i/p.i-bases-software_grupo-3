@@ -1,20 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, useId, useTemplateRef, watch } from 'vue'
 import { isAxiosError } from 'axios'
-import CreateEmployeeDialog from '@/components/users/CreateEmployeeDialog.vue'
+import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
-import type {
-  UserRole,
-  UserCreationOptions,
-  CreateEmployeeRequest,
-  UserApiError,
-} from '@/types/user'
+import type { UserRole, UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
 import { createUser, getUserCreationOptions } from '@/services/user.service'
 
 const role = ref<Exclude<UserRole, 'CLIENT'>>('ADMINISTRATOR')
 const activeSection = ref<'employees' | 'clients'>('employees')
 const roleId = useId()
-const employeeDialog = useTemplateRef<InstanceType<typeof CreateEmployeeDialog>>('employee-dialog')
+const userDialog = useTemplateRef<InstanceType<typeof CreateUserDialog>>('user-dialog')
 const catalogs = ref<UserCreationOptions | null>(null)
 const catalogsLoading = ref(false)
 const catalogsError = ref('')
@@ -27,8 +22,10 @@ const resultIsWarning = ref(false)
 const resultNotice = useTemplateRef<HTMLElement>('result-notice')
 let disposed = false
 
-async function submitEmployee(data: CreateEmployeeRequest) {
+async function submitUser(data: CreateUserRequest) {
   if (submitting.value || submissionBlocked.value || role.value !== 'ADMINISTRATOR') return
+  if ((activeSection.value === 'clients') !== (data.role === 'CLIENT')) return
+  const submittingDialog = userDialog.value
   submitting.value = true
   submissionErrors.value = []
   creationResult.value = ''
@@ -82,7 +79,7 @@ async function submitEmployee(data: CreateEmployeeRequest) {
     if (!disposed) {
       submitting.value = false
       if (completed) {
-        employeeDialog.value?.complete()
+        submittingDialog?.complete()
         await nextTick()
         resultNotice.value?.focus()
       }
@@ -126,8 +123,8 @@ async function loadCatalogs() {
   }
 }
 
-function openEmployeeDialog() {
-  employeeDialog.value?.open()
+function openUserDialog() {
+  userDialog.value?.open()
   void loadCatalogs()
 }
 
@@ -135,6 +132,8 @@ watch([role, activeSection], () => {
   cancelCatalogRequest()
   catalogs.value = null
   catalogsError.value = ''
+  if (!submissionBlocked.value) submissionErrors.value = []
+  creationResult.value = ''
 })
 onBeforeUnmount(() => {
   disposed = true
@@ -213,14 +212,14 @@ function navigate(section: string) {
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
-          v-if="role === 'ADMINISTRATOR' && activeSection === 'employees'"
+          v-if="role === 'ADMINISTRATOR'"
           type="button"
-          class="add-employee-button"
+          class="add-user-button"
           aria-haspopup="dialog"
-          @click="openEmployeeDialog"
+          @click="openUserDialog"
         >
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
-          Añadir empleado
+          {{ activeSection === 'clients' ? 'Añadir cliente' : 'Añadir empleado' }}
         </button>
       </div>
       <div class="preview-placeholder">
@@ -229,9 +228,11 @@ function navigate(section: string) {
         <p>Puedes probar el menú lateral, cambiar el rol y ajustar el tamaño de la ventana.</p>
       </div>
     </section>
-    <CreateEmployeeDialog
-      v-if="role === 'ADMINISTRATOR' && activeSection === 'employees'"
-      ref="employee-dialog"
+    <CreateUserDialog
+      v-if="role === 'ADMINISTRATOR'"
+      :key="activeSection"
+      ref="user-dialog"
+      :mode="activeSection === 'clients' ? 'client' : 'employee'"
       :provinces="catalogs?.provinces"
       :cantons="catalogs?.cantons"
       :districts="catalogs?.districts"
@@ -242,7 +243,7 @@ function navigate(section: string) {
       :submission-errors="submissionErrors"
       :submission-blocked="submissionBlocked"
       @retry-catalogs="loadCatalogs"
-      @submit="submitEmployee"
+      @submit="submitUser"
     />
   </DashboardLayout>
 </template>
@@ -348,7 +349,7 @@ function navigate(section: string) {
   font-size: clamp(1.5rem, 4vw, 2rem);
 }
 
-.add-employee-button {
+.add-user-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -361,11 +362,11 @@ function navigate(section: string) {
   background: var(--color-primary);
 }
 
-.add-employee-button:hover {
+.add-user-button:hover {
   background: var(--color-dark);
 }
 
-.add-employee-button:focus-visible {
+.add-user-button:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }

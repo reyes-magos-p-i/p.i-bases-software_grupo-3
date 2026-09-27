@@ -3,7 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import DashboardPreview from '@/views/DashboardPreview.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
-import CreateEmployeeDialog from '@/components/users/CreateEmployeeDialog.vue'
+import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import type { UserCreationOptions } from '@/types/user'
 
 const { getUserCreationOptions, createUser } = vi.hoisted(() => ({
@@ -201,8 +201,8 @@ describe('DashboardPreview', () => {
 
   it('opens the creation dialog from employees and returns focus when closed', async () => {
     const view = await renderPreview()
-    const button = view.get<HTMLButtonElement>('.add-employee-button')
-    const dialog = view.get<HTMLDialogElement>('.employee-dialog')
+    const button = view.get<HTMLButtonElement>('.add-user-button')
+    const dialog = view.get<HTMLDialogElement>('.user-dialog')
     expect(dialog.element.open).toBe(false)
 
     button.element.focus()
@@ -215,28 +215,29 @@ describe('DashboardPreview', () => {
     expect(document.activeElement).toBe(button.element)
   })
 
-  it('does not offer employee creation in clients or to the employee role', async () => {
+  it('offers the matching creation form in each section only to administrators', async () => {
     const view = await renderPreview()
     await view.get('[aria-label="Clientes"]').trigger('click')
 
-    expect(view.find('.add-employee-button').exists()).toBe(false)
-    expect(view.find('.employee-dialog').exists()).toBe(false)
+    expect(view.get('.add-user-button').text()).toContain('Añadir cliente')
+    expect(view.get('.user-dialog h2').text()).toBe('Crear cliente')
+    expect(view.find('[name="role"]').exists()).toBe(false)
     await view.get('[aria-label="Empleados"]').trigger('click')
-    expect(view.find('.add-employee-button').exists()).toBe(true)
+    expect(view.get('.add-user-button').text()).toContain('Añadir empleado')
     await view.get('.preview-controls select').setValue('EMPLOYEE')
-    expect(view.find('.add-employee-button').exists()).toBe(false)
-    expect(view.find('.employee-dialog').exists()).toBe(false)
+    expect(view.find('.add-user-button').exists()).toBe(false)
+    expect(view.find('.user-dialog').exists()).toBe(false)
   })
 
   it('closes the dialog if the preview identity changes while it is open', async () => {
     const view = await renderPreview()
-    await view.get('.add-employee-button').trigger('click')
-    const dialog = view.get<HTMLDialogElement>('.employee-dialog').element
+    await view.get('.add-user-button').trigger('click')
+    const dialog = view.get<HTMLDialogElement>('.user-dialog').element
 
     await view.get('.preview-controls select').setValue('EMPLOYEE')
 
     expect(dialog.open).toBe(false)
-    expect(view.find('.employee-dialog').exists()).toBe(false)
+    expect(view.find('.user-dialog').exists()).toBe(false)
     expect(view.get('h1').text()).toBe('Clientes')
   })
 })
@@ -244,7 +245,7 @@ describe('DashboardPreview', () => {
 describe('catalog loading', () => {
   it('loads on first open, fills dependent selectors and reuses the result when reopening', async () => {
     const view = await renderPreview()
-    await view.get('.add-employee-button').trigger('click')
+    await view.get('.add-user-button').trigger('click')
     await flushPromises()
     expect(getUserCreationOptions).toHaveBeenCalledTimes(1)
     expect(view.get('[name="branchId"]').text()).toContain(catalogs.branches[0]!.label)
@@ -266,7 +267,7 @@ describe('catalog loading', () => {
     await view.get('[name="provinceId"]').setValue('4')
     expect(view.get<HTMLSelectElement>('[name="districtId"]').element.value).toBe('')
     await view.get('[aria-label="Cerrar formulario"]').trigger('click')
-    await view.get('.add-employee-button').trigger('click')
+    await view.get('.add-user-button').trigger('click')
     expect(getUserCreationOptions).toHaveBeenCalledTimes(1)
     expect(view.get('.create-button').attributes('disabled')).toBeUndefined()
   })
@@ -274,10 +275,10 @@ describe('catalog loading', () => {
   it('keeps the form editable while loading and prevents duplicate loads', async () => {
     const pending = pendingCatalogs()
     const view = await renderPreview()
-    await view.get('.add-employee-button').trigger('click')
+    await view.get('.add-user-button').trigger('click')
     expect(view.get('[role="status"]').text()).toContain('Cargando')
     await view.get('[name="firstName"]').setValue('Ana')
-    view.getComponent(CreateEmployeeDialog).vm.$emit('retryCatalogs')
+    view.getComponent(CreateUserDialog).vm.$emit('retryCatalogs')
     await flushPromises()
     expect(getUserCreationOptions).toHaveBeenCalledTimes(1)
     pending.resolve(catalogs)
@@ -295,7 +296,7 @@ describe('catalog loading', () => {
   ])('shows a useful error and preserves input after retry: %p', async (error, message) => {
     const pending = pendingCatalogs()
     const view = await renderPreview()
-    await view.get('.add-employee-button').trigger('click')
+    await view.get('.add-user-button').trigger('click')
     await view.get('[name="firstName"]').setValue('Ana')
     pending.reject(error)
     await flushPromises()
@@ -317,7 +318,7 @@ describe('catalog loading', () => {
       branches: [],
     })
     const view = await renderPreview()
-    await view.get('.add-employee-button').trigger('click')
+    await view.get('.add-user-button').trigger('click')
     await flushPromises()
     expect(view.find('[role="alert"]').exists()).toBe(false)
     expect(view.find('[role="status"]').exists()).toBe(false)
@@ -329,13 +330,13 @@ describe('catalog loading', () => {
     async (outcome) => {
       const pending = pendingCatalogs()
       const view = await renderPreview()
-      await view.get('.add-employee-button').trigger('click')
+      await view.get('.add-user-button').trigger('click')
       const signal = getUserCreationOptions.mock.calls[0]![0] as AbortSignal
       await view.get('[aria-label="Clientes"]').trigger('click')
       expect(signal.aborted).toBe(true)
       await view.get('[aria-label="Empleados"]').trigger('click')
       const current = pendingCatalogs()
-      await view.get('.add-employee-button').trigger('click')
+      await view.get('.add-user-button').trigger('click')
       if (outcome === 'resolve')
         pending.resolve({ ...catalogs, branches: [{ id: 99, label: 'Obsolete' }] })
       else pending.reject(new Error('Obsolete failure'))
@@ -351,7 +352,7 @@ describe('catalog loading', () => {
   it('cancels the pending request when leaving the view', async () => {
     const pending = pendingCatalogs()
     const view = await renderPreview()
-    await view.get('.add-employee-button').trigger('click')
+    await view.get('.add-user-button').trigger('click')
     const signal = getUserCreationOptions.mock.calls[0]![0] as AbortSignal
     view.unmount()
     wrapper = undefined
@@ -364,7 +365,7 @@ describe('catalog loading', () => {
 describe('employee creation', () => {
   async function filledForm(role = 'EMPLOYEE') {
     const view = await renderPreview()
-    await view.get('.add-employee-button').trigger('click')
+    await view.get('.add-user-button').trigger('click')
     await flushPromises()
     for (const [field, value] of Object.entries({
       firstName: 'Ana',
@@ -404,7 +405,7 @@ describe('employee creation', () => {
       expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
       expect(view.get('.creation-result').text()).toContain('Cuenta creada para ana@example.com')
       expect(document.activeElement).toBe(view.get('.creation-result').element)
-      await view.get('.add-employee-button').trigger('click')
+      await view.get('.add-user-button').trigger('click')
       expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('')
       expect(view.get('[name="role"]').element).toHaveProperty('value', 'EMPLOYEE')
     },
@@ -420,7 +421,7 @@ describe('employee creation', () => {
     const view = await filledForm()
     await view.get('form').trigger('submit')
     await view.get('form').trigger('submit')
-    view.getComponent(CreateEmployeeDialog).vm.$emit('submit', { role: 'EMPLOYEE' })
+    view.getComponent(CreateUserDialog).vm.$emit('submit', { role: 'EMPLOYEE' })
     view.getComponent(DashboardLayout).vm.$emit('navigate', 'clients')
     await view.get('dialog').trigger('cancel')
     expect(view.get('h1').text()).toBe('Empleados')
@@ -495,7 +496,7 @@ describe('employee creation', () => {
     expect(view.get('.create-button').attributes('disabled')).toBeDefined()
     await view.get('form').trigger('submit')
     await view.get('.form-actions .cancel-button').trigger('click')
-    await view.get('.add-employee-button').trigger('click')
+    await view.get('.add-user-button').trigger('click')
     await view.get('form').trigger('submit')
     expect(createUser).toHaveBeenCalledTimes(1)
     expect(view.get<HTMLInputElement>('[name="email"]').element.value).toBe('ana@example.com')
@@ -523,6 +524,161 @@ describe('employee creation', () => {
       expect(createUser).toHaveBeenCalledTimes(1)
     },
   )
+})
+
+describe('client creation', () => {
+  async function clientForm() {
+    createUser.mockResolvedValueOnce({ id: 43, role: 'CLIENT', email: 'cliente@example.com' })
+    const view = await renderPreview()
+    await view.get('[aria-label="Clientes"]').trigger('click')
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+    await view.get('[name="firstName"]').setValue('Cliente')
+    await view.get('[name="email"]').setValue('cliente@example.com')
+    return view
+  }
+
+  it('creates a client without address even if catalog loading fails and resets on success', async () => {
+    getUserCreationOptions.mockRejectedValueOnce(new Error('Catalog unavailable'))
+    const view = await clientForm()
+    await view.get('form').trigger('submit')
+    await flushPromises()
+    expect(createUser).toHaveBeenCalledExactlyOnceWith({
+      role: 'CLIENT',
+      firstName: 'Cliente',
+      email: 'cliente@example.com',
+      language: 'es',
+    })
+    expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
+    expect(view.get('.creation-result').text()).toContain('Cuenta creada para cliente@example.com')
+    expect(document.activeElement).toBe(view.get('.creation-result').element)
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+    expect(view.get('[name="firstName"]').element).toHaveProperty('value', '')
+    expect(view.get('[type="checkbox"]').element).toHaveProperty('checked', false)
+  })
+
+  it('uses loaded geography for the client address without sending a branch or public registration fields', async () => {
+    const view = await clientForm()
+    await view.get('[type="checkbox"]').setValue(true)
+    await view.get('[name="provinceId"]').setValue('1')
+    await view.get('[name="cantonId"]').setValue('19')
+    await view.get('[name="districtId"]').setValue('102')
+    await view.get('[name="details"]').setValue('Casa azul')
+    await view.get('form').trigger('submit')
+    await flushPromises()
+    expect(createUser).toHaveBeenCalledExactlyOnceWith({
+      role: 'CLIENT',
+      firstName: 'Cliente',
+      email: 'cliente@example.com',
+      language: 'es',
+      address: { districtId: 102, details: 'Casa azul' },
+    })
+  })
+
+  it.each([
+    [400, ['Revisa el correo.'], 'Revisa el correo.'],
+    [403, 'private', 'No tienes permiso'],
+    [409, 'private', 'Ya existe una cuenta'],
+  ])(
+    'preserves client input after %s and clears errors when switching forms',
+    async (status, message, expected) => {
+      const view = await clientForm()
+      createUser
+        .mockReset()
+        .mockRejectedValueOnce({ isAxiosError: true, response: { status, data: { message } } })
+      await view.get('form').trigger('submit')
+      await flushPromises()
+      expect(view.get('[role="alert"]').text()).toContain(expected)
+      expect(view.get('[name="email"]').element).toHaveProperty('value', 'cliente@example.com')
+      expect(view.get('.create-button').attributes('disabled')).toBeUndefined()
+      await view.get('.close-button').trigger('click')
+      await view.get('[aria-label="Empleados"]').trigger('click')
+      await view.get('.add-user-button').trigger('click')
+      await flushPromises()
+      expect(view.find('[role="alert"]').exists()).toBe(false)
+      expect(view.get('[name="email"]').element).toHaveProperty('value', '')
+      await view.get('.close-button').trigger('click')
+      await view.get('[aria-label="Clientes"]').trigger('click')
+      expect(view.get('[name="email"]').element).toHaveProperty('value', '')
+    },
+  )
+
+  it('reports a created client whose credentials could not be emailed', async () => {
+    const view = await clientForm()
+    createUser.mockReset().mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        status: 502,
+        data: {
+          statusCode: 502,
+          message: 'El usuario fue creado, pero no se pudo enviar el correo con sus credenciales.',
+        },
+      },
+    })
+    await view.get('form').trigger('submit')
+    await flushPromises()
+    expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
+    expect(view.get('.creation-result').text()).toContain(
+      'La cuenta de cliente@example.com fue creada',
+    )
+    expect(view.get('.creation-result').attributes('role')).toBe('alert')
+    expect(createUser).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    { isAxiosError: true, code: 'ECONNABORTED' },
+    { isAxiosError: true, code: 'ERR_NETWORK' },
+    { isAxiosError: true, response: { status: 500 } },
+    { isAxiosError: true, response: { status: 502, data: 'Bad gateway' } },
+  ])('preserves the uncertain-result block across section and role changes: %p', async (error) => {
+    const view = await clientForm()
+    createUser.mockReset().mockRejectedValueOnce(error)
+    await view.get('form').trigger('submit')
+    await flushPromises()
+    await view.get('.close-button').trigger('click')
+    await view.get('[aria-label="Empleados"]').trigger('click')
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+    expect(view.get('[role="alert"]').text()).toContain('No se pudo confirmar')
+    expect(view.get('.create-button').attributes('disabled')).toBeDefined()
+    await view.get('form').trigger('submit')
+    await view.get('.close-button').trigger('click')
+    await view.get('.preview-controls select').setValue('EMPLOYEE')
+    expect(view.find('.add-user-button').exists()).toBe(false)
+    await view.get('.preview-controls select').setValue('ADMINISTRATOR')
+    await view.get('.add-user-button').trigger('click')
+    await view.get('form').trigger('submit')
+    expect(view.get('[role="alert"]').text()).toContain('No se pudo confirmar')
+    expect(createUser).toHaveBeenCalledTimes(1)
+  })
+
+  it('prevents duplicate client submissions and navigation while waiting for the API', async () => {
+    const view = await clientForm()
+    let resolve!: (value: unknown) => void
+    createUser.mockReset().mockReturnValueOnce(
+      new Promise((res) => {
+        resolve = res
+      }),
+    )
+    await view.get('form').trigger('submit')
+    await view.get('form').trigger('submit')
+    view.getComponent(DashboardLayout).vm.$emit('navigate', 'employees')
+    await view.get('dialog').trigger('cancel')
+    expect(view.get('h1').text()).toBe('Clientes')
+    expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(true)
+    expect(view.get('[type="checkbox"]').attributes('disabled')).toBeDefined()
+    expect(createUser).toHaveBeenCalledTimes(1)
+    resolve({ id: 43, role: 'CLIENT', email: 'cliente@example.com' })
+    await flushPromises()
+  })
+
+  it('ignores a creation event for a different section', async () => {
+    const view = await clientForm()
+    view.getComponent(CreateUserDialog).vm.$emit('submit', { role: 'EMPLOYEE' })
+    await flushPromises()
+    expect(createUser).not.toHaveBeenCalled()
+  })
 })
 
 describe('dashboard preview route', () => {

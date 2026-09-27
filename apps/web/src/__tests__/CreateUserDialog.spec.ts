@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import CreateEmployeeDialog from '@/components/users/CreateEmployeeDialog.vue'
+import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import type { CantonOption, DistrictOption, ProvinceOption } from '@/types/address'
 
 const provinces: ProvinceOption[] = [
@@ -19,7 +19,7 @@ const districts: DistrictOption[] = [
   { id: 211, label: 'Distrito B1', cantonId: 21 },
 ]
 
-let wrapper: VueWrapper<InstanceType<typeof CreateEmployeeDialog>> | undefined
+let wrapper: VueWrapper<InstanceType<typeof CreateUserDialog>> | undefined
 let opener: HTMLButtonElement
 let originalRootStyle: string | null
 let originalBodyStyle: string | null
@@ -74,17 +74,184 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function renderDialog(
-  props: Partial<InstanceType<typeof CreateEmployeeDialog>['$props']> = {},
-) {
-  wrapper = mount(CreateEmployeeDialog, { props, attachTo: document.body })
+async function renderDialog(props: Partial<InstanceType<typeof CreateUserDialog>['$props']> = {}) {
+  wrapper = mount(CreateUserDialog, { props, attachTo: document.body })
   opener.focus()
   wrapper.vm.open()
   await nextTick()
   return wrapper
 }
 
-describe('CreateEmployeeDialog', () => {
+describe('client form', () => {
+  async function filledClient(
+    props: Partial<InstanceType<typeof CreateUserDialog>['$props']> = {},
+  ) {
+    const view = await renderDialog({ mode: 'client', ...props })
+    await view.get('[name="firstName"]').setValue('Ana')
+    await view.get('[name="email"]').setValue('ana@example.com')
+    return view
+  }
+
+  it('requires only name and email and hides employee and public registration fields', async () => {
+    const view = await renderDialog({ mode: 'client' })
+    expect(view.get('h2').text()).toBe('Crear cliente')
+    expect(view.findAll('[required]').map((field) => field.attributes('name'))).toEqual([
+      'firstName',
+      'email',
+    ])
+    expect(view.findAll('label .required-marker')).toHaveLength(2)
+    for (const name of ['role', 'branchId', 'password', 'gender', 'acceptedTerms', 'districtId']) {
+      expect(view.find('[name="' + name + '"]').exists()).toBe(false)
+    }
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')).toBeUndefined()
+    expect(view.findAll('[aria-invalid="true"]')).toHaveLength(2)
+    expect(document.activeElement).toBe(view.get('[name="firstName"]').element)
+  })
+
+  it.each([{}, { catalogsLoading: true }, { catalogsError: 'Sin conexión' }])(
+    'creates a minimal client without depending on catalogs: %p',
+    async (props) => {
+      const view = await filledClient(props)
+      expect(view.get('.create-button').attributes('disabled')).toBeUndefined()
+      await view.get('form').trigger('submit')
+      await view.get('form').trigger('submit')
+      expect(view.emitted('submit')).toEqual([
+        [
+          {
+            role: 'CLIENT',
+            firstName: 'Ana',
+            email: 'ana@example.com',
+            language: 'es',
+          },
+        ],
+      ])
+    },
+  )
+
+  it('submits optional data and a nested address without a branch', async () => {
+    const view = await filledClient({ provinces, cantons, districts })
+    await view.get('[type="checkbox"]').setValue(true)
+    for (const [name, value] of Object.entries({
+      secondName: 'María',
+      firstSurname: 'Solano',
+      secondSurname: 'Rojas',
+      birthday: '2000-02-29',
+      phoneNumber: '+506 8888-8888',
+      language: 'en',
+      provinceId: '1',
+      cantonId: '11',
+      districtId: '111',
+      details: 'Casa azul',
+    }))
+      await view.get('[name="' + name + '"]').setValue(value)
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')).toEqual([
+      [
+        {
+          role: 'CLIENT',
+          firstName: 'Ana',
+          secondName: 'María',
+          firstSurname: 'Solano',
+          secondSurname: 'Rojas',
+          email: 'ana@example.com',
+          birthday: '2000-02-29',
+          phoneNumber: '+506 8888-8888',
+          language: 'en',
+          address: { districtId: 111, details: 'Casa azul' },
+        },
+      ],
+    ])
+    view.vm.complete()
+    await nextTick()
+    view.vm.open()
+    expect(view.get('[name="firstName"]').element).toHaveProperty('value', '')
+    expect(view.get('[name="language"]').element).toHaveProperty('value', 'es')
+    expect(view.get('[type="checkbox"]').element).toHaveProperty('checked', false)
+    expect(view.find('[name="provinceId"]').exists()).toBe(false)
+  })
+
+  it('requires a complete address when enabled and clears descendants on geography changes', async () => {
+    const view = await filledClient({ provinces, cantons, districts })
+    await view.get('[type="checkbox"]').setValue(true)
+    await view.get('[name="provinceId"]').setValue('1')
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')).toBeUndefined()
+    expect(view.get('[name="cantonId"]').attributes('aria-invalid')).toBe('true')
+    await view.get('[name="cantonId"]').setValue('11')
+    await view.get('[name="districtId"]').setValue('111')
+    await view.get('[name="provinceId"]').setValue('2')
+    expect(view.get('[name="cantonId"]').element).toHaveProperty('value', '')
+    expect(view.get('[name="districtId"]').element).toHaveProperty('value', '')
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')).toBeUndefined()
+    await view.get('[name="cantonId"]').setValue('21')
+    await view.get('[name="districtId"]').setValue('211')
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')?.[0]?.[0]).toHaveProperty('address', { districtId: 211 })
+  })
+
+  it('does not send an address that has been deselected, including invalid hidden details', async () => {
+    const view = await filledClient({ provinces, cantons, districts })
+    await view.get('[type="checkbox"]').setValue(true)
+    await view.get('[name="provinceId"]').setValue('1')
+    await view.get('[name="cantonId"]').setValue('11')
+    await view.get('[name="districtId"]').setValue('111')
+    await view.get('[name="details"]').setValue('á'.repeat(128))
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')).toBeUndefined()
+    await view.get('[type="checkbox"]').setValue(false)
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')?.[0]?.[0]).not.toHaveProperty('address')
+  })
+
+  it.each([{ catalogsLoading: true }, { catalogsError: 'Sin conexión' }, { provinces: [] }])(
+    'blocks an enabled address when catalogs are unavailable: %p',
+    async (props) => {
+      const view = await filledClient(props)
+      await view.get('[type="checkbox"]').setValue(true)
+      expect(view.get('.create-button').attributes('disabled')).toBeDefined()
+      await view.get('form').trigger('submit')
+      expect(view.emitted('submit')).toBeUndefined()
+      await view.get('[type="checkbox"]').setValue(false)
+      expect(view.get('.create-button').attributes('disabled')).toBeUndefined()
+    },
+  )
+
+  it.each([
+    ['email', 'ana@'],
+    ['firstSurname', 'á'.repeat(51)],
+    ['secondName', 'a'.repeat(101)],
+    ['secondSurname', 'a'.repeat(101)],
+    ['phoneNumber', '1'.repeat(21)],
+  ])('validates %s on blur and accepts its correction', async (name, value) => {
+    const view = await filledClient()
+    const field = view.get('[name="' + name + '"]')
+    await field.setValue(value)
+    await field.trigger('focusout')
+    expect(field.attributes('aria-invalid')).toBe('true')
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')).toBeUndefined()
+    await field.setValue(name === 'email' ? 'ana@example.com' : '')
+    expect(field.attributes('aria-invalid')).toBe('false')
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')).toHaveLength(1)
+  })
+
+  it('rejects partially entered dates while allowing an omitted birthday', async () => {
+    const view = await filledClient()
+    const field = view.get<HTMLInputElement>('[name="birthday"]')
+    vi.spyOn(field.element.validity, 'badInput', 'get').mockReturnValue(true)
+    await view.get('form').trigger('submit')
+    expect(field.attributes('aria-invalid')).toBe('true')
+    expect(view.emitted('submit')).toBeUndefined()
+    vi.restoreAllMocks()
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')?.[0]?.[0]).not.toHaveProperty('birthday')
+  })
+})
+
+describe('CreateUserDialog', () => {
   it('opens a labelled modal and focuses the first field without opening twice', async () => {
     const view = await renderDialog()
     const dialog = view.get<HTMLDialogElement>('dialog')
@@ -149,7 +316,7 @@ describe('CreateEmployeeDialog', () => {
   })
 
   it('restores scrolling if the native modal fails to open', () => {
-    wrapper = mount(CreateEmployeeDialog, { attachTo: document.body })
+    wrapper = mount(CreateUserDialog, { attachTo: document.body })
     vi.mocked(dialogPrototype.showModal).mockImplementationOnce(() => {
       throw new Error('Cannot open dialog')
     })
@@ -161,7 +328,7 @@ describe('CreateEmployeeDialog', () => {
 
   it('does not change page styles when an unopened dialog is removed', () => {
     document.body.style.position = 'relative'
-    wrapper = mount(CreateEmployeeDialog, { attachTo: document.body })
+    wrapper = mount(CreateUserDialog, { attachTo: document.body })
     wrapper.unmount()
 
     expect(document.body.style.position).toBe('relative')
