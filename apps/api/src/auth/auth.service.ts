@@ -54,7 +54,6 @@ export class AuthService {
   issueToken(client: Client) {
     return {
       accessToken: this.jwt.sign({ sub: client.id, email: client.email, type: 'client' }),
-      type: 'employee',  // For front end redirecting
     };
   }
 }
