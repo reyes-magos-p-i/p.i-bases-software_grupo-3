@@ -6,76 +6,93 @@ on:
     branches: [ "main", "dev" ]
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  ci:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, web]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - name: Install Dependencies (API)
-        working-directory: apps/api
-        run: npm ci --ignore-scripts
-
-      - name: Install Dependencies (Web)
-        working-directory: apps/web
-        run: npm ci --ignore-scripts
-
-      - name: Build Backend (API)
-        working-directory: apps/api
-        run: npm run build
-
-      - name: Build Frontend (Web)
-        working-directory: apps/web
-        run: npm run build
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run test:cov
+      - name: Typecheck
+        if: matrix.app == 'web'
+        run: npm run type-check
+      - run: npm run build
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          node-version: '20'
-      - name: Linter Backend (API)
-        working-directory: apps/api
-        run: |
-          npm ci
-          npm run lint
-
-      - name: Linter Frontend (Web)
-        working-directory: apps/web
-        run: |
-          npm ci
-          npm run lint
+          name: coverage-${{ matrix.app }}
+          path: apps/${{ matrix.app }}/coverage/lcov.info
+          if-no-files-found: error
+          retention-days: 1
 
   sonarqube:
+    name: SonarQube
+    needs: [ci]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          # Disabling shallow clone is recommended for improving relevancy of reporting.
-          fetch-depth: 0
-
-      # Triggering SonarQube analysis as results of it are required by Quality Gate check.
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-api
+          path: apps/api/coverage
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-web
+          path: apps/web/coverage
       - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4
+        uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: https://sonarcloud.io
 
-      # Check the Quality Gate status.
-      - name: SonarQube Quality Gate check
-        id: sonarqube-quality-gate-check
-        uses: sonarsource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa
+  deploy:
+    name: Deploy
+    needs: [ci, sonarqube]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build and serve
+        uses: appleboy/ssh-action@v1.2.0
         with:
-          pollingTimeoutSec: 600
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: https://sonarcloud.io
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          key: ${{ secrets.KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/app/p.i-bases-software_grupo-3
+            git fetch origin main
 
-      # Optionally you can use the output from the Quality Gate in another step.
-      # The possible outputs of the `quality-gate-status` variable are `PASSED`, `WARN` or `FAILED`.
-      - name: "Example show SonarQube Quality Gate Status value"
-        run: echo "The Quality Gate status is ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
+            git checkout main
+            git reset --hard origin/main
+
+            cd apps/api
+            npm ci
+            npm run build
+
+            cd ../web
+            npm ci
+            npm run build-only
+
+            sudo systemctl restart cinetadel-api.service
+            sudo systemctl --no-pager --full status cinetadel-api.service
+
 
