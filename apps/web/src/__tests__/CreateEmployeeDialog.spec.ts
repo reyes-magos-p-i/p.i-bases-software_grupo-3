@@ -269,7 +269,7 @@ describe('CreateEmployeeDialog', () => {
     expect(branch.element.value).toBe('7')
     expect(canton.attributes('aria-describedby')).toBeUndefined()
     expect(district.attributes('aria-describedby')).toBeUndefined()
-    expect(view.get('[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(view.get('[type="submit"]').attributes('disabled')).toBeUndefined()
   })
 
   it.each(['cancel', 'close-button', 'escape', 'native-close'])(
@@ -323,7 +323,7 @@ describe('CreateEmployeeDialog', () => {
     expect(event.defaultPrevented).toBe(false)
   })
 
-  it('prevents submission and explains why creation is disabled', async () => {
+  it('prevents submission when required catalog selections are unavailable', async () => {
     const view = await renderDialog()
     const submit = view.get('[type="submit"]')
     const event = new Event('submit', { bubbles: true, cancelable: true })
@@ -332,12 +332,85 @@ describe('CreateEmployeeDialog', () => {
 
     expect(event.defaultPrevented).toBe(true)
     expect(submit.attributes('disabled')).toBeDefined()
-    expect(view.get('[id="' + submit.attributes('aria-describedby') + '"]').text()).toContain(
-      'todavía no está habilitada',
-    )
+    expect(view.text()).toContain('Sin sucursales disponibles')
     expect(view.emitted('submit')).toBeUndefined()
     expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(true)
   })
+
+  it('validates all fields on submission and focuses the first invalid input', async () => {
+    const view = await renderDialog({
+      provinces,
+      cantons,
+      districts,
+      branches: [{ id: 1, label: 'Sucursal' }],
+    })
+    await view.get('form').trigger('submit')
+    await nextTick()
+    expect(view.emitted('submit')).toBeUndefined()
+    expect(view.findAll('[aria-invalid="true"]').length).toBeGreaterThan(1)
+    expect(document.activeElement).toBe(view.get('[name="firstName"]').element)
+    await view.get('[name="firstName"]').setValue('Ana')
+    expect(view.get('[name="firstName"]').attributes('aria-invalid')).toBe('false')
+  })
+
+  it('emits only API fields with nested address and blocks an immediate second submission', async () => {
+    const view = await renderDialog({
+      provinces,
+      cantons,
+      districts,
+      branches: [{ id: 1, label: 'Sucursal' }],
+    })
+    for (const [field, value] of Object.entries({
+      firstName: 'Ana',
+      secondName: 'María',
+      firstSurname: 'Solano',
+      secondSurname: 'Rojas',
+      email: 'ana@example.com',
+      birthday: '2000-02-29',
+      phoneNumber: '88888888',
+      role: 'ADMINISTRATOR',
+      branchId: '1',
+      provinceId: '1',
+      cantonId: '11',
+      districtId: '111',
+      details: 'Casa azul',
+    })) {
+      await view.get('[name="' + field + '"]').setValue(value)
+    }
+    await view.get('form').trigger('submit')
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')).toEqual([
+      [
+        {
+          firstName: 'Ana',
+          secondName: 'María',
+          firstSurname: 'Solano',
+          secondSurname: 'Rojas',
+          email: 'ana@example.com',
+          birthday: '2000-02-29',
+          phoneNumber: '88888888',
+          role: 'ADMINISTRATOR',
+          branchId: 1,
+          address: { districtId: 111, details: 'Casa azul' },
+        },
+      ],
+    ])
+    expect(view.get('.create-button').attributes('disabled')).toBeDefined()
+    await view.setProps({ submitting: true })
+    await view.setProps({ submitting: false, submissionErrors: ['Revisa el correo.'] })
+    await nextTick()
+    expect(document.activeElement).toBe(view.get('[role="alert"]').element)
+    expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('Ana')
+  })
+
+  it.each([{ submitting: true }, { submissionBlocked: true }, { catalogsLoading: true }])(
+    'does not emit a creation with state %p',
+    async (props) => {
+      const view = await renderDialog(props)
+      await view.get('form').trigger('submit')
+      expect(view.emitted('submit')).toBeUndefined()
+    },
+  )
 
   it('releases the native modal when the component is removed', async () => {
     const view = await renderDialog()

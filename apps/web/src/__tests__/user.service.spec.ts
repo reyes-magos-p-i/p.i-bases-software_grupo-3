@@ -58,7 +58,7 @@ describe('createUser', () => {
       await expect(createUser(payload)).resolves.toEqual(result)
 
       expect(create).toHaveBeenCalledExactlyOnceWith({ baseURL: 'https://api.example.com' })
-      expect(post).toHaveBeenCalledExactlyOnceWith('/users', payload)
+      expect(post).toHaveBeenCalledExactlyOnceWith('/users', payload, { timeout: 60000 })
     },
   )
 
@@ -67,7 +67,7 @@ describe('createUser', () => {
     const payload: CreateClientRequest = { ...client, address: { districtId: 7, details: null } }
     post.mockResolvedValue({ data: { id: 42, role: 'CLIENT', email: client.email } })
     await createUser(payload)
-    expect(post).toHaveBeenCalledExactlyOnceWith('/users', payload)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/users', payload, { timeout: 60000 })
   })
 
   it('preserves optional client fields and nulls in the request', async () => {
@@ -86,7 +86,7 @@ describe('createUser', () => {
 
     await createUser(payload)
 
-    expect(post).toHaveBeenCalledExactlyOnceWith('/users', payload)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/users', payload, { timeout: 60000 })
   })
 
   it('trims surrounding whitespace from the configured backend URL', async () => {
@@ -143,9 +143,17 @@ describe('createUser', () => {
       post.mockRejectedValue(failure)
 
       await expect(createUser(client)).rejects.toBe(failure)
-      expect(post).toHaveBeenCalledExactlyOnceWith('/users', client)
+      expect(post).toHaveBeenCalledExactlyOnceWith('/users', client, { timeout: 60000 })
     },
   )
+
+  it('preserves a creation timeout without retrying', async () => {
+    const { createUser } = await import('@/services/user.service')
+    const error = Object.assign(new Error('timeout'), { isAxiosError: true, code: 'ECONNABORTED' })
+    post.mockRejectedValue(error)
+    await expect(createUser(client)).rejects.toBe(error)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/users', client, { timeout: 60000 })
+  })
 
   describe('getUserCreationOptions', () => {
     it('loads catalog data through the same Axios instance with a timeout and signal', async () => {
@@ -202,6 +210,6 @@ describe('createUser', () => {
     post.mockRejectedValue(failure)
 
     await expect(createUser(client)).rejects.toBe(failure)
-    expect(post).toHaveBeenCalledExactlyOnceWith('/users', client)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/users', client, { timeout: 60000 })
   })
 })

@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, useId, useTemplateRef, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  reactive,
+  ref,
+  useId,
+  useTemplateRef,
+  watch,
+} from 'vue'
 import type { BranchOption, CreateEmployeeRequest } from '@/types/user'
 import type { CantonOption, DistrictOption, ProvinceOption } from '@/types/address'
 
@@ -11,6 +20,9 @@ const props = withDefaults(
     branches?: readonly BranchOption[]
     catalogsLoading?: boolean
     catalogsError?: string
+    submitting?: boolean
+    submissionErrors?: readonly string[]
+    submissionBlocked?: boolean
   }>(),
   {
     provinces: () => [],
@@ -19,9 +31,20 @@ const props = withDefaults(
     branches: () => [],
     catalogsLoading: false,
     catalogsError: '',
+    submitting: false,
+    submissionErrors: () => [],
+    submissionBlocked: false,
   },
 )
-const emit = defineEmits<{ retryCatalogs: [] }>()
+const emit = defineEmits<{ retryCatalogs: []; submit: [data: CreateEmployeeRequest] }>()
+const submitted = ref(false)
+const sending = computed(() => props.submitting || submitted.value)
+watch(
+  () => props.submitting,
+  (value) => {
+    if (!value) submitted.value = false
+  },
+)
 const catalogsUnavailable = computed(() => props.catalogsLoading || !!props.catalogsError)
 const catalogPlaceholder = computed(() =>
   props.catalogsLoading
@@ -33,6 +56,16 @@ const catalogPlaceholder = computed(() =>
 
 const id = useId()
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
+const submissionFeedback = useTemplateRef<HTMLElement>('submission-feedback')
+watch(
+  () => props.submissionErrors,
+  async (messages) => {
+    if (messages.length) {
+      await nextTick()
+      submissionFeedback.value?.focus()
+    }
+  },
+)
 const draft = reactive<
   Omit<CreateEmployeeRequest, 'address' | 'branchId' | 'secondName'> & {
     secondName: string
@@ -168,8 +201,9 @@ function description(field: FieldName, hasHelp = false) {
 function validateField(
   field: FieldName,
   control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+  includeDisabled = false,
 ) {
-  if (control.disabled) return ''
+  if (control.disabled && !includeDisabled) return ''
   const definition = textFields.find((item) => item.name === field)
   if (definition) {
     const value = draft[definition.name]
@@ -245,6 +279,66 @@ function onBlur(event: FocusEvent) {
   errors[target.field] = validateField(target.field, target.control)
 }
 
+async function submit() {
+  if (sending.value || props.submissionBlocked || catalogsUnavailable.value) return
+  const controls = dialog.value?.querySelectorAll<
+    HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+  >('[name]')
+  if (!controls) return
+  let firstInvalid: HTMLElement | undefined
+  for (const control of controls) {
+    const field = control.name as FieldName
+    touched[field] = true
+    errors[field] = validateField(field, control, true)
+    if (errors[field] && !firstInvalid) firstInvalid = control
+  }
+  if (firstInvalid) {
+    await nextTick()
+    firstInvalid.focus()
+    return
+  }
+  if (draft.branchId === '' || draft.districtId === '') return
+  submitted.value = true
+  emit('submit', {
+    role: draft.role,
+    email: draft.email,
+    firstName: draft.firstName,
+    ...(draft.secondName ? { secondName: draft.secondName } : {}),
+    firstSurname: draft.firstSurname,
+    secondSurname: draft.secondSurname,
+    birthday: draft.birthday,
+    phoneNumber: draft.phoneNumber,
+    branchId: draft.branchId,
+    address: { districtId: draft.districtId, ...(draft.details ? { details: draft.details } : {}) },
+  })
+}
+
+function complete() {
+  submitted.value = false
+  Object.assign(draft, {
+    firstName: '',
+    secondName: '',
+    firstSurname: '',
+    secondSurname: '',
+    birthday: '',
+    email: '',
+    phoneNumber: '',
+    role: 'EMPLOYEE',
+    branchId: '',
+    provinceId: '',
+    cantonId: '',
+    districtId: '',
+    details: '',
+  })
+  for (const field of Object.keys(draft) as FieldName[]) {
+    delete errors[field]
+    delete dirty[field]
+    delete touched[field]
+  }
+  dialog.value?.close()
+  onClosed()
+}
+
 let opener: HTMLElement | null = null
 let releasePageScroll: (() => void) | undefined
 
@@ -307,6 +401,7 @@ function onClosed() {
 }
 
 function close() {
+  if (sending.value) return
   dialog.value?.close()
   onClosed()
 }
@@ -328,8 +423,11 @@ function keepFocus(event: KeyboardEvent) {
   }
 }
 
-onBeforeUnmount(close)
-defineExpose({ open })
+onBeforeUnmount(() => {
+  dialog.value?.close()
+  releasePageScroll?.()
+})
+defineExpose({ open, complete })
 </script>
 
 <template>
@@ -343,7 +441,13 @@ defineExpose({ open })
   >
     <header class="dialog-heading">
       <h2 :id="id + '-title'">{{ title }}</h2>
-      <button type="button" class="close-button" aria-label="Cerrar formulario" @click="close">
+      <button
+        type="button"
+        class="close-button"
+        aria-label="Cerrar formulario"
+        :disabled="sending"
+        @click="close"
+      >
         <i class="bi bi-x-lg" aria-hidden="true"></i>
       </button>
     </header>
@@ -351,7 +455,8 @@ defineExpose({ open })
     <form
       autocomplete="off"
       novalidate
-      @submit.prevent.stop
+      :aria-busy="sending"
+      @submit.prevent.stop="submit"
       @input="onEdit"
       @change="onEdit"
       @focusout="onBlur"
@@ -368,7 +473,17 @@ defineExpose({ open })
         <button type="button" class="cancel-button" @click="retryCatalogs">Reintentar</button>
       </div>
 
-      <fieldset v-for="group in groups" :key="group.label">
+      <div
+        v-if="submissionErrors.length"
+        ref="submission-feedback"
+        class="catalog-notice"
+        role="alert"
+        tabindex="-1"
+      >
+        <p v-for="message in submissionErrors" :key="message">{{ message }}</p>
+      </div>
+
+      <fieldset v-for="group in groups" :key="group.label" :disabled="sending">
         <legend>{{ group.label }}</legend>
         <div class="field-grid">
           <div v-for="field in group.fields" :key="field.name" class="field">
@@ -399,7 +514,7 @@ defineExpose({ open })
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset :disabled="sending">
         <legend>Rol y sucursal</legend>
         <div class="field-grid">
           <div class="field">
@@ -465,7 +580,7 @@ defineExpose({ open })
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset :disabled="sending">
         <legend>Dirección</legend>
         <div class="field-grid">
           <div class="field">
@@ -605,18 +720,25 @@ defineExpose({ open })
       <p class="password-note">
         El sistema generará la contraseña inicial y la enviará por correo al crear la cuenta.
       </p>
-      <p :id="id + '-preview-help'" class="preview-note">
-        Vista previa del formulario. La creación de usuarios todavía no está habilitada.
+      <p v-if="sending" role="status">
+        Creando la cuenta y solicitando el envío del correo. Espera el resultado antes de salir.
       </p>
       <footer class="form-actions">
-        <button type="button" class="cancel-button" @click="close">Cancelar</button>
+        <button type="button" class="cancel-button" :disabled="sending" @click="close">
+          {{ submissionBlocked ? 'Cerrar' : 'Cancelar' }}
+        </button>
         <button
           type="submit"
           class="create-button"
-          disabled
-          :aria-describedby="id + '-preview-help'"
+          :disabled="
+            sending ||
+            submissionBlocked ||
+            catalogsUnavailable ||
+            !provinces.length ||
+            !branches.length
+          "
         >
-          Crear usuario
+          {{ sending ? 'Creando usuario…' : 'Crear usuario' }}
         </button>
       </footer>
     </form>

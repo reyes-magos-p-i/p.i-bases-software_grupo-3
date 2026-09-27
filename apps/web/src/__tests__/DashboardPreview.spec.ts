@@ -6,8 +6,11 @@ import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import CreateEmployeeDialog from '@/components/users/CreateEmployeeDialog.vue'
 import type { UserCreationOptions } from '@/types/user'
 
-const { getUserCreationOptions } = vi.hoisted(() => ({ getUserCreationOptions: vi.fn() }))
-vi.mock('@/services/user.service', () => ({ getUserCreationOptions }))
+const { getUserCreationOptions, createUser } = vi.hoisted(() => ({
+  getUserCreationOptions: vi.fn(),
+  createUser: vi.fn(),
+}))
+vi.mock('@/services/user.service', () => ({ getUserCreationOptions, createUser }))
 const catalogs: UserCreationOptions = {
   provinces: [
     { id: 1, label: 'San José' },
@@ -43,6 +46,7 @@ const originalShowModal = Object.getOwnPropertyDescriptor(dialogPrototype, 'show
 const originalClose = Object.getOwnPropertyDescriptor(dialogPrototype, 'close')
 
 beforeEach(() => {
+  createUser.mockReset().mockResolvedValue({ id: 42, role: 'EMPLOYEE', email: 'ana@example.com' })
   getUserCreationOptions.mockReset().mockResolvedValue(catalogs)
   // jsdom does not implement the native dialog methods.
   Object.defineProperties(dialogPrototype, {
@@ -264,7 +268,7 @@ describe('catalog loading', () => {
     await view.get('[aria-label="Cerrar formulario"]').trigger('click')
     await view.get('.add-employee-button').trigger('click')
     expect(getUserCreationOptions).toHaveBeenCalledTimes(1)
-    expect(view.get('.create-button').attributes('disabled')).toBeDefined()
+    expect(view.get('.create-button').attributes('disabled')).toBeUndefined()
   })
 
   it('keeps the form editable while loading and prevents duplicate loads', async () => {
@@ -355,6 +359,170 @@ describe('catalog loading', () => {
     pending.reject(new Error('Canceled'))
     await flushPromises()
   })
+})
+
+describe('employee creation', () => {
+  async function filledForm(role = 'EMPLOYEE') {
+    const view = await renderPreview()
+    await view.get('.add-employee-button').trigger('click')
+    await flushPromises()
+    for (const [field, value] of Object.entries({
+      firstName: 'Ana',
+      firstSurname: 'Solano',
+      secondSurname: 'Rojas',
+      email: 'ana@example.com',
+      birthday: '2000-02-29',
+      phoneNumber: '88888888',
+      role,
+      branchId: '1',
+      provinceId: '1',
+      cantonId: '19',
+      districtId: '102',
+    })) {
+      await view.get('[name="' + field + '"]').setValue(value)
+    }
+    return view
+  }
+
+  it.each(['EMPLOYEE', 'ADMINISTRATOR'])(
+    'creates %s and closes, resets and announces the result',
+    async (role) => {
+      const view = await filledForm(role)
+      await view.get('form').trigger('submit')
+      await flushPromises()
+      expect(createUser).toHaveBeenCalledExactlyOnceWith({
+        firstName: 'Ana',
+        firstSurname: 'Solano',
+        secondSurname: 'Rojas',
+        email: 'ana@example.com',
+        birthday: '2000-02-29',
+        phoneNumber: '88888888',
+        role,
+        branchId: 1,
+        address: { districtId: 102 },
+      })
+      expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
+      expect(view.get('.creation-result').text()).toContain('Cuenta creada para ana@example.com')
+      expect(document.activeElement).toBe(view.get('.creation-result').element)
+      await view.get('.add-employee-button').trigger('click')
+      expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('')
+      expect(view.get('[name="role"]').element).toHaveProperty('value', 'EMPLOYEE')
+    },
+  )
+
+  it('prevents duplicate requests, cancellation and navigation while saving', async () => {
+    let resolve!: (value: unknown) => void
+    createUser.mockReturnValue(
+      new Promise((res) => {
+        resolve = res
+      }),
+    )
+    const view = await filledForm()
+    await view.get('form').trigger('submit')
+    await view.get('form').trigger('submit')
+    view.getComponent(CreateEmployeeDialog).vm.$emit('submit', { role: 'EMPLOYEE' })
+    view.getComponent(DashboardLayout).vm.$emit('navigate', 'clients')
+    await view.get('dialog').trigger('cancel')
+    expect(view.get('h1').text()).toBe('Empleados')
+    expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(true)
+    expect(view.get('form').attributes('aria-busy')).toBe('true')
+    expect(view.get('.close-button').attributes('disabled')).toBeDefined()
+    expect(createUser).toHaveBeenCalledTimes(1)
+    resolve({ id: 42, email: 'ana@example.com', role: 'EMPLOYEE' })
+    await flushPromises()
+  })
+
+  it.each([
+    [400, ['Revisa el teléfono.'], 'Revisa el teléfono.'],
+    [400, 'Revisa el correo.', 'Revisa el correo.'],
+    [400, null, 'Revisa los datos'],
+    [403, 'private', 'No tienes permiso'],
+    [409, 'private', 'Ya existe una cuenta'],
+  ])(
+    'preserves data after %s and allows a corrected submission',
+    async (status, message, expected) => {
+      createUser.mockRejectedValueOnce({
+        isAxiosError: true,
+        response: { status, data: { message } },
+      })
+      const view = await filledForm()
+      await view.get('form').trigger('submit')
+      await flushPromises()
+      expect(view.get('[role="alert"]').text()).toContain(expected)
+      expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('Ana')
+      expect(view.get('.create-button').attributes('disabled')).toBeUndefined()
+      await view.get('[name="phoneNumber"]').setValue('88887777')
+      await view.get('form').trigger('submit')
+      await flushPromises()
+      expect(createUser).toHaveBeenCalledTimes(2)
+      expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
+    },
+  )
+
+  it('reports confirmed account creation with failed email without resubmitting', async () => {
+    createUser.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        status: 502,
+        data: {
+          statusCode: 502,
+          message: 'El usuario fue creado, pero no se pudo enviar el correo con sus credenciales.',
+        },
+      },
+    })
+    const view = await filledForm()
+    await view.get('form').trigger('submit')
+    await flushPromises()
+    expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
+    expect(view.get('.creation-result').attributes('role')).toBe('alert')
+    expect(view.get('.creation-result').text()).toContain('fue creada')
+    expect(view.get('.creation-result').text()).toContain('No repitas')
+    expect(createUser).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    { isAxiosError: true, code: 'ERR_NETWORK' },
+    { isAxiosError: true, code: 'ECONNABORTED' },
+    { isAxiosError: true, response: { status: 500 } },
+    { isAxiosError: true, response: { status: 502, data: 'Bad gateway' } },
+    new Error('Private error'),
+  ])('blocks repeated creation when the result is uncertain: %p', async (error) => {
+    createUser.mockRejectedValue(error)
+    const view = await filledForm()
+    await view.get('form').trigger('submit')
+    await flushPromises()
+    expect(view.get('[role="alert"]').text()).toContain('No se pudo confirmar')
+    expect(view.get('.create-button').attributes('disabled')).toBeDefined()
+    await view.get('form').trigger('submit')
+    await view.get('.form-actions .cancel-button').trigger('click')
+    await view.get('.add-employee-button').trigger('click')
+    await view.get('form').trigger('submit')
+    expect(createUser).toHaveBeenCalledTimes(1)
+    expect(view.get<HTMLInputElement>('[name="email"]').element.value).toBe('ana@example.com')
+  })
+
+  it.each(['resolve', 'reject'])(
+    'ignores a late %s after leaving the view and releases scroll',
+    async (outcome) => {
+      let resolve!: (value: unknown) => void
+      let reject!: (reason: unknown) => void
+      createUser.mockReturnValue(
+        new Promise((res, rej) => {
+          resolve = res
+          reject = rej
+        }),
+      )
+      const view = await filledForm()
+      await view.get('form').trigger('submit')
+      view.unmount()
+      wrapper = undefined
+      expect(document.body.style.position).not.toBe('fixed')
+      if (outcome === 'resolve') resolve({ id: 42, email: 'ana@example.com' })
+      else reject(new Error('Network error'))
+      await flushPromises()
+      expect(createUser).toHaveBeenCalledTimes(1)
+    },
+  )
 })
 
 describe('dashboard preview route', () => {

@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useId, useTemplateRef, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import CreateEmployeeDialog from '@/components/users/CreateEmployeeDialog.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
-import type { UserRole, UserCreationOptions } from '@/types/user'
-import { getUserCreationOptions } from '@/services/user.service'
+import type {
+  UserRole,
+  UserCreationOptions,
+  CreateEmployeeRequest,
+  UserApiError,
+} from '@/types/user'
+import { createUser, getUserCreationOptions } from '@/services/user.service'
 
 const role = ref<Exclude<UserRole, 'CLIENT'>>('ADMINISTRATOR')
 const activeSection = ref<'employees' | 'clients'>('employees')
@@ -14,6 +19,76 @@ const catalogs = ref<UserCreationOptions | null>(null)
 const catalogsLoading = ref(false)
 const catalogsError = ref('')
 let catalogRequest: AbortController | undefined
+const submitting = ref(false)
+const submissionErrors = ref<string[]>([])
+const submissionBlocked = ref(false)
+const creationResult = ref('')
+const resultIsWarning = ref(false)
+const resultNotice = useTemplateRef<HTMLElement>('result-notice')
+let disposed = false
+
+async function submitEmployee(data: CreateEmployeeRequest) {
+  if (submitting.value || submissionBlocked.value || role.value !== 'ADMINISTRATOR') return
+  submitting.value = true
+  submissionErrors.value = []
+  creationResult.value = ''
+  let completed = false
+  try {
+    const user = await createUser(data)
+    if (disposed) return
+    creationResult.value = `Cuenta creada para ${user.email}. El servidor de correo aceptó el envío de sus credenciales.`
+    resultIsWarning.value = false
+    completed = true
+  } catch (error) {
+    if (disposed) return
+    const status = isAxiosError<UserApiError>(error) ? error.response?.status : undefined
+    if (
+      status === 502 &&
+      isAxiosError<UserApiError>(error) &&
+      error.response?.data?.statusCode === 502 &&
+      error.response.data.message ===
+        'El usuario fue creado, pero no se pudo enviar el correo con sus credenciales.'
+    ) {
+      creationResult.value = `La cuenta de ${data.email} fue creada, pero no se pudo confirmar el envío del correo. No repitas la creación.`
+      resultIsWarning.value = true
+      completed = true
+    } else if (status === 400) {
+      const message: unknown = isAxiosError<UserApiError>(error)
+        ? error.response?.data?.message
+        : undefined
+      const messages = Array.isArray(message)
+        ? message.filter((item): item is string => typeof item === 'string' && !!item.trim())
+        : typeof message === 'string' && message.trim()
+          ? [message]
+          : []
+      submissionErrors.value = messages.length
+        ? messages
+        : ['Revisa los datos del formulario e inténtalo nuevamente.']
+    } else if (status === 403) {
+      submissionErrors.value = [
+        'No tienes permiso para crear usuarios. Comprueba los permisos antes de volver a enviar.',
+      ]
+    } else if (status === 409) {
+      submissionErrors.value = [
+        'Ya existe una cuenta con ese correo. Revisa el correo introducido.',
+      ]
+    } else {
+      submissionBlocked.value = true
+      submissionErrors.value = [
+        'No se pudo confirmar si la cuenta fue creada. Comprueba el resultado antes de intentar otra creación; repetirla podría duplicar la cuenta.',
+      ]
+    }
+  } finally {
+    if (!disposed) {
+      submitting.value = false
+      if (completed) {
+        employeeDialog.value?.complete()
+        await nextTick()
+        resultNotice.value?.focus()
+      }
+    }
+  }
+}
 
 function cancelCatalogRequest() {
   catalogRequest?.abort()
@@ -61,7 +136,10 @@ watch([role, activeSection], () => {
   catalogs.value = null
   catalogsError.value = ''
 })
-onBeforeUnmount(cancelCatalogRequest)
+onBeforeUnmount(() => {
+  disposed = true
+  cancelCatalogRequest()
+})
 const availableSections = computed(() =>
   role.value === 'ADMINISTRATOR' ? ['employees', 'clients'] : ['clients'],
 )
@@ -76,6 +154,7 @@ watch(role, () => {
 })
 
 function navigate(section: string) {
+  if (submitting.value) return
   if (
     (section === 'employees' || section === 'clients') &&
     availableSections.value.includes(section)
@@ -101,14 +180,14 @@ function navigate(section: string) {
         </p>
         <p>
           El rol de esta vista es simulado. El formulario consulta catálogos reales, con los
-          permisos del administrador configurado en el servidor. La creación todavía no está
-          habilitada.
+          permisos del administrador configurado en el servidor. Crear una cuenta guarda datos
+          reales y envía sus credenciales por correo.
         </p>
       </div>
       <div class="preview-controls">
         <div class="role-field">
           <label :for="roleId" class="form-label">Rol de prueba</label>
-          <select :id="roleId" v-model="role" class="form-select">
+          <select :id="roleId" v-model="role" class="form-select" :disabled="submitting">
             <option value="ADMINISTRATOR">Administrador</option>
             <option value="EMPLOYEE">Empleado</option>
           </select>
@@ -119,6 +198,16 @@ function navigate(section: string) {
         </RouterLink>
       </div>
     </section>
+
+    <p
+      v-if="creationResult"
+      ref="result-notice"
+      class="creation-result"
+      :role="resultIsWarning ? 'alert' : 'status'"
+      tabindex="-1"
+    >
+      {{ creationResult }}
+    </p>
 
     <section class="preview-content" aria-live="polite" aria-atomic="true">
       <div class="section-heading">
@@ -149,12 +238,26 @@ function navigate(section: string) {
       :branches="catalogs?.branches"
       :catalogs-loading="catalogsLoading"
       :catalogs-error="catalogsError"
+      :submitting="submitting"
+      :submission-errors="submissionErrors"
+      :submission-blocked="submissionBlocked"
       @retry-catalogs="loadCatalogs"
+      @submit="submitEmployee"
     />
   </DashboardLayout>
 </template>
 
 <style scoped>
+.creation-result {
+  padding: 16px;
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-white);
+  overflow-wrap: anywhere;
+}
+.creation-result:focus {
+  outline: 2px solid var(--color-primary);
+}
+
 .preview-toolbar {
   display: flex;
   flex-wrap: wrap;

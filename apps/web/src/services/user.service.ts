@@ -23,6 +23,6 @@ export async function getUserCreationOptions(signal?: AbortSignal): Promise<User
 export async function createUser(user: CreateUserRequest): Promise<CreatedUser> {
   requireBaseUrl()
 
-  const response = await api.post<CreatedUser>('/users', user)
+  const response = await api.post<CreatedUser>('/users', user, { timeout: 60000 })
   return response.data
 }
