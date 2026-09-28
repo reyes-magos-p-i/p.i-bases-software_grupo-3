@@ -4,7 +4,10 @@ import { LoginDto } from './login.dto';
 
 describe('LoginDto', () => {
   it('accepts a valid email and password', async () => {
-    const dto = plainToInstance(LoginDto, { email: 'user@example.com', password: 'anything' });
+    const dto = plainToInstance(LoginDto, {
+      email: 'user@example.com',
+      password: 'anything',
+    });
 
     const errors = await validate(dto);
 
@@ -12,7 +15,10 @@ describe('LoginDto', () => {
   });
 
   it('trims and lowercases the email', () => {
-    const dto = plainToInstance(LoginDto, { email: '  User@Example.com  ', password: 'x' });
+    const dto = plainToInstance(LoginDto, {
+      email: '  User@Example.com  ',
+      password: 'x',
+    });
 
     expect(dto.email).toBe('user@example.com');
   });
@@ -24,7 +30,10 @@ describe('LoginDto', () => {
   });
 
   it('rejects an invalid email', async () => {
-    const dto = plainToInstance(LoginDto, { email: 'not-an-email', password: 'x' });
+    const dto = plainToInstance(LoginDto, {
+      email: 'not-an-email',
+      password: 'x',
+    });
 
     const errors = await validate(dto);
 
@@ -38,4 +47,70 @@ describe('LoginDto', () => {
 
     expect(errors.some((e) => e.property === 'password')).toBe(true);
   });
+
+  it.each([
+    undefined,
+    null,
+    '',
+    '   ',
+    123,
+    {},
+    [],
+    'user@example',
+    '\uD800@example.com',
+  ])('rejects an invalid email value %p without throwing', async (email) => {
+    const dto = plainToInstance(LoginDto, { email, password: 'password' });
+    const errors = await validate(dto);
+    expect(errors.some((error) => error.property === 'email')).toBe(true);
+  });
+
+  it.each([150, 151])(
+    'enforces the email limit at %i UTF-8 bytes',
+    async (bytes) => {
+      const email =
+        'é'.repeat(20) +
+        '@' +
+        'a'.repeat(60) +
+        '.' +
+        'b'.repeat(bytes - 106) +
+        '.com';
+      expect(Buffer.byteLength(email, 'utf8')).toBe(bytes);
+      const dto = plainToInstance(LoginDto, { email, password: 'password' });
+      const errors = await validate(dto);
+      if (bytes === 150) expect(errors).toEqual([]);
+      else
+        expect(errors).toEqual([
+          expect.objectContaining({
+            property: 'email',
+            constraints: expect.objectContaining({
+              maxUtf8Bytes: expect.any(String),
+            }),
+          }),
+        ]);
+    },
+  );
+
+  it.each([undefined, null, '', 123, {}, [], 'x'.repeat(129)])(
+    'rejects an invalid password value %p',
+    async (password) => {
+      const dto = plainToInstance(LoginDto, {
+        email: 'user@example.com',
+        password,
+      });
+      const errors = await validate(dto);
+      expect(errors.some((error) => error.property === 'password')).toBe(true);
+    },
+  );
+
+  it.each(['x', '   ', ' Contraseña 🎬 ', 'x'.repeat(128), '🎬'.repeat(128)])(
+    'preserves a nonempty password without imposing registration rules: %p',
+    async (password) => {
+      const dto = plainToInstance(LoginDto, {
+        email: 'user@example.com',
+        password,
+      });
+      expect(dto.password).toBe(password);
+      expect(await validate(dto)).toEqual([]);
+    },
+  );
 });
