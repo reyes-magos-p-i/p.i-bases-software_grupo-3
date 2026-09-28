@@ -10,6 +10,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -28,6 +29,7 @@ export class AuthController {
   }
 
   @Post('employees/login')
+  @UseGuards(ThrottlerGuard)
   @HttpCode(HttpStatus.OK)
   loginEmployee(@Body() dto: LoginDto): Promise<EmployeeLoginResult> {
     return this.auth.loginEmployee(dto);

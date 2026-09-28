@@ -41,7 +41,9 @@ describe('Employee authentication (HTTP integration)', () => {
     };
   }
 
-  beforeAll(async () => {
+  beforeEach(async () => {
+    db.query.mockReset();
+    db.transaction.mockReset();
     const module = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
@@ -62,23 +64,131 @@ describe('Employee authentication (HTTP integration)', () => {
       }),
     );
     jwt = module.get(JwtService);
-    passwordHash = (await module.get(PasswordHasher).hash(password))
+    passwordHash ??= (await module.get(PasswordHasher).hash(password))
       .passwordHash;
+    db.query.mockResolvedValue({ rows: [employeeRow()] });
     await app.init();
   });
 
-  beforeEach(() => {
-    db.query.mockReset().mockResolvedValue({ rows: [employeeRow()] });
-    db.transaction.mockReset();
-  });
-
-  afterEach(() => {
+  afterEach(async () => {
     jest.restoreAllMocks();
+    await app.close();
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
-  afterAll(async () => {
-    await app.close();
+  it.each([
+    { scenario: 'successful logins', body: login, status: 200, calls: 5 },
+    {
+      scenario: 'incorrect passwords',
+      body: { ...login, password: 'incorrect password' },
+      status: 401,
+      calls: 5,
+    },
+    { scenario: 'invalid input', body: {}, status: 400, calls: 0 },
+  ])(
+    'limits $scenario before accessing Oracle or verifying passwords',
+    async ({ body, status, calls }) => {
+      const verify = jest.spyOn(app.get(PasswordHasher), 'verify');
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const response = await request(app.getHttpServer())
+          .post('/auth/employees/login')
+          .send(body)
+          .expect(status);
+        expect(response.headers['x-ratelimit-limit']).toBe('5');
+        expect(response.headers['x-ratelimit-remaining']).toBe(
+          String(4 - attempt),
+        );
+      }
+      const blocked = await request(app.getHttpServer())
+        .post('/auth/employees/login')
+        .send(login)
+        .expect(429);
+      expect(blocked.body).toEqual({
+        statusCode: 429,
+        message:
+          'Demasiadas solicitudes de inicio de sesión. Espere antes de intentarlo de nuevo.',
+      });
+      expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0);
+      expect(Number(blocked.headers['retry-after'])).toBeLessThanOrEqual(60);
+      expect(db.query).toHaveBeenCalledTimes(calls);
+      expect(verify).toHaveBeenCalledTimes(calls);
+    },
+  );
+
+  it('does not bypass the IP quota by changing email or forwarding headers', async () => {
+    const verify = jest.spyOn(app.get(PasswordHasher), 'verify');
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await request(app.getHttpServer())
+        .post('/auth/employees/login')
+        .set('X-Forwarded-For', `192.0.2.${attempt + 1}`)
+        .set('X-Real-IP', `192.0.2.${attempt + 1}`)
+        .send({ email: `staff${attempt}@example.com` })
+        .expect(attempt < 5 ? 400 : 429);
+    }
+    expect(db.query).not.toHaveBeenCalled();
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it('allows requests after the block expires without extending the wait on retries', async () => {
+    const now = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await request(app.getHttpServer())
+        .post('/auth/employees/login')
+        .send({})
+        .expect(attempt < 5 ? 400 : 429);
+    }
+    clock.mockReturnValue(now + 59_999);
+    const blocked = await request(app.getHttpServer())
+      .post('/auth/employees/login')
+      .send(login)
+      .expect(429);
+    expect(blocked.headers['retry-after']).toBe('1');
+    expect(db.query).not.toHaveBeenCalled();
+    clock.mockReturnValue(now + 60_000);
+    await request(app.getHttpServer())
+      .post('/auth/employees/login')
+      .send(login)
+      .expect(200);
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('expires unused quota after one minute even without reaching the limit', async () => {
+    const now = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await request(app.getHttpServer())
+        .post('/auth/employees/login')
+        .send({})
+        .expect(400);
+    }
+    clock.mockReturnValue(now + 60_000);
+    const response = await request(app.getHttpServer())
+      .post('/auth/employees/login')
+      .send({})
+      .expect(400);
+    expect(response.headers['x-ratelimit-remaining']).toBe('4');
+  });
+
+  it('does not apply the login quota to identity or registration routes', async () => {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await request(app.getHttpServer())
+        .post('/auth/employees/login')
+        .send({})
+        .expect(attempt < 5 ? 400 : 429);
+    }
+    const token = jwt.sign({ sub: 21, type: 'employee' });
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .auth(token, { type: 'bearer' })
+        .expect(200, { id: 21, role: UserRole.EMPLOYEE });
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({})
+        .expect(400);
+    }
+    expect(db.query).toHaveBeenCalledTimes(6);
   });
 
   it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(

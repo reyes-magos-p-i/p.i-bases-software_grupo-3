@@ -10,7 +10,8 @@ import { DatabaseModule } from '../database/database.module';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { Argon2PasswordHasher } from '../common/security/argon2-password-hasher.service';
 import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedException } from '@nestjs/common';
+import { type ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { ThrottlerException, ThrottlerGuard } from '@nestjs/throttler';
 import { UsersRepository } from '../users/users.repository';
 import { UserRole } from '../users/enums/user-role.enum';
 
@@ -55,6 +56,31 @@ describe('AuthModule', () => {
     expect(module.get(ClientsService)).toBeDefined();
     expect(module.get(PasswordHasher)).toBeInstanceOf(Argon2PasswordHasher);
     expect(module.get(UsersRepository)).toBeInstanceOf(UsersRepository);
+    expect(module.get(ThrottlerGuard)).toBeDefined();
+  });
+
+  it('keeps independent login quotas for different IP addresses', async () => {
+    await module.init();
+    const guard = module.get(ThrottlerGuard);
+    const contextFor = (ip: string) =>
+      ({
+        getHandler: () => AuthController.prototype.loginEmployee,
+        getClass: () => AuthController,
+        switchToHttp: () => ({
+          getRequest: () => ({ ip, headers: {} }),
+          getResponse: () => ({ header: jest.fn() }),
+        }),
+      }) as unknown as ExecutionContext;
+    const firstIp = contextFor('192.0.2.1');
+    const secondIp = contextFor('192.0.2.2');
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await expect(guard.canActivate(firstIp)).resolves.toBe(true);
+    }
+    await expect(guard.canActivate(firstIp)).rejects.toBeInstanceOf(
+      ThrottlerException,
+    );
+    await expect(guard.canActivate(secondIp)).resolves.toBe(true);
+    expect(db.query).not.toHaveBeenCalled();
   });
 
   describe('employee authentication integration', () => {
