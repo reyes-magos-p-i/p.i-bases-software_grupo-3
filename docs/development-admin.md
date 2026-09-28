@@ -1,9 +1,9 @@
-# Administrador de desarrollo
+# Creación administrativa y retiro del administrador de desarrollo
 
-El guard `DevelopmentAdminGuard` permite probar la creación administrativa de usuarios
-con un administrador real de Oracle, sin implementar inicio de sesión. Está aplicado
-al controlador de usuarios y asocia `{ id, role }` a `request.user` únicamente después
-de comprobar al administrador configurado.
+`DevelopmentAdminGuard` fue retirado. Las variables `DEV_ADMIN_ENABLED` y
+`DEV_ADMIN_EMPLOYEE_ID` ya no conceden acceso. La creación administrativa requiere
+iniciar sesión con una cuenta real cuyo rol vigente sea `ADMINISTRATOR`.
+La preparación de sesión y su prueba manual se describen en [Inicio de sesión del personal](employee-login.md).
 
 ## Estado de integración
 
@@ -87,16 +87,16 @@ controlador, la validación, el guard, el repositorio Oracle, el generador aleat
 el hasher Argon2id y el envío de credenciales por SMTP. El servidor necesita la
 configuración de Oracle y SMTP para arrancar.
 
-La vista de desarrollo carga los catálogos mediante Axios al abrir el formulario
+El dashboard autenticado carga los catálogos mediante Axios al abrir el formulario
 y permite crear clientes, empleados y administradores mediante `POST /users`. Valida
 los campos, bloquea envíos duplicados y comunica el resultado. `CreateUserDialog.vue`
 comparte el comportamiento modal y las validaciones entre las dos variantes.
-En Clientes, «Añadir cliente» está disponible para el rol visual Administrador;
+En Clientes, «Añadir cliente» está disponible para el administrador autenticado;
 el guard del backend sigue siendo quien autoriza cada solicitud.
 
 La integración del formulario está lista para preparar las pruebas manuales. Antes
 de realizarlas es necesario configurar los entornos locales de Vue y Nest, el
-administrador de desarrollo y un proveedor SMTP real, y arrancar ambos servidores.
+inicio de sesión y un proveedor SMTP real, y arrancar ambos servidores.
 No se modifica automáticamente la base de datos ni el archivo `.env` al incorporar
 este módulo; enviar el formulario sí crea registros reales y solicita un correo.
 
@@ -106,44 +106,31 @@ El entorno local del backend necesita estas variables:
 
 ```dotenv
 NODE_ENV=development
-DEV_ADMIN_ENABLED=true
-DEV_ADMIN_EMPLOYEE_ID=21
+FRONTEND_URL=http://127.0.0.1:5179
 ```
 
-El ID `21` corresponde al administrador inicial del entorno de desarrollo actual;
-no está fijado en el código. Debe apuntar a un empleado existente de la base conectada
-mediante la configuración Oracle habitual. El ID debe ser una cadena de dígitos,
-sin espacios ni ceros iniciales, que represente un entero positivo seguro de JavaScript.
-No se requiere su contraseña ni se consultan correo, hash o salt.
-
-Las dos primeras variables deben coincidir exactamente con los valores del ejemplo.
-En cada solicitud el repositorio consulta únicamente `EMPLOYEE_ID` y `ROLE`, usando
-un parámetro SQL para el ID y liberando la conexión al terminar. Solo se permite
-continuar si el registro existe y su rol actual es `ADMINISTRATOR`. No se almacena
-esa comprobación en caché.
+También se requiere `JWT_SECRET`, con un valor aleatorio y privado. Usar las
+credenciales locales de un empleado existente. El ID no está fijado en el código:
+lo determina el JWT firmado durante el login. La estrategia JWT vuelve a consultar
+`EMPLOYEE_ID` y `ROLE` en Oracle en cada solicitud protegida y no confía en roles
+enviados en el cuerpo, encabezados personalizados ni claims de rol del token.
 
 ## Comportamiento y límites
 
-- La configuración deshabilitada o inválida, un empleado inexistente o un rol distinto
-  de administrador producen `403 Forbidden`, antes de validar el formulario o crear registros.
+- Una sesión ausente, inválida o expirada, o una identidad inexistente, producen `401`.
+- Una identidad sin rol administrador produce `403` antes de validar el formulario.
+- `POST /users` también exige el origen autorizado; GET de catálogos no requiere Origin.
 - Los fallos operativos de Oracle impiden la operación y reciben una respuesta `500`
   sin detalles internos.
 - El rol del formulario describe la cuenta por crear. Los encabezados, el cuerpo y
   las identidades enviadas por el navegador no eligen al administrador que actúa.
-- Este modo asigna el mismo administrador a cualquier solicitud que alcance el controlador
-  en el servidor de desarrollo habilitado. No verifica la identidad de la persona:
-  debe utilizarse en un entorno local controlado, sin exponerlo públicamente.
-- No hay inicio de sesión, JWT ni sesiones. La autenticación y autorización de producción
-  corresponden a otra historia; este guard siempre deniega fuera de `development`.
-
-Para deshabilitarlo, establecer `DEV_ADMIN_ENABLED=false` o eliminar esa variable
-y reiniciar el backend. Las solicitudes seguirán
-recibiendo `403` mientras no exista otro mecanismo de autorización aprobado.
+- La cookie HttpOnly conserva la sesión durante su plazo original de 24 horas.
+  Cerrar sesión elimina la cookie de ese navegador; no revoca JWT en otros dispositivos.
 
 ## Catálogos del formulario
 
 `GET /users/creation-options` devuelve los datos existentes en Oracle, con el mismo
-guard de administrador de desarrollo que protege la creación. No requiere cuerpo
+guard de administrador autenticado que protege la creación. No requiere cuerpo
 ni parámetros y responde con estas cuatro listas:
 
 | Lista       | Tabla       | Campos de cada opción       |
@@ -157,7 +144,7 @@ Se consultan todos los registros y cada lista se ordena por nombre e identificad
 en Oracle. No se renombran sucursales ni se crean datos. Una tabla vacía devuelve
 una lista vacía. Cada consulta obtiene y libera una conexión mediante
 `DatabaseService.query()`; si alguna consulta falla, la respuesta es `500` genérico y
-no se envían catálogos parciales. Un rechazo del guard devuelve `403`.
+no se envían catálogos parciales. La falta de sesión devuelve `401`; la falta de permisos, `403`.
 
 Vue filtra cantones por `provinceId` y distritos por `cantonId` utilizando
 los selectores existentes. La dirección exacta sigue siendo texto introducido por
@@ -170,7 +157,7 @@ configuración SMTP sigue siendo necesaria para iniciar el backend.
 
 ## Conexión local con Vue
 
-El ejemplo `apps/web/.env.example` utiliza `VITE_API_BASE_URL=/api`. Para la futura
+El ejemplo `apps/web/.env.example` utiliza `VITE_API_BASE_URL=/api`. Para la
 prueba integrada, configurar ese valor en el entorno local de Vite y reiniciar
 el servidor de desarrollo si se modifica. No se editan automáticamente archivos
 `.env` privados. El backend se espera en `http://127.0.0.1:3000`.
@@ -187,12 +174,11 @@ anterior `VITE_API_URL` ya no se lee. Si un entorno la utilizaba, trasladar su U
 a `VITE_API_BASE_URL` y reiniciar Vite (o volver a compilar para producción).
 Los servicios conservan sus contratos y mensajes; no hay reintentos automáticos.
 
-El módulo `AuthModule` incorporado desde `dev` todavía no está registrado en
-`AppModule`. Esta integración conserva ese estado: compartir Axios no habilita
-por sí solo `/auth/register` ni implementa inicio de sesión. La conexión de ese
-módulo se debe coordinar con la historia correspondiente.
+`AuthModule` está registrado en `AppModule`. El registro público existente queda
+accesible, junto con el login del personal, recuperación de sesión y logout.
+El inicio de sesión de clientes y los proveedores externos siguen pendientes.
 
-En `/dev/dashboard`, «Añadir empleado» abre el diálogo y consulta los catálogos.
+En `/dashboard`, «Añadir empleado» abre el diálogo y consulta los catálogos.
 Mientras espera, muestra un aviso de carga y permite escribir los datos personales.
 Si ocurre un error, muestra un mensaje en español y permite reintentar sin borrar
 lo escrito. Los errores de permisos y de tiempo de espera tienen mensajes específicos.
@@ -201,12 +187,12 @@ presentarla como un fallo de conexión.
 
 Las solicitudes GET tienen un tiempo de espera de diez segundos. Los catálogos se
 reutilizan al cerrar y abrir el diálogo dentro de la misma sección; al cambiar de
-sección o rol visual se descartan y se cancelan las cargas pendientes. Al salir de
+sección o rol verificado se descartan y se cancelan las cargas pendientes. Al salir de
 la vista también se cancela la solicitud. Las respuestas tardías de solicitudes
 canceladas no cambian el formulario actual. No hay reintentos automáticos.
 
-El rol de la vista sigue siendo una simulación visual: no se envía como autorización.
-El backend comprueba el administrador configurado en su propio entorno.
+El rol de la vista procede de la sesión verificada. El backend comprueba los permisos
+actuales independientemente de los controles visibles en la interfaz.
 
 ## Envío del formulario
 
@@ -224,6 +210,7 @@ esté procesando. Salir del navegador tampoco garantiza cancelar la creación.
 | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `201`                                                              | Cierra y limpia el formulario, y anuncia la cuenta creada y la aceptación del correo por SMTP.                                     |
 | `400`                                                              | Muestra la validación recibida y conserva los campos para corregirlos.                                                             |
+| `401`                                                              | Retira la identidad local y solicita iniciar sesión nuevamente.                                                                    |
 | `403`                                                              | Informa de la falta de permisos y conserva los campos.                                                                             |
 | `409`                                                              | Informa del conflicto de correo y conserva los campos.                                                                             |
 | `502` con el mensaje contractual de cuenta creada                  | Cierra y limpia el formulario; informa que la cuenta existe pero no se confirmó el envío del correo y pide no repetir su creación. |
@@ -255,10 +242,10 @@ se leen desde `ConfigService`; los valores privados deben permanecer fuera de Gi
 
 El nombre visible del remitente es **Cinetadel**. El mensaje en español incluye el
 correo y la contraseña inicial de la cuenta creada, sin enlaces a funcionalidades
-de inicio de sesión o cambio de contraseña que todavía no están implementadas.
+al portal o al cambio de contraseña, que sigue pendiente.
 
 La ausencia o el formato inválido de una variable SMTP impiden inicializar el backend,
-incluso si el modo de administrador de desarrollo está deshabilitado. Esta validación
+incluso antes de iniciar sesión. Esta validación
 no abre conexiones SMTP y no comprueba credenciales ni permisos del remitente:
 la disponibilidad y la autenticación del proveedor se comprueban al enviar.
 
@@ -268,7 +255,7 @@ del servidor. No utiliza un transporte alternativo que simule envíos exitosos.
 
 ## Resultado de la creación
 
-1. El guard comprueba el administrador configurado y el pipe valida el cuerpo.
+1. La estrategia JWT comprueba la sesión, el guard exige ADMINISTRATOR y el pipe valida el cuerpo.
 2. El servicio genera una contraseña aleatoria y calcula el hash y salt.
 3. Oracle guarda dirección, perfil y credenciales en la misma transacción, cuando
    corresponde. Un error de persistencia impide enviar el correo.
@@ -286,7 +273,7 @@ el mensaje. La recuperación o reenvío de credenciales requiere un incremento p
 
 Los archivos `apps/api/.env` y `apps/web/.env.local` están excluidos de Git. Tras
 integrar `dev`, adaptar Oracle a modo Thin según los pasos siguientes. Para el entorno acordado, el backend
-usa `NODE_ENV=development`, `DEV_ADMIN_ENABLED=true` y `DEV_ADMIN_EMPLOYEE_ID=21`.
+usa `NODE_ENV=development`, `FRONTEND_URL=http://127.0.0.1:5179` y `JWT_SECRET` privado.
 El frontend usa `VITE_API_BASE_URL=/api`.
 
 ### Migración de Oracle a modo Thin
@@ -304,7 +291,7 @@ original de la transacción.
    `apps/api/Wallet/` debe contener `tnsnames.ora` y `ewallet.pem`. No borrar la wallet
    ni modificar las tablas o los registros existentes.
 3. Editar **`apps/api/.env`**, conservando `DB_USER`, `DB_PASSWORD`, las variables
-   `DEV_ADMIN_*` y las de SMTP. El ejemplo general `apps/.env.example` no se carga
+   de autenticación y las de SMTP. El ejemplo general `apps/.env.example` no se carga
    automáticamente: Nest lee `.env` desde `apps/api/` al arrancar allí.
 4. Renombrar `DB_CONNECTION_STRING` a `DB_CONNECT_STRING`, conservando el alias
    válido que ya usabas y que aparece en `tnsnames.ora`.
@@ -352,20 +339,22 @@ npm run start:dev
 En otra terminal ubicada en `apps/web/`, iniciar Vue con:
 
 ```sh
-npm run dev -- --host 127.0.0.1 --port 5178 --strictPort
+npm run dev -- --host 127.0.0.1 --port 5179 --strictPort
 ```
 
 Si el frontend ya está ejecutándose en ese puerto, utilizar esa instancia; no
 iniciar otra. Reiniciar los procesos si sus variables de entorno no se actualizan.
 El proxy presupone que Nest escucha en el puerto 3000.
 
-Abrir `http://127.0.0.1:5178/dev/dashboard` y seleccionar «Añadir empleado». Comprobar
+Abrir `http://127.0.0.1:5179/`, iniciar sesión como administrador y seleccionar
+«Añadir empleado» en `/dashboard`. Comprobar
 que aparecen las sucursales y provincias, y que provincia → cantón → distrito filtra
 las opciones. Esta consulta no crea registros ni envía correo. Si falla, revisar:
 
 - Que Vue tenga `VITE_API_BASE_URL=/api` y Nest esté escuchando en 3000.
 - Que la configuración SMTP esté completa, pues es necesaria para arrancar Nest.
-- Que el guard encuentre al empleado 21 con rol `ADMINISTRATOR`.
+- Que la sesión corresponda a un empleado con rol vigente `ADMINISTRATOR`.
+- Que `FRONTEND_URL` coincida exactamente con el origen abierto en el navegador.
 
 La verificación SMTP de conexión y autenticación no envía mensajes ni garantiza que
 el proveedor acepte un remitente o entregue un correo; eso se verifica en la prueba
@@ -382,13 +371,13 @@ real de creación.
 5. Ante `502` contractual, verificar la cuenta existente sin repetir su creación.
    Ante un resultado incierto, comprobar Oracle antes de efectuar otro intento.
 
-Estas pruebas sí crean datos reales y envían correos. No requieren iniciar sesión:
-el guard usa al administrador configurado. Los listados reales de clientes y
+Estas pruebas sí crean datos reales y envían correos. Requieren iniciar sesión
+como administrador. Los listados reales de clientes y
 empleados siguen pendientes; esta vista confirma la creación mediante mensajes.
 
 ## Prueba manual de creación de clientes
 
-1. En `/dev/dashboard`, mantener Administrador como rol de prueba, abrir Clientes
+1. En `/dashboard`, con sesión de administrador, abrir Clientes
    y pulsar «Añadir cliente». La página del fondo debe quedar bloqueada mientras
    el diálogo esté abierto.
 2. Completar primer nombre y un correo controlado y único. Son los únicos campos
@@ -406,7 +395,7 @@ empleados siguen pendientes; esta vista confirma la creación mediante mensajes.
 5. Intentar crear otro cliente con un correo ya utilizado: debe aparecer el mensaje
    de duplicado y conservarse lo escrito para corregirlo. Cambiar de sección tras
    cerrar el diálogo debe abrir un formulario limpio y sin errores del anterior.
-6. Cambiar el rol visual a Empleado: puede ver Clientes, pero no «Añadir cliente».
+6. Cerrar sesión e ingresar con una cuenta de empleado: puede ver Clientes, pero no «Añadir cliente».
 
 Los campos opcionales vacíos no se envían y una dirección desactivada tampoco.
 El idioma inicial es español (`es`); también puede elegirse inglés (`en`). El alta
@@ -415,18 +404,19 @@ términos por parte del cliente. No solicita contraseña, género, rol ni sucurs
 
 Ante la respuesta contractual de cuenta creada sin correo confirmado, verificar
 la cuenta sin repetir el envío. Ante un resultado incierto por conexión o servidor,
-el bloqueo de nuevos envíos se conserva aunque se cambie de sección o rol visual.
+el bloqueo de nuevos envíos se conserva aunque se cambie de sección.
 Verificar primero Oracle; cambiar de formulario no confirma ni revierte la operación.
 
 La API también admite solicitudes JSON directas a `POST /users` con el contrato de
-`create-user.openapi.yaml`. No requiere un token en este modo: actúa el administrador
-configurado en el servidor, no el rol seleccionado en la vista de desarrollo.
+`create-user.openapi.yaml`. Requiere autenticación y rol ADMINISTRATOR vigente,
+además del Origin autorizado en POST; el rol del cuerpo no otorga permisos.
 
 ## Verificación automatizada
 
-Los specs del guard comprueban la configuración, la identidad mínima y la consulta
-en cada solicitud. Los del repositorio verifican SQL parametrizado y liberación de
-conexiones. Las pruebas HTTP del controlador ejecutan el guard real con configuración,
+Los specs del guard comprueban el rol de la identidad autenticada. La estrategia JWT
+comprueba firma, expiración e identidad vigente. Los del repositorio verifican SQL
+parametrizado y liberación de conexiones. Las pruebas HTTP del controlador ejecutan
+autenticación y autorización reales con configuración,
 repositorio y servicio simulados: comprueban los rechazos y mantienen los casos de
 creación de clientes, empleados y administradores.
 
@@ -440,7 +430,7 @@ la liberación de conexiones ante errores y la ruta GET protegida dentro de la
 aplicación. Comprueban que consultar opciones no invoque creación ni credenciales.
 No crean registros en Oracle ni envían correos reales.
 
-En el frontend, los specs de Axios, la vista de desarrollo y el diálogo simulan
+En el frontend, los specs de Axios, el dashboard y el diálogo simulan
 las respuestas HTTP. Verifican carga, selección geográfica, listas vacías, errores,
 reintentos, conservación del texto y cancelación de solicitudes obsoletas.
 También verifican el envío de empleados y administradores, el cuerpo enviado,

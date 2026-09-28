@@ -30,7 +30,7 @@ const roleLabel = computed(
       >
         <i class="bi bi-list" aria-hidden="true"></i>
       </button>
-      <p class="role-label">Rol: {{ roleLabel }}</p>
+      <p class="role-label">Sesión iniciada como {{ roleLabel }}</p>
     </div>
     <div class="user-profile">
       <slot name="profile">
