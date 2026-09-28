@@ -3,6 +3,23 @@ import { mount } from '@vue/test-utils'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 
 describe('SocialAuthButtons.vue', () => {
+  it('preserves registration labels by default', () => {
+    const wrapper = mount(SocialAuthButtons)
+    expect(wrapper.text()).toContain('Registrarse con Google')
+    expect(wrapper.text()).toContain('Registrarse con Facebook')
+  })
+
+  it('renders unavailable login providers without emitting events', async () => {
+    const wrapper = mount(SocialAuthButtons, { props: { mode: 'login', disabled: true } })
+    expect(wrapper.text()).toContain('Iniciar sesión con Google')
+    expect(wrapper.text()).toContain('Iniciar sesión con Facebook')
+    for (const button of wrapper.findAll('button')) {
+      expect(button.element.disabled).toBe(true)
+      await button.trigger('click')
+    }
+    expect(wrapper.emitted('google')).toBeUndefined()
+    expect(wrapper.emitted('facebook')).toBeUndefined()
+  })
   it('emite evento "google" al hacer clic', async () => {
     const wrapper = mount(SocialAuthButtons)
     const buttons = wrapper.findAll('button')

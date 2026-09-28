@@ -4,10 +4,14 @@ const emit = defineEmits<{
   (e: 'google'): void
   (e: 'facebook', accessToken: string): void
 }>()
+const props = withDefaults(defineProps<{ mode?: 'register' | 'login'; disabled?: boolean }>(), {
+  mode: 'register',
+  disabled: false,
+})
 
-// TODO (Silvio): implementar el flujo OAuth de Google
+// OAuth handlers remain owned by their respective integrations.
 function onGoogle() {
-  emit('google')
+  if (!props.disabled) emit('google')
 }
 
 // TODO (Diego): implementar el flujo OAuth de Facebook
@@ -21,11 +25,13 @@ async function onFacebook() {
 
 <template>
   <div class="d-grid gap-2">
-    <button type="button" class="btn btn-light border" @click="onGoogle">
-      <i class="bi bi-google me-2"></i>Registrarse con Google
+    <button type="button" class="btn btn-light border" :disabled="disabled" @click="onGoogle">
+      <i class="bi bi-google me-2" aria-hidden="true"></i
+      >{{ mode === 'login' ? 'Iniciar sesión' : 'Registrarse' }} con Google
     </button>
-    <button type="button" class="btn btn-light border" @click="onFacebook">
-      <i class="bi bi-facebook me-2"></i>Registrarse con Facebook
+    <button type="button" class="btn btn-light border" :disabled="disabled" @click="onFacebook">
+      <i class="bi bi-facebook me-2" aria-hidden="true"></i
+      >{{ mode === 'login' ? 'Iniciar sesión' : 'Registrarse' }} con Facebook
     </button>
   </div>
 </template>
