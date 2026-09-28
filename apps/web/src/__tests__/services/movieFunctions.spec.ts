@@ -1,7 +1,41 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { stripTrailingSlashes } from '../../services/movieFunctions'
 
 const API_BASE_URL = 'https://api.example.com'
 const ENDPOINT = `${API_BASE_URL}/movie-fuctions`
+
+describe('stripTrailingSlashes', () => {
+  it('leaves a string with no trailing slash unchanged', () => {
+    expect(stripTrailingSlashes('https://api.example.com/v1')).toBe(
+      'https://api.example.com/v1',
+    )
+  })
+
+  it('removes a single trailing slash', () => {
+    expect(stripTrailingSlashes('https://api.example.com/')).toBe(
+      'https://api.example.com',
+    )
+  })
+
+  it('removes multiple trailing slashes', () => {
+    expect(stripTrailingSlashes('https://api.example.com///')).toBe(
+      'https://api.example.com',
+    )
+  })
+
+  it('keeps slashes in the middle', () => {
+    expect(stripTrailingSlashes('/api/users/')).toBe('/api/users')
+  })
+
+  it('returns empty string for only slashes', () => {
+    expect(stripTrailingSlashes('/')).toBe('')
+    expect(stripTrailingSlashes('///')).toBe('')
+  })
+
+  it('handles empty string', () => {
+    expect(stripTrailingSlashes('')).toBe('')
+  })
+})
 
 describe('getMovieFunctions', () => {
   beforeEach(() => {
