@@ -5,11 +5,18 @@ import { JwtStrategy } from './jwt.strategy';
 import { ClientsService } from '../../clients/clients.service';
 import { UsersRepository } from '../../users/users.repository';
 import { UserRole } from '../../users/enums/user-role.enum';
+import type { Request } from 'express';
+import { JwtService } from '@nestjs/jwt';
+import {
+  EmployeeSessionService,
+  EMPLOYEE_SESSION_COOKIE,
+} from '../employee-session.service';
 
 describe('JwtStrategy', () => {
   let strategy: JwtStrategy;
   let clients: { findById: jest.Mock };
   let users: { findEmployeeIdentityById: jest.Mock };
+  const request = { headers: {} } as Request;
 
   beforeEach(async () => {
     clients = { findById: jest.fn() };
@@ -18,11 +25,19 @@ describe('JwtStrategy', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JwtStrategy,
+        EmployeeSessionService,
+        JwtService,
         { provide: ClientsService, useValue: clients },
         { provide: UsersRepository, useValue: users },
         {
           provide: ConfigService,
-          useValue: { getOrThrow: jest.fn(() => 'mock-secret') },
+          useValue: {
+            getOrThrow: jest.fn(() => 'mock-secret'),
+            get: (key: string) =>
+              ({ FRONTEND_URL: 'https://cinema.example', NODE_ENV: 'test' })[
+                key
+              ],
+          },
         },
       ],
     }).compile();
@@ -51,7 +66,7 @@ describe('JwtStrategy', () => {
   ])(
     'rejects an invalid payload before accessing persistence: %p',
     async (payload) => {
-      await expect(strategy.validate(payload)).rejects.toThrow(
+      await expect(strategy.validate(request, payload)).rejects.toThrow(
         UnauthorizedException,
       );
       expect(clients.findById).not.toHaveBeenCalled();
@@ -62,9 +77,9 @@ describe('JwtStrategy', () => {
   it('rejects when the client no longer exists', async () => {
     clients.findById.mockResolvedValue(null);
 
-    await expect(strategy.validate({ sub: 1, type: 'client' })).rejects.toThrow(
-      UnauthorizedException,
-    );
+    await expect(
+      strategy.validate(request, { sub: 1, type: 'client' }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('returns the client when the token is valid and the client still exists', async () => {
@@ -72,7 +87,7 @@ describe('JwtStrategy', () => {
     clients.findById.mockResolvedValue(client);
 
     await expect(
-      strategy.validate({ sub: 1, type: 'client' }),
+      strategy.validate(request, { sub: 1, type: 'client' }),
     ).resolves.toEqual(client);
     expect(clients.findById).toHaveBeenCalledWith(1);
     expect(users.findEmployeeIdentityById).not.toHaveBeenCalled();
@@ -83,7 +98,11 @@ describe('JwtStrategy', () => {
     async (role) => {
       users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role });
       await expect(
-        strategy.validate({ sub: 21, type: 'employee', role: 'CLIENT' }),
+        strategy.validate(request, {
+          sub: 21,
+          type: 'employee',
+          role: 'CLIENT',
+        }),
       ).resolves.toEqual({ id: 21, role });
       expect(users.findEmployeeIdentityById).toHaveBeenCalledWith(21);
       expect(clients.findById).not.toHaveBeenCalled();
@@ -93,8 +112,20 @@ describe('JwtStrategy', () => {
   it('rejects a missing or invalid employee identity', async () => {
     users.findEmployeeIdentityById.mockResolvedValue(null);
     await expect(
-      strategy.validate({ sub: 21, type: 'employee' }),
+      strategy.validate(request, { sub: 21, type: 'employee' }),
     ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('rejects a client token from the employee cookie before querying persistence', async () => {
+    const cookieRequest = {
+      headers: {},
+      cookies: { [EMPLOYEE_SESSION_COOKIE]: 'client-token' },
+    } as unknown as Request;
+    await expect(
+      strategy.validate(cookieRequest, { sub: 21, type: 'client' }),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(clients.findById).not.toHaveBeenCalled();
+    expect(users.findEmployeeIdentityById).not.toHaveBeenCalled();
   });
 
   it('reads employee identity on each validation so role changes are reflected', async () => {
@@ -102,11 +133,11 @@ describe('JwtStrategy', () => {
     users.findEmployeeIdentityById
       .mockResolvedValueOnce({ id: 21, role: UserRole.ADMINISTRATOR })
       .mockResolvedValueOnce({ id: 21, role: UserRole.EMPLOYEE });
-    await expect(strategy.validate(payload)).resolves.toHaveProperty(
+    await expect(strategy.validate(request, payload)).resolves.toHaveProperty(
       'role',
       UserRole.ADMINISTRATOR,
     );
-    await expect(strategy.validate(payload)).resolves.toHaveProperty(
+    await expect(strategy.validate(request, payload)).resolves.toHaveProperty(
       'role',
       UserRole.EMPLOYEE,
     );
@@ -119,7 +150,9 @@ describe('JwtStrategy', () => {
       const failure = new Error('Database unavailable');
       clients.findById.mockRejectedValue(failure);
       users.findEmployeeIdentityById.mockRejectedValue(failure);
-      await expect(strategy.validate({ sub: 1, type })).rejects.toBe(failure);
+      await expect(strategy.validate(request, { sub: 1, type })).rejects.toBe(
+        failure,
+      );
     },
   );
 });

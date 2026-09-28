@@ -14,6 +14,8 @@ import { type ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { ThrottlerException, ThrottlerGuard } from '@nestjs/throttler';
 import { UsersRepository } from '../users/users.repository';
 import { UserRole } from '../users/enums/user-role.enum';
+import { EmployeeSessionService } from './employee-session.service';
+import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 
 describe('AuthModule', () => {
   let module: TestingModule;
@@ -39,7 +41,11 @@ describe('AuthModule', () => {
       ],
     })
       .overrideProvider(ConfigService)
-      .useValue({ getOrThrow: () => 'test-jwt-secret' })
+      .useValue({
+        getOrThrow: () => 'test-jwt-secret',
+        get: (key: string) =>
+          ({ FRONTEND_URL: 'https://cinema.example', NODE_ENV: 'test' })[key],
+      })
       .overrideProvider(DatabaseService)
       .useValue(db)
       .compile();
@@ -57,6 +63,10 @@ describe('AuthModule', () => {
     expect(module.get(PasswordHasher)).toBeInstanceOf(Argon2PasswordHasher);
     expect(module.get(UsersRepository)).toBeInstanceOf(UsersRepository);
     expect(module.get(ThrottlerGuard)).toBeDefined();
+    expect(module.get(EmployeeSessionService)).toBeInstanceOf(
+      EmployeeSessionService,
+    );
+    expect(module.get(EmployeeSessionOriginGuard)).toBeDefined();
   });
 
   it('keeps independent login quotas for different IP addresses', async () => {

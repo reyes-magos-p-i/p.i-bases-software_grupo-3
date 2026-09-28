@@ -68,8 +68,70 @@ distintas. Antes de activar el login en producción:
 - Verificar por HTTP el límite y la IP efectiva en el despliegue. La configuración
   del servidor y el número de procesos no se han confirmado desde el repositorio.
 
-Este incremento no modifica el proxy, systemd, la base de datos ni la duración o
-el transporte de los JWT. Referencia: [limitación de solicitudes en NestJS](https://docs.nestjs.com/security/rate-limiting).
+El limitador no modifica el proxy, systemd ni la base de datos.
+Referencia: [limitación de solicitudes en NestJS](https://docs.nestjs.com/security/rate-limiting).
+
+## Sesión del personal
+
+`AuthModule` prepara una sesión mediante JWT en la cookie
+`cinetadel_employee_session`. Todavía no está importado por `AppModule`; este
+incremento no publica rutas ni activa incidentalmente `/auth/register`.
+
+Tras un login válido, el cuerpo HTTP contiene únicamente `{ user: ... }`.
+El JWT se entrega en `Set-Cookie`, con `HttpOnly`, `SameSite=Strict`, `Path=/api`
+y sin `Domain`. La cookie es persistente, con un plazo máximo de **24 horas**
+desde la emisión del JWT, alineado con su `exp`. Recuperar la identidad mediante
+`GET /api/auth/me` no renueva la cookie ni extiende el plazo. Ambas respuestas
+exitosas incluyen `Cache-Control: no-store`.
+
+La cookie solo autentica tokens del personal (`type=employee`). Los tokens Bearer
+existentes siguen funcionando sin esta cookie. Enviar cookie y `Authorization`
+simultáneamente devuelve `401`, incluso si contienen el mismo token; tampoco se
+recurre a Bearer cuando la cookie es inválida. El frontend del personal deberá
+usar la cookie, sin guardar el JWT en `localStorage` o `sessionStorage` ni añadir
+una cabecera `Authorization`. Su integración se realizará en otro incremento.
+
+La lectura de cookies usa `cookie-parser` en las rutas de `AuthController`.
+La protección de origen se aplica al login del personal: `Origin` debe coincidir
+exactamente con el origen de `FRONTEND_URL`. No se admiten orígenes ausentes,
+`null`, inválidos o diferentes; se responde `403` antes de consultar Oracle o
+verificar contraseñas. El guard de limitación se ejecuta primero, por lo que esas
+solicitudes también consumen el cupo y pueden recibir `429`. No se confía en
+`Host`, `Referer` ni cabeceras reenviadas para autorizar el origen.
+
+Cuando se habiliten otras operaciones que modifiquen datos mediante esta cookie,
+también deberán incorporar protección contra CSRF. Este cambio no sustituye la
+autorización administrativa de `/users` ni configura CORS o `trust proxy`.
+
+### Configuración prevista para integrar la sesión
+
+`EmployeeSessionService` valida `FRONTEND_URL` al inicializar el módulo. Debe ser
+un origen absoluto sin credenciales, rutas, consulta ni fragmento. Se permite
+una barra final y se normaliza al origen. HTTPS establece siempre `Secure`.
+HTTP solo se acepta cuando `NODE_ENV` es `development` o `test` y el host es
+`localhost`, `127.0.0.1` o `[::1]`. Una configuración inválida impide iniciar
+`AuthModule`; no rebaja automáticamente la seguridad.
+
+- Desarrollo local: `NODE_ENV=development`, `FRONTEND_URL=http://localhost:5173`
+  y `VITE_API_BASE_URL=/api`. El origen debe coincidir con el que se abre en el
+  navegador; otro puerto o cambiar `localhost` por `127.0.0.1` requiere ajustarlo.
+- Despliegue previsto: `NODE_ENV=production`,
+  `FRONTEND_URL=https://159.54.166.238` y `VITE_API_BASE_URL=/api`.
+  Debe resolverse la confianza del certificado HTTPS antes de activar el flujo.
+- Conservar `JWT_SECRET` en la configuración privada del backend. No se modifica
+  ni se proporciona un secreto predeterminado en este incremento.
+
+Nginx recibe `/api/` y lo reenvía a `http://127.0.0.1:3000/`, retirando el prefijo.
+Vite realiza la misma traducción localmente. Las rutas internas de Nest siguen
+siendo `/auth/...`; el navegador usa `/api/auth/...` porque la cookie tiene
+`Path=/api`. No se ha añadido un prefijo global a la aplicación principal.
+Las pruebas HTTP sí simulan ese prefijo externo para verificar el recorrido con
+un navegador simulado que conserva y envía la cookie según su ruta.
+
+No hay endpoint de logout, renovación ni revocación anticipada en este incremento.
+Eliminar la cookie no invalida una copia del JWT: un cierre de sesión efectivo
+con revocación requiere un diseño posterior. No se habilita todavía el botón de
+cierre de sesión. Tampoco se modifica el esquema de Oracle.
 
 ## Project setup
 

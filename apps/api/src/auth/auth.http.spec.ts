@@ -9,6 +9,7 @@ import { DatabaseService } from '../database/database.service';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AuthModule } from './auth.module';
 import { AuthService } from './auth.service';
+import { EMPLOYEE_SESSION_COOKIE } from './employee-session.service';
 
 describe('Employee authentication (HTTP integration)', () => {
   let app: INestApplication<App>;
@@ -17,6 +18,7 @@ describe('Employee authentication (HTTP integration)', () => {
   const db = { query: jest.fn(), transaction: jest.fn() };
   const password = ' Staff password 🎬 ';
   const login = { email: 'staff@example.com', password };
+  const origin = 'http://localhost:5173';
   const profile = {
     id: 21,
     role: UserRole.EMPLOYEE,
@@ -51,11 +53,16 @@ describe('Employee authentication (HTTP integration)', () => {
       ],
     })
       .overrideProvider(ConfigService)
-      .useValue({ getOrThrow: () => 'http-test-jwt-secret' })
+      .useValue({
+        getOrThrow: () => 'http-test-jwt-secret',
+        get: (key: string) => ({ FRONTEND_URL: origin, NODE_ENV: 'test' })[key],
+      })
       .overrideProvider(DatabaseService)
       .useValue(db)
       .compile();
     app = module.createNestApplication({ logger: false });
+    // Simulate the external /api path so the test cookie jar enforces its real path.
+    app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -77,6 +84,114 @@ describe('Employee authentication (HTTP integration)', () => {
   });
 
   it.each([
+    undefined,
+    'null',
+    'invalid',
+    'https://evil.example',
+    'http://localhost:5174',
+    'http://localhost:5173.evil.example',
+  ])(
+    'rejects an unauthorized Origin before accessing credentials: %p',
+    async (untrustedOrigin) => {
+      const verify = jest.spyOn(app.get(PasswordHasher), 'verify');
+      const call = request(app.getHttpServer()).post(
+        '/api/auth/employees/login',
+      );
+      if (untrustedOrigin !== undefined) call.set('Origin', untrustedOrigin);
+      const response = await call.send(login).expect(403);
+      expect(response.headers['set-cookie']).toBeUndefined();
+      expect(db.query).not.toHaveBeenCalled();
+      expect(verify).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['invalid', 'expired', 'wrong signature', 'client', 'empty', 'json'])(
+    'rejects an invalid employee cookie (%s) before accessing persistence',
+    async (scenario) => {
+      let token = 'invalid';
+      if (scenario === 'expired')
+        token = jwt.sign({ sub: 21, type: 'employee' }, { expiresIn: -1 });
+      if (scenario === 'wrong signature')
+        token = jwt.sign(
+          { sub: 21, type: 'employee' },
+          { secret: 'wrong-secret' },
+        );
+      if (scenario === 'client') token = jwt.sign({ sub: 21, type: 'client' });
+      if (scenario === 'empty') token = '';
+      if (scenario === 'json') token = 'j:{"token":"invalid"}';
+      await request(app.getHttpServer())
+        .get('/api/auth/me')
+        .set(
+          'Cookie',
+          `${EMPLOYEE_SESSION_COOKIE}=${encodeURIComponent(token)}`,
+        )
+        .expect(401);
+      expect(db.query).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['same token', 'different token', 'malformed cookie'])(
+    'rejects simultaneous cookie and Bearer credentials (%s)',
+    async (scenario) => {
+      const token = jwt.sign({ sub: 21, type: 'employee' });
+      const cookie = scenario === 'malformed cookie' ? 'invalid' : token;
+      const bearer =
+        scenario === 'different token'
+          ? jwt.sign({ sub: 22, type: 'employee' })
+          : token;
+      await request(app.getHttpServer())
+        .get('/api/auth/me')
+        .set('Cookie', `${EMPLOYEE_SESSION_COOKIE}=${cookie}`)
+        .auth(bearer, { type: 'bearer' })
+        .expect(401);
+      expect(db.query).not.toHaveBeenCalled();
+    },
+  );
+
+  it('checks the current identity and never renews the cookie during session recovery', async () => {
+    const browser = request.agent(app.getHttpServer());
+    await browser
+      .post('/api/auth/employees/login')
+      .set('Origin', origin)
+      .send(login)
+      .expect(200);
+    db.query.mockResolvedValueOnce({
+      rows: [employeeRow(UserRole.ADMINISTRATOR)],
+    });
+    const recovered = await browser
+      .get('/api/auth/me')
+      .expect(200, { id: 21, role: UserRole.ADMINISTRATOR });
+    expect(recovered.headers['set-cookie']).toBeUndefined();
+    db.query.mockResolvedValueOnce({ rows: [] });
+    await browser.get('/api/auth/me').expect(401);
+  });
+
+  it('rejects a previously working session at the original JWT expiration', async () => {
+    const now = Math.floor(Date.now() / 1000) * 1000;
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/employees/login')
+      .set('Origin', origin)
+      .send(login)
+      .expect(200);
+    const cookies = response.headers['set-cookie'] as unknown as string[];
+    const cookie = cookies[0].split(';')[0];
+    clock.mockReturnValue(now + 86_399_000);
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Cookie', cookie)
+      .expect(200);
+    db.query.mockClear();
+    clock.mockReturnValue(now + 86_400_000);
+    const expired = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Cookie', cookie)
+      .expect(401);
+    expect(expired.headers['set-cookie']).toBeUndefined();
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it.each([
     { scenario: 'successful logins', body: login, status: 200, calls: 5 },
     {
       scenario: 'incorrect passwords',
@@ -91,7 +206,8 @@ describe('Employee authentication (HTTP integration)', () => {
       const verify = jest.spyOn(app.get(PasswordHasher), 'verify');
       for (let attempt = 0; attempt < 5; attempt++) {
         const response = await request(app.getHttpServer())
-          .post('/auth/employees/login')
+          .post('/api/auth/employees/login')
+          .set('Origin', origin)
           .send(body)
           .expect(status);
         expect(response.headers['x-ratelimit-limit']).toBe('5');
@@ -100,7 +216,8 @@ describe('Employee authentication (HTTP integration)', () => {
         );
       }
       const blocked = await request(app.getHttpServer())
-        .post('/auth/employees/login')
+        .post('/api/auth/employees/login')
+        .set('Origin', origin)
         .send(login)
         .expect(429);
       expect(blocked.body).toEqual({
@@ -119,7 +236,8 @@ describe('Employee authentication (HTTP integration)', () => {
     const verify = jest.spyOn(app.get(PasswordHasher), 'verify');
     for (let attempt = 0; attempt < 6; attempt++) {
       await request(app.getHttpServer())
-        .post('/auth/employees/login')
+        .post('/api/auth/employees/login')
+        .set('Origin', origin)
         .set('X-Forwarded-For', `192.0.2.${attempt + 1}`)
         .set('X-Real-IP', `192.0.2.${attempt + 1}`)
         .send({ email: `staff${attempt}@example.com` })
@@ -134,20 +252,23 @@ describe('Employee authentication (HTTP integration)', () => {
     const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
     for (let attempt = 0; attempt < 6; attempt++) {
       await request(app.getHttpServer())
-        .post('/auth/employees/login')
+        .post('/api/auth/employees/login')
+        .set('Origin', origin)
         .send({})
         .expect(attempt < 5 ? 400 : 429);
     }
     clock.mockReturnValue(now + 59_999);
     const blocked = await request(app.getHttpServer())
-      .post('/auth/employees/login')
+      .post('/api/auth/employees/login')
+      .set('Origin', origin)
       .send(login)
       .expect(429);
     expect(blocked.headers['retry-after']).toBe('1');
     expect(db.query).not.toHaveBeenCalled();
     clock.mockReturnValue(now + 60_000);
     await request(app.getHttpServer())
-      .post('/auth/employees/login')
+      .post('/api/auth/employees/login')
+      .set('Origin', origin)
       .send(login)
       .expect(200);
     expect(db.query).toHaveBeenCalledTimes(1);
@@ -158,13 +279,15 @@ describe('Employee authentication (HTTP integration)', () => {
     const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
     for (let attempt = 0; attempt < 4; attempt++) {
       await request(app.getHttpServer())
-        .post('/auth/employees/login')
+        .post('/api/auth/employees/login')
+        .set('Origin', origin)
         .send({})
         .expect(400);
     }
     clock.mockReturnValue(now + 60_000);
     const response = await request(app.getHttpServer())
-      .post('/auth/employees/login')
+      .post('/api/auth/employees/login')
+      .set('Origin', origin)
       .send({})
       .expect(400);
     expect(response.headers['x-ratelimit-remaining']).toBe('4');
@@ -173,18 +296,19 @@ describe('Employee authentication (HTTP integration)', () => {
   it('does not apply the login quota to identity or registration routes', async () => {
     for (let attempt = 0; attempt < 6; attempt++) {
       await request(app.getHttpServer())
-        .post('/auth/employees/login')
+        .post('/api/auth/employees/login')
+        .set('Origin', origin)
         .send({})
         .expect(attempt < 5 ? 400 : 429);
     }
     const token = jwt.sign({ sub: 21, type: 'employee' });
     for (let attempt = 0; attempt < 6; attempt++) {
       await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/api/auth/me')
         .auth(token, { type: 'bearer' })
         .expect(200, { id: 21, role: UserRole.EMPLOYEE });
       await request(app.getHttpServer())
-        .post('/auth/register')
+        .post('/api/auth/register')
         .send({})
         .expect(400);
     }
@@ -192,19 +316,29 @@ describe('Employee authentication (HTTP integration)', () => {
   });
 
   it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(
-    'logs in %s and authenticates the returned token',
+    'logs in %s and recovers identity through the session cookie',
     async (role) => {
       db.query.mockResolvedValue({ rows: [employeeRow(role)] });
-      const response = await request(app.getHttpServer())
-        .post('/auth/employees/login')
+      const browser = request.agent(app.getHttpServer());
+      const response = await browser
+        .post('/api/auth/employees/login')
+        .set('Origin', origin)
         .send({ ...login, email: '  Staff@Example.COM  ' })
         .expect(200);
-      const body = response.body as { accessToken: string; user: unknown };
-      expect(body).toEqual({
-        accessToken: expect.any(String),
-        user: { ...profile, role },
-      });
-      expect(jwt.verify<Record<string, unknown>>(body.accessToken)).toEqual({
+      expect(response.body).toEqual({ user: { ...profile, role } });
+      const cookies = response.headers['set-cookie'] as unknown as string[];
+      expect(cookies).toHaveLength(1);
+      expect(cookies[0]).toContain(`${EMPLOYEE_SESSION_COOKIE}=`);
+      expect(cookies[0]).toContain('Path=/api');
+      expect(cookies[0]).toContain('HttpOnly');
+      expect(cookies[0]).toContain('SameSite=Strict');
+      expect(cookies[0]).not.toContain('Domain=');
+      expect(cookies[0]).not.toContain('Secure');
+      expect(response.headers['cache-control']).toBe('no-store');
+      const token = cookies[0]
+        .split(';')[0]
+        .slice(EMPLOYEE_SESSION_COOKIE.length + 1);
+      expect(jwt.verify<Record<string, unknown>>(token)).toEqual({
         sub: 21,
         type: 'employee',
         iat: expect.any(Number),
@@ -215,10 +349,11 @@ describe('Employee authentication (HTTP integration)', () => {
       });
       expect(response.text).not.toContain(passwordHash);
       expect(response.text).not.toContain(password);
-      await request(app.getHttpServer())
-        .get('/auth/me')
-        .auth(body.accessToken, { type: 'bearer' })
+      const recovered = await browser
+        .get('/api/auth/me')
         .expect(200, { id: 21, role });
+      expect(recovered.headers['set-cookie']).toBeUndefined();
+      expect(recovered.headers['cache-control']).toBe('no-store');
       expect(db.query.mock.calls[1][1]).toMatchObject({
         employeeId: { val: 21 },
       });
@@ -237,7 +372,8 @@ describe('Employee authentication (HTTP integration)', () => {
     { ...login, role: 'ADMINISTRATOR' },
   ])('rejects invalid input before querying Oracle: %#', async (body) => {
     const response = await request(app.getHttpServer())
-      .post('/auth/employees/login')
+      .post('/api/auth/employees/login')
+      .set('Origin', origin)
       .send(body)
       .expect(400);
     expect(response.body).toMatchObject({ statusCode: 400 });
@@ -261,8 +397,9 @@ describe('Employee authentication (HTTP integration)', () => {
         });
       }
       const sign = jest.spyOn(jwt, 'signAsync');
-      await request(app.getHttpServer())
-        .post('/auth/employees/login')
+      const response = await request(app.getHttpServer())
+        .post('/api/auth/employees/login')
+        .set('Origin', origin)
         .send({ ...login, password: 'incorrect password' })
         .expect(401, {
           statusCode: 401,
@@ -270,6 +407,7 @@ describe('Employee authentication (HTTP integration)', () => {
           message: 'Correo o contraseña incorrectos',
         });
       expect(sign).not.toHaveBeenCalled();
+      expect(response.headers['set-cookie']).toBeUndefined();
     },
   );
 
@@ -287,10 +425,12 @@ describe('Employee authentication (HTTP integration)', () => {
           .spyOn(jwt, 'signAsync')
           .mockRejectedValue(new Error('Private key detail'));
       }
-      await request(app.getHttpServer())
-        .post('/auth/employees/login')
+      const response = await request(app.getHttpServer())
+        .post('/api/auth/employees/login')
+        .set('Origin', origin)
         .send(login)
         .expect(500, { statusCode: 500, message: 'Internal server error' });
+      expect(response.headers['set-cookie']).toBeUndefined();
     },
   );
 
@@ -308,7 +448,7 @@ describe('Employee authentication (HTTP integration)', () => {
           { secret: 'different-test-secret' },
         );
       }
-      const call = request(app.getHttpServer()).get('/auth/me');
+      const call = request(app.getHttpServer()).get('/api/auth/me');
       if (token) call.auth(token, { type: 'bearer' });
       await call.expect(401);
       expect(db.query).not.toHaveBeenCalled();
@@ -324,7 +464,7 @@ describe('Employee authentication (HTTP integration)', () => {
     'rejects signed tokens with invalid identity claims: %p',
     async (claims) => {
       await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/api/auth/me')
         .auth(jwt.sign(claims), { type: 'bearer' })
         .expect(401);
       expect(db.query).not.toHaveBeenCalled();
@@ -342,7 +482,7 @@ describe('Employee authentication (HTTP integration)', () => {
       .mockResolvedValueOnce({ rows: [employeeRow(UserRole.EMPLOYEE)] });
     for (const role of [UserRole.ADMINISTRATOR, UserRole.EMPLOYEE]) {
       await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/api/auth/me')
         .auth(token, { type: 'bearer' })
         .expect(200, { id: 21, role });
     }
@@ -354,7 +494,7 @@ describe('Employee authentication (HTTP integration)', () => {
     async ({ rows }) => {
       db.query.mockResolvedValue({ rows });
       await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/api/auth/me')
         .auth(jwt.sign({ sub: 21, type: 'employee' }), { type: 'bearer' })
         .expect(401);
     },
@@ -363,7 +503,7 @@ describe('Employee authentication (HTTP integration)', () => {
   it('reports identity lookup failures as internal errors rather than invalid credentials', async () => {
     db.query.mockRejectedValue(new Error('Private Oracle detail'));
     await request(app.getHttpServer())
-      .get('/auth/me')
+      .get('/api/auth/me')
       .auth(jwt.sign({ sub: 21, type: 'employee' }), { type: 'bearer' })
       .expect(500, { statusCode: 500, message: 'Internal server error' });
   });
@@ -384,7 +524,7 @@ describe('Employee authentication (HTTP integration)', () => {
     db.query.mockResolvedValue({ rows: [client] });
     const { accessToken } = app.get(AuthService).issueToken(client);
     await request(app.getHttpServer())
-      .get('/auth/me')
+      .get('/api/auth/me')
       .auth(accessToken, { type: 'bearer' })
       .expect(200, client);
     expect(db.query).toHaveBeenCalledWith(
