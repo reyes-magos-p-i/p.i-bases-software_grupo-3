@@ -354,15 +354,16 @@ describe('UsersRepository', () => {
       'reads a minimal employee identity with role %s using a bound ID',
       async (role) => {
         connection.execute.mockResolvedValue({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: role }],
+          rows: [{ EMPLOYEE_ID: 21, ROLE: role, FIRST_NAME: 'Ana' }],
         });
         await expect(repository.findEmployeeIdentityById(21)).resolves.toEqual({
           id: 21,
           role,
+          firstName: 'Ana',
         });
         expect(connection.execute).toHaveBeenCalledTimes(1);
         expect(connection.execute).toHaveBeenCalledWith(
-          'SELECT EMPLOYEE_ID, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
+          'SELECT EMPLOYEE_ID, ROLE, FIRST_NAME FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
           { employeeId: { val: 21, type: oracle.NUMBER } },
           { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: true },
         );
@@ -377,16 +378,36 @@ describe('UsersRepository', () => {
       { rows: [] },
       {
         rows: [
-          { EMPLOYEE_ID: 21, ROLE: UserRole.ADMINISTRATOR },
-          { EMPLOYEE_ID: 21, ROLE: UserRole.ADMINISTRATOR },
+          { EMPLOYEE_ID: 21, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
+          { EMPLOYEE_ID: 21, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
         ],
       },
-      { rows: [{ EMPLOYEE_ID: '21', ROLE: UserRole.ADMINISTRATOR }] },
-      { rows: [{ EMPLOYEE_ID: 1.5, ROLE: UserRole.ADMINISTRATOR }] },
-      { rows: [{ EMPLOYEE_ID: 0, ROLE: UserRole.ADMINISTRATOR }] },
-      { rows: [{ EMPLOYEE_ID: 42, ROLE: UserRole.ADMINISTRATOR }] },
-      { rows: [{ EMPLOYEE_ID: 21, ROLE: UserRole.CLIENT }] },
-      { rows: [{ EMPLOYEE_ID: 21, ROLE: 'UNKNOWN' }] },
+      {
+        rows: [
+          {
+            EMPLOYEE_ID: '21',
+            ROLE: UserRole.ADMINISTRATOR,
+            FIRST_NAME: 'Ana',
+          },
+        ],
+      },
+      {
+        rows: [
+          { EMPLOYEE_ID: 1.5, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
+        ],
+      },
+      {
+        rows: [
+          { EMPLOYEE_ID: 0, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
+        ],
+      },
+      {
+        rows: [
+          { EMPLOYEE_ID: 42, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
+        ],
+      },
+      { rows: [{ EMPLOYEE_ID: 21, ROLE: UserRole.CLIENT, FIRST_NAME: 'Ana' }] },
+      { rows: [{ EMPLOYEE_ID: 21, ROLE: 'UNKNOWN', FIRST_NAME: 'Ana' }] },
     ])(
       'returns no identity for an absent or invalid result %p',
       async (result) => {
@@ -395,6 +416,20 @@ describe('UsersRepository', () => {
           repository.findEmployeeIdentityById(21),
         ).resolves.toBeNull();
         expect(connection.close).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each([undefined, null, 42, '', '   '])(
+      'rejects an invalid first name %p',
+      async (firstName) => {
+        connection.execute.mockResolvedValue({
+          rows: [
+            { EMPLOYEE_ID: 21, ROLE: UserRole.EMPLOYEE, FIRST_NAME: firstName },
+          ],
+        });
+        await expect(
+          repository.findEmployeeIdentityById(21),
+        ).resolves.toBeNull();
       },
     );
 
@@ -416,7 +451,9 @@ describe('UsersRepository', () => {
     it('does not return an identity when releasing the connection fails', async () => {
       const error = new Error('Connection close failed');
       connection.execute.mockResolvedValue({
-        rows: [{ EMPLOYEE_ID: 21, ROLE: UserRole.ADMINISTRATOR }],
+        rows: [
+          { EMPLOYEE_ID: 21, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
+        ],
       });
       connection.close.mockRejectedValue(error);
       await expect(repository.findEmployeeIdentityById(21)).rejects.toBe(error);

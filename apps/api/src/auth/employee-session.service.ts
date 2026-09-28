@@ -91,4 +91,8 @@ export class EmployeeSessionService {
       expires: new Date(payload.exp * 1000),
     });
   }
+
+  clear(response: Response): void {
+    response.clearCookie(EMPLOYEE_SESSION_COOKIE, this.cookieOptions);
+  }
 }

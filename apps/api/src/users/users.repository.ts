@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import oracle from 'oracledb';
 import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
-import type { UserIdentity } from './types/user-identity.type';
 import { DatabaseService } from '../database/database.service';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import type { CreateAddressDto } from './dto/create-address.dto';
@@ -131,12 +130,16 @@ export class UsersRepository {
 
   async findEmployeeIdentityById(
     employeeId: number,
-  ): Promise<UserIdentity | null> {
+  ): Promise<Pick<
+    EmployeeWithLocalCredentials,
+    'id' | 'role' | 'firstName'
+  > | null> {
     const result = await this.db.query<{
       EMPLOYEE_ID: unknown;
       ROLE: unknown;
+      FIRST_NAME: unknown;
     }>(
-      'SELECT EMPLOYEE_ID, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
+      'SELECT EMPLOYEE_ID, ROLE, FIRST_NAME FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
       { employeeId: { val: employeeId, type: oracle.NUMBER } },
       { outFormat: oracle.OUT_FORMAT_OBJECT },
     );
@@ -150,11 +153,13 @@ export class UsersRepository {
       !Number.isSafeInteger(row.EMPLOYEE_ID) ||
       row.EMPLOYEE_ID < 1 ||
       row.EMPLOYEE_ID !== employeeId ||
-      (row.ROLE !== UserRole.ADMINISTRATOR && row.ROLE !== UserRole.EMPLOYEE)
+      (row.ROLE !== UserRole.ADMINISTRATOR && row.ROLE !== UserRole.EMPLOYEE) ||
+      typeof row.FIRST_NAME !== 'string' ||
+      !row.FIRST_NAME.trim()
     ) {
       return null;
     }
-    return { id: row.EMPLOYEE_ID, role: row.ROLE };
+    return { id: row.EMPLOYEE_ID, role: row.ROLE, firstName: row.FIRST_NAME };
   }
 
   async createEmployee(data: CreateEmployeeRecord): Promise<number> {

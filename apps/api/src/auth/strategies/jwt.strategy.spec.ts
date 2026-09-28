@@ -96,14 +96,18 @@ describe('JwtStrategy', () => {
   it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(
     'uses the current database role %s instead of a role claim',
     async (role) => {
-      users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role });
+      users.findEmployeeIdentityById.mockResolvedValue({
+        id: 21,
+        role,
+        firstName: 'Ana',
+      });
       await expect(
         strategy.validate(request, {
           sub: 21,
           type: 'employee',
           role: 'CLIENT',
         }),
-      ).resolves.toEqual({ id: 21, role });
+      ).resolves.toEqual({ id: 21, role, firstName: 'Ana' });
       expect(users.findEmployeeIdentityById).toHaveBeenCalledWith(21);
       expect(clients.findById).not.toHaveBeenCalled();
     },
@@ -131,8 +135,16 @@ describe('JwtStrategy', () => {
   it('reads employee identity on each validation so role changes are reflected', async () => {
     const payload = { sub: 21, type: 'employee' };
     users.findEmployeeIdentityById
-      .mockResolvedValueOnce({ id: 21, role: UserRole.ADMINISTRATOR })
-      .mockResolvedValueOnce({ id: 21, role: UserRole.EMPLOYEE });
+      .mockResolvedValueOnce({
+        id: 21,
+        role: UserRole.ADMINISTRATOR,
+        firstName: 'Ana',
+      })
+      .mockResolvedValueOnce({
+        id: 21,
+        role: UserRole.EMPLOYEE,
+        firstName: 'Ana',
+      });
     await expect(strategy.validate(request, payload)).resolves.toHaveProperty(
       'role',
       UserRole.ADMINISTRATOR,
