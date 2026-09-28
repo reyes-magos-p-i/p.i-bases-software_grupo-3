@@ -74,3 +74,114 @@ describe('registerUser', () => {
     expect(post).not.toHaveBeenCalled()
   })
 })
+
+describe('employee authentication API', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.resetAllMocks()
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    create.mockImplementation((defaults) => ({ defaults, post, get }))
+  })
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('logs in through the shared proxy without changing the password or retaining a token', async () => {
+    const { loginEmployee } = await import('@/services/authService')
+    post.mockResolvedValue({ data: { user: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' } } })
+    const credentials = { email: 'staff@example.com', password: ' Exact password ' }
+    expect(await loginEmployee(credentials)).toEqual({
+      id: 21,
+      role: 'ADMINISTRATOR',
+      firstName: 'Ana',
+    })
+    expect(post).toHaveBeenCalledExactlyOnceWith('/auth/employees/login', credentials, {
+      timeout: 15000,
+    })
+  })
+
+  it('recovers only staff identities and treats 401 as no session', async () => {
+    const { getEmployeeSession } = await import('@/services/authService')
+    get.mockResolvedValueOnce({ data: { id: 22, role: 'EMPLOYEE', firstName: 'Ana' } })
+    expect(await getEmployeeSession()).toEqual({ id: 22, role: 'EMPLOYEE', firstName: 'Ana' })
+    expect(get).toHaveBeenCalledWith('/auth/me', { timeout: 10000 })
+    get.mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } })
+    expect(await getEmployeeSession()).toBeNull()
+    get.mockResolvedValueOnce({ data: { id: 22, role: 'CLIENT', firstName: 'Ana' } })
+    await expect(getEmployeeSession()).rejects.toThrow('verificar')
+  })
+
+  it.each([
+    null,
+    {},
+    { id: 0, role: 'EMPLOYEE' },
+    { id: 1.5, role: 'EMPLOYEE' },
+    { id: '21', role: 'ADMINISTRATOR' },
+    { id: 21, role: 'CLIENT', firstName: 'Ana' },
+  ])('rejects malformed login identity %p', async (user) => {
+    const { loginEmployee } = await import('@/services/authService')
+    post.mockResolvedValue({ data: { user } })
+    await expect(loginEmployee({ email: 'a@example.com', password: 'x' })).rejects.toThrow(
+      'verificar',
+    )
+  })
+
+  it.each([undefined, null, 42, '', '   '])(
+    'rejects an invalid first name %p',
+    async (firstName) => {
+      const { getEmployeeSession } = await import('@/services/authService')
+      get.mockResolvedValue({ data: { id: 21, role: 'EMPLOYEE', firstName } })
+      await expect(getEmployeeSession()).rejects.toThrow('verificar')
+    },
+  )
+
+  it.each([
+    [400, 'Revisa'],
+    [401, 'incorrectos'],
+    [403, 'autorizar'],
+    [500, 'conectar'],
+  ])('maps status %s without exposing internal messages', async (status, message) => {
+    const { loginEmployee } = await import('@/services/authService')
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { status, data: { message: 'private SQL' } },
+    })
+    await expect(loginEmployee({ email: 'a@example.com', password: 'x' })).rejects.toThrow(
+      String(message),
+    )
+    await expect(loginEmployee({ email: 'a@example.com', password: 'x' })).rejects.not.toThrow(
+      /recarga/i,
+    )
+    expect(post).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['12', 12],
+    ['1.5', 2],
+    ['invalid', 60],
+    [undefined, 60],
+    ['-4', 60],
+    ['99999', 60],
+  ])('honors Retry-After %p with a bounded delay', async (header, expected) => {
+    const { loginEmployee } = await import('@/services/authService')
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 429, headers: { 'retry-after': header } },
+    })
+    await expect(loginEmployee({ email: 'a@example.com', password: 'x' })).rejects.toMatchObject({
+      status: 429,
+      retryAfterSeconds: expected,
+    })
+  })
+
+  it('clears the server cookie through logout and reports transport failures without retries', async () => {
+    const { logoutEmployee, getEmployeeSession } = await import('@/services/authService')
+    post.mockResolvedValue({ status: 204 })
+    await logoutEmployee()
+    expect(post).toHaveBeenCalledExactlyOnceWith('/auth/employees/logout', undefined, {
+      timeout: 10000,
+    })
+    post.mockRejectedValueOnce(new Error('Private transport details'))
+    await expect(logoutEmployee()).rejects.toThrow('conectar')
+    get.mockRejectedValueOnce({ isAxiosError: true, code: 'ERR_NETWORK' })
+    await expect(getEmployeeSession()).rejects.toThrow('conectar')
+  })
+})
