@@ -59,6 +59,194 @@ describe('UsersRepository', () => {
     await module.close();
   });
 
+  describe('findEmployeeWithLocalCredentialsByEmail', () => {
+    const row = {
+      EMPLOYEE_ID: 21,
+      ROLE: UserRole.ADMINISTRATOR,
+      EMAIL: 'Personal@Example.com',
+      FIRST_NAME: 'Ana',
+      SECOND_NAME: null,
+      FIRST_SURNAME: 'Solano',
+      SECOND_SURNAME: 'Rojas',
+      CREDENTIALS_EMPLOYEE_ID: 21,
+      PASSWORD_HASH: 'test-password-hash',
+    };
+
+    it.each([UserRole.ADMINISTRATOR, UserRole.EMPLOYEE])(
+      'reads credentials and profile for %s using a normalized bound email',
+      async (role) => {
+        connection.execute.mockResolvedValue({
+          rows: [{ ...row, ROLE: role }],
+        });
+        await expect(
+          repository.findEmployeeWithLocalCredentialsByEmail(
+            '  Personal@Example.com  ',
+          ),
+        ).resolves.toEqual({
+          id: 21,
+          role,
+          email: 'Personal@Example.com',
+          firstName: 'Ana',
+          secondName: null,
+          firstSurname: 'Solano',
+          secondSurname: 'Rojas',
+          passwordHash: 'test-password-hash',
+        });
+        expect(connection.execute).toHaveBeenCalledTimes(1);
+        const [sql, binds, options] = connection.execute.mock.calls[0];
+        expect(sql).toContain(
+          'LEFT JOIN EMPLOYEE_LOCAL_CREDENTIALS c ON c.EMPLOYEE_ID = e.EMPLOYEE_ID',
+        );
+        expect(sql).toContain('WHERE LOWER(TRIM(e.EMAIL)) = :email');
+        expect(sql).toContain('FETCH FIRST 2 ROWS ONLY');
+        expect(sql).not.toContain('SALT');
+        expect(binds).toEqual({
+          email: { val: 'personal@example.com', type: oracle.STRING },
+        });
+        expect(options).toEqual({
+          outFormat: oracle.OUT_FORMAT_OBJECT,
+          autoCommit: true,
+        });
+        expect(connection.close).toHaveBeenCalledTimes(1);
+        expect(connection.commit).not.toHaveBeenCalled();
+        expect(connection.rollback).not.toHaveBeenCalled();
+      },
+    );
+
+    it('preserves the optional second name when it exists', async () => {
+      connection.execute.mockResolvedValue({
+        rows: [{ ...row, SECOND_NAME: 'María' }],
+      });
+      await expect(
+        repository.findEmployeeWithLocalCredentialsByEmail(
+          'personal@example.com',
+        ),
+      ).resolves.toHaveProperty('secondName', 'María');
+    });
+
+    it.each([{ rows: [] }, {}])(
+      'returns null for an absent employee: %p',
+      async (result) => {
+        connection.execute.mockResolvedValue(result);
+        await expect(
+          repository.findEmployeeWithLocalCredentialsByEmail(
+            'missing@example.com',
+          ),
+        ).resolves.toBeNull();
+        expect(connection.close).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('returns null when the employee has no local credentials', async () => {
+      connection.execute.mockResolvedValue({
+        rows: [{ ...row, CREDENTIALS_EMPLOYEE_ID: null, PASSWORD_HASH: null }],
+      });
+      await expect(
+        repository.findEmployeeWithLocalCredentialsByEmail(
+          'personal@example.com',
+        ),
+      ).resolves.toBeNull();
+      expect(connection.close).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([true, false])(
+      'rejects an ambiguous email even when a duplicate has credentials=%s',
+      async (hasCredentials) => {
+        const duplicate = {
+          ...row,
+          EMPLOYEE_ID: 22,
+          EMAIL: ' personal@example.com ',
+          CREDENTIALS_EMPLOYEE_ID: hasCredentials ? 22 : null,
+          PASSWORD_HASH: hasCredentials ? 'another-test-hash' : null,
+        };
+        connection.execute.mockResolvedValue({ rows: [row, duplicate] });
+        await expect(
+          repository.findEmployeeWithLocalCredentialsByEmail(
+            'personal@example.com',
+          ),
+        ).rejects.toThrow('Employee email lookup returned multiple accounts.');
+        expect(connection.close).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each([
+      { EMPLOYEE_ID: 0 },
+      { EMPLOYEE_ID: 1.5 },
+      { EMPLOYEE_ID: '21' },
+      { EMPLOYEE_ID: Number.MAX_SAFE_INTEGER + 1 },
+      { ROLE: UserRole.CLIENT },
+      { ROLE: 'UNKNOWN' },
+    ])('rejects an invalid employee identity: %p', async (invalid) => {
+      connection.execute.mockResolvedValue({ rows: [{ ...row, ...invalid }] });
+      await expect(
+        repository.findEmployeeWithLocalCredentialsByEmail(
+          'personal@example.com',
+        ),
+      ).rejects.toThrow('Oracle returned an invalid employee identity.');
+      expect(connection.close).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      { CREDENTIALS_EMPLOYEE_ID: 22 },
+      { PASSWORD_HASH: null },
+      { PASSWORD_HASH: 123 },
+      { PASSWORD_HASH: '' },
+      { PASSWORD_HASH: '   ' },
+    ])('rejects an invalid credentials record: %p', async (invalid) => {
+      connection.execute.mockResolvedValue({ rows: [{ ...row, ...invalid }] });
+      await expect(
+        repository.findEmployeeWithLocalCredentialsByEmail(
+          'personal@example.com',
+        ),
+      ).rejects.toThrow('Oracle returned invalid employee credentials.');
+      expect(connection.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps SQL injection input in a bind variable', async () => {
+      const email = "' OR 1=1 --";
+      await repository.findEmployeeWithLocalCredentialsByEmail(email);
+      const [sql, binds] = connection.execute.mock.calls[0];
+      expect(sql).not.toContain(email);
+      expect(binds).toEqual({
+        email: { val: email.toLowerCase(), type: oracle.STRING },
+      });
+    });
+
+    it('releases the connection and propagates a query failure', async () => {
+      const failure = new Error('Query failed');
+      connection.execute.mockRejectedValueOnce(failure);
+      await expect(
+        repository.findEmployeeWithLocalCredentialsByEmail(
+          'personal@example.com',
+        ),
+      ).rejects.toBe(failure);
+      expect(connection.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('propagates acquisition failures without executing SQL', async () => {
+      const failure = new Error('Connection unavailable');
+      pool.getConnection.mockRejectedValueOnce(failure);
+      await expect(
+        repository.findEmployeeWithLocalCredentialsByEmail(
+          'personal@example.com',
+        ),
+      ).rejects.toBe(failure);
+      expect(connection.execute).not.toHaveBeenCalled();
+      expect(connection.close).not.toHaveBeenCalled();
+    });
+
+    it('does not return credentials if releasing the connection fails', async () => {
+      const failure = new Error('Connection close failed');
+      connection.execute.mockResolvedValue({ rows: [row] });
+      connection.close.mockRejectedValueOnce(failure);
+      await expect(
+        repository.findEmployeeWithLocalCredentialsByEmail(
+          'personal@example.com',
+        ),
+      ).rejects.toBe(failure);
+    });
+  });
+
   describe('getCreationOptions', () => {
     const queries = [
       'SELECT ID_PROVINCE, NAME FROM PROVINCES ORDER BY NAME, ID_PROVINCE',
