@@ -65,3 +65,7 @@ Desktop.ini
 *.tmp
 *.temp
 .cache/
+
+# agents
+
+AGENTS.md
