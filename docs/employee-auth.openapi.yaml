@@ -5,8 +5,9 @@ info:
   description: |
     Contrato implementado y probado dentro de AuthModule. El módulo todavía
     no está importado por AppModule, por lo que estas rutas no están disponibles
-    en la aplicación desplegada. Su activación, protección contra intentos
-    repetidos e integración con la sesión del frontend corresponden a incrementos posteriores.
+    en la aplicación desplegada. El login del personal ya incorpora limitación
+    de solicitudes. Su activación e integración con la sesión del frontend
+    corresponden a incrementos posteriores.
     El transporte actual usa Authorization: Bearer; no establece cookies.
 x-integration-status: module-tested-not-mounted
 paths:
@@ -20,6 +21,12 @@ paths:
         Solo consulta empleados con credenciales locales. Un correo inexistente,
         una cuenta sin credenciales locales y una contraseña incorrecta producen
         el mismo error. Los fallos internos no se presentan como credenciales inválidas.
+        Admite 5 solicitudes en 60 segundos por IP de origen y proceso de la API,
+        incluyendo intentos correctos, incorrectos y cuerpos rechazados por el DTO.
+        En IPv6, el limitador agrupa las direcciones de una misma subred /64.
+        La sexta solicitud inicia un bloqueo de 60 segundos; los reintentos durante
+        el bloqueo no prolongan esa espera. Se responde 429 antes de consultar
+        Oracle o verificar contraseñas. Cambiar el correo no reinicia el contador.
       security: []
       requestBody:
         required: true
@@ -74,6 +81,29 @@ paths:
                 statusCode: 401
                 message: Correo o contraseña incorrectos
                 error: Unauthorized
+        "429":
+          description: Límite de solicitudes superado; esperar el tiempo indicado antes de reintentar.
+          headers:
+            Retry-After:
+              description: Segundos restantes del bloqueo temporal.
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [statusCode, message]
+                properties:
+                  statusCode:
+                    type: integer
+                    enum: [429]
+                  message:
+                    type: string
+              example:
+                statusCode: 429
+                message: Demasiadas solicitudes de inicio de sesión. Espere antes de intentarlo de nuevo.
         "500":
           $ref: "#/components/responses/InternalError"
   /auth/me:
