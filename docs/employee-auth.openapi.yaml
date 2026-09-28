@@ -1,0 +1,215 @@
+openapi: 3.0.3
+info:
+  title: Cinetadel - Autenticación del personal
+  version: 0.1.0
+  description: |
+    Contrato implementado y probado dentro de AuthModule. El módulo todavía
+    no está importado por AppModule, por lo que estas rutas no están disponibles
+    en la aplicación desplegada. Su activación, protección contra intentos
+    repetidos e integración con la sesión del frontend corresponden a incrementos posteriores.
+    El transporte actual usa Authorization: Bearer; no establece cookies.
+x-integration-status: module-tested-not-mounted
+paths:
+  /auth/employees/login:
+    post:
+      operationId: loginEmployee
+      summary: Iniciar sesión como empleado o administrador
+      description: |
+        Normaliza el correo eliminando espacios exteriores y convirtiéndolo
+        a minúsculas. Conserva la contraseña exactamente como se recibe.
+        Solo consulta empleados con credenciales locales. Un correo inexistente,
+        una cuenta sin credenciales locales y una contraseña incorrecta producen
+        el mismo error. Los fallos internos no se presentan como credenciales inválidas.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Máximo 150 bytes UTF-8 después de normalizar.
+                password:
+                  type: string
+                  format: password
+                  minLength: 1
+                  maxLength: 128
+                  writeOnly: true
+      responses:
+        "200":
+          description: Credenciales válidas; token y perfil del personal.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [accessToken, user]
+                properties:
+                  accessToken:
+                    type: string
+                    description: |
+                      JWT con sub numérico, type=employee, iat y exp.
+                      La configuración actual establece una duración de 24 horas.
+                      No incluye el rol, la contraseña, el hash ni el salt.
+                  user:
+                    $ref: "#/components/schemas/EmployeeProfile"
+        "400":
+          description: Campos inválidos, ausentes o no permitidos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Correo o contraseña incorrectos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+              example:
+                statusCode: 401
+                message: Correo o contraseña incorrectos
+                error: Unauthorized
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/me:
+    get:
+      operationId: getAuthenticatedIdentity
+      summary: Consultar la identidad autenticada
+      description: |
+        Verifica la firma y expiración del JWT y consulta la identidad en la base
+        en cada petición. Para personal devuelve únicamente id y el rol vigente;
+        no confía en roles enviados en el token. Rechaza empleados eliminados o
+        con identidad inválida. Conserva la respuesta de perfil para tokens de
+        cliente existentes; este incremento no incorpora el login de clientes.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Identidad vigente del personal o perfil existente del cliente.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/EmployeeIdentity"
+                  - $ref: "#/components/schemas/ClientProfile"
+        "401":
+          description: Token ausente, inválido o expirado, o identidad inexistente o inválida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    EmployeeIdentity:
+      type: object
+      required: [id, role]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        role:
+          type: string
+          enum: [EMPLOYEE, ADMINISTRATOR]
+    EmployeeProfile:
+      allOf:
+        - $ref: "#/components/schemas/EmployeeIdentity"
+        - type: object
+          required: [email, firstName, secondName, firstSurname, secondSurname]
+          properties:
+            email:
+              type: string
+              format: email
+            firstName:
+              type: string
+            secondName:
+              type: string
+              nullable: true
+            firstSurname:
+              type: string
+            secondSurname:
+              type: string
+    ClientProfile:
+      type: object
+      required: [id, email, firstName, language]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        email:
+          type: string
+        firstName:
+          type: string
+        secondName:
+          type: string
+          nullable: true
+        firstSurname:
+          type: string
+          nullable: true
+        secondSurname:
+          type: string
+          nullable: true
+        birthday:
+          type: string
+          format: date
+          nullable: true
+        phoneNumber:
+          type: string
+          nullable: true
+        gender:
+          type: string
+          nullable: true
+        language:
+          type: string
+    ValidationError:
+      type: object
+      required: [statusCode, message, error]
+      properties:
+        statusCode:
+          type: integer
+          enum: [400]
+        message:
+          type: array
+          items:
+            type: string
+        error:
+          type: string
+          enum: [Bad Request]
+    UnauthorizedError:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode:
+          type: integer
+          enum: [401]
+        message:
+          type: string
+        error:
+          type: string
+  responses:
+    InternalError:
+      description: Fallo interno sin exponer información de Oracle, credenciales o claves.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [statusCode, message]
+            properties:
+              statusCode:
+                type: integer
+                enum: [500]
+              message:
+                type: string
+                enum: [Internal server error]

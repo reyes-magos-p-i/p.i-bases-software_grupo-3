@@ -1,4 +1,13 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -28,5 +37,5 @@ export class AuthController {
   }
 
   // TODO(Silvio): Google routes should be here.
-  // TODO(Diego): Facebook routes should be here. 
+  // TODO(Diego): Facebook routes should be here.
 }
