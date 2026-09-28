@@ -16,6 +16,7 @@ import { AuthModule } from './auth/auth.module';
     HealthModule,
     MovieFuctionsModule,
     DatabaseModule,
+    AuthModule,
     UsersModule,
     AuthModule,
   ],

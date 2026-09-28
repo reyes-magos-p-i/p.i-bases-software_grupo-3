@@ -1,19 +1,19 @@
 openapi: 3.0.3
 info:
   title: Cinetadel - Autenticación del personal
-  version: 0.2.0
+  version: 0.3.0
   description: |
-    Contrato implementado y probado dentro de AuthModule. El módulo todavía
-    no está importado por AppModule, por lo que estas rutas no están disponibles
-    en la aplicación desplegada. El login del personal ya incorpora limitación
-    de solicitudes. Su activación e integración con la sesión del frontend
-    corresponden a incrementos posteriores.
+    AuthModule está activado en AppModule. El formulario del personal utiliza
+    estas rutas para iniciar, recuperar y cerrar la sesión desde el portal.
+    La ruta /dashboard requiere una identidad vigente de empleado o administrador.
+    Activar este módulo también expone el registro público existente /auth/register;
+    no incorpora el inicio de sesión de clientes ni proveedores externos.
     El login del personal establece una cookie HttpOnly. Bearer se conserva para
     tokens existentes cuando no se envía la cookie del personal. Las rutas de este
     contrato son internas de Nest: Nginx y Vite publican el prefijo /api y lo retiran
     antes de reenviar a Nest. El navegador debe utilizar /api/auth/... para que
     envíe la cookie, cuya ruta es /api.
-x-integration-status: module-tested-not-mounted
+x-integration-status: frontend-integrated
 paths:
   /auth/employees/login:
     post:
@@ -27,6 +27,9 @@ paths:
         el mismo error. Los fallos internos no se presentan como credenciales inválidas.
         Admite 5 solicitudes en 60 segundos por IP de origen y proceso de la API,
         incluyendo intentos correctos, incorrectos y cuerpos rechazados por el DTO.
+        Nest confía únicamente en proxies loopback para interpretar la IP; esto
+        corresponde al Nginx local documentado. El almacenamiento del limitador
+        es por proceso y no coordina varias instancias de Nest.
         En IPv6, el limitador agrupa las direcciones de una misma subred /64.
         La sexta solicitud inicia un bloqueo de 60 segundos; los reintentos durante
         el bloqueo no prolongan esa espera. Se responde 429 antes de consultar
@@ -163,8 +166,8 @@ paths:
         La cookie solo acepta tokens type=employee. Una cookie junto a cualquier
         cabecera Authorization devuelve 401, incluso si contienen el mismo token.
         Una cookie inválida no permite recurrir a Bearer. La consulta no escribe
-        cookies ni renueva la sesión. No existe todavía un endpoint de logout
-        o revocación de tokens.
+        cookies ni renueva la sesión. El cierre elimina la cookie del navegador;
+        no existe revocación global de tokens.
       security:
         - employeeSession: []
         - bearerAuth: []
@@ -190,6 +193,40 @@ paths:
                 $ref: "#/components/schemas/UnauthorizedError"
         "500":
           $ref: "#/components/responses/InternalError"
+  /auth/employees/logout:
+    post:
+      operationId: logoutEmployee
+      summary: Cerrar la sesión del personal en este navegador
+      description: |
+        Exige el mismo Origin autorizado que el login. Elimina la cookie con
+        HttpOnly, SameSite=Strict, Path=/api y Secure cuando corresponde.
+        Es idempotente: admite una cookie ausente, inválida o expirada y no
+        consulta Oracle. No revoca copias del JWT ni sesiones de otros dispositivos;
+        esas copias siguen sujetas a su expiración original de 24 horas.
+      security: []
+      parameters:
+        - in: header
+          name: Origin
+          required: true
+          schema:
+            type: string
+            format: uri
+      responses:
+        "204":
+          description: Cookie eliminada; sin cuerpo de respuesta.
+          headers:
+            Set-Cookie:
+              description: Cookie de sesión vacía con expiración pasada y su mismo ámbito.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-store]
+        "403":
+          description: Origin ausente, inválido o diferente del frontend autorizado.
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   securitySchemes:
     employeeSession:
@@ -204,7 +241,7 @@ components:
   schemas:
     EmployeeIdentity:
       type: object
-      required: [id, role]
+      required: [id, role, firstName]
       properties:
         id:
           type: integer
@@ -213,17 +250,18 @@ components:
         role:
           type: string
           enum: [EMPLOYEE, ADMINISTRATOR]
+        firstName:
+          type: string
+          minLength: 1
     EmployeeProfile:
       allOf:
         - $ref: "#/components/schemas/EmployeeIdentity"
         - type: object
-          required: [email, firstName, secondName, firstSurname, secondSurname]
+          required: [email, secondName, firstSurname, secondSurname]
           properties:
             email:
               type: string
               format: email
-            firstName:
-              type: string
             secondName:
               type: string
               nullable: true
