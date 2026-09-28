@@ -2,24 +2,33 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { DatabaseService } from '../database/database.service';
+import { ClientsRepository } from './clients.repository';
 
 describe('ClientsService', () => {
   let service: ClientsService;
   let db: { query: jest.Mock; transaction: jest.Mock };
   let conn: { execute: jest.Mock };
+  let repository: { createClient: jest.Mock; insertClient: jest.Mock };
 
   const client = { id: 1, email: 'ana@example.com', firstName: 'Ana' };
 
   beforeEach(async () => {
     conn = { execute: jest.fn() };
+    repository = { createClient: jest.fn(), insertClient: jest.fn() };
     db = {
       query: jest.fn(),
       // Runs the work callback with a fake connection, like a real transaction would
-      transaction: jest.fn((work: (c: unknown) => Promise<unknown>) => work(conn)),
+      transaction: jest.fn((work: (c: unknown) => Promise<unknown>) =>
+        work(conn),
+      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ClientsService, { provide: DatabaseService, useValue: db }],
+      providers: [
+        ClientsService,
+        { provide: DatabaseService, useValue: db },
+        { provide: ClientsRepository, useValue: repository },
+      ],
     }).compile();
 
     service = module.get<ClientsService>(ClientsService);
@@ -76,96 +85,71 @@ describe('ClientsService', () => {
   });
 
   describe('createWithLocalCredentials', () => {
-    it('inserts the client and its credentials inside a transaction', async () => {
-      conn.execute
-        .mockResolvedValueOnce({ outBinds: { id: [7] } }) // insertClient
-        .mockResolvedValueOnce({}); // credentials insert
-      db.query.mockResolvedValue({ rows: [{ ...client, id: 7 }] }); // findById after commit
-
+    it('delegates to the shared repository and returns the existing public client contract', async () => {
+      repository.createClient.mockResolvedValue(7);
+      db.query.mockResolvedValue({ rows: [{ ...client, id: 7 }] });
       const result = await service.createWithLocalCredentials(
         { email: client.email, firstName: 'Ana' },
         'hash',
         'salt',
       );
-
-      expect(db.transaction).toHaveBeenCalled();
-      expect(conn.execute).toHaveBeenCalledTimes(2);
-      expect(result).toEqual({ ...client, id: 7 });
-    });
-
-    it('defaults every optional field to null and language to "es" when omitted', async () => {
-      conn.execute
-        .mockResolvedValueOnce({ outBinds: { id: [8] } })
-        .mockResolvedValueOnce({});
-      db.query.mockResolvedValue({ rows: [{ ...client, id: 8 }] });
-
-      await service.createWithLocalCredentials({ email: client.email, firstName: 'Ana' }, 'hash', 'salt');
-
-      const insertClientBinds = conn.execute.mock.calls[0][1];
-      expect(insertClientBinds).toMatchObject({
-        secondName: null,
-        firstSurname: null,
-        secondSurname: null,
-        birthday: null,
-        phoneNumber: null,
-        gender: null,
-        language: 'es',
-        terms: 0,
-      });
-    });
-
-    it('translates a duplicate email UNIQUE violation into ConflictException', async () => {
-      db.transaction.mockRejectedValue({ errorNum: 1, message: 'ORA-00001: unique constraint (UQ_CLIENTS_EMAIL) violated' });
-
-      await expect(
-        service.createWithLocalCredentials({ email: client.email, firstName: 'Ana' }, 'hash', 'salt'),
-      ).rejects.toThrow(ConflictException);
-    });
-
-    it('rethrows unrelated database errors', async () => {
-      db.transaction.mockRejectedValue(new Error('connection lost'));
-
-      await expect(
-        service.createWithLocalCredentials({ email: client.email, firstName: 'Ana' }, 'hash', 'salt'),
-      ).rejects.toThrow('connection lost');
-    });
-
-    it('passes all provided optional fields through to the insert', async () => {
-      conn.execute
-        .mockResolvedValueOnce({ outBinds: { id: [9] } })
-        .mockResolvedValueOnce({});
-      db.query.mockResolvedValue({ rows: [{ ...client, id: 9 }] });
-
-      await service.createWithLocalCredentials(
-        {
-          email: client.email,
-          firstName: 'Ana',
-          secondName: 'Maria',
-          firstSurname: 'Perez',
-          secondSurname: 'Mora',
-          birthday: '2000-05-10',
-          phoneNumber: '88881234',
-          gender: 'F',
-          language: 'en',
-          acceptedTerms: true,
-        },
-        'hash',
-        'salt',
-      );
-
-      const insertBinds = conn.execute.mock.calls[0][1];
-      expect(insertBinds).toMatchObject({
+      expect(repository.createClient).toHaveBeenCalledWith({
+        email: client.email,
         firstName: 'Ana',
-        secondName: 'Maria',
+        language: 'es',
+        passwordHash: 'hash',
+        salt: 'salt',
+      });
+      expect(result).toEqual({ ...client, id: 7 });
+      expect(db.transaction).not.toHaveBeenCalled();
+      expect(conn.execute).not.toHaveBeenCalled();
+      expect(repository.createClient.mock.invocationCallOrder[0]).toBeLessThan(
+        db.query.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('preserves optional fields, address, terms and explicit language', async () => {
+      const data = {
+        email: client.email,
+        firstName: 'Ana',
+        secondName: null,
         firstSurname: 'Perez',
         secondSurname: 'Mora',
         birthday: '2000-05-10',
         phoneNumber: '88881234',
         gender: 'F',
         language: 'en',
-        terms: 1,
+        acceptedTerms: true,
+        address: { districtId: 7, details: 'Casa azul' },
+      };
+      repository.createClient.mockResolvedValue(9);
+      db.query.mockResolvedValue({ rows: [{ ...client, id: 9 }] });
+      await service.createWithLocalCredentials(data, 'hash', 'salt');
+      expect(repository.createClient).toHaveBeenCalledWith({
+        ...data,
+        passwordHash: 'hash',
+        salt: 'salt',
       });
     });
+
+    it.each([
+      new ConflictException('Duplicate email'),
+      new Error('Connection lost'),
+    ])(
+      'propagates persistence errors without reading or retrying a client',
+      async (failure) => {
+        repository.createClient.mockRejectedValue(failure);
+        await expect(
+          service.createWithLocalCredentials(
+            { email: client.email, firstName: 'Ana' },
+            'hash',
+            'salt',
+          ),
+        ).rejects.toBe(failure);
+        expect(repository.createClient).toHaveBeenCalledTimes(1);
+        expect(db.query).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('findOrCreateSocial', () => {
@@ -224,9 +208,8 @@ describe('ClientsService', () => {
         .mockResolvedValueOnce({ rows: [] }) // findByExternal miss
         .mockResolvedValueOnce({ rows: [] }) // findByEmail miss
         .mockResolvedValueOnce({ rows: [{ ...client, id: 9 }] }); // findById after commit
-      conn.execute
-        .mockResolvedValueOnce({ outBinds: { id: [9] } }) // insertClient
-        .mockResolvedValueOnce({}); // external credentials insert
+      repository.insertClient.mockResolvedValue(9);
+      conn.execute.mockResolvedValue({});
 
       const result = await service.findOrCreateSocial({
         provider: 'GOOGLE',
@@ -238,11 +221,17 @@ describe('ClientsService', () => {
 
       expect(db.transaction).toHaveBeenCalled();
       expect(result).toEqual({ ...client, id: 9 });
+      expect(repository.insertClient).toHaveBeenCalledWith(
+        conn,
+        expect.objectContaining({ language: 'es' }),
+      );
+      expect(conn.execute).toHaveBeenCalledTimes(1);
+      expect(repository.createClient).not.toHaveBeenCalled();
     });
 
     it('rethrows non-UNIQUE errors when linking external credentials', async () => {
       db.query
-        .mockResolvedValueOnce({ rows: [] })   // findByExternal miss
+        .mockResolvedValueOnce({ rows: [] }) // findByExternal miss
         .mockResolvedValueOnce({ rows: [client] }) // findByEmail hit
         .mockRejectedValueOnce(new Error('connection lost')); // non-UNIQUE error
 
@@ -259,22 +248,21 @@ describe('ClientsService', () => {
 
     it('falls back to email prefix when firstName is empty and skips lastName split when absent', async () => {
       db.query
-        .mockResolvedValueOnce({ rows: [] })  // findByExternal miss
-        .mockResolvedValueOnce({ rows: [] })  // findByEmail miss
+        .mockResolvedValueOnce({ rows: [] }) // findByExternal miss
+        .mockResolvedValueOnce({ rows: [] }) // findByEmail miss
         .mockResolvedValueOnce({ rows: [{ ...client, id: 10 }] }); // findById after commit
-      conn.execute
-        .mockResolvedValueOnce({ outBinds: { id: [10] } }) // insertClient
-        .mockResolvedValueOnce({});  // external credentials insert
+      repository.insertClient.mockResolvedValue(10);
+      conn.execute.mockResolvedValue({});
 
       await service.findOrCreateSocial({
         provider: 'FACEBOOK',
         providerUserId: 'fb-1',
         email: 'fallback@example.com',
-        firstName: '',   // falsy → uses 'fallback' from email
-        lastName: '',    // falsy → [null, null]
+        firstName: '', // falsy → uses 'fallback' from email
+        lastName: '', // falsy → [null, null]
       });
 
-      const insertBinds = conn.execute.mock.calls[0][1];
+      const insertBinds = repository.insertClient.mock.calls[0][1];
       expect(insertBinds).toMatchObject({
         firstName: 'fallback',
         firstSurname: null,
