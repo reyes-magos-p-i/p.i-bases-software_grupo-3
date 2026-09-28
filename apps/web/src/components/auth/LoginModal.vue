@@ -10,8 +10,9 @@ const props = withDefaults(
     enabled?: boolean
     submitting?: boolean
     errorMessage?: string
+    retryAfterSeconds?: number
   }>(),
-  { mode: 'client', enabled: false, submitting: false, errorMessage: '' },
+  { mode: 'client', enabled: false, submitting: false, errorMessage: '', retryAfterSeconds: 0 },
 )
 const emit = defineEmits<{
   close: []
@@ -21,6 +22,7 @@ const emit = defineEmits<{
 const id = useId()
 const emailInput = useTemplateRef<HTMLInputElement>('email')
 const passwordInput = useTemplateRef<HTMLInputElement>('password')
+const modeSwitch = useTemplateRef<HTMLButtonElement>('modeSwitch')
 const feedback = useTemplateRef<HTMLElement>('feedback')
 const form = reactive({ email: '', password: '' })
 const touched = reactive({ email: false, password: false })
@@ -68,6 +70,7 @@ watch(
 )
 
 function close() {
+  if (props.submitting) return
   clearPassword()
   emit('close')
 }
@@ -78,8 +81,16 @@ function switchMode() {
   emit('switchMode', isClient.value ? 'employee' : 'client')
 }
 
+function markTouched(field: 'email' | 'password', event: FocusEvent) {
+  if (event.relatedTarget !== modeSwitch.value) touched[field] = true
+}
+
+function focusModeSwitch(event: PointerEvent) {
+  if (event.button === 0 && !props.submitting) modeSwitch.value?.focus()
+}
+
 function submit() {
-  if (props.submitting || !props.open) return
+  if (props.submitting || props.retryAfterSeconds > 0 || !props.open) return
   touched.email = true
   touched.password = true
   if (emailError.value) {
@@ -99,6 +110,7 @@ function submit() {
   <BaseModal
     :open="open"
     :title="isClient ? 'Iniciar sesión' : 'Inicio de sesión del personal'"
+    :close-disabled="submitting"
     @close="close"
   >
     <div class="login-content">
@@ -130,12 +142,13 @@ function submit() {
             :disabled="submitting"
             :aria-invalid="touched.email && !!emailError"
             :aria-describedby="touched.email && emailError ? `${id}-email-error` : undefined"
-            @blur="touched.email = true"
+            @blur="markTouched('email', $event)"
           />
           <p
-            v-if="touched.email && emailError"
             :id="`${id}-email-error`"
             class="field-error"
+            :class="{ 'field-error-hidden': !touched.email || !emailError }"
+            :aria-hidden="!touched.email || !emailError"
             aria-live="polite"
           >
             {{ emailError }}
@@ -159,7 +172,7 @@ function submit() {
               :aria-describedby="
                 touched.password && passwordError ? `${id}-password-error` : undefined
               "
-              @blur="touched.password = true"
+              @blur="markTouched('password', $event)"
             />
             <button
               type="button"
@@ -174,9 +187,10 @@ function submit() {
             </button>
           </div>
           <p
-            v-if="touched.password && passwordError"
             :id="`${id}-password-error`"
             class="field-error"
+            :class="{ 'field-error-hidden': !touched.password || !passwordError }"
+            :aria-hidden="!touched.password || !passwordError"
             aria-live="polite"
           >
             {{ passwordError }}
@@ -189,22 +203,27 @@ function submit() {
         <p v-if="errorMessage" ref="feedback" class="server-error" tabindex="-1" role="alert">
           {{ errorMessage }}
         </p>
+        <p v-if="retryAfterSeconds > 0 && !isClient" class="availability-note" role="status">
+          Puedes volver a intentarlo en {{ retryAfterSeconds }} segundos.
+        </p>
         <p v-if="!enabled" :id="`${id}-availability`" class="availability-note" role="status">
           El inicio de sesión estará disponible próximamente.
         </p>
         <button
           type="submit"
           class="login-submit"
-          :disabled="!enabled || submitting"
+          :disabled="!enabled || submitting || retryAfterSeconds > 0"
           :aria-describedby="!enabled ? `${id}-availability` : undefined"
         >
           {{ submitting ? 'Iniciando sesión…' : 'Iniciar sesión' }}
         </button>
       </form>
       <button
+        ref="modeSwitch"
         type="button"
         class="text-button switch-mode"
         :disabled="submitting"
+        @pointerdown="focusModeSwitch"
         @click="switchMode"
       >
         {{
@@ -234,7 +253,7 @@ function submit() {
 }
 .required-mark,
 .field-error {
-  color: #b42318;
+  color: var(--color-error);
 }
 .availability-note {
   margin: 0.5rem 0;
@@ -262,7 +281,7 @@ input {
   padding: 0.6rem 0.75rem;
 }
 input[aria-invalid='true'] {
-  border-color: #b42318;
+  border-color: var(--color-error);
 }
 input:focus-visible,
 button:focus-visible {
@@ -271,7 +290,12 @@ button:focus-visible {
 }
 .field-error {
   font-size: 0.875rem;
+  line-height: 1.5;
+  min-height: 1.5em;
   margin: 0.35rem 0 0;
+}
+.field-error-hidden {
+  visibility: hidden;
 }
 .password-control {
   position: relative;
@@ -332,9 +356,9 @@ button:focus-visible {
 }
 .server-error {
   padding: 0.75rem;
-  border: 1px solid #b42318;
+  border: 1px solid var(--color-error);
   border-radius: var(--radius-small);
-  color: #b42318;
+  color: var(--color-error);
   overflow-wrap: anywhere;
 }
 </style>

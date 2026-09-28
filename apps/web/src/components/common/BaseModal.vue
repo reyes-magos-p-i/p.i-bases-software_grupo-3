@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, useId, useTemplateRef, watch } from 'vue'
 
-const props = defineProps<{ open: boolean; title: string }>()
+const props = defineProps<{ open: boolean; title: string; closeDisabled?: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
 const titleId = useId()
 let opener: HTMLElement | null = null
 let restoreScroll: (() => void) | undefined
+
+function requestClose() {
+  if (!props.closeDisabled) emit('close')
+}
 
 function releasePage() {
   restoreScroll?.()
@@ -80,11 +84,17 @@ onBeforeUnmount(() => {
       class="app-modal-backdrop"
       :aria-labelledby="titleId"
       aria-modal="true"
-      @cancel.prevent="emit('close')"
-      @click.self="emit('close')"
+      @cancel.prevent="requestClose"
+      @click.self="requestClose"
     >
       <div v-if="open" class="app-modal-card">
-        <button class="app-modal-close" type="button" aria-label="Cerrar" @click="emit('close')">
+        <button
+          class="app-modal-close"
+          type="button"
+          aria-label="Cerrar"
+          :disabled="closeDisabled"
+          @click="requestClose"
+        >
           <i class="bi bi-x-lg"></i>
         </button>
         <h2 :id="titleId" class="app-modal-title">{{ title }}</h2>
