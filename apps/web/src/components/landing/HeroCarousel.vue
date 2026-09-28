@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import { computed,
-    onMounted, 
-    onUnmounted, 
-    ref } from 'vue'
-
-import hpImage from '@/assets/images/movies/hp.jpg'
-import lotrImage from '@/assets/images/movies/lotr.jpg'
-import scarfaceImage from '@/assets/images/movies/scarface.jpg'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { getMovieFunctions } from '../../services/movieFunctions'
+import placeholderImage from '../../assets/images/placeholder.svg'
 
 interface CarouselSlide {
   image: string
@@ -15,26 +10,7 @@ interface CarouselSlide {
   description: string
 }
 
-const slides: CarouselSlide[] = [
-  {
-    image: hpImage,
-    alt: 'Harry Potter: Las Reliquias de la Muerte',
-    title: 'Harry Potter: Las Reliquias de la Muerte',
-    description: 'Disponible próximamente en Cinetadel',
-  },
-  {
-    image: lotrImage,
-    alt: 'El Señor de los Anillos: El Retorno del Rey',
-    title: 'El Señor de los Anillos: El Retorno del Rey',
-    description: 'Ya disponible en cartelera',
-  },
-  {
-    image: scarfaceImage,
-    alt: 'Scarface',
-    title: 'Scarface',
-    description: 'Una experiencia que debes vivir en pantalla grande',
-  },
-]
+const slides = ref<CarouselSlide[]>([])
 
 const autoSlideInterval = 5000
 
@@ -52,7 +28,36 @@ function stopAutoSlide(): void {
   }
 }
 
-onMounted(() => {
+
+function setPlaceholderSlides(): void {
+  slides.value = [
+    {
+      image: placeholderImage,
+      alt: 'Cinetadel',
+      title: 'Cinetadel',
+      description: 'Disponible próximamente en Cinetadel',
+    },
+  ]
+}
+
+onMounted(async () => {
+  try {
+    const movies = await getMovieFunctions()
+
+    if (!movies?.length) {
+      setPlaceholderSlides()
+    } else {
+      slides.value = movies.map((movie: { title: string; posterImage: string }) => ({
+        image: `${import.meta.env.VITE_API_BASE_URL}image/${movie.posterImage}`,
+        alt: movie.title,
+        title: movie.title,
+        description: 'Disponible próximamente en Cinetadel',
+      }))
+    }
+  } catch {
+    setPlaceholderSlides()
+  }
+
   startAutoSlide()
 })
 
@@ -62,20 +67,31 @@ onUnmounted(() => {
 
 const currentIndex = ref(0)
 
-const currentSlide = computed(() => slides[currentIndex.value])
+const currentSlide = computed(() => slides.value[currentIndex.value])
 
 function nextSlide(): void {
-  currentIndex.value = (currentIndex.value + 1) % slides.length
+  if (!slides.value.length) return
+  currentIndex.value = (currentIndex.value + 1) % slides.value.length
 }
 
 function previousSlide(): void {
+  if (!slides.value.length) return
   currentIndex.value =
-    (currentIndex.value - 1 + slides.length) % slides.length
+    (currentIndex.value - 1 + slides.value.length) % slides.value.length
 }
 
 function selectSlide(index: number): void {
   currentIndex.value = index
 }
+
+function handleImageError(): void {
+  const slide = slides.value[currentIndex.value]
+
+  if (!slide || slide.image === placeholderImage) return
+
+  slide.image = placeholderImage
+}
+
 </script>
 
 <template>
@@ -96,6 +112,7 @@ function selectSlide(index: number): void {
       :src="currentSlide.image"
       :alt="currentSlide.alt"
       class="hero-image"
+      @error="handleImageError"
     />
 
     <div class="hero-overlay"></div>

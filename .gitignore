@@ -11,8 +11,6 @@ dist/
 build/
 coverage/
 
-# DB Wallet
-wallet/
 
 # Environment variables
 
