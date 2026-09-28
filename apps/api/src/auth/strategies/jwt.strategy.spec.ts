@@ -3,18 +3,23 @@ import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from './jwt.strategy';
 import { ClientsService } from '../../clients/clients.service';
+import { UsersRepository } from '../../users/users.repository';
+import { UserRole } from '../../users/enums/user-role.enum';
 
 describe('JwtStrategy', () => {
   let strategy: JwtStrategy;
   let clients: { findById: jest.Mock };
+  let users: { findEmployeeIdentityById: jest.Mock };
 
   beforeEach(async () => {
     clients = { findById: jest.fn() };
+    users = { findEmployeeIdentityById: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JwtStrategy,
         { provide: ClientsService, useValue: clients },
+        { provide: UsersRepository, useValue: users },
         {
           provide: ConfigService,
           useValue: { getOrThrow: jest.fn(() => 'mock-secret') },
@@ -25,9 +30,17 @@ describe('JwtStrategy', () => {
     strategy = module.get<JwtStrategy>(JwtStrategy);
   });
 
-  it('rejects a payload whose type is not client', async () => {
-    await expect(strategy.validate({ sub: 1, type: 'employee' })).rejects.toThrow(UnauthorizedException);
+  it.each([
+    null, undefined, [], 'token', 1, {}, { sub: 1 }, { type: 'employee' },
+    { sub: '1', type: 'employee' }, { sub: 0, type: 'employee' },
+    { sub: -1, type: 'employee' }, { sub: 1.5, type: 'employee' },
+    { sub: Number.MAX_SAFE_INTEGER + 1, type: 'employee' },
+    { sub: NaN, type: 'client' }, { sub: Infinity, type: 'client' },
+    { sub: 1, type: 'administrator' }, { sub: 1, type: null },
+  ])('rejects an invalid payload before accessing persistence: %p', async (payload) => {
+    await expect(strategy.validate(payload)).rejects.toThrow(UnauthorizedException);
     expect(clients.findById).not.toHaveBeenCalled();
+    expect(users.findEmployeeIdentityById).not.toHaveBeenCalled();
   });
 
   it('rejects when the client no longer exists', async () => {
@@ -41,5 +54,39 @@ describe('JwtStrategy', () => {
     clients.findById.mockResolvedValue(client);
 
     await expect(strategy.validate({ sub: 1, type: 'client' })).resolves.toEqual(client);
+    expect(clients.findById).toHaveBeenCalledWith(1);
+    expect(users.findEmployeeIdentityById).not.toHaveBeenCalled();
+  });
+
+  it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(
+    'uses the current database role %s instead of a role claim', async (role) => {
+      users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role });
+      await expect(strategy.validate({ sub: 21, type: 'employee', role: 'CLIENT' }))
+        .resolves.toEqual({ id: 21, role });
+      expect(users.findEmployeeIdentityById).toHaveBeenCalledWith(21);
+      expect(clients.findById).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a missing or invalid employee identity', async () => {
+    users.findEmployeeIdentityById.mockResolvedValue(null);
+    await expect(strategy.validate({ sub: 21, type: 'employee' })).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('reads employee identity on each validation so role changes are reflected', async () => {
+    const payload = { sub: 21, type: 'employee' };
+    users.findEmployeeIdentityById
+      .mockResolvedValueOnce({ id: 21, role: UserRole.ADMINISTRATOR })
+      .mockResolvedValueOnce({ id: 21, role: UserRole.EMPLOYEE });
+    await expect(strategy.validate(payload)).resolves.toHaveProperty('role', UserRole.ADMINISTRATOR);
+    await expect(strategy.validate(payload)).resolves.toHaveProperty('role', UserRole.EMPLOYEE);
+    expect(users.findEmployeeIdentityById).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['client', 'employee'])('propagates persistence failures for %s', async (type) => {
+    const failure = new Error('Database unavailable');
+    clients.findById.mockRejectedValue(failure);
+    users.findEmployeeIdentityById.mockRejectedValue(failure);
+    await expect(strategy.validate({ sub: 1, type })).rejects.toBe(failure);
   });
 });
