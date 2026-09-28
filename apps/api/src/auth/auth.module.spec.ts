@@ -39,6 +39,13 @@ describe('AuthModule', () => {
         DatabaseModule,
         AuthModule,
       ],
+      providers: [
+        {
+          provide: 'ORIGIN_GUARD_CONSUMER',
+          inject: [EmployeeSessionOriginGuard],
+          useFactory: (guard: EmployeeSessionOriginGuard) => guard,
+        },
+      ],
     })
       .overrideProvider(ConfigService)
       .useValue({
@@ -57,6 +64,9 @@ describe('AuthModule', () => {
   });
 
   it('wires AuthController, AuthService and ClientsService', () => {
+    expect(module.get('ORIGIN_GUARD_CONSUMER')).toBeInstanceOf(
+      EmployeeSessionOriginGuard,
+    );
     expect(module.get(AuthController)).toBeDefined();
     expect(module.get(AuthService)).toBeDefined();
     expect(module.get(ClientsService)).toBeDefined();

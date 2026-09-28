@@ -2,6 +2,7 @@ import {
   type MiddlewareConsumer,
   Module,
   type NestModule,
+  RequestMethod,
 } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { ConfigService } from '@nestjs/config';
@@ -46,9 +47,12 @@ import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.gua
     EmployeeSessionService,
     EmployeeSessionOriginGuard,
   ],
+  exports: [PassportModule, EmployeeSessionService, EmployeeSessionOriginGuard],
 })
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(cookieParser()).forRoutes(AuthController);
+    consumer
+      .apply(cookieParser())
+      .forRoutes({ path: '{*path}', method: RequestMethod.ALL });
   }
 }
