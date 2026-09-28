@@ -22,5 +22,16 @@ export class AuthController {
   }
 
   // TODO(Silvio): Google routes should be here.
-  // TODO(Diego): Facebook routes should be here. 
+  @Post('google')
+  google(@Body('code') code: string) {
+    console.log(code)
+
+  /*return {
+    success: true,
+    message: 'Backend received the Google code!'
+  };*/
+    return this.auth.googleLogin(code)
+  }
+
+  // TODO(Diego): Facebook routes should be here.
 }

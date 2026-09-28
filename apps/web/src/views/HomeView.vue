@@ -4,7 +4,8 @@ import AppFooter from '@/components/layout/AppFooter.vue'
 
 import HeroCarousel from '@/components/landing/HeroCarousel.vue'
 import MovieCatalog from '@/components/landing/MovieCatalog.vue'
-import GoogleButton from '@/components/Google/GoogleButton.vue'
+import CustomGoogleButton from '@/components/Google/CustomGoogleButton.vue';
+
 </script>
 
 <template>
@@ -17,7 +18,7 @@ import GoogleButton from '@/components/Google/GoogleButton.vue'
 
       <MovieCatalog />
     </div>
-
+  <CustomGoogleButton/>
   </main>
 
   <AppFooter />
