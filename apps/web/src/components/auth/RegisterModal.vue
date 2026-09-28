@@ -72,7 +72,6 @@ async function onSubmit() {
 </script>
 
 <template>
-  // Rebase the open prop to the BaseModal
   <BaseModal :open="open" title="Crear cuenta" @close="emit('close')">
     <SocialAuthButtons />
 
