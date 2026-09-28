@@ -2,23 +2,30 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
+import { EmployeeSessionService } from './employee-session.service';
+import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly session: EmployeeSessionService,
+  ) {}
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -26,13 +33,20 @@ export class AuthController {
   }
 
   @Post('employees/login')
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(ThrottlerGuard, EmployeeSessionOriginGuard)
+  @Header('Cache-Control', 'no-store')
   @HttpCode(HttpStatus.OK)
-  loginEmployee(@Body() dto: LoginDto): Promise<EmployeeLoginResult> {
-    return this.auth.loginEmployee(dto);
+  async loginEmployee(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<Pick<EmployeeLoginResult, 'user'>> {
+    const result = await this.auth.loginEmployee(dto);
+    this.session.write(response, result.accessToken);
+    return { user: result.user };
   }
 
   @Get('me')
+  @Header('Cache-Control', 'no-store')
   @UseGuards(AuthGuard('jwt'))
   me(@Req() req: Request) {
     return req.user;

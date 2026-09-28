@@ -1,14 +1,18 @@
 openapi: 3.0.3
 info:
   title: Cinetadel - Autenticación del personal
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Contrato implementado y probado dentro de AuthModule. El módulo todavía
     no está importado por AppModule, por lo que estas rutas no están disponibles
     en la aplicación desplegada. El login del personal ya incorpora limitación
     de solicitudes. Su activación e integración con la sesión del frontend
     corresponden a incrementos posteriores.
-    El transporte actual usa Authorization: Bearer; no establece cookies.
+    El login del personal establece una cookie HttpOnly. Bearer se conserva para
+    tokens existentes cuando no se envía la cookie del personal. Las rutas de este
+    contrato son internas de Nest: Nginx y Vite publican el prefijo /api y lo retiran
+    antes de reenviar a Nest. El navegador debe utilizar /api/auth/... para que
+    envíe la cookie, cuya ruta es /api.
 x-integration-status: module-tested-not-mounted
 paths:
   /auth/employees/login:
@@ -27,7 +31,20 @@ paths:
         La sexta solicitud inicia un bloqueo de 60 segundos; los reintentos durante
         el bloqueo no prolongan esa espera. Se responde 429 antes de consultar
         Oracle o verificar contraseñas. Cambiar el correo no reinicia el contador.
+        Exige un Origin exactamente igual al origen configurado en FRONTEND_URL.
+        Un origen ausente, inválido o diferente devuelve 403, salvo que el límite
+        ya se haya superado (429). No se utiliza Host ni Referer como alternativa.
+        El token se entrega solo en Set-Cookie, nunca en el JSON. Cookie y JWT
+        expiran a las 24 horas de la emisión; consultar /auth/me no renueva el plazo.
       security: []
+      parameters:
+        - in: header
+          name: Origin
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Origen exacto del frontend permitido, incluyendo esquema y puerto si corresponde.
       requestBody:
         required: true
         content:
@@ -49,20 +66,27 @@ paths:
                   writeOnly: true
       responses:
         "200":
-          description: Credenciales válidas; token y perfil del personal.
+          description: Credenciales válidas; perfil en JSON y sesión en cookie.
+          headers:
+            Set-Cookie:
+              description: |
+                cinetadel_employee_session contiene el JWT, con HttpOnly,
+                SameSite=Strict, Path=/api, Max-Age y Expires alineados con exp.
+                Sin Domain. Incluye Secure en HTTPS; solo desarrollo o pruebas
+                locales permiten HTTP. No debe almacenarse el token en JavaScript.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-store]
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties: false
-                required: [accessToken, user]
+                required: [user]
                 properties:
-                  accessToken:
-                    type: string
-                    description: |
-                      JWT con sub numérico, type=employee, iat y exp.
-                      La configuración actual establece una duración de 24 horas.
-                      No incluye el rol, la contraseña, el hash ni el salt.
                   user:
                     $ref: "#/components/schemas/EmployeeProfile"
         "400":
@@ -81,6 +105,26 @@ paths:
                 statusCode: 401
                 message: Correo o contraseña incorrectos
                 error: Unauthorized
+        "403":
+          description: Origin ausente, inválido o no autorizado; no se consultan credenciales.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [statusCode, message, error]
+                properties:
+                  statusCode:
+                    type: integer
+                    enum: [403]
+                  message:
+                    type: string
+                  error:
+                    type: string
+                    enum: [Forbidden]
+              example:
+                statusCode: 403
+                message: El origen de la solicitud no está autorizado.
+                error: Forbidden
         "429":
           description: Límite de solicitudes superado; esperar el tiempo indicado antes de reintentar.
           headers:
@@ -116,11 +160,22 @@ paths:
         no confía en roles enviados en el token. Rechaza empleados eliminados o
         con identidad inválida. Conserva la respuesta de perfil para tokens de
         cliente existentes; este incremento no incorpora el login de clientes.
+        La cookie solo acepta tokens type=employee. Una cookie junto a cualquier
+        cabecera Authorization devuelve 401, incluso si contienen el mismo token.
+        Una cookie inválida no permite recurrir a Bearer. La consulta no escribe
+        cookies ni renueva la sesión. No existe todavía un endpoint de logout
+        o revocación de tokens.
       security:
+        - employeeSession: []
         - bearerAuth: []
       responses:
         "200":
           description: Identidad vigente del personal o perfil existente del cliente.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-store]
           content:
             application/json:
               schema:
@@ -128,7 +183,7 @@ paths:
                   - $ref: "#/components/schemas/EmployeeIdentity"
                   - $ref: "#/components/schemas/ClientProfile"
         "401":
-          description: Token ausente, inválido o expirado, o identidad inexistente o inválida.
+          description: Credenciales ausentes, inválidas, expiradas o ambiguas, token de cliente en cookie del personal, o identidad inexistente o inválida.
           content:
             application/json:
               schema:
@@ -137,6 +192,11 @@ paths:
           $ref: "#/components/responses/InternalError"
 components:
   securitySchemes:
+    employeeSession:
+      type: apiKey
+      in: cookie
+      name: cinetadel_employee_session
+      description: Cookie HttpOnly exclusiva para JWT del personal.
     bearerAuth:
       type: http
       scheme: bearer
