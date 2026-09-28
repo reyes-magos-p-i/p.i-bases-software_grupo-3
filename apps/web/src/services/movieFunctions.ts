@@ -1,6 +1,6 @@
 export function stripTrailingSlashes(str: string) {
   let i = str.length;
-  while (i > 0 && str.charCodeAt(i - 1) === 47) i--;
+  while (i > 0 && str.codePointAt(i - 1) === 47) i--;
   return str.slice(0, i);
 }
 
