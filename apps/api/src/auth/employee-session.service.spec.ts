@@ -27,6 +27,20 @@ describe('EmployeeSessionService', () => {
 
   it.each([
     ['https://cinema.example', 'production', true],
+    ['http://localhost:5173', 'development', false],
+  ])('clears the same cookie scope for %s', (origin, mode, secure) => {
+    const clearCookie = jest.fn();
+    create(origin, mode).clear({ clearCookie } as unknown as Response);
+    expect(clearCookie).toHaveBeenCalledWith(EMPLOYEE_SESSION_COOKIE, {
+      httpOnly: true,
+      secure,
+      sameSite: 'strict',
+      path: '/api',
+    });
+  });
+
+  it.each([
+    ['https://cinema.example', 'production', true],
     ['https://159.54.166.238', 'production', true],
     ['https://localhost:5173/', 'development', true],
     ['http://localhost:5173', 'development', false],

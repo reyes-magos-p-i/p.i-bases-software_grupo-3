@@ -83,6 +83,82 @@ describe('Employee authentication (HTTP integration)', () => {
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
+  it('logs out the browser and rejects its next authenticated request', async () => {
+    const browser = request.agent(app.getHttpServer());
+    await browser
+      .post('/api/auth/employees/login')
+      .set('Origin', origin)
+      .send(login)
+      .expect(200);
+    await browser.get('/api/auth/me').expect(200);
+    db.query.mockClear();
+    const response = await browser
+      .post('/api/auth/employees/logout')
+      .set('Origin', origin)
+      .expect(204);
+    expect(response.text).toBe('');
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['set-cookie'][0]).toContain('Path=/api');
+    expect(response.headers['set-cookie'][0]).toContain(
+      'Expires=Thu, 01 Jan 1970',
+    );
+    await browser.get('/api/auth/me').expect(401);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('limits visitors independently behind a trusted local proxy and ignores a forged leftmost IP', async () => {
+    const adapter = app.getHttpAdapter().getInstance() as {
+      set: (name: string, value: string) => void;
+    };
+    adapter.set('trust proxy', 'loopback');
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await request(app.getHttpServer())
+        .post('/api/auth/employees/login')
+        .set('Origin', origin)
+        .set('X-Forwarded-For', '198.51.100.10')
+        .send({})
+        .expect(400);
+    }
+    await request(app.getHttpServer())
+      .post('/api/auth/employees/login')
+      .set('Origin', origin)
+      .set('X-Forwarded-For', '203.0.113.99, 198.51.100.10')
+      .send({})
+      .expect(429);
+    await request(app.getHttpServer())
+      .post('/api/auth/employees/login')
+      .set('Origin', origin)
+      .set('X-Forwarded-For', '198.51.100.11')
+      .send({})
+      .expect(400);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, 'invalid', 'expired'])(
+    'allows logout without a valid session (%p)',
+    async (cookie) => {
+      const call = request(app.getHttpServer())
+        .post('/api/auth/employees/logout')
+        .set('Origin', origin);
+      if (cookie) call.set('Cookie', `${EMPLOYEE_SESSION_COOKIE}=${cookie}`);
+      await call.expect(204);
+      expect(db.query).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, 'https://untrusted.example'])(
+    'rejects logout from an untrusted origin: %p',
+    async (source) => {
+      const call = request(app.getHttpServer()).post(
+        '/api/auth/employees/logout',
+      );
+      if (source) call.set('Origin', source);
+      const response = await call.expect(403);
+      expect(response.headers['set-cookie']).toBeUndefined();
+      expect(db.query).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     undefined,
     'null',
@@ -160,7 +236,7 @@ describe('Employee authentication (HTTP integration)', () => {
     });
     const recovered = await browser
       .get('/api/auth/me')
-      .expect(200, { id: 21, role: UserRole.ADMINISTRATOR });
+      .expect(200, { id: 21, role: UserRole.ADMINISTRATOR, firstName: 'Ana' });
     expect(recovered.headers['set-cookie']).toBeUndefined();
     db.query.mockResolvedValueOnce({ rows: [] });
     await browser.get('/api/auth/me').expect(401);
@@ -306,7 +382,7 @@ describe('Employee authentication (HTTP integration)', () => {
       await request(app.getHttpServer())
         .get('/api/auth/me')
         .auth(token, { type: 'bearer' })
-        .expect(200, { id: 21, role: UserRole.EMPLOYEE });
+        .expect(200, { id: 21, role: UserRole.EMPLOYEE, firstName: 'Ana' });
       await request(app.getHttpServer())
         .post('/api/auth/register')
         .send({})
@@ -351,7 +427,7 @@ describe('Employee authentication (HTTP integration)', () => {
       expect(response.text).not.toContain(password);
       const recovered = await browser
         .get('/api/auth/me')
-        .expect(200, { id: 21, role });
+        .expect(200, { id: 21, role, firstName: 'Ana' });
       expect(recovered.headers['set-cookie']).toBeUndefined();
       expect(recovered.headers['cache-control']).toBe('no-store');
       expect(db.query.mock.calls[1][1]).toMatchObject({
@@ -484,12 +560,15 @@ describe('Employee authentication (HTTP integration)', () => {
       await request(app.getHttpServer())
         .get('/api/auth/me')
         .auth(token, { type: 'bearer' })
-        .expect(200, { id: 21, role });
+        .expect(200, { id: 21, role, firstName: 'Ana' });
     }
     expect(db.query).toHaveBeenCalledTimes(2);
   });
 
-  it.each([{ rows: [] }, { rows: [{ EMPLOYEE_ID: 21, ROLE: 'CLIENT' }] }])(
+  it.each([
+    { rows: [] },
+    { rows: [{ EMPLOYEE_ID: 21, ROLE: 'CLIENT', FIRST_NAME: 'Ana' }] },
+  ])(
     'rejects a missing or invalid persisted employee identity: %p',
     async ({ rows }) => {
       db.query.mockResolvedValue({ rows });

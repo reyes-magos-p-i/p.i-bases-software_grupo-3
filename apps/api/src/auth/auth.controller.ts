@@ -54,6 +54,14 @@ export class AuthController {
     return req.user;
   }
 
+  @Post('employees/logout')
+  @UseGuards(EmployeeSessionOriginGuard)
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  logoutEmployee(@Res({ passthrough: true }) response: Response): void {
+    this.session.clear(response);
+  }
+
   // TODO(Silvio): Google routes should be here.
   // TODO(Diego): Facebook routes should be here.
   @Post('facebook')

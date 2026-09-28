@@ -9,12 +9,12 @@ import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.gua
 describe('AuthController', () => {
   let controller: AuthController;
   let auth: { register: jest.Mock; loginEmployee: jest.Mock };
-  let session: { write: jest.Mock };
+  let session: { write: jest.Mock; clear: jest.Mock };
   const response = {} as Response;
 
   beforeEach(async () => {
     auth = { register: jest.fn(), loginEmployee: jest.fn() };
-    session = { write: jest.fn() };
+    session = { write: jest.fn(), clear: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -77,5 +77,11 @@ describe('AuthController', () => {
     const req = { user: { id: 1, email: 'a@b.com' } } as never;
 
     expect(controller.me(req)).toEqual({ id: 1, email: 'a@b.com' });
+  });
+
+  it('logout clears the cookie without requiring credentials', () => {
+    expect(controller.logoutEmployee(response)).toBeUndefined();
+    expect(session.clear).toHaveBeenCalledWith(response);
+    expect(auth.loginEmployee).not.toHaveBeenCalled();
   });
 });
