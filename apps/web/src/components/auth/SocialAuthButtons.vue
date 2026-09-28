@@ -1,12 +1,21 @@
 <script setup lang="ts">
-
-import CustomGoogleButton from '../Google/CustomGoogleButton.vue';
+import { loginWithGoogle } from '@/services/authService';
 
 const emit = defineEmits<{ (e: 'google'): void; (e: 'facebook'): void }>()
 
 // TODO (Silvio): implementar el flujo OAuth de Google
-function onGoogle() {
+async function onGoogle() {
+  try{
+    await loginWithGoogle()
+
+    console.log('google login succesful')
+
+  }catch(error){
+    console.error('google login fauiles', error)
+
+  }
   emit('google')
+
 }
 
 // TODO (Diego): implementar el flujo OAuth de Facebook
@@ -17,9 +26,9 @@ function onFacebook() {
 
 <template>
   <div class="d-grid gap-2">
-    <CustomGoogleButton @click="onGoogle">
-
-    </CustomGoogleButton>
+    <button type="button" class="btn btn-light border"  @click="onGoogle">
+      <i class="bi bi-google me-2"></i>Registrarse con Google
+    </button>
 
     <button type="button" class="btn btn-light border" @click="onFacebook">
       <i class="bi bi-facebook me-2"></i>Registrarse con Facebook

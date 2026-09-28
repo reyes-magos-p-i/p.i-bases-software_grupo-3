@@ -1,13 +1,33 @@
 <script setup lang="ts">
-	// Callback function receives Google ccredential response
-	import type { CallbackTypes } from 'vue3-google-login';
+	// For curstom button
+	import { googleAuthCodeLogin } from 'vue3-google-login';
   import axios from 'axios'
-  import { ref } from 'vue';
+
 
   const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
-  const errorMessage = ref<string | null>(null)
 
-  const sendCodeToBackend = async (authCode:string)=> {
+
+  const login = async () => {
+    try {
+      const response = await googleAuthCodeLogin()
+
+      console.log('Google response:', response)
+
+      const result = await axios.post(
+        `${API_URL}/auth/google`,
+        {
+          code: response.code
+        }
+      )
+
+      console.log('Backend response:', result.data)
+
+    } catch (error) {
+      console.error('Google login failed:', error)
+    }
+  }
+
+/*  const sendCodeToBackend = async (authCode:string)=> {
     errorMessage.value=null
     try {
       const backendResponse = await axios.post(`${API_URL}/auth/google`, {
@@ -23,7 +43,6 @@
 
 
   }
-
   const callback: CallbackTypes.CodeResponseCallback = async (response) => {
     console.log("Authorisation code", response.code);
 
@@ -31,15 +50,14 @@
       sendCodeToBackend(response.code);
     }
 };
+*/
 
 </script>
 
 <template>
 	<div>
-		<GoogleLogin :callback="callback">
-      <button type="button" class="btn btn-light border" >
+    <button type="button" class="btn btn-light border"  @click="login">
       <i class="bi bi-google me-2"></i>Registrarse con Google
     </button>
-    </GoogleLogin>
 	</div>
 </template>
