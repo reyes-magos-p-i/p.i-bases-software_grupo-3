@@ -965,18 +965,18 @@ label {
 }
 
 .required-marker {
-  color: var(--bs-danger, #dc3545);
+  color: var(--color-error);
   font-weight: 700;
 }
 
 .field-error {
-  color: var(--bs-danger-text-emphasis, #b02a37);
+  color: var(--color-error);
   font-size: 0.875rem;
 }
 
 .form-control[aria-invalid='true'],
 .form-select[aria-invalid='true'] {
-  border-color: var(--bs-danger, #dc3545);
+  border-color: var(--color-error);
 }
 
 textarea {

@@ -1,6 +1,8 @@
 :root {
   /* Brand colors */
-  --color-primary: #36080C;
+  --color-primary: #36080c;
+  /* Feedback colors */
+  --color-error: #b42318;
   /* Neutral colors */
   --color-dark: #2f2f2f;
   --color-gray: #8c8c8c;
