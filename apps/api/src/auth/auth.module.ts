@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ClientsModule } from '../clients/clients.module';
 import { PasswordHashingModule } from '../common/security/password-hashing.module';
+import { UsersPersistenceModule } from '../users/users-persistence.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -12,6 +13,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   imports: [
     ClientsModule,
     PasswordHashingModule,
+    UsersPersistenceModule,
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
