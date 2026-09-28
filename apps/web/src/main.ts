@@ -12,17 +12,16 @@ import { applyLoginStatus } from './facebook-auth'
 const app = createApp(App)
 app.use(router)
 
-loadFacebookSdk()
-  .then((response) => {
-    applyLoginStatus(response)
+try {
+  const response = await loadFacebookSdk()
+  applyLoginStatus(response)
 
-    if (response.status === 'connected') {
-      // If it comes here, then user is already logged into Facebook and with us
-      // So i must send accessToken to backend
-    }
-    // if it comes here then user is not_authorized | unknown, so i must show login UI
-  })
-  .catch((err) => console.error('Facebook SDK failed', err))
-  .finally(() => {
-    app.mount('#app')
-  })
+  if (response.status === 'connected') {
+    // Already logged into Facebook and this app, send accessToken to the backend
+  }
+  // not_authorized or unknown, show the login UI
+} catch (err) {
+  console.error('Facebook SDK failed', err)
+}
+
+app.mount('#app')
