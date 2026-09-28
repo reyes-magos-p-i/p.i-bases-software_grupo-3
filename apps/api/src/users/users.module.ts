@@ -4,7 +4,8 @@ import { ClientsModule } from '../clients/clients.module';
 import { PasswordGenerator } from '../common/security/password-generator';
 import { PasswordHashingModule } from '../common/security/password-hashing.module';
 import { RandomPasswordGenerator } from '../common/security/random-password-generator.service';
-import { DevelopmentAdminGuard } from './guards/development-admin.guard';
+import { AdministratorGuard } from './guards/administrator.guard';
+import { AuthModule } from '../auth/auth.module';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { SmtpInitialCredentialsSender } from './notifications/smtp-initial-credentials-sender';
 import { CreateUserValidationPipe } from './pipes/create-user-validation.pipe';
@@ -15,6 +16,7 @@ import { UsersService } from './users.service';
 @Module({
   imports: [
     ConfigModule,
+    AuthModule,
     UsersPersistenceModule,
     PasswordHashingModule,
     ClientsModule,
@@ -22,7 +24,7 @@ import { UsersService } from './users.service';
   controllers: [UsersController],
   providers: [
     UsersService,
-    DevelopmentAdminGuard,
+    AdministratorGuard,
     CreateUserValidationPipe,
     { provide: PasswordGenerator, useClass: RandomPasswordGenerator },
     {
