@@ -96,6 +96,20 @@ describe('BaseModal', () => {
     expect(document.activeElement).toBe(page.get('.app-modal-close').element)
   })
 
+  it('blocks every user close path while disabled and restores closing afterward', async () => {
+    const wrapper = await render()
+    await wrapper.setProps({ closeDisabled: true })
+    expect(page.get<HTMLButtonElement>('.app-modal-close').element.disabled).toBe(true)
+    await page.get('.app-modal-close').trigger('click')
+    await page.get('dialog').trigger('click')
+    await page.get('dialog').trigger('cancel')
+    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(page.get('dialog').element.open).toBe(true)
+    await wrapper.setProps({ closeDisabled: false })
+    await page.get('dialog').trigger('cancel')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
   it('emits close on the button, backdrop and native Escape cancellation, not content clicks', async () => {
     const wrapper = await render()
     await page.get('.app-modal-card').trigger('click')
