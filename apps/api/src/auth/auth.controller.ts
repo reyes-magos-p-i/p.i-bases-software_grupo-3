@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Logger, Post, Req, UseGuards } from '@nestjs/common';
+import { Logger, Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import type { EmployeeLoginResult } from './types/employee-login-result.type';
 
 @Controller('auth')
 export class AuthController {
@@ -15,7 +17,11 @@ export class AuthController {
     return this.auth.register(dto);
   }
 
-  // TODO(Alejandro): POST /auth/login (clients & employees)
+  @Post('employees/login')
+  @HttpCode(HttpStatus.OK)
+  loginEmployee(@Body() dto: LoginDto): Promise<EmployeeLoginResult> {
+    return this.auth.loginEmployee(dto);
+  }
 
   @Get('me')
   @UseGuards(AuthGuard('jwt'))
