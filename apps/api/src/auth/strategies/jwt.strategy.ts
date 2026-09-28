@@ -20,17 +20,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: unknown) {
     if (
-      typeof payload !== 'object' || payload === null || Array.isArray(payload) ||
-      !('sub' in payload) || typeof payload.sub !== 'number' ||
-      !Number.isSafeInteger(payload.sub) || payload.sub < 1 ||
-      !('type' in payload) || (payload.type !== 'client' && payload.type !== 'employee')
+      typeof payload !== 'object' ||
+      payload === null ||
+      Array.isArray(payload) ||
+      !('sub' in payload) ||
+      typeof payload.sub !== 'number' ||
+      !Number.isSafeInteger(payload.sub) ||
+      payload.sub < 1 ||
+      !('type' in payload) ||
+      (payload.type !== 'client' && payload.type !== 'employee')
     ) {
       throw new UnauthorizedException();
     }
 
-    const user = payload.type === 'employee'
-      ? await this.users.findEmployeeIdentityById(payload.sub)
-      : await this.clients.findById(payload.sub);
+    const user =
+      payload.type === 'employee'
+        ? await this.users.findEmployeeIdentityById(payload.sub)
+        : await this.clients.findById(payload.sub);
     if (!user) throw new UnauthorizedException();
     return user;
   }

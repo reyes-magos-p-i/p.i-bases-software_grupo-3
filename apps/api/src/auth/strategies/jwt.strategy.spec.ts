@@ -31,38 +31,60 @@ describe('JwtStrategy', () => {
   });
 
   it.each([
-    null, undefined, [], 'token', 1, {}, { sub: 1 }, { type: 'employee' },
-    { sub: '1', type: 'employee' }, { sub: 0, type: 'employee' },
-    { sub: -1, type: 'employee' }, { sub: 1.5, type: 'employee' },
+    null,
+    undefined,
+    [],
+    'token',
+    1,
+    {},
+    { sub: 1 },
+    { type: 'employee' },
+    { sub: '1', type: 'employee' },
+    { sub: 0, type: 'employee' },
+    { sub: -1, type: 'employee' },
+    { sub: 1.5, type: 'employee' },
     { sub: Number.MAX_SAFE_INTEGER + 1, type: 'employee' },
-    { sub: NaN, type: 'client' }, { sub: Infinity, type: 'client' },
-    { sub: 1, type: 'administrator' }, { sub: 1, type: null },
-  ])('rejects an invalid payload before accessing persistence: %p', async (payload) => {
-    await expect(strategy.validate(payload)).rejects.toThrow(UnauthorizedException);
-    expect(clients.findById).not.toHaveBeenCalled();
-    expect(users.findEmployeeIdentityById).not.toHaveBeenCalled();
-  });
+    { sub: NaN, type: 'client' },
+    { sub: Infinity, type: 'client' },
+    { sub: 1, type: 'administrator' },
+    { sub: 1, type: null },
+  ])(
+    'rejects an invalid payload before accessing persistence: %p',
+    async (payload) => {
+      await expect(strategy.validate(payload)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(clients.findById).not.toHaveBeenCalled();
+      expect(users.findEmployeeIdentityById).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects when the client no longer exists', async () => {
     clients.findById.mockResolvedValue(null);
 
-    await expect(strategy.validate({ sub: 1, type: 'client' })).rejects.toThrow(UnauthorizedException);
+    await expect(strategy.validate({ sub: 1, type: 'client' })).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 
   it('returns the client when the token is valid and the client still exists', async () => {
     const client = { id: 1, email: 'ana@example.com' };
     clients.findById.mockResolvedValue(client);
 
-    await expect(strategy.validate({ sub: 1, type: 'client' })).resolves.toEqual(client);
+    await expect(
+      strategy.validate({ sub: 1, type: 'client' }),
+    ).resolves.toEqual(client);
     expect(clients.findById).toHaveBeenCalledWith(1);
     expect(users.findEmployeeIdentityById).not.toHaveBeenCalled();
   });
 
   it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(
-    'uses the current database role %s instead of a role claim', async (role) => {
+    'uses the current database role %s instead of a role claim',
+    async (role) => {
       users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role });
-      await expect(strategy.validate({ sub: 21, type: 'employee', role: 'CLIENT' }))
-        .resolves.toEqual({ id: 21, role });
+      await expect(
+        strategy.validate({ sub: 21, type: 'employee', role: 'CLIENT' }),
+      ).resolves.toEqual({ id: 21, role });
       expect(users.findEmployeeIdentityById).toHaveBeenCalledWith(21);
       expect(clients.findById).not.toHaveBeenCalled();
     },
@@ -70,7 +92,9 @@ describe('JwtStrategy', () => {
 
   it('rejects a missing or invalid employee identity', async () => {
     users.findEmployeeIdentityById.mockResolvedValue(null);
-    await expect(strategy.validate({ sub: 21, type: 'employee' })).rejects.toThrow(UnauthorizedException);
+    await expect(
+      strategy.validate({ sub: 21, type: 'employee' }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('reads employee identity on each validation so role changes are reflected', async () => {
@@ -78,15 +102,24 @@ describe('JwtStrategy', () => {
     users.findEmployeeIdentityById
       .mockResolvedValueOnce({ id: 21, role: UserRole.ADMINISTRATOR })
       .mockResolvedValueOnce({ id: 21, role: UserRole.EMPLOYEE });
-    await expect(strategy.validate(payload)).resolves.toHaveProperty('role', UserRole.ADMINISTRATOR);
-    await expect(strategy.validate(payload)).resolves.toHaveProperty('role', UserRole.EMPLOYEE);
+    await expect(strategy.validate(payload)).resolves.toHaveProperty(
+      'role',
+      UserRole.ADMINISTRATOR,
+    );
+    await expect(strategy.validate(payload)).resolves.toHaveProperty(
+      'role',
+      UserRole.EMPLOYEE,
+    );
     expect(users.findEmployeeIdentityById).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['client', 'employee'])('propagates persistence failures for %s', async (type) => {
-    const failure = new Error('Database unavailable');
-    clients.findById.mockRejectedValue(failure);
-    users.findEmployeeIdentityById.mockRejectedValue(failure);
-    await expect(strategy.validate({ sub: 1, type })).rejects.toBe(failure);
-  });
+  it.each(['client', 'employee'])(
+    'propagates persistence failures for %s',
+    async (type) => {
+      const failure = new Error('Database unavailable');
+      clients.findById.mockRejectedValue(failure);
+      users.findEmployeeIdentityById.mockRejectedValue(failure);
+      await expect(strategy.validate({ sub: 1, type })).rejects.toBe(failure);
+    },
+  );
 });
