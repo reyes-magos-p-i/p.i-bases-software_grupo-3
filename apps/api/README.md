@@ -25,6 +25,52 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Límite de solicitudes del login del personal
+
+`POST /auth/employees/login` utiliza `@nestjs/throttler` con un máximo de
+**5 solicitudes en 60 segundos por IP de origen**, configurado en `AuthModule`.
+Cuenta tanto los logins correctos como los intentos fallidos y las solicitudes
+que rechaza la validación del DTO. En IPv6 se conserva la agrupación por subred
+`/64` de la biblioteca para impedir el cambio de dirección dentro de la misma
+subred como forma de eludir el límite.
+
+La sexta solicitud devuelve `429` con un mensaje en español y la cabecera
+`Retry-After`, expresada en segundos. Inicia una espera de 60 segundos; los
+reintentos bloqueados no prolongan esa espera. El guard rechaza esas solicitudes
+antes de consultar Oracle o verificar el hash de la contraseña. Cambiar el correo
+no reinicia el contador. Personas que comparten una IP pública comparten el cupo.
+
+El guard se aplica únicamente al login del personal. No cambia los límites del
+registro ni de `/auth/me`. No bloquea cuentas ni modifica registros de Oracle.
+Las pruebas HTTP usan el módulo, el guard y el almacenamiento reales del
+limitador, con una aplicación nueva por prueba para aislar los contadores.
+
+### Condiciones para activar el login
+
+`AuthModule` todavía no está importado por `AppModule`: estas rutas permanecen
+sin activar en la aplicación principal. El contrato está en
+[employee-auth.openapi.yaml](../../docs/employee-auth.openapi.yaml).
+
+El almacenamiento del limitador es **local a cada proceso**. Sus contadores se
+pierden al reiniciar y no se comparten entre procesos o réplicas. Esta protección
+no sustituye límites globales de carga ni limita hashes simultáneos entre IP
+distintas. Antes de activar el login en producción:
+
+- Confirmar cuántos procesos o réplicas atienden peticiones. Si hay varios,
+  preparar almacenamiento compartido o una protección equivalente en el punto
+  de entrada; no considerar este contador como un límite global.
+- Verificar los proxies y la ruta de acceso al backend. El guard usa `req.ip` de
+  Express; actualmente no se configura `trust proxy`. Detrás de un proxy, las
+  peticiones pueden compartir la IP del proxy y consumir el mismo cupo.
+- Configurar la confianza exclusivamente para los proxies comprobados, con
+  cabeceras de origen controladas por ellos. No aceptar `X-Forwarded-For` o
+  `X-Real-IP` arbitrarios ni activar `trust proxy: true` sin verificar la topología.
+- Verificar por HTTP el límite y la IP efectiva en el despliegue. La configuración
+  del servidor y el número de procesos no se han confirmado desde el repositorio.
+
+Este incremento no modifica el proxy, systemd, la base de datos ni la duración o
+el transporte de los JWT. Referencia: [limitación de solicitudes en NestJS](https://docs.nestjs.com/security/rate-limiting).
+
 ## Project setup
 
 ```bash
