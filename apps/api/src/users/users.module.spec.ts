@@ -10,6 +10,8 @@ jest.mock('nodemailer', () => ({
 
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { EMPLOYEE_SESSION_COOKIE } from '../auth/employee-session.service';
 import { Test } from '@nestjs/testing';
 import nodemailer, {
   type Mail,
@@ -29,6 +31,8 @@ import { SmtpInitialCredentialsSender } from './notifications/smtp-initial-crede
 
 describe('UsersModule (application HTTP integration)', () => {
   let app: INestApplication<App>;
+  let browser: ReturnType<typeof request.agent>;
+  const origin = 'http://localhost:5173';
   let settings: Record<string, unknown>;
   let operations: string[];
   const sendMail = jest.fn();
@@ -72,8 +76,8 @@ describe('UsersModule (application HTTP integration)', () => {
     operations = [];
     settings = {
       NODE_ENV: 'development',
-      DEV_ADMIN_ENABLED: 'true',
-      DEV_ADMIN_EMPLOYEE_ID: '21',
+      FRONTEND_URL: origin,
+      JWT_SECRET: 'application-test-secret',
       SMTP_HOST: 'smtp.example.com',
       SMTP_PORT: '587',
       SMTP_SECURE: 'false',
@@ -97,7 +101,7 @@ describe('UsersModule (application HTTP integration)', () => {
         return Promise.resolve({ rows: [{ schema: 'TEST' }] });
       if (sql.startsWith('SELECT EMPLOYEE_ID')) {
         return Promise.resolve({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR' }],
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
         });
       }
       if (sql.startsWith('SELECT 1')) return Promise.resolve({ rows: [] });
@@ -141,6 +145,13 @@ describe('UsersModule (application HTTP integration)', () => {
       }),
     );
     await app.init();
+    browser = request
+      .agent(app.getHttpServer())
+      .set('Origin', origin)
+      .set(
+        'Cookie',
+        `${EMPLOYEE_SESSION_COOKIE}=${app.get(JwtService).sign({ sub: 21, type: 'employee' })}`,
+      );
     jest.clearAllMocks();
   });
 
@@ -154,7 +165,7 @@ describe('UsersModule (application HTTP integration)', () => {
       const hash = jest.spyOn(app.get(PasswordHasher), 'hash');
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR' }],
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
         })
         .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
         .mockResolvedValueOnce({
@@ -167,9 +178,7 @@ describe('UsersModule (application HTTP integration)', () => {
           rows: [{ BRANCH_ID: 1, NAME: 'Cinépolis Multiplaza del Este' }],
         });
 
-      const response = await request(app.getHttpServer())
-        .get('/users/creation-options')
-        .expect(200);
+      const response = await browser.get('/users/creation-options').expect(200);
       expect(response.body).toEqual({
         provinces: [{ id: 1, label: 'San José' }],
         cantons: [{ id: 19, label: 'Curridabat', provinceId: 1 }],
@@ -194,24 +203,21 @@ describe('UsersModule (application HTTP integration)', () => {
       hash.mockRestore();
     });
 
-    it('denies access outside development before any Oracle query', async () => {
-      settings.NODE_ENV = 'production';
+    it('denies missing authentication before any Oracle query', async () => {
       await request(app.getHttpServer())
         .get('/users/creation-options')
-        .expect(403);
+        .expect(401);
       expect(pool.getConnection).not.toHaveBeenCalled();
     });
 
     it('does not return partial catalogs if a later query fails', async () => {
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR' }],
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
         })
         .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
         .mockRejectedValueOnce(new Error('Private Oracle catalog error'));
-      const response = await request(app.getHttpServer())
-        .get('/users/creation-options')
-        .expect(500);
+      const response = await browser.get('/users/creation-options').expect(500);
       expect(response.body).toEqual({
         statusCode: 500,
         message: 'Internal server error',
@@ -229,13 +235,75 @@ describe('UsersModule (application HTTP integration)', () => {
     );
   });
 
+  it('logs in through the mounted auth module and creates only with the authenticated cookie', async () => {
+    const password = 'Integration password';
+    const { passwordHash } = await app.get(PasswordHasher).hash(password);
+    const execute = connection.execute.getMockImplementation()!;
+    connection.execute.mockImplementation((sql: string, ...args: unknown[]) => {
+      if (sql.startsWith('SELECT e.EMPLOYEE_ID'))
+        return Promise.resolve({
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              EMAIL: 'staff@example.com',
+              FIRST_NAME: 'Ana',
+              SECOND_NAME: null,
+              FIRST_SURNAME: 'Solano',
+              SECOND_SURNAME: 'Rojas',
+              CREDENTIALS_EMPLOYEE_ID: 21,
+              PASSWORD_HASH: passwordHash,
+            },
+          ],
+        });
+      return execute(sql, ...args);
+    });
+    const response = await request(app.getHttpServer())
+      .post('/auth/employees/login')
+      .set('Origin', origin)
+      .send({ email: 'staff@example.com', password })
+      .expect(200);
+    expect(response.body).not.toHaveProperty('accessToken');
+    const cookie = (
+      response.headers['set-cookie'] as unknown as string[]
+    )[0].split(';')[0];
+    // Nest receives paths without /api after proxy rewriting, so forward the browser cookie explicitly.
+    const authenticated = request
+      .agent(app.getHttpServer())
+      .set('Cookie', cookie)
+      .set('Origin', origin);
+    await authenticated
+      .get('/auth/me')
+      .expect(200, { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' });
+    await authenticated.post('/users').send(client).expect(201);
+    const calls = connection.execute.mock.calls.length;
+    await request(app.getHttpServer()).post('/users').send(client).expect(401);
+    expect(connection.execute).toHaveBeenCalledTimes(calls);
+  });
+
+  it('uses the current role rather than role claims or development flags', async () => {
+    settings.DEV_ADMIN_ENABLED = 'true';
+    settings.DEV_ADMIN_EMPLOYEE_ID = '21';
+    const cookie = `${EMPLOYEE_SESSION_COOKIE}=${app.get(JwtService).sign({ sub: 21, type: 'employee', role: 'ADMINISTRATOR' })}`;
+    connection.execute.mockResolvedValueOnce({
+      rows: [{ EMPLOYEE_ID: 21, ROLE: 'EMPLOYEE', FIRST_NAME: 'Ana' }],
+    });
+    await request(app.getHttpServer())
+      .post('/users')
+      .set('Cookie', cookie)
+      .set('Origin', origin)
+      .send({ ...employee, role: 'ADMINISTRATOR' })
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/users/creation-options')
+      .expect(401);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
   it.each([client, employee, { ...employee, role: 'ADMINISTRATOR' }])(
     'creates a $role through the registered route and sends credentials after commit',
     async (body) => {
-      const response = await request(app.getHttpServer())
-        .post('/users')
-        .send(body)
-        .expect(201);
+      const response = await browser.post('/users').send(body).expect(201);
       expect(response.body).toEqual({
         id: body.role === 'CLIENT' ? 43 : 42,
         role: body.role,
@@ -270,18 +338,17 @@ describe('UsersModule (application HTTP integration)', () => {
     },
   );
 
-  it('denies production requests before acquiring a connection', async () => {
-    settings.NODE_ENV = 'production';
-    await request(app.getHttpServer()).post('/users').send(client).expect(403);
+  it('denies unauthenticated requests before acquiring a connection', async () => {
+    await request(app.getHttpServer()).post('/users').send(client).expect(401);
     expect(pool.getConnection).not.toHaveBeenCalled();
     expect(sendMail).not.toHaveBeenCalled();
   });
 
   it('denies employees even if the requested account is an administrator', async () => {
     connection.execute.mockResolvedValueOnce({
-      rows: [{ EMPLOYEE_ID: 21, ROLE: 'EMPLOYEE' }],
+      rows: [{ EMPLOYEE_ID: 21, ROLE: 'EMPLOYEE', FIRST_NAME: 'Ana' }],
     });
-    await request(app.getHttpServer())
+    await browser
       .post('/users')
       .send({ ...employee, role: 'ADMINISTRATOR' })
       .expect(403);
@@ -290,7 +357,7 @@ describe('UsersModule (application HTTP integration)', () => {
   });
 
   it('rejects invalid data before any inserts or emails', async () => {
-    await request(app.getHttpServer())
+    await browser
       .post('/users')
       .send({ ...client, email: 'invalid' })
       .expect(400);
@@ -300,14 +367,11 @@ describe('UsersModule (application HTTP integration)', () => {
   it('rolls back persistence failures and never sends credentials', async () => {
     connection.execute
       .mockResolvedValueOnce({
-        rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR' }],
+        rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
       })
       .mockResolvedValueOnce({ rowsAffected: 1, outBinds: { addressId: [55] } })
       .mockRejectedValueOnce(new Error('Private Oracle details'));
-    const response = await request(app.getHttpServer())
-      .post('/users')
-      .send(employee)
-      .expect(500);
+    const response = await browser.post('/users').send(employee).expect(500);
     expect(response.body).toEqual({
       statusCode: 500,
       message: 'Internal server error',
@@ -319,10 +383,7 @@ describe('UsersModule (application HTTP integration)', () => {
 
   it('returns 502 after commit when SMTP fails, without recreating the account or retrying email', async () => {
     sendMail.mockRejectedValue(new Error('Private SMTP details'));
-    const response = await request(app.getHttpServer())
-      .post('/users')
-      .send(client)
-      .expect(502);
+    const response = await browser.post('/users').send(client).expect(502);
     expect(response.body.message).toBe(
       'El usuario fue creado, pero no se pudo enviar el correo con sus credenciales.',
     );
@@ -333,7 +394,7 @@ describe('UsersModule (application HTTP integration)', () => {
   });
 
   it('persists an administrative client address without asserting terms acceptance', async () => {
-    await request(app.getHttpServer())
+    await browser
       .post('/users')
       .send({ ...client, address: { districtId: 102, details: 'Casa azul' } })
       .expect(201);
@@ -364,10 +425,7 @@ describe('UsersModule (application HTTP integration)', () => {
       }
       return execute(sql, ...args);
     });
-    const response = await request(app.getHttpServer())
-      .post('/users')
-      .send(client)
-      .expect(409);
+    const response = await browser.post('/users').send(client).expect(409);
     expect(response.text).not.toContain('ORA-00001');
     expect(connection.rollback).toHaveBeenCalledTimes(1);
     expect(connection.commit).not.toHaveBeenCalled();
