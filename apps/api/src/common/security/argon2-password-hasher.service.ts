@@ -28,8 +28,8 @@ export class Argon2PasswordHasher extends PasswordHasher {
       );
     });
 
-    const salt = saltBytes.toString('base64').replace(/=+$/, '');
-    const encodedHash = derivedKey.toString('base64').replace(/=+$/, '');
+    const salt = saltBytes.toString('base64').replaceAll('=', '');
+    const encodedHash = derivedKey.toString('base64').replaceAll('=', '');
     const { memory, passes, parallelism } = ARGON2_PARAMETERS;
 
     return {

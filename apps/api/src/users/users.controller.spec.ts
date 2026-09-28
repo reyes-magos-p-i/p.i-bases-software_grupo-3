@@ -81,6 +81,10 @@ describe('UsersController (HTTP integration)', () => {
       );
   });
 
+  afterAll(async () => {
+    await app.close();
+  });
+
   describe('GET /users/creation-options', () => {
     it('returns all catalogs for an authorized administrator', async () => {
       const options = {
@@ -144,10 +148,6 @@ describe('UsersController (HTTP integration)', () => {
       });
       expect(service.create).not.toHaveBeenCalled();
     });
-  });
-
-  afterAll(async () => {
-    await app.close();
   });
 
   it.each([
