@@ -1,38 +1,38 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-import { getMovies } from '@/services/movie.service'
 import type { Movie } from '@/types/movie'
-
+import { getMovieFunctions, stripTrailingSlashes } from '@/services/movieFunctions'
+import placeholderImage from '../../assets/images/placeholder.svg'
+const imagesBaseUrl = `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image`
 const search = ref('')
-
 const movies = ref<Movie[]>([])
-
 const isLoading = ref(true)
 const errorMessage = ref('')
 
+function handleImageError(event: Event): void {
+  const img = event.target as HTMLImageElement
+
+  if (img.src === placeholderImage) return
+
+  img.src = placeholderImage
+}
+
 const filteredMovies = computed(() => {
-  const normalizedSearch = search.value
-    .trim()
-    .toLocaleLowerCase()
+  const normalizedSearch = search.value.trim().toLocaleLowerCase()
 
   if (!normalizedSearch) {
     return movies.value
   }
 
-  return movies.value.filter((movie) =>
-    movie.title
-      .toLocaleLowerCase()
-      .includes(normalizedSearch),
-  )
+  return movies.value.filter((movie) => movie.title.toLocaleLowerCase().includes(normalizedSearch))
 })
 
 async function loadMovies(): Promise<void> {
   try {
-    movies.value = await getMovies()
+    movies.value = await getMovieFunctions()
   } catch {
-    errorMessage.value =
-      'No fue posible cargar las películas.'
+    errorMessage.value = 'No fue posible cargar las películas.'
   } finally {
     isLoading.value = false
   }
@@ -46,12 +46,7 @@ onMounted(() => {
 <template>
   <section class="movie-catalog">
     <div class="search-container">
-      <label
-        for="movie-search"
-        class="visually-hidden"
-      >
-        Buscar película
-      </label>
+      <label for="movie-search" class="visually-hidden"> Buscar película </label>
 
       <input
         id="movie-search"
@@ -60,39 +55,22 @@ onMounted(() => {
         placeholder="Busca tu película favorita..."
       />
 
-      <i
-        class="bi bi-search"
-        aria-hidden="true"
-      ></i>
+      <i class="bi bi-search" aria-hidden="true"></i>
     </div>
 
-    <p
-      v-if="isLoading"
-      class="status-message"
-    >
-      Cargando películas...
-    </p>
+    <p v-if="isLoading" class="status-message">Cargando películas...</p>
 
-    <p
-      v-else-if="errorMessage"
-      class="status-message error-message"
-    >
+    <p v-else-if="errorMessage" class="status-message error-message">
       {{ errorMessage }}
     </p>
 
-    <div
-      v-else-if="filteredMovies.length"
-      class="movie-grid"
-    >
-      <article
-        v-for="movie in filteredMovies"
-        :key="movie.id"
-        class="movie-card"
-      >
+    <div v-else-if="filteredMovies.length" class="movie-grid">
+      <article v-for="movie in filteredMovies" :key="movie.title" class="movie-card">
         <img
-          :src="movie.posterUrl"
+          :src="`${imagesBaseUrl}/${movie.posterImage}`"
           :alt="movie.title"
           class="movie-poster"
+          @error="handleImageError"
         />
 
         <h3>
@@ -101,12 +79,7 @@ onMounted(() => {
       </article>
     </div>
 
-    <p
-      v-else
-      class="status-message"
-    >
-      No encontramos películas que coincidan con tu búsqueda.
-    </p>
+    <p v-else class="status-message">No encontramos películas que coincidan con tu búsqueda.</p>
   </section>
 </template>
 
@@ -160,8 +133,7 @@ onMounted(() => {
 .movie-grid {
   display: grid;
 
-  grid-template-columns:
-    repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
 
   gap: 28px 24px;
 }

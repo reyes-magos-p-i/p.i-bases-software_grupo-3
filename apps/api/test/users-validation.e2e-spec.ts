@@ -82,6 +82,7 @@ describe('Compiled user creation validation', () => {
       .useValue(repository)
       .compile();
     app = module.createNestApplication({ logger: false });
+    app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -118,7 +119,7 @@ describe('Compiled user creation validation', () => {
     'accepts a valid $role through both pipes in the compiled application',
     async (body) => {
       await browser
-        .post('/users')
+        .post('/api/users')
         .send(body)
         .expect(201, { id: 42, role: body.role, email: body.email });
       expect(service.create).toHaveBeenCalledTimes(1);
@@ -134,7 +135,7 @@ describe('Compiled user creation validation', () => {
     { ...employee, address: { districtId: '7' } },
     { ...client, role: 'UNKNOWN' },
   ])('rejects invalid input before persistence: %p', async (body) => {
-    const response = await browser.post('/users').send(body).expect(400);
+    const response = await browser.post('/api/users').send(body).expect(400);
     expect(response.body.error).toBe('Solicitud inválida');
     expect(service.create).not.toHaveBeenCalled();
   });
@@ -144,7 +145,7 @@ describe('Compiled user creation validation', () => {
     { ...employee, passwordHash: 'not-allowed' },
     { ...employee, address: { districtId: 7, extra: 'not-allowed' } },
   ])('still rejects unexpected fields: %p', async (body) => {
-    const response = await browser.post('/users').send(body).expect(400);
+    const response = await browser.post('/api/users').send(body).expect(400);
     expect(response.body.message).toEqual([
       'La solicitud contiene campos no permitidos.',
     ]);
@@ -153,7 +154,7 @@ describe('Compiled user creation validation', () => {
 
   it('still rejects unauthenticated creation', async () => {
     await request(app.getHttpServer())
-      .post('/users')
+      .post('/api/users')
       .set('Origin', origin)
       .send(client)
       .expect(401);
@@ -166,7 +167,7 @@ describe('Compiled user creation validation', () => {
       role: 'EMPLOYEE',
       firstName: 'Ana',
     });
-    await browser.post('/users').send(client).expect(403);
+    await browser.post('/api/users').send(client).expect(403);
     expect(service.create).not.toHaveBeenCalled();
   });
 });
