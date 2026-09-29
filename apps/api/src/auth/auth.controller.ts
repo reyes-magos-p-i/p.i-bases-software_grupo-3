@@ -24,7 +24,7 @@ export class AuthController {
   // TODO(Silvio): Google routes should be here.
   @Post('google')
   google(@Body('code') code: string) {
-    console.log(code)
+    //console.log(code)
 
     return this.auth.googleLogin(code)
   }
