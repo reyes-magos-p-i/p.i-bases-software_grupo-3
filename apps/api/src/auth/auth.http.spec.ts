@@ -581,10 +581,14 @@ describe('Employee authentication (HTTP integration)', () => {
 
   it('reports identity lookup failures as internal errors rather than invalid credentials', async () => {
     db.query.mockRejectedValue(new Error('Private Oracle detail'));
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .get('/api/auth/me')
       .auth(jwt.sign({ sub: 21, type: 'employee' }), { type: 'bearer' })
-      .expect(500, { statusCode: 500, message: 'Internal server error' });
+      .expect(500);
+    expect(response.body).toEqual({
+      statusCode: 500,
+      message: 'Internal server error',
+    });
   });
 
   it('preserves client token validation and the existing client profile', async () => {

@@ -1,11 +1,14 @@
 import type { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import type { CreateClientDto } from '../src/users/dto/create-client.dto';
 import type { CreateEmployeeDto } from '../src/users/dto/create-employee.dto';
 
 // Load the build without Jest's transformer to exercise production decorator metadata.
-const runtime = process.getBuiltinModule('module').createRequire(__filename);
+const runtime = process
+  .getBuiltinModule('node:module')
+  .createRequire(__filename);
 const { Test } = runtime('@nestjs/testing') as typeof import('@nestjs/testing');
 const { ValidationPipe } = runtime(
   '@nestjs/common',
@@ -141,8 +144,8 @@ describe('Compiled user creation validation', () => {
   });
 
   it.each([
-    { ...client, password: 'not-allowed' },
-    { ...employee, passwordHash: 'not-allowed' },
+    { ...client, password: randomUUID() },
+    { ...employee, passwordHash: randomUUID() },
     { ...employee, address: { districtId: 7, extra: 'not-allowed' } },
   ])('still rejects unexpected fields: %p', async (body) => {
     const response = await browser.post('/api/users').send(body).expect(400);
