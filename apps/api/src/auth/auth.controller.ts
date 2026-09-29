@@ -26,10 +26,6 @@ export class AuthController {
   google(@Body('code') code: string) {
     console.log(code)
 
-  /*return {
-    success: true,
-    message: 'Backend received the Google code!'
-  };*/
     return this.auth.googleLogin(code)
   }
 

@@ -7,6 +7,7 @@ import { ClientsService } from '../clients/clients.service';
 import { DatabaseService } from '../database/database.service';
 import { DatabaseModule } from '../database/database.module';
 
+
 describe('AuthModule', () => {
   let module: TestingModule;
 
