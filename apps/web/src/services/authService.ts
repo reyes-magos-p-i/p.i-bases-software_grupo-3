@@ -3,7 +3,6 @@ import { getApi } from '@/services/api'
 import type { RegisterPayload } from '@/types/client'
 //for login with google
 import { googleAuthCodeLogin } from 'vue3-google-login'
-import axios from 'axios'
 
 export async function registerUser(payload: RegisterPayload): Promise<void> {
   const api = getApi()
