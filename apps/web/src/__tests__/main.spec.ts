@@ -54,4 +54,36 @@ describe('Application startup with Facebook', () => {
     expect(log).toHaveBeenCalledWith('Facebook SDK failed', failure)
     expect(mocks.apply).not.toHaveBeenCalled()
   })
+
+  it('keeps the portal mounted when SDK loading throws synchronously', async () => {
+    const failure = new Error('SDK initialization failed')
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.load.mockImplementation(() => {
+      throw failure
+    })
+
+    await import('../main')
+    await flushPromises()
+
+    expect(mocks.mount).toHaveBeenCalledExactlyOnceWith('#app')
+    expect(log).toHaveBeenCalledWith('Facebook SDK failed', failure)
+    expect(mocks.apply).not.toHaveBeenCalled()
+  })
+
+  it('keeps the portal mounted when applying Facebook status fails', async () => {
+    const response = { status: 'connected' }
+    const failure = new Error('Status update failed')
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.load.mockResolvedValue(response)
+    mocks.apply.mockImplementation(() => {
+      throw failure
+    })
+
+    await import('../main')
+    await flushPromises()
+
+    expect(mocks.mount).toHaveBeenCalledExactlyOnceWith('#app')
+    expect(mocks.apply).toHaveBeenCalledExactlyOnceWith(response)
+    expect(log).toHaveBeenCalledWith('Facebook SDK failed', failure)
+  })
 })
