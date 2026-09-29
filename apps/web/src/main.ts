@@ -6,8 +6,8 @@ import './styles/main.css'
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
-//VUE3 google lib copyright devbaji "https://github.com/devbaji/vue3-google-login"
 import vue3GoogleLogin from 'vue3-google-login'
+import { initializeFacebook } from './services/facebook-initialization.service'
 
 const app = createApp(App)
 
@@ -16,7 +16,7 @@ app.use(vue3GoogleLogin, {
 })
 
 
-import { initializeFacebook } from './services/facebook-initialization.service'
+
 
 
 app.use(router)

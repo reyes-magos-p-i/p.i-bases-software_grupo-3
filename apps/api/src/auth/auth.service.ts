@@ -108,7 +108,7 @@ export class AuthService {
       const idToken = tokens.id_token;
 
       if (!idToken){
-        throw new ConflictException('unable to acquire toke from google')
+        throw new ConflictException('unable to acquire token from google')
 
       }
 
@@ -119,7 +119,7 @@ export class AuthService {
       });
 
       const payload = ticket.getPayload();
-      if(!payload || !payload.email){
+      if(!payload?.email){
         throw new ConflictException('unable to verify with google or email not valid')
 
       }
