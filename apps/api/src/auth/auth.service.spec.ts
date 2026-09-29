@@ -12,7 +12,7 @@ jest.mock('argon2');
 jest.mock('google-auth-library', () => ({
   OAuth2Client: jest.fn(),
 }));
-const hasher = { hash: jest.fn() };
+
 import { UsersRepository } from '../users/users.repository';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { EmployeeWithLocalCredentials } from '../users/types/employee-with-local-credentials.type';
