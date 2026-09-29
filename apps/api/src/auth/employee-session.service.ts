@@ -20,7 +20,8 @@ export class EmployeeSessionService {
     const mode = config.get<unknown>('NODE_ENV');
     let url: URL;
     try {
-      if (typeof configuredOrigin !== 'string') throw new Error();
+      if (typeof configuredOrigin !== 'string')
+        throw new Error('FRONTEND_URL must be a string.');
       url = new URL(configuredOrigin);
     } catch {
       throw new Error('FRONTEND_URL must contain a valid frontend origin.');
