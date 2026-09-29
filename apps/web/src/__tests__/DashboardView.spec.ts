@@ -1,9 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
-import DashboardPreview from '@/views/DashboardPreview.vue'
+import DashboardView from '@/views/DashboardView.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
+import { nextTick } from 'vue'
+import {
+  employeeSession,
+  closeEmployeeSession,
+  invalidateEmployeeSession,
+  restoreEmployeeSession,
+} from '@/services/employee-session.service'
 import type { UserCreationOptions } from '@/types/user'
 
 const { getUserCreationOptions, createUser } = vi.hoisted(() => ({
@@ -11,6 +18,26 @@ const { getUserCreationOptions, createUser } = vi.hoisted(() => ({
   createUser: vi.fn(),
 }))
 vi.mock('@/services/user.service', () => ({ getUserCreationOptions, createUser }))
+vi.mock('@/services/employee-session.service', async () => {
+  const { ref } = await import('vue')
+  const user = ref<{ id: number; role: string; firstName: string } | null>({
+    id: 21,
+    role: 'ADMINISTRATOR',
+    firstName: 'Ana',
+  })
+  return {
+    employeeSession: { user },
+    closeEmployeeSession: vi.fn(),
+    invalidateEmployeeSession: vi.fn(() => {
+      user.value = null
+    }),
+    restoreEmployeeSession: vi.fn(),
+  }
+})
+async function setRole(role: 'ADMINISTRATOR' | 'EMPLOYEE') {
+  Object.assign(employeeSession.user, { value: { id: 21, role, firstName: 'Ana' } })
+  await nextTick()
+}
 const catalogs: UserCreationOptions = {
   provinces: [
     { id: 1, label: 'San José' },
@@ -46,6 +73,14 @@ const originalShowModal = Object.getOwnPropertyDescriptor(dialogPrototype, 'show
 const originalClose = Object.getOwnPropertyDescriptor(dialogPrototype, 'close')
 
 beforeEach(() => {
+  Object.assign(employeeSession.user, {
+    value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' },
+  })
+  vi.mocked(closeEmployeeSession).mockReset().mockResolvedValue(null)
+  vi.mocked(invalidateEmployeeSession).mockClear()
+  vi.mocked(restoreEmployeeSession)
+    .mockReset()
+    .mockResolvedValue({ id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' })
   createUser.mockReset().mockResolvedValue({ id: 42, role: 'EMPLOYEE', email: 'ana@example.com' })
   getUserCreationOptions.mockReset().mockResolvedValue(catalogs)
   // jsdom does not implement the native dialog methods.
@@ -91,43 +126,36 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-async function renderPreview() {
+async function renderDashboard() {
   router = createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: '/', component: { template: '<h1>Portal principal</h1>' } },
-      { path: '/dev/dashboard', component: DashboardPreview },
+      { path: '/dashboard', component: DashboardView },
     ],
   })
   routeHistories.push(router.options.history)
-  await router.push('/dev/dashboard')
+  await router.push('/dashboard')
   await router.isReady()
-  wrapper = mount(DashboardPreview, { attachTo: document.body, global: { plugins: [router] } })
+  wrapper = mount(DashboardView, { attachTo: document.body, global: { plugins: [router] } })
   return wrapper
 }
 
-describe('DashboardPreview', () => {
-  it('starts with a clearly identified administrator preview in the employees section', async () => {
-    const view = await renderPreview()
-
-    expect(view.text()).toContain('Vista de desarrollo')
-    expect(view.text()).toContain('El rol de esta vista es simulado')
+describe('DashboardView', () => {
+  it('uses the authenticated identity without development role controls', async () => {
+    const view = await renderDashboard()
+    expect(view.text()).not.toContain('Vista de desarrollo')
+    expect(view.text()).not.toContain('Usuario de prueba')
     expect(getUserCreationOptions).not.toHaveBeenCalled()
-    expect(view.get('header').text()).toContain('Usuario de prueba')
-    expect(view.get('header').text()).toContain('Rol: Administrador')
+    expect(view.get('header').text()).toContain('Ana')
+    expect(view.get('header').text()).toContain('Sesión iniciada como Administrador')
     expect(view.get('h1').text()).toBe('Empleados')
-    expect(view.get<HTMLSelectElement>('select').element.value).toBe('ADMINISTRATOR')
-    expect(view.get('label').attributes('for')).toBe(view.get('select').attributes('id'))
-    expect(
-      view
-        .get('.preview-controls select')
-        .findAll('option')
-        .map((option) => option.attributes('value')),
-    ).toEqual(['ADMINISTRATOR', 'EMPLOYEE'])
+    expect(view.find('.preview-toolbar').exists()).toBe(false)
+    expect(view.get('.logout-button').attributes('disabled')).toBeUndefined()
   })
 
-  it('switches between the two preview sections and updates the active menu item', async () => {
-    const view = await renderPreview()
+  it('switches between the two dashboard sections and updates the active menu item', async () => {
+    const view = await renderDashboard()
 
     await view.get('[aria-label="Clientes"]').trigger('click')
     expect(view.get('h1').text()).toBe('Clientes')
@@ -137,12 +165,12 @@ describe('DashboardPreview', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
   })
 
-  it('moves to clients and hides administrator options when selecting employee', async () => {
-    const view = await renderPreview()
+  it('moves to clients and hides administrator options when the server reports an employee role', async () => {
+    const view = await renderDashboard()
 
-    await view.get('select').setValue('EMPLOYEE')
+    await setRole('EMPLOYEE')
 
-    expect(view.get('header').text()).toContain('Rol: Empleado')
+    expect(view.get('header').text()).toContain('Sesión iniciada como Empleado')
     expect(view.get('h1').text()).toBe('Clientes')
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
@@ -151,56 +179,106 @@ describe('DashboardPreview', () => {
   })
 
   it('preserves clients as the current section across role changes', async () => {
-    const view = await renderPreview()
+    const view = await renderDashboard()
     await view.get('[aria-label="Clientes"]').trigger('click')
 
-    await view.get('select').setValue('EMPLOYEE')
-    await view.get('select').setValue('ADMINISTRATOR')
+    await setRole('EMPLOYEE')
+    await setRole('ADMINISTRATOR')
 
     expect(view.get('h1').text()).toBe('Clientes')
     expect(view.find('[aria-label="Empleados"]').exists()).toBe(true)
     expect(view.find('[aria-label="Tablero (Pendiente)"]').exists()).toBe(true)
   })
 
-  it('leaves other features and logout disabled', async () => {
-    const view = await renderPreview()
-    const pending = view.findAll('nav button:disabled, .logout-button')
+  it('leaves unimplemented features disabled', async () => {
+    const view = await renderDashboard()
+    const pending = view.findAll('nav button:disabled')
 
-    expect(pending).toHaveLength(9)
+    expect(pending).toHaveLength(8)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')
       await button.trigger('click')
     }
     expect(view.get('h1').text()).toBe('Empleados')
-    expect(router.currentRoute.value.path).toBe('/dev/dashboard')
+    expect(router.currentRoute.value.path).toBe('/dashboard')
   })
 
-  it('ignores navigation outside the available preview sections', async () => {
-    const view = await renderPreview()
+  it('ignores navigation outside the available dashboard sections', async () => {
+    const view = await renderDashboard()
     const layout = view.getComponent(DashboardLayout)
 
     layout.vm.$emit('navigate', 'dashboard')
     await flushPromises()
     expect(view.get('h1').text()).toBe('Empleados')
 
-    await view.get('select').setValue('EMPLOYEE')
+    await setRole('EMPLOYEE')
     layout.vm.$emit('navigate', 'employees')
     await flushPromises()
     expect(view.get('h1').text()).toBe('Clientes')
   })
 
-  it('allows returning to the main portal', async () => {
-    const view = await renderPreview()
+  it('closes the session before returning to the portal', async () => {
+    const view = await renderDashboard()
 
-    await view.get('.portal-link').trigger('click')
+    await view.get('.logout-button').trigger('click')
     await flushPromises()
 
     expect(router.currentRoute.value.path).toBe('/')
+    expect(closeEmployeeSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not navigate away when logout fails and permits a retry', async () => {
+    vi.mocked(closeEmployeeSession).mockRejectedValueOnce(new Error('Offline'))
+    const view = await renderDashboard()
+    await view.get('.logout-button').trigger('click')
+    await flushPromises()
+    expect(view.get('[role="alert"]').text()).toContain('No se pudo confirmar el cierre')
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+    await view.get('.logout-button').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/')
+  })
+
+  it('blocks duplicate logout and new actions until logout completes', async () => {
+    let resolve!: (value: null) => void
+    vi.mocked(closeEmployeeSession).mockReturnValueOnce(
+      new Promise((res) => {
+        resolve = res
+      }),
+    )
+    const view = await renderDashboard()
+    const layout = view.getComponent(DashboardLayout)
+    layout.vm.$emit('logout')
+    layout.vm.$emit('logout')
+    layout.vm.$emit('navigate', 'clients')
+    await nextTick()
+    expect(view.text()).toContain('Cerrando sesión')
+    expect(view.get('.logout-button').attributes('disabled')).toBeDefined()
+    expect(view.get('.add-user-button').attributes('disabled')).toBeDefined()
+    expect(view.get('h1').text()).toBe('Empleados')
+    expect(closeEmployeeSession).toHaveBeenCalledTimes(1)
+    resolve(null)
+    await flushPromises()
+  })
+
+  it('shows no administrative content without a verified identity', async () => {
+    Object.assign(employeeSession.user, { value: null })
+    const view = await renderDashboard()
+    expect(view.find('.dashboard-layout').exists()).toBe(false)
+    expect(view.text()).toContain('No hay una sesión verificada')
+  })
+
+  it('starts employees in the clients section without any create action', async () => {
+    await setRole('EMPLOYEE')
+    const view = await renderDashboard()
+    expect(view.get('h1').text()).toBe('Clientes')
+    expect(view.find('.add-user-button').exists()).toBe(false)
+    expect(view.find('[aria-label="Empleados"]').exists()).toBe(false)
   })
 
   it('opens the creation dialog from employees and returns focus when closed', async () => {
-    const view = await renderPreview()
+    const view = await renderDashboard()
     const button = view.get<HTMLButtonElement>('.add-user-button')
     const dialog = view.get<HTMLDialogElement>('.user-dialog')
     expect(dialog.element.open).toBe(false)
@@ -216,7 +294,7 @@ describe('DashboardPreview', () => {
   })
 
   it('offers the matching creation form in each section only to administrators', async () => {
-    const view = await renderPreview()
+    const view = await renderDashboard()
     await view.get('[aria-label="Clientes"]').trigger('click')
 
     expect(view.get('.add-user-button').text()).toContain('Añadir cliente')
@@ -224,17 +302,17 @@ describe('DashboardPreview', () => {
     expect(view.find('[name="role"]').exists()).toBe(false)
     await view.get('[aria-label="Empleados"]').trigger('click')
     expect(view.get('.add-user-button').text()).toContain('Añadir empleado')
-    await view.get('.preview-controls select').setValue('EMPLOYEE')
+    await setRole('EMPLOYEE')
     expect(view.find('.add-user-button').exists()).toBe(false)
     expect(view.find('.user-dialog').exists()).toBe(false)
   })
 
-  it('closes the dialog if the preview identity changes while it is open', async () => {
-    const view = await renderPreview()
+  it('closes the dialog if the authenticated identity changes while it is open', async () => {
+    const view = await renderDashboard()
     await view.get('.add-user-button').trigger('click')
     const dialog = view.get<HTMLDialogElement>('.user-dialog').element
 
-    await view.get('.preview-controls select').setValue('EMPLOYEE')
+    await setRole('EMPLOYEE')
 
     expect(dialog.open).toBe(false)
     expect(view.find('.user-dialog').exists()).toBe(false)
@@ -243,8 +321,35 @@ describe('DashboardPreview', () => {
 })
 
 describe('catalog loading', () => {
+  it('returns to employee login when the session expires during catalog loading', async () => {
+    getUserCreationOptions.mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } })
+    const view = await renderDashboard()
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+    expect(invalidateEmployeeSession).toHaveBeenCalledTimes(1)
+    expect(router.currentRoute.value.query).toEqual({ login: 'employee', reason: 'expired' })
+    expect(createUser).not.toHaveBeenCalled()
+  })
+
+  it.each(['expired', 'unavailable'] as const)(
+    'handles permission refresh failure: %s',
+    async (reason) => {
+      getUserCreationOptions.mockRejectedValueOnce({
+        isAxiosError: true,
+        response: { status: 403 },
+      })
+      if (reason === 'expired') vi.mocked(restoreEmployeeSession).mockResolvedValueOnce(null)
+      else vi.mocked(restoreEmployeeSession).mockRejectedValueOnce(new Error('Offline'))
+      const view = await renderDashboard()
+      await view.get('.add-user-button').trigger('click')
+      await flushPromises()
+      expect(restoreEmployeeSession).toHaveBeenCalledWith(true)
+      expect(router.currentRoute.value.query.reason).toBe(reason)
+    },
+  )
+
   it('loads on first open, fills dependent selectors and reuses the result when reopening', async () => {
-    const view = await renderPreview()
+    const view = await renderDashboard()
     await view.get('.add-user-button').trigger('click')
     await flushPromises()
     expect(getUserCreationOptions).toHaveBeenCalledTimes(1)
@@ -274,7 +379,7 @@ describe('catalog loading', () => {
 
   it('keeps the form editable while loading and prevents duplicate loads', async () => {
     const pending = pendingCatalogs()
-    const view = await renderPreview()
+    const view = await renderDashboard()
     await view.get('.add-user-button').trigger('click')
     expect(view.get('[role="status"]').text()).toContain('Cargando')
     await view.get('[name="firstName"]').setValue('Ana')
@@ -295,7 +400,7 @@ describe('catalog loading', () => {
     [new Error('Private configuration details'), 'No se pudieron cargar'],
   ])('shows a useful error and preserves input after retry: %p', async (error, message) => {
     const pending = pendingCatalogs()
-    const view = await renderPreview()
+    const view = await renderDashboard()
     await view.get('.add-user-button').trigger('click')
     await view.get('[name="firstName"]').setValue('Ana')
     pending.reject(error)
@@ -317,7 +422,7 @@ describe('catalog loading', () => {
       districts: [],
       branches: [],
     })
-    const view = await renderPreview()
+    const view = await renderDashboard()
     await view.get('.add-user-button').trigger('click')
     await flushPromises()
     expect(view.find('[role="alert"]').exists()).toBe(false)
@@ -329,7 +434,7 @@ describe('catalog loading', () => {
     'cancels on navigation and ignores late %s from a previous request',
     async (outcome) => {
       const pending = pendingCatalogs()
-      const view = await renderPreview()
+      const view = await renderDashboard()
       await view.get('.add-user-button').trigger('click')
       const signal = getUserCreationOptions.mock.calls[0]![0] as AbortSignal
       await view.get('[aria-label="Clientes"]').trigger('click')
@@ -351,7 +456,7 @@ describe('catalog loading', () => {
 
   it('cancels the pending request when leaving the view', async () => {
     const pending = pendingCatalogs()
-    const view = await renderPreview()
+    const view = await renderDashboard()
     await view.get('.add-user-button').trigger('click')
     const signal = getUserCreationOptions.mock.calls[0]![0] as AbortSignal
     view.unmount()
@@ -364,7 +469,7 @@ describe('catalog loading', () => {
 
 describe('employee creation', () => {
   async function filledForm(role = 'EMPLOYEE') {
-    const view = await renderPreview()
+    const view = await renderDashboard()
     await view.get('.add-user-button').trigger('click')
     await flushPromises()
     for (const [field, value] of Object.entries({
@@ -423,14 +528,26 @@ describe('employee creation', () => {
     await view.get('form').trigger('submit')
     view.getComponent(CreateUserDialog).vm.$emit('submit', { role: 'EMPLOYEE' })
     view.getComponent(DashboardLayout).vm.$emit('navigate', 'clients')
+    view.getComponent(DashboardLayout).vm.$emit('logout')
     await view.get('dialog').trigger('cancel')
     expect(view.get('h1').text()).toBe('Empleados')
     expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(true)
     expect(view.get('form').attributes('aria-busy')).toBe('true')
     expect(view.get('.close-button').attributes('disabled')).toBeDefined()
     expect(createUser).toHaveBeenCalledTimes(1)
+    expect(closeEmployeeSession).not.toHaveBeenCalled()
     resolve({ id: 42, email: 'ana@example.com', role: 'EMPLOYEE' })
     await flushPromises()
+  })
+
+  it('treats an expired session during creation as unauthenticated rather than an uncertain creation', async () => {
+    createUser.mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } })
+    const view = await filledForm()
+    await view.get('form').trigger('submit')
+    await flushPromises()
+    expect(invalidateEmployeeSession).toHaveBeenCalledTimes(1)
+    expect(router.currentRoute.value.query).toEqual({ login: 'employee', reason: 'expired' })
+    expect(createUser).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -529,7 +646,7 @@ describe('employee creation', () => {
 describe('client creation', () => {
   async function clientForm() {
     createUser.mockResolvedValueOnce({ id: 43, role: 'CLIENT', email: 'cliente@example.com' })
-    const view = await renderPreview()
+    const view = await renderDashboard()
     await view.get('[aria-label="Clientes"]').trigger('click')
     await view.get('.add-user-button').trigger('click')
     await flushPromises()
@@ -644,9 +761,9 @@ describe('client creation', () => {
     expect(view.get('.create-button').attributes('disabled')).toBeDefined()
     await view.get('form').trigger('submit')
     await view.get('.close-button').trigger('click')
-    await view.get('.preview-controls select').setValue('EMPLOYEE')
+    await setRole('EMPLOYEE')
     expect(view.find('.add-user-button').exists()).toBe(false)
-    await view.get('.preview-controls select').setValue('ADMINISTRATOR')
+    await setRole('ADMINISTRATOR')
     await view.get('.add-user-button').trigger('click')
     await view.get('form').trigger('submit')
     expect(view.get('[role="alert"]').text()).toContain('No se pudo confirmar')
@@ -681,32 +798,18 @@ describe('client creation', () => {
   })
 })
 
-describe('dashboard preview route', () => {
-  it.each([true, false])('registers the route only when DEV is true (DEV=%s)', async (dev) => {
+describe('dashboard routes', () => {
+  it.each([true, false])('exposes only a protected dashboard regardless of DEV=%s', async (dev) => {
     vi.resetModules()
     vi.stubEnv('DEV', dev)
     const { default: applicationRouter } = await import('@/router')
     routeHistories.push(applicationRouter.options.history)
-
-    expect(applicationRouter.hasRoute('dashboard-preview')).toBe(dev)
-    expect(applicationRouter.resolve('/dev/dashboard').name).toBe(
-      dev ? 'dashboard-preview' : 'NotFound',
-    )
+    expect(applicationRouter.hasRoute('dashboard')).toBe(true)
+    expect(applicationRouter.resolve('/dashboard').meta.requiresEmployee).toBe(true)
+    expect(
+      applicationRouter.getRoutes().find((route) => route.path === '/dev/dashboard')?.redirect,
+    ).toBe('/dashboard')
     expect(applicationRouter.resolve('/').name).toBe('home')
     expect(applicationRouter.resolve('/privacy-policy').name).toBe('privacy-policy')
-  })
-
-  it('loads the preview lazily in development', async () => {
-    vi.resetModules()
-    vi.stubEnv('DEV', true)
-    const { default: applicationRouter } = await import('@/router')
-    routeHistories.push(applicationRouter.options.history)
-    const loadView = applicationRouter
-      .getRoutes()
-      .find((route) => route.name === 'dashboard-preview')?.components?.default
-
-    expect(loadView).toBeTypeOf('function')
-    const module = await (loadView as () => Promise<{ default: unknown }>)()
-    expect(module.default).toBeDefined()
   })
 })
