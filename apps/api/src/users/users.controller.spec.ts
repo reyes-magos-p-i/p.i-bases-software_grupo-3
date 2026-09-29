@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   ConflictException,
+  ValidationPipe,
   type INestApplication,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -69,6 +70,13 @@ describe('UsersController (HTTP integration)', () => {
       .compile();
     jwt = module.get(JwtService);
     app = module.createNestApplication({ logger: false });
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     await app.init();
   });
 
