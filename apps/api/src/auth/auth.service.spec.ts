@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { AuthService } from './auth.service';
@@ -13,6 +13,11 @@ jest.mock('google-auth-library', () => ({
   OAuth2Client: jest.fn(),
 }));
 const hasher = { hash: jest.fn() };
+import { UsersRepository } from '../users/users.repository';
+import { UserRole } from '../users/enums/user-role.enum';
+import type { EmployeeWithLocalCredentials } from '../users/types/employee-with-local-credentials.type';
+
+const hasher = { hash: jest.fn(), verify: jest.fn() };
 const salt = 'AAECAwQFBgcICQoLDA0ODw';
 
 describe('AuthService', () => {
@@ -22,7 +27,8 @@ describe('AuthService', () => {
     createWithLocalCredentials: jest.Mock;
     findOrCreateSocial: jest.Mock; // for google auth
   };
-  let jwt: { sign: jest.Mock };
+  let jwt: { sign: jest.Mock; signAsync: jest.Mock };
+  let users: { findEmployeeWithLocalCredentialsByEmail: jest.Mock };
 
   const registerDto: RegisterDto = {
     email: 'user@example.com',
@@ -42,7 +48,11 @@ describe('AuthService', () => {
       createWithLocalCredentials: jest.fn(),
        findOrCreateSocial: jest.fn(),
     };
-    jwt = { sign: jest.fn().mockReturnValue('signed-token') };
+    jwt = {
+      sign: jest.fn().mockReturnValue('signed-token'),
+      signAsync: jest.fn().mockResolvedValue('employee-token'),
+    };
+    users = { findEmployeeWithLocalCredentialsByEmail: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -50,12 +60,14 @@ describe('AuthService', () => {
         { provide: PasswordHasher, useValue: hasher },
         { provide: ClientsService, useValue: clients },
         { provide: JwtService, useValue: jwt },
+        { provide: UsersRepository, useValue: users },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
     jest.clearAllMocks();
     hasher.hash.mockResolvedValue({ passwordHash: 'hashed-password', salt });
+    hasher.verify.mockReset().mockResolvedValue(true);
   });
 
   describe('register', () => {
@@ -117,6 +129,124 @@ describe('AuthService', () => {
     );
     expect(clients.createWithLocalCredentials).toHaveBeenCalledTimes(1);
     expect(jwt.sign).not.toHaveBeenCalled();
+  });
+
+  describe('loginEmployee', () => {
+    const dto = { email: 'staff@example.com', password: ' Staff password 🎬 ' };
+    const employee: EmployeeWithLocalCredentials = {
+      id: 21,
+      role: UserRole.EMPLOYEE,
+      email: dto.email,
+      firstName: 'Ana',
+      secondName: null,
+      firstSurname: 'Solano',
+      secondSurname: 'Rojas',
+      passwordHash: 'stored-password-hash',
+    };
+
+    it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(
+      'authenticates %s and returns an explicit profile without credentials',
+      async (role) => {
+        users.findEmployeeWithLocalCredentialsByEmail.mockResolvedValue({
+          ...employee,
+          role,
+          salt: 'private-salt',
+          privateField: 'must-not-escape',
+        });
+        await expect(service.loginEmployee(dto)).resolves.toEqual({
+          accessToken: 'employee-token',
+          user: {
+            id: 21,
+            role,
+            email: dto.email,
+            firstName: 'Ana',
+            secondName: null,
+            firstSurname: 'Solano',
+            secondSurname: 'Rojas',
+          },
+        });
+        expect(
+          users.findEmployeeWithLocalCredentialsByEmail,
+        ).toHaveBeenCalledTimes(1);
+        expect(
+          users.findEmployeeWithLocalCredentialsByEmail,
+        ).toHaveBeenCalledWith(dto.email);
+        expect(hasher.verify).toHaveBeenCalledTimes(1);
+        expect(hasher.verify).toHaveBeenCalledWith(
+          dto.password,
+          employee.passwordHash,
+        );
+        expect(jwt.signAsync).toHaveBeenCalledTimes(1);
+        expect(jwt.signAsync).toHaveBeenCalledWith({
+          sub: 21,
+          type: 'employee',
+        });
+        expect(hasher.hash).not.toHaveBeenCalled();
+        expect(clients.findByEmail).not.toHaveBeenCalled();
+        expect(clients.createWithLocalCredentials).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { account: employee, matches: false },
+      { account: null, matches: false },
+      { account: null, matches: true },
+    ])(
+      'returns the same 401 for invalid credentials: %p',
+      async ({ account, matches }) => {
+        users.findEmployeeWithLocalCredentialsByEmail.mockResolvedValue(
+          account,
+        );
+        hasher.verify.mockResolvedValue(matches);
+        const result = service.loginEmployee(dto);
+        await expect(result).rejects.toBeInstanceOf(UnauthorizedException);
+        await expect(result).rejects.toMatchObject({
+          response: {
+            statusCode: 401,
+            message: 'Correo o contraseña incorrectos',
+            error: 'Unauthorized',
+          },
+        });
+        expect(hasher.verify).toHaveBeenCalledTimes(1);
+        expect(hasher.verify).toHaveBeenCalledWith(
+          dto.password,
+          account
+            ? employee.passwordHash
+            : expect.stringMatching(/^\$argon2id\$v=19\$m=65536,t=3,p=4\$/u),
+        );
+        expect(jwt.signAsync).not.toHaveBeenCalled();
+        expect(jwt.sign).not.toHaveBeenCalled();
+      },
+    );
+
+    it('propagates repository failures without verifying or signing', async () => {
+      const failure = new Error('Database lookup failed');
+      users.findEmployeeWithLocalCredentialsByEmail.mockRejectedValue(failure);
+      await expect(service.loginEmployee(dto)).rejects.toBe(failure);
+      expect(hasher.verify).not.toHaveBeenCalled();
+      expect(jwt.signAsync).not.toHaveBeenCalled();
+    });
+
+    it.each([employee, null])(
+      'propagates verifier failures without signing: %p',
+      async (account) => {
+        const failure = new Error('Password verification failed');
+        users.findEmployeeWithLocalCredentialsByEmail.mockResolvedValue(
+          account,
+        );
+        hasher.verify.mockRejectedValue(failure);
+        await expect(service.loginEmployee(dto)).rejects.toBe(failure);
+        expect(jwt.signAsync).not.toHaveBeenCalled();
+      },
+    );
+
+    it('propagates signing failures without returning a successful login', async () => {
+      const failure = new Error('Signing failed');
+      users.findEmployeeWithLocalCredentialsByEmail.mockResolvedValue(employee);
+      jwt.signAsync.mockRejectedValue(failure);
+      await expect(service.loginEmployee(dto)).rejects.toBe(failure);
+      expect(jwt.signAsync).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('issueToken', () => {

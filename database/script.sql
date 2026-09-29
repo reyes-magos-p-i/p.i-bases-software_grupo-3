@@ -311,5 +311,5 @@ CREATE TABLE Products (
     product_name VARCHAR(100),
     price NUMBER NOT NULL,
     is_ticket BOOLEAN NOT NULL,
-    
+
 );

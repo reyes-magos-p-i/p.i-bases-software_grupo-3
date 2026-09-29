@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { ClientsService } from '../clients/clients.service';
@@ -6,6 +10,13 @@ import { Client, SocialProfile} from '../clients/client.model';
 import { splitFirstWord } from '../clients/name.util';
 import { RegisterDto } from './dto/register.dto';
 import { OAuth2Client } from 'google-auth-library'; // google lib for authetication
+import { UsersRepository } from '../users/users.repository';
+import type { LoginDto } from './dto/login.dto';
+import type { EmployeeLoginResult } from './types/employee-login-result.type';
+
+// This non-account hash keeps missing credentials on the password verification path.
+const LOGIN_REFERENCE_HASH =
+  '$argon2id$v=19$m=65536,t=3,p=4$AAECAwQFBgcICQoLDA0ODw$/tXTH42HzfyOlS8JzgvppUM1iWQlrRk8rqbsEK11dfE';
 
 @Injectable()
 export class AuthService {
@@ -13,6 +24,7 @@ export class AuthService {
     private readonly clients: ClientsService,
     private readonly jwt: JwtService,
     private readonly passwordHasher: PasswordHasher,
+    private readonly usersRepository: UsersRepository,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -50,8 +62,36 @@ export class AuthService {
     return { id: client.id, email: client.email }; // minimum data needed
   }
 
-  // TODO(Alejandro): Login probably will be here. For clients and employees
-  // distinguishing by 'type'('client','employee') on the payload.
+  async loginEmployee(dto: LoginDto): Promise<EmployeeLoginResult> {
+    const employee =
+      await this.usersRepository.findEmployeeWithLocalCredentialsByEmail(
+        dto.email,
+      );
+    const matches = await this.passwordHasher.verify(
+      dto.password,
+      employee?.passwordHash ?? LOGIN_REFERENCE_HASH,
+    );
+    if (!employee || !matches) {
+      throw new UnauthorizedException('Correo o contraseña incorrectos');
+    }
+
+    const accessToken = await this.jwt.signAsync({
+      sub: employee.id,
+      type: 'employee',
+    });
+    return {
+      accessToken,
+      user: {
+        id: employee.id,
+        role: employee.role,
+        email: employee.email,
+        firstName: employee.firstName,
+        secondName: employee.secondName,
+        firstSurname: employee.firstSurname,
+        secondSurname: employee.secondSurname,
+      },
+    };
+  }
 
   //google auth SIlvio
   async googleLogin(authCode: string){

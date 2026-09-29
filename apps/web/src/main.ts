@@ -17,20 +17,11 @@ app.use(vue3GoogleLogin, {
 
 import { loadFacebookSdk } from './loadFBSDK.js'
 import { applyLoginStatus } from './facebook-auth'
+import { initializeFacebook } from './services/facebook-initialization.service'
 
 
 app.use(router)
 
-try {
-  const response = await loadFacebookSdk()
-  applyLoginStatus(response)
-
-  if (response.status === 'connected') {
-    // Already logged into Facebook and this app, send accessToken to the backend
-  }
-  // not_authorized or unknown, show the login UI
-} catch (err) {
-  console.error('Facebook SDK failed', err)
-}
-
 app.mount('#app')
+
+void initializeFacebook()

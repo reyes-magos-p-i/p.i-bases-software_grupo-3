@@ -1,6 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import crypto from 'node:crypto';
-import { verify } from 'argon2';
+import argon2, { verify } from 'argon2';
 import { Argon2PasswordHasher } from './argon2-password-hasher.service';
 import { PasswordHasher } from './password-hasher';
 
@@ -47,8 +47,46 @@ describe('Argon2PasswordHasher', () => {
     '$argon2id$v=19$m=19456,t=2,p=1$AAECAwQFBgcICQoLDA0ODw$jcC029sCs78ZIUTOoSZP6yTYhGTlvGuhTSfDDgUOuaM',
     '$argon2id$v=19$m=65536,t=3,p=4$AAECAwQFBgcICQoLDA0ODw$/tXTH42HzfyOlS8JzgvppUM1iWQlrRk8rqbsEK11dfE',
   ])('keeps historical PHC profiles verifiable: %s', async (hash) => {
-    await expect(verify(hash, 'Cinema test password')).resolves.toBe(true);
-    await expect(verify(hash, 'Incorrect password')).resolves.toBe(false);
+    await expect(hasher.verify('Cinema test password', hash)).resolves.toBe(
+      true,
+    );
+    await expect(hasher.verify('Incorrect password', hash)).resolves.toBe(
+      false,
+    );
+  });
+
+  it('verifies a generated hash without normalizing the password or generating a new salt', async () => {
+    const password = ' Contraseña de prueba 🎬 ';
+    const { passwordHash } = await hasher.hash(password);
+    const randomBytes = jest.spyOn(crypto, 'randomBytes');
+
+    await expect(hasher.verify(password, passwordHash)).resolves.toBe(true);
+    await expect(hasher.verify(password.trim(), passwordHash)).resolves.toBe(
+      false,
+    );
+    await expect(
+      hasher.verify('Incorrect password', passwordHash),
+    ).resolves.toBe(false);
+    await expect(hasher.verify('', passwordHash)).resolves.toBe(false);
+    expect(randomBytes).not.toHaveBeenCalled();
+  });
+
+  it('propagates an error for a malformed stored hash', async () => {
+    await expect(
+      hasher.verify('Cinema test password', 'not-a-phc-hash'),
+    ).rejects.toThrow();
+  });
+
+  it('propagates verifier failures instead of treating them as a password mismatch', async () => {
+    const failure = new Error('Verification unavailable');
+    jest.spyOn(argon2, 'verify').mockRejectedValueOnce(failure);
+
+    await expect(
+      hasher.verify(
+        'Cinema test password',
+        '$argon2id$v=19$m=65536,t=3,p=4$AAECAwQFBgcICQoLDA0ODw$/tXTH42HzfyOlS8JzgvppUM1iWQlrRk8rqbsEK11dfE',
+      ),
+    ).rejects.toBe(failure);
   });
 
   it('produces hashes interoperable with the existing Argon2 verifier', async () => {

@@ -2,14 +2,72 @@ import { Injectable } from '@nestjs/common';
 import oracle from 'oracledb';
 import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
-import type { UserIdentity } from './types/user-identity.type';
 import { DatabaseService } from '../database/database.service';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import type { CreateAddressDto } from './dto/create-address.dto';
+import type { EmployeeWithLocalCredentials } from './types/employee-with-local-credentials.type';
 
 @Injectable()
 export class UsersRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  async findEmployeeWithLocalCredentialsByEmail(
+    email: string,
+  ): Promise<EmployeeWithLocalCredentials | null> {
+    const result = await this.db.query<{
+      EMPLOYEE_ID: number;
+      ROLE: UserRole;
+      EMAIL: string;
+      FIRST_NAME: string;
+      SECOND_NAME: string | null;
+      FIRST_SURNAME: string;
+      SECOND_SURNAME: string;
+      CREDENTIALS_EMPLOYEE_ID: number | null;
+      PASSWORD_HASH: string | null;
+    }>(
+      `SELECT e.EMPLOYEE_ID, e.ROLE, e.EMAIL, e.FIRST_NAME, e.SECOND_NAME,
+              e.FIRST_SURNAME, e.SECOND_SURNAME,
+              c.EMPLOYEE_ID AS CREDENTIALS_EMPLOYEE_ID, c.PASSWORD_HASH
+       FROM EMPLOYEES e
+       LEFT JOIN EMPLOYEE_LOCAL_CREDENTIALS c ON c.EMPLOYEE_ID = e.EMPLOYEE_ID
+       WHERE LOWER(TRIM(e.EMAIL)) = :email
+       FETCH FIRST 2 ROWS ONLY`,
+      { email: { val: email.trim().toLowerCase(), type: oracle.STRING } },
+      { outFormat: oracle.OUT_FORMAT_OBJECT },
+    );
+    const rows = result.rows ?? [];
+    if (rows.length === 0) return null;
+    // Count employees without credentials too: they must not hide an ambiguous email.
+    if (rows.length !== 1) {
+      throw new Error('Employee email lookup returned multiple accounts.');
+    }
+    const row = rows[0];
+    if (
+      !Number.isSafeInteger(row.EMPLOYEE_ID) ||
+      row.EMPLOYEE_ID < 1 ||
+      (row.ROLE !== UserRole.EMPLOYEE && row.ROLE !== UserRole.ADMINISTRATOR)
+    ) {
+      throw new Error('Oracle returned an invalid employee identity.');
+    }
+    if (row.CREDENTIALS_EMPLOYEE_ID === null) return null;
+    if (
+      row.CREDENTIALS_EMPLOYEE_ID !== row.EMPLOYEE_ID ||
+      typeof row.PASSWORD_HASH !== 'string' ||
+      !row.PASSWORD_HASH.trim()
+    ) {
+      throw new Error('Oracle returned invalid employee credentials.');
+    }
+    return {
+      id: row.EMPLOYEE_ID,
+      role: row.ROLE,
+      email: row.EMAIL,
+      firstName: row.FIRST_NAME,
+      secondName: row.SECOND_NAME,
+      firstSurname: row.FIRST_SURNAME,
+      secondSurname: row.SECOND_SURNAME,
+      passwordHash: row.PASSWORD_HASH,
+    };
+  }
 
   async getCreationOptions(): Promise<UserCreationOptionsDto> {
     const options = { outFormat: oracle.OUT_FORMAT_OBJECT };
@@ -72,12 +130,16 @@ export class UsersRepository {
 
   async findEmployeeIdentityById(
     employeeId: number,
-  ): Promise<UserIdentity | null> {
+  ): Promise<Pick<
+    EmployeeWithLocalCredentials,
+    'id' | 'role' | 'firstName'
+  > | null> {
     const result = await this.db.query<{
       EMPLOYEE_ID: unknown;
       ROLE: unknown;
+      FIRST_NAME: unknown;
     }>(
-      'SELECT EMPLOYEE_ID, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
+      'SELECT EMPLOYEE_ID, ROLE, FIRST_NAME FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
       { employeeId: { val: employeeId, type: oracle.NUMBER } },
       { outFormat: oracle.OUT_FORMAT_OBJECT },
     );
@@ -91,11 +153,13 @@ export class UsersRepository {
       !Number.isSafeInteger(row.EMPLOYEE_ID) ||
       row.EMPLOYEE_ID < 1 ||
       row.EMPLOYEE_ID !== employeeId ||
-      (row.ROLE !== UserRole.ADMINISTRATOR && row.ROLE !== UserRole.EMPLOYEE)
+      (row.ROLE !== UserRole.ADMINISTRATOR && row.ROLE !== UserRole.EMPLOYEE) ||
+      typeof row.FIRST_NAME !== 'string' ||
+      !row.FIRST_NAME.trim()
     ) {
       return null;
     }
-    return { id: row.EMPLOYEE_ID, role: row.ROLE };
+    return { id: row.EMPLOYEE_ID, role: row.ROLE, firstName: row.FIRST_NAME };
   }
 
   async createEmployee(data: CreateEmployeeRecord): Promise<number> {

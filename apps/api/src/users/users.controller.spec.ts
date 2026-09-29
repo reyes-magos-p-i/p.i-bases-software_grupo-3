@@ -1,10 +1,15 @@
 import {
   BadGatewayException,
   ConflictException,
+  ValidationPipe,
   type INestApplication,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { AuthModule } from '../auth/auth.module';
+import { DatabaseService } from '../database/database.service';
+import { EMPLOYEE_SESSION_COOKIE } from '../auth/employee-session.service';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -21,7 +26,9 @@ describe('UsersController (HTTP integration)', () => {
   let app: INestApplication<App>;
   const service = { create: jest.fn(), getCreationOptions: jest.fn() };
   const repository = { findEmployeeIdentityById: jest.fn() };
-  let settings: Record<string, unknown>;
+  let jwt: JwtService;
+  let browser: ReturnType<typeof request.agent>;
+  const origin = 'http://localhost:5173';
   const client = {
     role: 'CLIENT',
     email: 'Cliente@Example.COM',
@@ -41,18 +48,35 @@ describe('UsersController (HTTP integration)', () => {
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
+        AuthModule,
+      ],
       controllers: [UsersController],
       providers: [
         CreateUserValidationPipe,
         { provide: UsersService, useValue: service },
-        { provide: UsersRepository, useValue: repository },
-        {
-          provide: ConfigService,
-          useValue: { get: (key: string) => settings[key] },
-        },
       ],
-    }).compile();
+    })
+      .overrideProvider(ConfigService)
+      .useValue({
+        get: (key: string) => ({ FRONTEND_URL: origin, NODE_ENV: 'test' })[key],
+        getOrThrow: () => 'controller-test-secret',
+      })
+      .overrideProvider(DatabaseService)
+      .useValue({})
+      .overrideProvider(UsersRepository)
+      .useValue(repository)
+      .compile();
+    jwt = module.get(JwtService);
     app = module.createNestApplication({ logger: false });
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     await app.init();
   });
 
@@ -63,11 +87,13 @@ describe('UsersController (HTTP integration)', () => {
       districts: [],
       branches: [],
     });
-    settings = {
-      NODE_ENV: 'development',
-      DEV_ADMIN_ENABLED: 'true',
-      DEV_ADMIN_EMPLOYEE_ID: '21',
-    };
+    browser = request
+      .agent(app.getHttpServer())
+      .set('Origin', origin)
+      .set(
+        'Cookie',
+        `${EMPLOYEE_SESSION_COOKIE}=${jwt.sign({ sub: 21, type: 'employee' })}`,
+      );
     repository.findEmployeeIdentityById.mockReset().mockResolvedValue({
       id: 21,
       role: UserRole.ADMINISTRATOR,
@@ -94,9 +120,7 @@ describe('UsersController (HTTP integration)', () => {
         branches: [{ id: 1, label: 'Sucursal existente' }],
       };
       service.getCreationOptions.mockResolvedValue(options);
-      const response = await request(app.getHttpServer())
-        .get('/users/creation-options')
-        .expect(200);
+      const response = await browser.get('/users/creation-options').expect(200);
       expect(response.body).toEqual(options);
       expect(repository.findEmployeeIdentityById).toHaveBeenCalledWith(21);
       expect(service.getCreationOptions).toHaveBeenCalledTimes(1);
@@ -104,9 +128,7 @@ describe('UsersController (HTTP integration)', () => {
     });
 
     it('returns empty lists with 200 when no catalog data exists', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/users/creation-options')
-        .expect(200);
+      const response = await browser.get('/users/creation-options').expect(200);
       expect(response.body).toEqual({
         provinces: [],
         cantons: [],
@@ -115,19 +137,18 @@ describe('UsersController (HTTP integration)', () => {
       });
     });
 
-    it('rejects disabled development mode before reading catalogs', async () => {
-      settings.DEV_ADMIN_ENABLED = 'false';
+    it('rejects missing authentication before reading catalogs', async () => {
       await request(app.getHttpServer())
         .get('/users/creation-options')
-        .expect(403);
+        .expect(401);
       expect(service.getCreationOptions).not.toHaveBeenCalled();
     });
 
-    it.each([null, { id: 21, role: UserRole.EMPLOYEE }])(
+    it.each([{ id: 21, role: UserRole.EMPLOYEE }])(
       'rejects an unauthorized identity %p',
       async (identity) => {
         repository.findEmployeeIdentityById.mockResolvedValue(identity);
-        await request(app.getHttpServer())
+        await browser
           .get('/users/creation-options')
           .set('x-user-role', 'ADMINISTRATOR')
           .expect(403);
@@ -139,9 +160,7 @@ describe('UsersController (HTTP integration)', () => {
       service.getCreationOptions.mockRejectedValue(
         new Error('Private SQL details'),
       );
-      const response = await request(app.getHttpServer())
-        .get('/users/creation-options')
-        .expect(500);
+      const response = await browser.get('/users/creation-options').expect(500);
       expect(response.body).toEqual({
         statusCode: 500,
         message: 'Internal server error',
@@ -150,37 +169,47 @@ describe('UsersController (HTTP integration)', () => {
     });
   });
 
-  it.each([
-    ['NODE_ENV', 'production'],
-    ['NODE_ENV', 'test'],
-    ['DEV_ADMIN_ENABLED', undefined],
-    ['DEV_ADMIN_ENABLED', 'false'],
-    ['DEV_ADMIN_EMPLOYEE_ID', 'invalid'],
-  ])(
-    'returns 403 for %s=%p before invoking the service or repository',
-    async (key, value) => {
-      settings[key] = value;
-      const response = await request(app.getHttpServer())
+  it.each([undefined, 'invalid-token'])(
+    'rejects missing or invalid authentication despite forged role headers: %p',
+    async (token) => {
+      const call = request(app.getHttpServer())
         .post('/users')
+        .set('Origin', origin)
         .set('x-user-id', '21')
-        .set('x-user-role', 'ADMINISTRATOR')
-        .send({ ...employee, role: 'ADMINISTRATOR' })
-        .expect(403);
-      expect(response.body).toEqual({
-        statusCode: 403,
-        error: 'Forbidden',
-        message: 'No tiene permiso para crear usuarios.',
-      });
+        .set('x-user-role', 'ADMINISTRATOR');
+      if (token) call.set('Cookie', `${EMPLOYEE_SESSION_COOKIE}=${token}`);
+      await call.send({ ...employee, role: 'ADMINISTRATOR' }).expect(401);
       expect(repository.findEmployeeIdentityById).not.toHaveBeenCalled();
       expect(service.create).not.toHaveBeenCalled();
     },
   );
 
-  it.each([null, { id: 21, role: UserRole.EMPLOYEE }])(
+  it.each([undefined, 'https://untrusted.example'])(
+    'rejects a creation with an unauthorized origin: %p',
+    async (source) => {
+      const call = request(app.getHttpServer())
+        .post('/users')
+        .set(
+          'Cookie',
+          `${EMPLOYEE_SESSION_COOKIE}=${jwt.sign({ sub: 21, type: 'employee' })}`,
+        );
+      if (source) call.set('Origin', source);
+      await call.send(client).expect(403);
+      expect(service.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a deleted employee identity', async () => {
+    repository.findEmployeeIdentityById.mockResolvedValue(null);
+    await browser.post('/users').send(client).expect(401);
+    expect(service.create).not.toHaveBeenCalled();
+  });
+
+  it.each([{ id: 21, role: UserRole.EMPLOYEE }])(
     'returns 403 when Oracle does not confirm an administrator: %p',
     async (identity) => {
       repository.findEmployeeIdentityById.mockResolvedValue(identity);
-      await request(app.getHttpServer())
+      await browser
         .post('/users')
         .set('x-user-id', '999')
         .set('x-user-role', 'ADMINISTRATOR')
@@ -192,8 +221,7 @@ describe('UsersController (HTTP integration)', () => {
   );
 
   it('rejects unauthorized requests before body validation', async () => {
-    settings.DEV_ADMIN_ENABLED = 'false';
-    await request(app.getHttpServer()).post('/users').send({}).expect(403);
+    await request(app.getHttpServer()).post('/users').send({}).expect(401);
     expect(service.create).not.toHaveBeenCalled();
   });
 
@@ -201,10 +229,7 @@ describe('UsersController (HTTP integration)', () => {
     repository.findEmployeeIdentityById.mockRejectedValue(
       new Error('Private SQL details'),
     );
-    const response = await request(app.getHttpServer())
-      .post('/users')
-      .send(client)
-      .expect(500);
+    const response = await browser.post('/users').send(client).expect(500);
     expect(response.body).toEqual({
       statusCode: 500,
       message: 'Internal server error',
@@ -213,10 +238,7 @@ describe('UsersController (HTTP integration)', () => {
   });
 
   it('returns 201 for a client and sends the normalized DTO to the service', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/users')
-      .send(client)
-      .expect(201);
+    const response = await browser.post('/users').send(client).expect(201);
 
     expect(service.create).toHaveBeenCalledTimes(1);
     expect(repository.findEmployeeIdentityById).toHaveBeenCalledWith(21);
@@ -234,7 +256,7 @@ describe('UsersController (HTTP integration)', () => {
   it.each(['EMPLOYEE', 'ADMINISTRATOR'])(
     'returns 201 for %s with the employee DTO',
     async (role) => {
-      const response = await request(app.getHttpServer())
+      const response = await browser
         .post('/users')
         .send({ ...employee, role })
         .expect(201);
@@ -254,7 +276,7 @@ describe('UsersController (HTTP integration)', () => {
   it.each([null, { districtId: 7 }, { districtId: 7, details: 'Casa azul' }])(
     'accepts a client address %p',
     async (address) => {
-      await request(app.getHttpServer())
+      await browser
         .post('/users')
         .send({ ...client, address })
         .expect(201);
@@ -265,7 +287,7 @@ describe('UsersController (HTTP integration)', () => {
   );
 
   it('returns useful nested errors before invoking the service', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await browser
       .post('/users')
       .send({
         ...employee,
@@ -282,7 +304,7 @@ describe('UsersController (HTTP integration)', () => {
   });
 
   it('rejects unknown nested fields without reflecting their names or values', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await browser
       .post('/users')
       .send({
         ...client,
@@ -313,10 +335,7 @@ describe('UsersController (HTTP integration)', () => {
   ])(
     'rejects an invalid request before calling the service: %p',
     async (body) => {
-      const response = await request(app.getHttpServer())
-        .post('/users')
-        .send(body)
-        .expect(400);
+      const response = await browser.post('/users').send(body).expect(400);
 
       expect(service.create).not.toHaveBeenCalled();
       expect(response.body).toEqual({
@@ -333,7 +352,7 @@ describe('UsersController (HTTP integration)', () => {
   it.each(['password', 'passwordHash', 'salt', 'id'])(
     'rejects the forbidden property %s without reflecting its value',
     async (field) => {
-      const response = await request(app.getHttpServer())
+      const response = await browser
         .post('/users')
         .send({ ...client, [field]: 'private-test-value' })
         .expect(400);
@@ -352,10 +371,7 @@ describe('UsersController (HTTP integration)', () => {
       new ConflictException('Ya existe un cliente con ese correo electrónico.'),
     );
 
-    const response = await request(app.getHttpServer())
-      .post('/users')
-      .send(client)
-      .expect(409);
+    const response = await browser.post('/users').send(client).expect(409);
 
     expect(response.body).toEqual({
       statusCode: 409,
@@ -370,10 +386,7 @@ describe('UsersController (HTTP integration)', () => {
       'El usuario fue creado, pero no se pudo enviar el correo con sus credenciales.';
     service.create.mockRejectedValue(new BadGatewayException(message));
 
-    const response = await request(app.getHttpServer())
-      .post('/users')
-      .send(client)
-      .expect(502);
+    const response = await browser.post('/users').send(client).expect(502);
 
     expect(response.body).toEqual({
       statusCode: 502,
@@ -388,10 +401,7 @@ describe('UsersController (HTTP integration)', () => {
       new Error('Oracle internal detail: private-password-hash'),
     );
 
-    const response = await request(app.getHttpServer())
-      .post('/users')
-      .send(client)
-      .expect(500);
+    const response = await browser.post('/users').send(client).expect(500);
 
     expect(response.body).toEqual({
       statusCode: 500,
