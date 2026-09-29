@@ -45,12 +45,12 @@ export function restoreEmployeeSession(force = false): Promise<EmployeeIdentity 
       setIdentity(identity)
       return identity
     })
-    .catch((failure: unknown) => {
+    .catch((error_: unknown) => {
       if (current !== revision) return mutation ?? user.value
       user.value = null
       status.value = 'error'
-      error.value = failure instanceof Error ? failure.message : 'No se pudo recuperar la sesión.'
-      throw failure
+      error.value = error_ instanceof Error ? error_.message : 'No se pudo recuperar la sesión.'
+      throw error_
     })
     .finally(() => {
       if (restoration === pending) restoration = undefined
@@ -73,13 +73,13 @@ function changeSession(work: () => Promise<EmployeeIdentity | null>, preserveOnF
       setIdentity(identity)
       return identity
     })
-    .catch((failure: unknown) => {
+    .catch((error_: unknown) => {
       if (current === revision) {
         setIdentity(preserveOnFailure ? previous : null)
         error.value =
-          failure instanceof Error ? failure.message : 'No se pudo completar la solicitud.'
+          error_ instanceof Error ? error_.message : 'No se pudo completar la solicitud.'
       }
-      throw failure
+      throw error_
     })
     .finally(() => {
       if (mutation === pending) mutation = undefined
