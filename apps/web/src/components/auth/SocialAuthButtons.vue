@@ -5,6 +5,7 @@ const emit = defineEmits<{ (e: 'google'): void; (e: 'facebook'): void }>()
 
 // TODO (Silvio): implementar el flujo OAuth de Google
 async function onGoogle() {
+  emit('google')
   try{
     await loginWithGoogle()
 
@@ -14,7 +15,6 @@ async function onGoogle() {
     console.error('google login fauiles', error)
 
   }
-  emit('google')
 
 }
 
