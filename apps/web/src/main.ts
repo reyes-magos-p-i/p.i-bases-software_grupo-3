@@ -18,7 +18,7 @@ app.use(vue3GoogleLogin, {
 import { loadFacebookSdk } from './loadFBSDK.js'
 import { applyLoginStatus } from './facebook-auth'
 
-const app = createApp(App)
+
 app.use(router)
 
 try {

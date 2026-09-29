@@ -30,9 +30,10 @@ export async function registerUser(payload: RegisterPayload): Promise<void> {
 // reusable google login function
 export async function loginWithGoogle(): Promise<void> {
   // waiting for auth code from google
+  const api = getApi()
   const googleResponse = await googleAuthCodeLogin()
 
-  await axios.post(`${API_URL}/auth/google`, {
+  await api.post('/auth/google', {
     code: googleResponse.code,
   })
 }
