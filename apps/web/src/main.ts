@@ -13,15 +13,18 @@ const app = createApp(App)
 app.use(router)
 app.mount('#app')
 
-try {
-  const response = await loadFacebookSdk()
-  applyLoginStatus(response)
+app.mount('#app')
 
-  if (response.status === 'connected') {
-    // Already logged into Facebook and this app, send accessToken to the backend
-  }
-  // not_authorized or unknown, show the login UI
-} catch (err) {
-  console.error('Facebook SDK failed', err)
-}
+void Promise.resolve()
+  .then(() => loadFacebookSdk())
+  .then((response) => {
+    applyLoginStatus(response)
 
+    if (response.status === 'connected') {
+      // Already logged into Facebook and this app, send accessToken to the backend
+    }
+    // not_authorized or unknown, show the login UI
+  })
+  .catch((error) => {
+    console.error('Facebook SDK failed', error)
+  })
