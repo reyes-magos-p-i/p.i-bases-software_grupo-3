@@ -1,7 +1,6 @@
-import { ConflictException, Injectable} from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { randomBytes } from 'crypto';
-import * as argon2 from 'argon2';
+import { PasswordHasher } from '../common/security/password-hasher';
 import { ClientsService } from '../clients/clients.service';
 import { Client, SocialProfile} from '../clients/client.model';
 import { splitFirstWord } from '../clients/name.util';
@@ -13,6 +12,7 @@ export class AuthService {
   constructor(
     private readonly clients: ClientsService,
     private readonly jwt: JwtService,
+    private readonly passwordHasher: PasswordHasher,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -27,15 +27,15 @@ export class AuthService {
     const [firstName, secondName] = splitFirstWord(dto.firstName);
     const [firstSurname, secondSurname] = splitFirstWord(dto.lastName);
 
-    const salt = randomBytes(16);
-    // TODO(rga): Consider eliminating salt from the DB local credentials,
-    // argon2 manages salt internally if we dont give one.
-    const passwordHash = await argon2.hash(dto.password, { salt });
+    const { passwordHash, salt } = await this.passwordHasher.hash(dto.password);
 
     const client = await this.clients.createWithLocalCredentials(
       {
         email: dto.email,
-        firstName, secondName, firstSurname, secondSurname,
+        firstName,
+        secondName,
+        firstSurname,
+        secondSurname,
         birthday: dto.birthDate,
         phoneNumber: dto.phone,
         gender: dto.gender,
@@ -43,10 +43,11 @@ export class AuthService {
         acceptedTerms: dto.acceptTerms,
       },
       passwordHash,
-      salt.toString('base64'),
+      // Public registration historically stores padded Base64 in the SALT column.
+      Buffer.from(salt, 'base64').toString('base64'),
     );
 
-    return { id: client.id, email: client.email };  // minimum data needed
+    return { id: client.id, email: client.email }; // minimum data needed
   }
 
   // TODO(Alejandro): Login probably will be here. For clients and employees
@@ -118,7 +119,11 @@ export class AuthService {
 
   issueToken(client: Client) {
     return {
-      accessToken: this.jwt.sign({ sub: client.id, email: client.email, type: 'client' }),
+      accessToken: this.jwt.sign({
+        sub: client.id,
+        email: client.email,
+        type: 'client',
+      }),
     };
   }
 }

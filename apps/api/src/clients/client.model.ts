@@ -1,3 +1,5 @@
+import type { PasswordHashResult } from '../common/security/password-hasher';
+
 export type Provider = 'GOOGLE' | 'FACEBOOK';
 
 export interface Client {
@@ -28,7 +30,10 @@ export interface NewClient {
   gender?: string | null;
   language?: string;
   acceptedTerms?: boolean;
+  address?: { districtId: number; details?: string | null } | null;
 }
+
+export type NewClientWithLocalCredentials = NewClient & PasswordHashResult;
 
 export interface SocialProfile {
   provider: Provider;

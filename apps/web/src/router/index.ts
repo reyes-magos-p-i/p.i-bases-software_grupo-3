@@ -18,7 +18,7 @@ const router = createRouter({
     {
       path: '/:pathMatch(.*)*',
       name: 'NotFound',
-      component: PlaceHolder
+      component: PlaceHolder,
     },
     {
       path: '/terms-and-conditions',
@@ -37,5 +37,13 @@ const router = createRouter({
     },
   ],
 })
+
+if (import.meta.env.DEV) {
+  router.addRoute({
+    path: '/dev/dashboard',
+    name: 'dashboard-preview',
+    component: () => import('@/views/DashboardPreview.vue'),
+  })
+}
 
 export default router

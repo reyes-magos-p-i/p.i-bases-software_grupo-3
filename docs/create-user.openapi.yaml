@@ -1,0 +1,452 @@
+openapi: 3.0.3
+info:
+  title: Creación administrativa de usuarios
+  version: 0.5.0
+  description: |
+    Contrato preliminar para la comunicación HTTP entre Vue y NestJS.
+    UsersModule está registrado en AppModule y expone POST /users y
+    GET /users/creation-options para cargar los catálogos del formulario.
+    El backend necesita configuración válida de Oracle y SMTP para arrancar.
+    Las pruebas de integración del módulo ejecutan las capas de usuarios reales
+    con Oracle y SMTP simulados. La integración con el formulario sigue pendiente.
+
+    La operación está destinada exclusivamente a administradores.
+    El controlador utiliza DevelopmentAdminGuard: solo permite solicitudes con
+    NODE_ENV=development, DEV_ADMIN_ENABLED=true y DEV_ADMIN_EMPLOYEE_ID válido.
+    Consulta el empleado configurado en Oracle en cada solicitud y exige que
+    su rol sea ADMINISTRATOR. Este modo local asigna esa identidad a todas las
+    solicitudes que alcancen el controlador habilitado; no autentica a la persona.
+    La autorización de producción sigue pendiente. El envío de credenciales usa
+    un proveedor SMTP configurable, con conexión cifrada y validación de certificados.
+    Este documento no define todavía un esquema de autenticación; su ausencia
+    no autoriza el acceso público a la operación. Véase development-admin.md.
+    El campo role del cuerpo identifica la cuenta que se desea crear y no
+    acredita los permisos de quien hace la solicitud.
+
+    Los límites de texto se expresan en bytes UTF-8 mediante la extensión
+    x-max-utf8-bytes. No equivalen a límites de caracteres: por ejemplo,
+    una letra acentuada puede ocupar varios bytes. Las herramientas OpenAPI
+    no validan automáticamente esta extensión; el backend aplica los límites.
+    No se convierten implícitamente cadenas en números.
+x-integration-status: backend-integrated
+x-frontend-integration-status: pending
+paths:
+  /users/creation-options:
+    get:
+      operationId: getUserCreationOptions
+      summary: Consultar los catálogos para crear usuarios
+      x-required-role: ADMINISTRATOR
+      description: |
+        Devuelve provincias, cantones, distritos y sucursales existentes.
+        Cada lista se ordena en Oracle por NAME y luego por su identificador.
+        Los nombres se conservan como están almacenados. provinceId relaciona
+        un cantón con su provincia y cantonId relaciona un distrito con su cantón.
+        Las sucursales provienen de CINEMAS, sin inferir vínculos geográficos.
+        No recibe parámetros de filtrado ni paginación. Cada tabla vacía produce
+        una lista vacía. Si falla una consulta, no se devuelve un resultado parcial.
+        Reutiliza el guard de administrador de desarrollo de POST /users.
+        No crea usuarios ni direcciones, no genera contraseñas y no envía correos.
+      responses:
+        "200":
+          description: Catálogos consultados; las listas pueden estar vacías.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserCreationOptions"
+              example:
+                provinces:
+                  - { id: 1, label: San José }
+                cantons:
+                  - { id: 19, label: Curridabat, provinceId: 1 }
+                districts:
+                  - { id: 102, label: Curridabat, cantonId: 19 }
+                branches:
+                  - { id: 1, label: Cinépolis Multiplaza del Este }
+        "403":
+          description: Modo de desarrollo deshabilitado, configuración inválida o empleado configurado sin permisos de administrador.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 403
+                error: Forbidden
+                message: No tiene permiso para crear usuarios.
+        "500":
+          description: Fallo al comprobar la identidad o consultar los catálogos; no incluye detalles internos ni resultados parciales.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 500
+                message: Internal server error
+  /users:
+    post:
+      operationId: createUser
+      summary: Crear un cliente, empleado o administrador
+      x-required-role: ADMINISTRATOR
+      description: |
+        Valida los datos, genera una contraseña inicial y guarda el perfil
+        con su hash y salt. Si se proporciona una dirección, se crea junto con
+        el perfil y las credenciales en una misma transacción. Un fallo durante
+        esas inserciones revierte la operación completa. Después del commit
+        solicita la entrega por SMTP. La aceptación por el servidor SMTP no
+        garantiza que el mensaje llegue a la bandeja de entrada.
+        La contraseña, el hash y el salt no forman parte de la respuesta.
+        No se admiten propiedades adicionales en el cuerpo ni en address.
+        Se recibe address con districtId y details; ya no se admite addressId.
+
+        Los clientes se guardan en CLIENTS; empleados y administradores,
+        en EMPLOYEES. Los identificadores se generan en Oracle y no se envían
+        en la solicitud. La respuesta id identifica el registro en la tabla
+        correspondiente al role, no un identificador global entre ambas tablas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/CreateClient"
+                - $ref: "#/components/schemas/CreateEmployee"
+              discriminator:
+                propertyName: role
+                mapping:
+                  CLIENT: "#/components/schemas/CreateClient"
+                  EMPLOYEE: "#/components/schemas/CreateEmployee"
+                  ADMINISTRATOR: "#/components/schemas/CreateEmployee"
+            examples:
+              client:
+                summary: Cliente con campos mínimos
+                value:
+                  role: CLIENT
+                  email: cliente@example.com
+                  firstName: Ana
+              employee:
+                summary: Empleado con dirección nueva y sucursal existente
+                value:
+                  role: EMPLOYEE
+                  email: empleado@example.com
+                  firstName: José
+                  firstSurname: Núñez
+                  secondSurname: Solano
+                  birthday: "2000-02-29"
+                  phoneNumber: "+506 8888-8888"
+                  address:
+                    districtId: 7
+                    details: Casa con portón azul
+                  branchId: 3
+              administrator:
+                summary: Administrador con dirección nueva y sucursal existente
+                value:
+                  role: ADMINISTRATOR
+                  email: administrador@example.com
+                  firstName: María
+                  firstSurname: Núñez
+                  secondSurname: Solano
+                  birthday: "1990-05-20"
+                  phoneNumber: "+506 8888-8888"
+                  address:
+                    districtId: 7
+                    details: Casa con portón azul
+                  branchId: 3
+      responses:
+        "201":
+          description: Usuario creado y correo de credenciales aceptado por el servidor SMTP para el destinatario.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedUser"
+              example:
+                id: 42
+                role: CLIENT
+                email: cliente@example.com
+        "400":
+          description: Cuerpo inválido, rol desconocido o campos no permitidos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 400
+                error: Solicitud inválida
+                message:
+                  - El primer nombre es obligatorio.
+        "403":
+          description: |
+            Modo de desarrollo deshabilitado, configuración inválida o empleado
+            configurado inexistente o sin rol ADMINISTRATOR. No se crea ningún
+            registro; los encabezados y el rol del cuerpo no conceden permisos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 403
+                error: Forbidden
+                message: No tiene permiso para crear usuarios.
+        "409":
+          description: La comprobación previa detectó un cliente con el mismo correo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 409
+                error: Conflict
+                message: Ya existe un cliente con ese correo electrónico.
+        "500":
+          description: |
+            Error interno con detalles ocultos. Actualmente incluye errores de
+            persistencia sin traducción específica, como rechazos de claves
+            foráneas o un correo duplicado detectado por Oracle tras la
+            comprobación previa. No presupone que sea seguro repetir la creación.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 500
+                message: Internal server error
+        "502":
+          description: |
+            La cuenta ya fue creada, pero falló el envío de sus credenciales.
+            No repetir automáticamente POST /users para resolver este error:
+            la persistencia ya terminó. No se realiza ningún reintento automático
+            del envío. Un corte de conexión puede impedir confirmar la aceptación
+            aunque el servidor haya recibido el correo. La recuperación de la
+            entrega sigue pendiente; este endpoint no permite reenviar credenciales.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                statusCode: 502
+                error: Bad Gateway
+                message: El usuario fue creado, pero no se pudo enviar el correo con sus credenciales.
+components:
+  schemas:
+    UserCreationOptions:
+      type: object
+      additionalProperties: false
+      required: [provinces, cantons, districts, branches]
+      properties:
+        provinces:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogOption"
+        cantons:
+          type: array
+          items:
+            $ref: "#/components/schemas/CantonOption"
+        districts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DistrictOption"
+        branches:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogOption"
+    CatalogOption:
+      type: object
+      additionalProperties: false
+      required: [id, label]
+      properties:
+        id:
+          type: integer
+          description: Identificador existente de la provincia o sucursal.
+        label:
+          type: string
+          description: Nombre almacenado en Oracle.
+    CantonOption:
+      type: object
+      additionalProperties: false
+      required: [id, label, provinceId]
+      properties:
+        id:
+          type: integer
+        label:
+          type: string
+        provinceId:
+          type: integer
+          description: Referencia a PROVINCES.ID_PROVINCE.
+    DistrictOption:
+      type: object
+      additionalProperties: false
+      required: [id, label, cantonId]
+      properties:
+        id:
+          type: integer
+        label:
+          type: string
+        cantonId:
+          type: integer
+          description: Referencia a CANTONS.ID_CANTON.
+    CreateClient:
+      type: object
+      additionalProperties: false
+      required: [role, email, firstName]
+      description: |
+        El correo se convierte a minúsculas antes de validarse y guardarse.
+        Los campos opcionales, salvo language, admiten null.
+        No se reciben género, aceptación de términos ni contraseñas.
+      properties:
+        role:
+          type: string
+          enum: [CLIENT]
+        email:
+          $ref: "#/components/schemas/Email"
+        firstName:
+          $ref: "#/components/schemas/RequiredName"
+        secondName:
+          $ref: "#/components/schemas/OptionalName"
+        firstSurname:
+          $ref: "#/components/schemas/OptionalName"
+        secondSurname:
+          $ref: "#/components/schemas/OptionalName"
+        birthday:
+          type: string
+          format: date
+          nullable: true
+          minLength: 10
+          maxLength: 10
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Fecha real con formato YYYY-MM-DD, sin hora ni zona horaria.
+        phoneNumber:
+          type: string
+          nullable: true
+          x-max-utf8-bytes: 20
+          description: Máximo 20 bytes UTF-8; permite cadena vacía.
+        address:
+          description: |
+            Dirección nueva opcional. Si se omite o es null, no se crea una
+            dirección y CLIENTS.ID_ADDRESS se guarda como null.
+          anyOf:
+            - $ref: "#/components/schemas/CreateAddress"
+            - type: object
+              nullable: true
+              enum: [null]
+        language:
+          type: string
+          pattern: '\S'
+          x-max-utf8-bytes: 5
+          default: es
+          description: |
+            Máximo 5 bytes UTF-8. Puede omitirse para usar el valor predeterminado
+            es de Oracle; no admite null, vacío ni solo espacios.
+            Actualmente no se restringe a un catálogo de idiomas.
+    CreateEmployee:
+      type: object
+      additionalProperties: false
+      required:
+        - role
+        - email
+        - firstName
+        - firstSurname
+        - secondSurname
+        - birthday
+        - phoneNumber
+        - address
+        - branchId
+      description: |
+        Contrato compartido por empleados y administradores.
+        La dirección y la sucursal son obligatorias para ambos roles.
+        El correo conserva sus mayúsculas y minúsculas.
+      properties:
+        role:
+          type: string
+          enum: [EMPLOYEE, ADMINISTRATOR]
+        email:
+          $ref: "#/components/schemas/Email"
+        firstName:
+          $ref: "#/components/schemas/RequiredName"
+        secondName:
+          $ref: "#/components/schemas/OptionalName"
+        firstSurname:
+          $ref: "#/components/schemas/RequiredName"
+        secondSurname:
+          $ref: "#/components/schemas/RequiredName"
+        birthday:
+          type: string
+          format: date
+          minLength: 10
+          maxLength: 10
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Fecha real con formato YYYY-MM-DD, sin hora ni zona horaria.
+        phoneNumber:
+          type: string
+          pattern: '\S'
+          x-max-utf8-bytes: 20
+          description: Máximo 20 bytes UTF-8; no admite vacío ni solo espacios.
+        address:
+          $ref: "#/components/schemas/CreateAddress"
+        branchId:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Referencia obligatoria a una sucursal existente en CINEMAS.BRANCH_ID.
+    CreateAddress:
+      type: object
+      additionalProperties: false
+      required: [districtId]
+      description: |
+        Se crea en ADDRESSES y Oracle genera ID_ADDRESS. No se reciben
+        identificadores de provincia o cantón: se deducen del distrito.
+        El distrito debe existir; Oracle comprueba la clave foránea.
+      properties:
+        districtId:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Referencia obligatoria a DISTRICTS.ID_DISTRICT.
+        details:
+          type: string
+          nullable: true
+          x-max-utf8-bytes: 255
+          description: |
+            Detalle opcional, máximo 255 bytes UTF-8. Permite cadena vacía.
+            Si se omite, es null o es una cadena vacía, Oracle guarda NULL.
+    Email:
+      type: string
+      format: email
+      x-max-utf8-bytes: 150
+      description: Correo válido, máximo 150 bytes UTF-8.
+    RequiredName:
+      type: string
+      pattern: '\S'
+      x-max-utf8-bytes: 100
+      description: Máximo 100 bytes UTF-8; no admite vacío ni solo espacios.
+    OptionalName:
+      type: string
+      nullable: true
+      x-max-utf8-bytes: 100
+      description: Máximo 100 bytes UTF-8; permite null y cadena vacía.
+    CreatedUser:
+      type: object
+      additionalProperties: false
+      required: [id, role, email]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        role:
+          type: string
+          enum: [CLIENT, EMPLOYEE, ADMINISTRATOR]
+        email:
+          $ref: "#/components/schemas/Email"
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [statusCode, message]
+      properties:
+        statusCode:
+          type: integer
+        error:
+          type: string
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ClientsModule } from './clients.module';
 import { ClientsService } from './clients.service';
+import { ClientsRepository } from './clients.repository';
 import { DatabaseModule } from '../database/database.module';
 import { DatabaseService } from '../database/database.service';
 
@@ -14,5 +15,6 @@ describe('ClientsModule', () => {
       .compile();
 
     expect(module.get(ClientsService)).toBeDefined();
+    expect(module.get(ClientsRepository)).toBeDefined();
   });
 });

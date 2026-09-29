@@ -1,23 +1,29 @@
+import { isAxiosError } from 'axios'
+import { getApi } from '@/services/api'
 import type { RegisterPayload } from '@/types/client'
 //for login with google
 import { googleAuthCodeLogin } from 'vue3-google-login'
 import axios from 'axios'
 
-// VITE only exposes env variables prefixed with VITE_ to the client-side code.
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
-
 export async function registerUser(payload: RegisterPayload): Promise<void> {
-  // The caller must handle throwing errors, so we don't catch them here.
-  const res = await fetch(`${API_URL}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => null)
-    const msg = Array.isArray(body?.message) ? body.message.join('. ') : body?.message
-    throw new Error(msg ?? 'No se pudo crear la cuenta')
+  const api = getApi()
+  try {
+    await api.post('/auth/register', payload, { timeout: 60000 })
+  } catch (error) {
+    if (isAxiosError(error)) {
+      const message: unknown = error.response?.data?.message
+      if (typeof message === 'string' && message.trim()) {
+        throw new Error(message)
+      }
+      if (
+        Array.isArray(message) &&
+        message.length &&
+        message.every((item) => typeof item === 'string')
+      ) {
+        throw new Error(message.join('. '))
+      }
+    }
+    throw new Error('No se pudo crear la cuenta')
   }
 }
 

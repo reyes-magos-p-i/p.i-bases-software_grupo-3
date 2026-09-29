@@ -1,0 +1,106 @@
+import {
+  BadGatewayException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
+import { PasswordGenerator } from '../common/security/password-generator';
+import { PasswordHasher } from '../common/security/password-hasher';
+import type { CreateClientDto } from './dto/create-client.dto';
+import type { CreateEmployeeDto } from './dto/create-employee.dto';
+import { CreatedUserDto } from './dto/created-user.dto';
+import type { UserCreationOptionsDto } from './dto/user-creation-options.dto';
+import { UserRole } from './enums/user-role.enum';
+import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
+import { UsersRepository } from './users.repository';
+import { ClientsRepository } from '../clients/clients.repository';
+
+@Injectable()
+export class UsersService {
+  constructor(
+    private readonly usersRepository: UsersRepository,
+    private readonly clientsRepository: ClientsRepository,
+    private readonly passwordGenerator: PasswordGenerator,
+    private readonly passwordHasher: PasswordHasher,
+    private readonly credentialsSender: InitialCredentialsSender,
+  ) {}
+
+  getCreationOptions(): Promise<UserCreationOptionsDto> {
+    return this.usersRepository.getCreationOptions();
+  }
+
+  async create(
+    data: CreateClientDto | CreateEmployeeDto,
+  ): Promise<CreatedUserDto> {
+    if (
+      data.role !== UserRole.CLIENT &&
+      data.role !== UserRole.EMPLOYEE &&
+      data.role !== UserRole.ADMINISTRATOR
+    ) {
+      throw new BadRequestException('El tipo de usuario no es válido.');
+    }
+
+    if (
+      data.role === UserRole.CLIENT &&
+      (await this.clientsRepository.clientEmailExists(data.email))
+    ) {
+      throw new ConflictException(
+        'Ya existe un cliente con ese correo electrónico.',
+      );
+    }
+
+    const password = this.passwordGenerator.generate();
+    const { passwordHash, salt } = await this.passwordHasher.hash(password);
+    let id: number;
+
+    if (data.role === UserRole.CLIENT) {
+      id = await this.clientsRepository.createClient({
+        email: data.email,
+        firstName: data.firstName,
+        secondName: data.secondName,
+        firstSurname: data.firstSurname,
+        secondSurname: data.secondSurname,
+        birthday: data.birthday,
+        phoneNumber: data.phoneNumber,
+        address:
+          data.address == null
+            ? data.address
+            : {
+                districtId: data.address.districtId,
+                details: data.address.details,
+              },
+        language: data.language,
+        passwordHash,
+        salt,
+      });
+    } else {
+      id = await this.usersRepository.createEmployee({
+        role: data.role,
+        email: data.email,
+        firstName: data.firstName,
+        secondName: data.secondName,
+        firstSurname: data.firstSurname,
+        secondSurname: data.secondSurname,
+        birthday: data.birthday,
+        phoneNumber: data.phoneNumber,
+        address: {
+          districtId: data.address.districtId,
+          details: data.address.details,
+        },
+        branchId: data.branchId,
+        passwordHash,
+        salt,
+      });
+    }
+
+    try {
+      await this.credentialsSender.send({ email: data.email, password });
+    } catch {
+      throw new BadGatewayException(
+        'El usuario fue creado, pero no se pudo enviar el correo con sus credenciales.',
+      );
+    }
+
+    return new CreatedUserDto({ id, role: data.role, email: data.email });
+  }
+}
