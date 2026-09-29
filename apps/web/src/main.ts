@@ -15,8 +15,7 @@ app.use(vue3GoogleLogin, {
   clientId: '913566706796-cg960qafeugmdcti1dnp8q95j1jo98lt.apps.googleusercontent.com'
 })
 
-import { loadFacebookSdk } from './loadFBSDK.js'
-import { applyLoginStatus } from './facebook-auth'
+
 import { initializeFacebook } from './services/facebook-initialization.service'
 
 
