@@ -1,6 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
+
+vi.mock('@/facebook-auth', () => ({
+  loginWithFacebook: vi.fn().mockResolvedValue({
+    status: 'connected',
+    authResponse: { accessToken: 'test-access-token' },
+  }),
+}))
 
 describe('SocialAuthButtons.vue', () => {
   it('preserves registration labels by default', () => {
@@ -36,5 +43,6 @@ describe('SocialAuthButtons.vue', () => {
     await buttons[1]!.trigger('click')
 
     expect(wrapper.emitted('facebook')).toHaveLength(1)
+    expect(wrapper.emitted('facebook')?.[0]).toEqual(['test-access-token'])
   })
 })
