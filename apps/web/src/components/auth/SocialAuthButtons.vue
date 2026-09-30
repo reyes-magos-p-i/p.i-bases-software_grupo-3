@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { loginWithFacebook } from '@/facebook-auth'
+import { loginWithGoogle } from '@/services/authService'
 const emit = defineEmits<{
   (e: 'google'): void
   (e: 'facebook', accessToken: string): void
@@ -13,7 +14,7 @@ const props = withDefaults(defineProps<{ mode?: 'register' | 'login'; disabled?:
 async function onGoogle() {
   if (!props.disabled) emit('google')
   try{
-    //await loginWithGoogle()
+    await loginWithGoogle()
     console.log('google login successful')
   }catch(error){
     console.error('google login failed or was cancelled', error)
