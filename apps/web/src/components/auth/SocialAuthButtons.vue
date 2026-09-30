@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { loginWithGoogle } from '@/services/authService';
-
+import { loginWithFacebook } from '@/facebook-auth'
+import { loginWithGoogle } from '@/services/authService'
+const emit = defineEmits<{
+  (e: 'google'): void
+  (e: 'facebook', accessToken: string): void
+}>()
 const props = withDefaults(defineProps<{ mode?: 'register' | 'login'; disabled?: boolean }>(), {
   mode: 'register',
   disabled: false,
 })
-const emit = defineEmits<{ (e: 'google'): void; (e: 'facebook'): void }>()
 
 // OAuth handlers remain owned by their respective integrations.
 async function onGoogle() {
@@ -18,8 +21,12 @@ async function onGoogle() {
   }
 }
 
-function onFacebook() {
-  if (!props.disabled) emit('facebook')
+// TODO (Diego): implementar el flujo OAuth de Facebook
+async function onFacebook() {
+  const response = await loginWithFacebook()
+  if (response.status === 'connected' && response.authResponse) {
+    emit('facebook', response.authResponse.accessToken)
+  }
 }
 </script>
 

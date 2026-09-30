@@ -2,10 +2,12 @@ import {
   ConflictException,
   Injectable,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { ClientsService } from '../clients/clients.service';
+import { ConfigService } from '@nestjs/config';
 import { Client, SocialProfile} from '../clients/client.model';
 import { splitFirstWord } from '../clients/name.util';
 import { RegisterDto } from './dto/register.dto';
@@ -24,6 +26,7 @@ export class AuthService {
     private readonly clients: ClientsService,
     private readonly jwt: JwtService,
     private readonly passwordHasher: PasswordHasher,
+    private readonly config: ConfigService,
     private readonly usersRepository: UsersRepository,
   ) {}
 
@@ -166,4 +169,77 @@ export class AuthService {
       }),
     };
   }
+
+  async facebookLogin(accessToken: string) {
+    if (!accessToken) {
+      throw new BadRequestException('Facebook access token is required');
+    }
+
+    const appId = this.config.getOrThrow<string>('FACEBOOK_APP_ID');
+    const appSecret = this.config.getOrThrow<string>('FACEBOOK_APP_SECRET');
+    const appAccessToken = `${appId}|${appSecret}`;
+
+    const debugUrl = new URL('https://graph.facebook.com/v21.0/debug_token');
+    debugUrl.searchParams.set('input_token', accessToken);
+    debugUrl.searchParams.set('access_token', appAccessToken);
+
+    const debugResponse = await fetch(debugUrl);
+    // CHECK: token is valid
+    const debugResult = (await debugResponse.json()) as {
+      data?: {
+        app_id?: string;
+        user_id?: string;
+        is_valid?: boolean;
+      };
+    };
+
+    const tokenData = debugResult.data;
+    // CHECK: token belongs to app
+    if (
+      !debugResponse.ok ||
+      !tokenData?.is_valid ||
+      tokenData.app_id !== appId ||
+      !tokenData.user_id
+    ) {
+      throw new UnauthorizedException('Invalid Facebook access token');
+    }
+
+    const profileUrl = new URL('https://graph.facebook.com/v21.0/me');
+    profileUrl.searchParams.set(
+      'fields',
+      'id,email,first_name,last_name',
+    );
+    profileUrl.searchParams.set('access_token', accessToken);
+
+    const profileResponse = await fetch(profileUrl);
+    const profile = (await profileResponse.json()) as {
+      id?: string;
+      email?: string;
+      first_name?: string;
+      last_name?: string;
+    };
+    // CHECK: token user_id matches profile id
+    if (
+      !profileResponse.ok ||
+      profile.id !== tokenData.user_id ||
+      !profile.email
+    ) {
+      throw new UnauthorizedException(
+        'Could not verify Facebook profile',
+      );
+    }
+    // CHECK: email is verified by Facebook
+    const socialProfile: SocialProfile = {
+      provider: 'FACEBOOK',
+      providerUserId: profile.id,
+      email: profile.email,
+      firstName: profile.first_name ?? '',
+      lastName: profile.last_name ?? '',
+    };
+
+    const client = await this.clients.findOrCreateSocial(socialProfile);
+
+    return this.issueToken(client);
+  }
+
 }

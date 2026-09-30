@@ -9,6 +9,7 @@ import {
   Req,
   Res,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ThrottlerGuard } from '@nestjs/throttler';
@@ -22,8 +23,9 @@ import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.gua
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly auth: AuthService,
+  private readonly logger = new Logger(AuthController.name);
+
+  constructor(private readonly auth: AuthService,
     private readonly session: EmployeeSessionService,
   ) {}
 
@@ -69,4 +71,9 @@ export class AuthController {
   }
 
   // TODO(Diego): Facebook routes should be here.
+  @Post('facebook')
+  async facebookLogin(@Body() dto: { accessToken: string }) {
+    this.logger.log(`Facebook login attempt`);
+    return this.auth.facebookLogin(dto.accessToken);
+  }
 }

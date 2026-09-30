@@ -1,11 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { AuthService } from './auth.service';
 import { ClientsService } from '../clients/clients.service';
 import { RegisterDto } from './dto/register.dto';
-import { OAuth2Client } from 'google-auth-library'; //google login testing
+import { ConfigService } from '@nestjs/config';
 
 jest.mock('argon2');
 // mock for google lib
@@ -29,6 +33,7 @@ describe('AuthService', () => {
   };
   let jwt: { sign: jest.Mock; signAsync: jest.Mock };
   let users: { findEmployeeWithLocalCredentialsByEmail: jest.Mock };
+  let config: { getOrThrow: jest.Mock };
 
   const registerDto: RegisterDto = {
     email: 'user@example.com',
@@ -46,13 +51,14 @@ describe('AuthService', () => {
     clients = {
       findByEmail: jest.fn(),
       createWithLocalCredentials: jest.fn(),
-       findOrCreateSocial: jest.fn(),
+      findOrCreateSocial: jest.fn(),
     };
     jwt = {
       sign: jest.fn().mockReturnValue('signed-token'),
       signAsync: jest.fn().mockResolvedValue('employee-token'),
     };
     users = { findEmployeeWithLocalCredentialsByEmail: jest.fn() };
+    config = { getOrThrow: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -60,6 +66,7 @@ describe('AuthService', () => {
         { provide: PasswordHasher, useValue: hasher },
         { provide: ClientsService, useValue: clients },
         { provide: JwtService, useValue: jwt },
+        { provide: ConfigService, useValue: config },
         { provide: UsersRepository, useValue: users },
       ],
     }).compile();
@@ -262,162 +269,81 @@ describe('AuthService', () => {
     });
   });
 
-  describe('googleLogin', () => {
-  let googleClient: {
-    getToken: jest.Mock;
-    verifyIdToken: jest.Mock;
-  };
+  describe('facebookLogin', () => {
+    const accessToken = 'facebook-user-token';
 
-  beforeEach(() => {
-    googleClient = {
-      getToken: jest.fn(),
-      verifyIdToken: jest.fn(),
-    };
-
-    (OAuth2Client as unknown as jest.Mock).mockImplementation(() => googleClient);
-
-    process.env.GOOGLE_CLIENT_ID = 'test-client-id';
-    process.env.GOOGLE_CLIENT_SECRET = 'test-client-secret';
-  });
-
-  it('logs in an existing/new Google client and returns an access token', async () => {
-    const googlePayload = {
-      sub: 'google-123',
-      email: 'google@example.com',
-      given_name: 'Juan',
-      family_name: 'Perez',
-    };
-
-    const client = {
-      id: 10,
-      email: 'google@example.com',
-      firstName: 'Juan',
-    };
-
-    googleClient.getToken.mockResolvedValue({
-      tokens: {
-        id_token: 'google-id-token',
-      },
+    beforeEach(() => {
+      config.getOrThrow.mockImplementation((key: string) => {
+        const values = {
+          FACEBOOK_APP_ID: 'facebook-app-id',
+          FACEBOOK_APP_SECRET: 'facebook-app-secret',
+        };
+        return values[key as keyof typeof values];
+      });
     });
 
-    googleClient.verifyIdToken.mockResolvedValue({
-      getPayload: jest.fn().mockReturnValue(googlePayload),
+    it('verifies the token, loads the profile, persists the social client, and issues a JWT', async () => {
+      const fetchMock = jest.spyOn(global, 'fetch');
+      fetchMock
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: {
+              app_id: 'facebook-app-id',
+              user_id: 'facebook-user-id',
+              is_valid: true,
+            },
+          }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            id: 'facebook-user-id',
+            email: 'facebook@example.com',
+            first_name: 'Ana',
+            last_name: 'Perez',
+          }),
+        } as Response);
+      clients.findOrCreateSocial.mockResolvedValue({
+        id: 12,
+        email: 'facebook@example.com',
+      });
+
+      await expect(service.facebookLogin(accessToken)).resolves.toEqual({
+        accessToken: 'signed-token',
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const debugUrl = new URL(fetchMock.mock.calls[0]![0] as string);
+      expect(debugUrl.pathname).toBe('/v21.0/debug_token');
+      expect(debugUrl.searchParams.get('input_token')).toBe(accessToken);
+      expect(debugUrl.searchParams.get('access_token')).toBe(
+        'facebook-app-id|facebook-app-secret',
+      );
+      const profileUrl = new URL(fetchMock.mock.calls[1]![0] as string);
+      expect(profileUrl.pathname).toBe('/v21.0/me');
+      expect(profileUrl.searchParams.get('access_token')).toBe(accessToken);
+      expect(clients.findOrCreateSocial).toHaveBeenCalledWith({
+        provider: 'FACEBOOK',
+        providerUserId: 'facebook-user-id',
+        email: 'facebook@example.com',
+        firstName: 'Ana',
+        lastName: 'Perez',
+      });
+      expect(jwt.sign).toHaveBeenCalledWith({
+        sub: 12,
+        email: 'facebook@example.com',
+        type: 'client',
+      });
     });
 
-    clients.findOrCreateSocial.mockResolvedValue(client);
+    it('rejects a missing access token before calling Facebook', async () => {
+      const fetchMock = jest.spyOn(global, 'fetch');
 
-    const result = await service.googleLogin('google-auth-code');
-
-    expect(googleClient.getToken).toHaveBeenCalledWith('google-auth-code');
-
-    expect(googleClient.verifyIdToken).toHaveBeenCalledWith({
-      idToken: 'google-id-token',
-      audience: 'test-client-id',
-    });
-
-    expect(clients.findOrCreateSocial).toHaveBeenCalledWith({
-      provider: 'GOOGLE',
-      providerUserId: 'google-123',
-      email: 'google@example.com',
-      firstName: 'Juan',
-      lastName: 'Perez',
-    });
-
-    expect(jwt.sign).toHaveBeenCalledWith({
-      sub: 10,
-      email: 'google@example.com',
-      type: 'client',
-    });
-
-    expect(result).toEqual({
-      message: 'authentication success',
-      client: {
-        id: 10,
-        email: 'google@example.com',
-        firstName: 'Juan',
-      },
-      accessToken: 'signed-token',
-    });
-  });
-
-  it('throws ConflictException when Google does not return an ID token', async () => {
-    googleClient.getToken.mockResolvedValue({
-      tokens: {},
-    });
-
-    await expect(
-      service.googleLogin('invalid-code'),
-    ).rejects.toThrow(ConflictException);
-
-    expect(googleClient.verifyIdToken).not.toHaveBeenCalled();
-    expect(clients.findOrCreateSocial).not.toHaveBeenCalled();
-  });
-
-  it('throws ConflictException when Google payload has no email', async () => {
-    googleClient.getToken.mockResolvedValue({
-      tokens: {
-        id_token: 'google-id-token',
-      },
-    });
-
-    googleClient.verifyIdToken.mockResolvedValue({
-      getPayload: jest.fn().mockReturnValue({
-        sub: 'google-123',
-        given_name: 'Juan',
-        family_name: 'Perez',
-      }),
-    });
-
-    await expect(
-      service.googleLogin('google-auth-code'),
-    ).rejects.toThrow(ConflictException);
-
-    expect(clients.findOrCreateSocial).not.toHaveBeenCalled();
-  });
-
-  it('converts unexpected Google errors into ConflictException', async () => {
-    googleClient.getToken.mockRejectedValue(
-      new Error('Google API error'),
-    );
-
-    await expect(
-      service.googleLogin('google-auth-code'),
-    ).rejects.toThrow(
-      'Error trying to validated google credentials',
-    );
-
-    expect(clients.findOrCreateSocial).not.toHaveBeenCalled();
-  });
-
-  it('uses empty strings when Google does not provide given_name or family_name', async () => {
-    googleClient.getToken.mockResolvedValue({
-      tokens: {
-        id_token: 'google-id-token',
-      },
-    });
-
-    googleClient.verifyIdToken.mockResolvedValue({
-      getPayload: jest.fn().mockReturnValue({
-        sub: 'google-123',
-        email: 'google@example.com',
-      }),
-    });
-
-    clients.findOrCreateSocial.mockResolvedValue({
-      id: 20,
-      email: 'google@example.com',
-      firstName: '',
-    });
-
-    await service.googleLogin('google-auth-code');
-
-    expect(clients.findOrCreateSocial).toHaveBeenCalledWith({
-      provider: 'GOOGLE',
-      providerUserId: 'google-123',
-      email: 'google@example.com',
-      firstName: '',
-      lastName: '',
+      await expect(service.facebookLogin('')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
-});
 });

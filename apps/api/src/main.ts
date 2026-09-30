@@ -5,8 +5,9 @@ import { AppModule } from './app.module';
 
 export async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  app.set('trust proxy', 'loopback');
   app.setGlobalPrefix('api');
+  app.set('trust proxy', 'loopback');
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

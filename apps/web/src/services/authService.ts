@@ -5,6 +5,15 @@ import type { RegisterPayload } from '@/types/client'
 import { googleAuthCodeLogin } from 'vue3-google-login'
 import type { EmployeeIdentity, EmployeeLoginRequest } from '@/types/employee-auth'
 
+export async function facebookLogin(accessToken: string) {
+  const api = getApi()
+  const response = await api.post('/auth/facebook', {
+    accessToken,
+  })
+  localStorage.setItem('accessToken', response.data.accessToken)
+  return response.data
+}
+
 export async function registerUser(payload: RegisterPayload): Promise<void> {
   const api = getApi()
   try {

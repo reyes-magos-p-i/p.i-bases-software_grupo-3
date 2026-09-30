@@ -16,6 +16,7 @@ describe('function bootstrap', () => {
   const createMockApp = () => ({
     set: jest.fn(),
     setGlobalPrefix: jest.fn(),
+    set: jest.fn(),
     useGlobalPipes: jest.fn(),
     enableCors: jest.fn(),
     enableShutdownHooks: jest.fn(),
@@ -35,6 +36,7 @@ describe('function bootstrap', () => {
     expect(NestFactory.create).toHaveBeenCalledWith(AppModule);
     expect(app.set).toHaveBeenCalledWith('trust proxy', 'loopback');
     expect(app.setGlobalPrefix).toHaveBeenCalledWith('api');
+    expect(app.set).toHaveBeenCalledWith('trust proxy', 'loopback');
     expect(app.useGlobalPipes).toHaveBeenCalled();
     expect(app.enableCors).toHaveBeenCalled();
     expect(app.enableShutdownHooks).toHaveBeenCalled();

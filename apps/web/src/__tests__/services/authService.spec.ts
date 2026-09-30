@@ -75,6 +75,37 @@ describe('registerUser', () => {
   })
 })
 
+describe('facebook authentication API', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.resetAllMocks()
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    localStorage.clear()
+    create.mockImplementation((defaults) => ({ defaults, post, get }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    localStorage.clear()
+  })
+
+  it('logs in with Facebook, stores the access token, and returns the response data', async () => {
+    const { facebookLogin } = await import('@/services/authService')
+    const responseData = {
+      accessToken: 'server-access-token',
+      user: { id: 7, firstName: 'Ana' },
+    }
+    post.mockResolvedValue({ data: responseData })
+
+    await expect(facebookLogin('facebook-access-token')).resolves.toEqual(responseData)
+
+    expect(post).toHaveBeenCalledExactlyOnceWith('/auth/facebook', {
+      accessToken: 'facebook-access-token',
+    })
+    expect(localStorage.getItem('accessToken')).toBe('server-access-token')
+  })
+})
+
 describe('employee authentication API', () => {
   beforeEach(() => {
     vi.resetModules()
