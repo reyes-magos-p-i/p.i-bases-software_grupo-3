@@ -22,5 +22,9 @@ export class AuthController {
   }
 
   // TODO(Silvio): Google routes should be here.
-  // TODO(Diego): Facebook routes should be here. 
+  // TODO(Diego): Facebook routes should be here.
+  @Post('facebook')
+  async facebookLogin(@Body() dto: { accessToken: string }) {
+    //return this.auth.facebookLogin(dto.accessToken);
+  }
 }
