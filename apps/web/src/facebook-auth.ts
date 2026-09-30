@@ -1,5 +1,3 @@
-/// <reference path="./types/facebook.d.ts" />
-
 import { reactive } from 'vue'
 
 export const fbAuth = reactive({
