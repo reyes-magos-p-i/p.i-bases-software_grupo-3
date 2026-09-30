@@ -5,6 +5,7 @@ import { PasswordHasher } from '../common/security/password-hasher';
 import { AuthService } from './auth.service';
 import { ClientsService } from '../clients/clients.service';
 import { RegisterDto } from './dto/register.dto';
+import { ConfigService } from '@nestjs/config';
 
 const hasher = { hash: jest.fn() };
 const salt = 'AAECAwQFBgcICQoLDA0ODw';
@@ -42,6 +43,7 @@ describe('AuthService', () => {
         { provide: PasswordHasher, useValue: hasher },
         { provide: ClientsService, useValue: clients },
         { provide: JwtService, useValue: jwt },
+        { provide: ConfigService, useValue: { useValue: {} } },
       ],
     }).compile();
 
