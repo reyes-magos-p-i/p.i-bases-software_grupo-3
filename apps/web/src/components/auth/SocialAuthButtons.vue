@@ -13,7 +13,7 @@ const props = withDefaults(defineProps<{ mode?: 'register' | 'login'; disabled?:
 async function onGoogle() {
   if (!props.disabled) emit('google')
   try{
-    await loginWithGoogle()
+    //await loginWithGoogle()
     console.log('google login successful')
   }catch(error){
     console.error('google login failed or was cancelled', error)
