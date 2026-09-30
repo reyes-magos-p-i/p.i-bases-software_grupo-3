@@ -1,14 +1,26 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, useId, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
-import type { UserRole, UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
+import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
 import { createUser, getUserCreationOptions } from '@/services/user.service'
+import {
+  closeEmployeeSession,
+  employeeSession,
+  invalidateEmployeeSession,
+  restoreEmployeeSession,
+} from '@/services/employee-session.service'
 
-const role = ref<Exclude<UserRole, 'CLIENT'>>('ADMINISTRATOR')
-const activeSection = ref<'employees' | 'clients'>('employees')
-const roleId = useId()
+const router = useRouter()
+const identity = employeeSession.user
+const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
+const activeSection = ref<'employees' | 'clients'>(
+  role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
+)
+const loggingOut = ref(false)
+const logoutError = ref('')
 const userDialog = useTemplateRef<InstanceType<typeof CreateUserDialog>>('user-dialog')
 const catalogs = ref<UserCreationOptions | null>(null)
 const catalogsLoading = ref(false)
@@ -22,8 +34,44 @@ const resultIsWarning = ref(false)
 const resultNotice = useTemplateRef<HTMLElement>('result-notice')
 let disposed = false
 
+function sessionExpired() {
+  invalidateEmployeeSession()
+  void router.replace({ path: '/', query: { login: 'employee', reason: 'expired' } })
+}
+
+async function refreshPermissions() {
+  try {
+    const current = await restoreEmployeeSession(true)
+    if (!disposed && !current) sessionExpired()
+  } catch {
+    if (!disposed)
+      void router.replace({ path: '/', query: { login: 'employee', reason: 'unavailable' } })
+  }
+}
+
+async function logout() {
+  if (submitting.value || loggingOut.value) return
+  loggingOut.value = true
+  logoutError.value = ''
+  try {
+    await closeEmployeeSession()
+    if (!disposed) await router.replace('/')
+  } catch {
+    if (!disposed)
+      logoutError.value = 'No se pudo confirmar el cierre de sesión. Vuelve a intentarlo.'
+  } finally {
+    if (!disposed) loggingOut.value = false
+  }
+}
+
 async function submitUser(data: CreateUserRequest) {
-  if (submitting.value || submissionBlocked.value || role.value !== 'ADMINISTRATOR') return
+  if (
+    submitting.value ||
+    loggingOut.value ||
+    submissionBlocked.value ||
+    role.value !== 'ADMINISTRATOR'
+  )
+    return
   if ((activeSection.value === 'clients') !== (data.role === 'CLIENT')) return
   const submittingDialog = userDialog.value
   submitting.value = true
@@ -49,6 +97,8 @@ async function submitUser(data: CreateUserRequest) {
       creationResult.value = `La cuenta de ${data.email} fue creada, pero no se pudo confirmar el envío del correo. No repitas la creación.`
       resultIsWarning.value = true
       completed = true
+    } else if (status === 401) {
+      sessionExpired()
     } else if (status === 400) {
       const message: unknown = isAxiosError<UserApiError>(error)
         ? error.response?.data?.message
@@ -65,6 +115,7 @@ async function submitUser(data: CreateUserRequest) {
       submissionErrors.value = [
         'No tienes permiso para crear usuarios. Comprueba los permisos antes de volver a enviar.',
       ]
+      void refreshPermissions()
     } else if (status === 409) {
       submissionErrors.value = [
         'Ya existe una cuenta con ese correo. Revisa el correo introducido.',
@@ -104,8 +155,11 @@ async function loadCatalogs() {
     if (!request.signal.aborted) catalogs.value = options
   } catch (error) {
     if (request.signal.aborted) return
-    if (isAxiosError(error) && error.response?.status === 403) {
+    if (isAxiosError(error) && error.response?.status === 401) {
+      sessionExpired()
+    } else if (isAxiosError(error) && error.response?.status === 403) {
       catalogsError.value = 'No tienes permiso para cargar las opciones del formulario.'
+      void refreshPermissions()
     } else if (
       isAxiosError(error) &&
       (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT')
@@ -124,6 +178,7 @@ async function loadCatalogs() {
 }
 
 function openUserDialog() {
+  if (loggingOut.value || role.value !== 'ADMINISTRATOR') return
   userDialog.value?.open()
   void loadCatalogs()
 }
@@ -153,7 +208,7 @@ watch(role, () => {
 })
 
 function navigate(section: string) {
-  if (submitting.value) return
+  if (submitting.value || loggingOut.value) return
   if (
     (section === 'employees' || section === 'clients') &&
     availableSections.value.includes(section)
@@ -165,38 +220,17 @@ function navigate(section: string) {
 
 <template>
   <DashboardLayout
+    v-if="identity"
     :role="role"
-    user-name="Usuario de prueba"
+    :user-name="identity.firstName"
     :active-section="activeSection"
     :available-sections="availableSections"
+    :can-logout="!submitting && !loggingOut"
     @navigate="navigate"
+    @logout="logout"
   >
-    <section class="preview-toolbar" aria-label="Controles de la vista de desarrollo">
-      <div class="preview-description">
-        <p class="preview-title">
-          <i class="bi bi-tools" aria-hidden="true"></i>
-          Vista de desarrollo
-        </p>
-        <p>
-          El rol de esta vista es simulado. El formulario consulta catálogos reales, con los
-          permisos del administrador configurado en el servidor. Crear una cuenta guarda datos
-          reales y envía sus credenciales por correo.
-        </p>
-      </div>
-      <div class="preview-controls">
-        <div class="role-field">
-          <label :for="roleId" class="form-label">Rol de prueba</label>
-          <select :id="roleId" v-model="role" class="form-select" :disabled="submitting">
-            <option value="ADMINISTRATOR">Administrador</option>
-            <option value="EMPLOYEE">Empleado</option>
-          </select>
-        </div>
-        <RouterLink to="/" class="portal-link">
-          <i class="bi bi-arrow-left" aria-hidden="true"></i>
-          Volver al portal
-        </RouterLink>
-      </div>
-    </section>
+    <p v-if="loggingOut" role="status">Cerrando sesión…</p>
+    <p v-if="logoutError" role="alert">{{ logoutError }}</p>
 
     <p
       v-if="creationResult"
@@ -215,6 +249,7 @@ function navigate(section: string) {
           v-if="role === 'ADMINISTRATOR'"
           type="button"
           class="add-user-button"
+          :disabled="loggingOut"
           aria-haspopup="dialog"
           @click="openUserDialog"
         >
@@ -225,7 +260,6 @@ function navigate(section: string) {
       <div class="preview-placeholder">
         <h2>Sección en preparación</h2>
         <p>El contenido de esta sección se incorporará en próximos incrementos.</p>
-        <p>Puedes probar el menú lateral, cambiar el rol y ajustar el tamaño de la ventana.</p>
       </div>
     </section>
     <CreateUserDialog
@@ -246,6 +280,10 @@ function navigate(section: string) {
       @submit="submitUser"
     />
   </DashboardLayout>
+  <p v-else class="session-unavailable" role="alert">
+    No hay una sesión verificada.
+    <RouterLink to="/?login=employee">Volver al inicio de sesión</RouterLink>
+  </p>
 </template>
 
 <style scoped>
@@ -257,82 +295,6 @@ function navigate(section: string) {
 }
 .creation-result:focus {
   outline: 2px solid var(--color-primary);
-}
-
-.preview-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px 32px;
-  margin-bottom: 32px;
-  padding: 20px;
-  border-left: 4px solid var(--color-primary);
-  border-radius: var(--radius-small);
-  background: var(--color-background);
-}
-
-.preview-description {
-  flex: 1 1 20rem;
-  min-width: 0;
-}
-
-.preview-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  color: var(--color-primary);
-  font-weight: 700;
-}
-
-.preview-description > p:last-child,
-.preview-placeholder > p:last-child {
-  margin-bottom: 0;
-}
-
-.preview-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 16px;
-  max-width: 100%;
-}
-
-.role-field {
-  flex: 1 1 12rem;
-  min-width: 0;
-}
-
-.form-label {
-  font-weight: 600;
-}
-
-.form-select {
-  min-height: 44px;
-}
-
-.portal-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px;
-  border-radius: var(--radius-small);
-  color: var(--color-primary);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.portal-link:hover {
-  background: var(--color-light_gray);
-}
-
-.portal-link:focus-visible,
-.form-select:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-  box-shadow: none;
 }
 
 .section-heading {

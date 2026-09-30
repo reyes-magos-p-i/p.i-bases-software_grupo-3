@@ -1,3 +1,8 @@
+wallet/
+*.png
+*.svg
+*.jpg
+*.jpeg
 # compiled output
 /dist
 /node_modules
@@ -57,3 +62,6 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+#Wallet
+wallet/

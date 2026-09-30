@@ -121,7 +121,7 @@ describe('DashboardLayout', () => {
         id !== 'dashboard' && id !== 'employees',
       )
     }
-    expect(wrapper.get('header').text()).toContain('Rol: Empleado')
+    expect(wrapper.get('header').text()).toContain('Sesión iniciada como Empleado')
   })
 
   it.each(['CLIENT', 'UNKNOWN'] as UserRole[])(
@@ -212,7 +212,7 @@ describe('DashboardLayout', () => {
   it('renders supplied identity and content without inventing a session or profile picture', () => {
     const wrapper = renderLayout({ userName: 'Ana Solano' }, { default: '<h1>Crear usuario</h1>' })
 
-    expect(wrapper.get('header').text()).toContain('Rol: Administrador')
+    expect(wrapper.get('header').text()).toContain('Sesión iniciada como Administrador')
     expect(wrapper.get('header').text()).toContain('Ana Solano')
     expect(wrapper.get('main h1').text()).toBe('Crear usuario')
     expect(wrapper.find('img').exists()).toBe(false)

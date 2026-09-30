@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { DOMWrapper, mount, type VueWrapper } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
 import { registerUser } from '@/services/authService'
 
@@ -8,8 +9,57 @@ vi.mock('@/services/authService', () => ({
 }))
 
 describe('RegisterModal.vue', () => {
+  let realWrapper: VueWrapper | undefined
+  const prototype = HTMLDialogElement.prototype
+  const originalShow = Object.getOwnPropertyDescriptor(prototype, 'showModal')
+  const originalClose = Object.getOwnPropertyDescriptor(prototype, 'close')
   beforeEach(() => {
     vi.clearAllMocks()
+    Object.defineProperties(prototype, {
+      showModal: {
+        configurable: true,
+        value: function (this: HTMLDialogElement) {
+          this.open = true
+        },
+      },
+      close: {
+        configurable: true,
+        value: function (this: HTMLDialogElement) {
+          this.open = false
+        },
+      },
+    })
+  })
+
+  afterEach(() => {
+    realWrapper?.unmount()
+    realWrapper = undefined
+    for (const [key, descriptor] of [
+      ['showModal', originalShow],
+      ['close', originalClose],
+    ] as const) {
+      if (descriptor) Object.defineProperty(prototype, key, descriptor)
+      else Reflect.deleteProperty(prototype, key)
+    }
+  })
+
+  it('preserves registration validation and events inside the real native modal', async () => {
+    realWrapper = mount(RegisterModal, {
+      props: { open: true },
+      attachTo: document.body,
+    })
+    const page = new DOMWrapper(document.body)
+    await nextTick()
+    expect(page.get('dialog').element.open).toBe(true)
+    expect(document.activeElement).toBe(page.get('#email').element)
+    await page.get('form').trigger('submit')
+    expect(page.text()).toContain('Ingresa un correo válido')
+    expect(registerUser).not.toHaveBeenCalled()
+    await page.get('.app-modal-close').trigger('click')
+    expect(realWrapper.emitted('close')).toHaveLength(1)
+    await realWrapper.setProps({ open: false })
+    expect(page.get('dialog').element.open).toBe(false)
+    expect(document.body.style.position).toBe('')
   })
 
   const createWrapper = (props = { open: true }) => {
@@ -20,7 +70,8 @@ describe('RegisterModal.vue', () => {
           BaseModal: {
             props: ['open', 'title'],
             emits: ['close'],
-            template: '<div v-if="open"><slot /><button id="btn-close-modal" @click="$emit(\'close\')"></button></div>',
+            template:
+              '<div v-if="open"><slot /><button id="btn-close-modal" @click="$emit(\'close\')"></button></div>',
           },
           SocialAuthButtons: true,
         },
@@ -43,7 +94,9 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#password').setValue('simple')
     await wrapper.find('form').trigger('submit.prevent')
 
-    expect(wrapper.text()).toContain('Mínimo 8 caracteres con mayúscula, minúscula, número y un carácter especial')
+    expect(wrapper.text()).toContain(
+      'Mínimo 8 caracteres con mayúscula, minúscula, número y un carácter especial',
+    )
   })
 
   it('valida que la contraseña no sea igual al email o nombres', async () => {
@@ -54,7 +107,9 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#confirmPassword').setValue(password)
     await wrapper.find('form').trigger('submit.prevent')
 
-    expect(wrapper.text()).toContain('La contraseña no puede ser igual al correo ni al nombre de usuario')
+    expect(wrapper.text()).toContain(
+      'La contraseña no puede ser igual al correo ni al nombre de usuario',
+    )
   })
 
   it('valida que las contraseñas coincidan', async () => {
@@ -67,8 +122,9 @@ describe('RegisterModal.vue', () => {
   })
 
   it('ejecuta registro con éxito y emite eventos', async () => {
-
-    vi.mocked(registerUser).mockResolvedValueOnce({} as unknown as Awaited<ReturnType<typeof registerUser>>)
+    vi.mocked(registerUser).mockResolvedValueOnce(
+      {} as unknown as Awaited<ReturnType<typeof registerUser>>,
+    )
     const wrapper = createWrapper()
 
     await wrapper.find('#email').setValue('juan.perez@example.com')
@@ -84,7 +140,7 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('form').trigger('submit.prevent')
 
     expect(registerUser).toHaveBeenCalledWith(
-      expect.not.objectContaining({ confirmPassword: 'Password123!' })
+      expect.not.objectContaining({ confirmPassword: 'Password123!' }),
     )
     expect(wrapper.emitted('registered')).toBeTruthy()
     expect(wrapper.emitted('close')).toBeTruthy()

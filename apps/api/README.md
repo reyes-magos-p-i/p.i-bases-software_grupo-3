@@ -25,6 +25,114 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Límite de solicitudes del login del personal
+
+`POST /auth/employees/login` utiliza `@nestjs/throttler` con un máximo de
+**5 solicitudes en 60 segundos por IP de origen**, configurado en `AuthModule`.
+Cuenta tanto los logins correctos como los intentos fallidos y las solicitudes
+que rechaza la validación del DTO. En IPv6 se conserva la agrupación por subred
+`/64` de la biblioteca para impedir el cambio de dirección dentro de la misma
+subred como forma de eludir el límite.
+
+La sexta solicitud devuelve `429` con un mensaje en español y la cabecera
+`Retry-After`, expresada en segundos. Inicia una espera de 60 segundos; los
+reintentos bloqueados no prolongan esa espera. El guard rechaza esas solicitudes
+antes de consultar Oracle o verificar el hash de la contraseña. Cambiar el correo
+no reinicia el contador. Personas que comparten una IP pública comparten el cupo.
+
+El guard se aplica únicamente al login del personal. No cambia los límites del
+registro ni de `/auth/me`. No bloquea cuentas ni modifica registros de Oracle.
+Las pruebas HTTP usan el módulo, el guard y el almacenamiento reales del
+limitador, con una aplicación nueva por prueba para aislar los contadores.
+
+### Condiciones para activar el login
+
+`AuthModule` todavía no está importado por `AppModule`: estas rutas permanecen
+sin activar en la aplicación principal. El contrato está en
+[employee-auth.openapi.yaml](../../docs/employee-auth.openapi.yaml).
+
+El almacenamiento del limitador es **local a cada proceso**. Sus contadores se
+pierden al reiniciar y no se comparten entre procesos o réplicas. Esta protección
+no sustituye límites globales de carga ni limita hashes simultáneos entre IP
+distintas. Antes de activar el login en producción:
+
+- Confirmar cuántos procesos o réplicas atienden peticiones. Si hay varios,
+  preparar almacenamiento compartido o una protección equivalente en el punto
+  de entrada; no considerar este contador como un límite global.
+- Verificar los proxies y la ruta de acceso al backend. El guard usa `req.ip` de
+  Express; actualmente no se configura `trust proxy`. Detrás de un proxy, las
+  peticiones pueden compartir la IP del proxy y consumir el mismo cupo.
+- Configurar la confianza exclusivamente para los proxies comprobados, con
+  cabeceras de origen controladas por ellos. No aceptar `X-Forwarded-For` o
+  `X-Real-IP` arbitrarios ni activar `trust proxy: true` sin verificar la topología.
+- Verificar por HTTP el límite y la IP efectiva en el despliegue. La configuración
+  del servidor y el número de procesos no se han confirmado desde el repositorio.
+
+El limitador no modifica el proxy, systemd ni la base de datos.
+Referencia: [limitación de solicitudes en NestJS](https://docs.nestjs.com/security/rate-limiting).
+
+## Sesión del personal
+
+`AuthModule` prepara una sesión mediante JWT en la cookie
+`cinetadel_employee_session`. Todavía no está importado por `AppModule`; este
+incremento no publica rutas ni activa incidentalmente `/auth/register`.
+
+Tras un login válido, el cuerpo HTTP contiene únicamente `{ user: ... }`.
+El JWT se entrega en `Set-Cookie`, con `HttpOnly`, `SameSite=Strict`, `Path=/api`
+y sin `Domain`. La cookie es persistente, con un plazo máximo de **24 horas**
+desde la emisión del JWT, alineado con su `exp`. Recuperar la identidad mediante
+`GET /api/auth/me` no renueva la cookie ni extiende el plazo. Ambas respuestas
+exitosas incluyen `Cache-Control: no-store`.
+
+La cookie solo autentica tokens del personal (`type=employee`). Los tokens Bearer
+existentes siguen funcionando sin esta cookie. Enviar cookie y `Authorization`
+simultáneamente devuelve `401`, incluso si contienen el mismo token; tampoco se
+recurre a Bearer cuando la cookie es inválida. El frontend del personal deberá
+usar la cookie, sin guardar el JWT en `localStorage` o `sessionStorage` ni añadir
+una cabecera `Authorization`. Su integración se realizará en otro incremento.
+
+La lectura de cookies usa `cookie-parser` en las rutas de `AuthController`.
+La protección de origen se aplica al login del personal: `Origin` debe coincidir
+exactamente con el origen de `FRONTEND_URL`. No se admiten orígenes ausentes,
+`null`, inválidos o diferentes; se responde `403` antes de consultar Oracle o
+verificar contraseñas. El guard de limitación se ejecuta primero, por lo que esas
+solicitudes también consumen el cupo y pueden recibir `429`. No se confía en
+`Host`, `Referer` ni cabeceras reenviadas para autorizar el origen.
+
+Cuando se habiliten otras operaciones que modifiquen datos mediante esta cookie,
+también deberán incorporar protección contra CSRF. Este cambio no sustituye la
+autorización administrativa de `/users` ni configura CORS o `trust proxy`.
+
+### Configuración prevista para integrar la sesión
+
+`EmployeeSessionService` valida `FRONTEND_URL` al inicializar el módulo. Debe ser
+un origen absoluto sin credenciales, rutas, consulta ni fragmento. Se permite
+una barra final y se normaliza al origen. HTTPS establece siempre `Secure`.
+HTTP solo se acepta cuando `NODE_ENV` es `development` o `test` y el host es
+`localhost`, `127.0.0.1` o `[::1]`. Una configuración inválida impide iniciar
+`AuthModule`; no rebaja automáticamente la seguridad.
+
+- Desarrollo local: `NODE_ENV=development`, `FRONTEND_URL=http://localhost:5173`
+  y `VITE_API_BASE_URL=/api`. El origen debe coincidir con el que se abre en el
+  navegador; otro puerto o cambiar `localhost` por `127.0.0.1` requiere ajustarlo.
+- Despliegue previsto: `NODE_ENV=production`,
+  `FRONTEND_URL=https://159.54.166.238` y `VITE_API_BASE_URL=/api`.
+  Debe resolverse la confianza del certificado HTTPS antes de activar el flujo.
+- Conservar `JWT_SECRET` en la configuración privada del backend. No se modifica
+  ni se proporciona un secreto predeterminado en este incremento.
+
+Nginx recibe `/api/` y lo reenvía a `http://127.0.0.1:3000/`, retirando el prefijo.
+Vite realiza la misma traducción localmente. Las rutas internas de Nest siguen
+siendo `/auth/...`; el navegador usa `/api/auth/...` porque la cookie tiene
+`Path=/api`. No se ha añadido un prefijo global a la aplicación principal.
+Las pruebas HTTP sí simulan ese prefijo externo para verificar el recorrido con
+un navegador simulado que conserva y envía la cookie según su ruta.
+
+No hay endpoint de logout, renovación ni revocación anticipada en este incremento.
+Eliminar la cookie no invalida una copia del JWT: un cierre de sesión efectivo
+con revocación requiere un diseño posterior. No se habilita todavía el botón de
+cierre de sesión. Tampoco se modifica el esquema de Oracle.
+
 ## Project setup
 
 ```bash

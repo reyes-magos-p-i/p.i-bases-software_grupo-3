@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { registerUser } from '@/services/authService'
+import { facebookLogin, registerUser } from '@/services/authService'
 import BaseModal from '@/components/common/BaseModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 
@@ -52,6 +52,22 @@ function validate(): boolean {
   return Object.keys(errors).length === 0
 }
 
+async function handleFacebookLogin(accessToken: string) {
+  serverError.value = ''
+
+  try {
+    await facebookLogin(accessToken)
+
+    emit('registered')
+    emit('close')
+  } catch (error) {
+    serverError.value =
+      error instanceof Error
+        ? error.message
+        : 'No se pudo iniciar sesión con Facebook'
+  }
+}
+
 async function onSubmit() {
   serverError.value = ''
   if (!validate()) return
@@ -73,7 +89,7 @@ async function onSubmit() {
 
 <template>
   <BaseModal :open="open" title="Crear cuenta" @close="emit('close')">
-    <SocialAuthButtons />
+    <SocialAuthButtons @facebook="handleFacebookLogin" />
 
     <hr class="my-3" />
 

@@ -60,6 +60,7 @@ Desktop.ini
 # TypeScript
 
 *.tsbuildinfo
+*.vue.js
 
 
 # Temporary files
