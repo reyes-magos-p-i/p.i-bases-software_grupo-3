@@ -25,6 +25,6 @@ export class AuthController {
   // TODO(Diego): Facebook routes should be here.
   @Post('facebook')
   async facebookLogin(@Body() dto: { accessToken: string }) {
-    //return this.auth.facebookLogin(dto.accessToken);
+    return this.auth.facebookLogin(dto.accessToken);
   }
 }
