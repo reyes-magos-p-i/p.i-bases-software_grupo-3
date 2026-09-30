@@ -8,12 +8,20 @@ import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.gua
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let auth: { register: jest.Mock; loginEmployee: jest.Mock };
+  let auth: {
+    register: jest.Mock;
+    loginEmployee: jest.Mock;
+    facebookLogin: jest.Mock;
+  };
   let session: { write: jest.Mock; clear: jest.Mock };
   const response = {} as Response;
 
   beforeEach(async () => {
-    auth = { register: jest.fn(), loginEmployee: jest.fn() };
+    auth = {
+      register: jest.fn(),
+      loginEmployee: jest.fn(),
+      facebookLogin: jest.fn(),
+    };
     session = { write: jest.fn(), clear: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -40,6 +48,26 @@ describe('AuthController', () => {
 
     expect(auth.register).toHaveBeenCalledWith(dto);
     expect(result).toEqual({ id: 1, email: 'a@b.com' });
+  });
+
+  it('facebookLogin() delegates the access token and returns the service result', async () => {
+    const dto = { accessToken: 'facebook-access-token' };
+    const result = { accessToken: 'signed-token' };
+    auth.facebookLogin.mockResolvedValue(result);
+
+    await expect(controller.facebookLogin(dto)).resolves.toEqual(result);
+
+    expect(auth.facebookLogin).toHaveBeenCalledTimes(1);
+    expect(auth.facebookLogin).toHaveBeenCalledWith(dto.accessToken);
+  });
+
+  it('facebookLogin() propagates authentication failures', async () => {
+    const failure = new Error('Invalid Facebook access token');
+    auth.facebookLogin.mockRejectedValue(failure);
+
+    await expect(
+      controller.facebookLogin({ accessToken: 'facebook-access-token' }),
+    ).rejects.toBe(failure);
   });
 
   it('loginEmployee() writes the cookie and returns only the user profile', async () => {
