@@ -10,6 +10,14 @@ import { AuthService } from './auth.service';
 import { ClientsService } from '../clients/clients.service';
 import { RegisterDto } from './dto/register.dto';
 import { ConfigService } from '@nestjs/config';
+import { OAuth2Client } from 'google-auth-library'; //google login testing
+
+jest.mock('argon2');
+// mock for google lib
+jest.mock('google-auth-library', () => ({
+  OAuth2Client: jest.fn(),
+}));
+
 import { UsersRepository } from '../users/users.repository';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { EmployeeWithLocalCredentials } from '../users/types/employee-with-local-credentials.type';
@@ -22,7 +30,7 @@ describe('AuthService', () => {
   let clients: {
     findByEmail: jest.Mock;
     createWithLocalCredentials: jest.Mock;
-    findOrCreateSocial: jest.Mock;
+    findOrCreateSocial: jest.Mock; // for google auth
   };
   let jwt: { sign: jest.Mock; signAsync: jest.Mock };
   let users: { findEmployeeWithLocalCredentialsByEmail: jest.Mock };

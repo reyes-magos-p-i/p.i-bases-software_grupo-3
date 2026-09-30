@@ -4,8 +4,9 @@ import { HealthModule } from './health/health.module';
 import { ImageController } from './image/image.controller';
 import { MovieFuctionsModule } from './movie-fuctions/movie-fuctions.module';
 import { DatabaseModule } from './database/database.module';
-import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+
 
 @Module({
   imports: [

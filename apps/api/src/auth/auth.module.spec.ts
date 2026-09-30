@@ -17,6 +17,7 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { EmployeeSessionService } from './employee-session.service';
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 
+
 describe('AuthModule', () => {
   let module: TestingModule;
   const connection = { execute: jest.fn() };

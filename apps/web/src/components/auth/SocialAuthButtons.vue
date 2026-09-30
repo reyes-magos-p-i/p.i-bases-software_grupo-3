@@ -10,8 +10,14 @@ const props = withDefaults(defineProps<{ mode?: 'register' | 'login'; disabled?:
 })
 
 // OAuth handlers remain owned by their respective integrations.
-function onGoogle() {
+async function onGoogle() {
   if (!props.disabled) emit('google')
+  try{
+    await loginWithGoogle()
+    console.log('google login successful')
+  }catch(error){
+    console.error('google login failed or was cancelled', error)
+  }
 }
 
 // TODO (Diego): implementar el flujo OAuth de Facebook

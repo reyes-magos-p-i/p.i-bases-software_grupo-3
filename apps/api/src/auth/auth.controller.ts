@@ -63,6 +63,13 @@ export class AuthController {
   }
 
   // TODO(Silvio): Google routes should be here.
+  @Post('google')
+  google(@Body('code') code: string) {
+    //console.log(code)
+
+    return this.auth.googleLogin(code)
+  }
+
   // TODO(Diego): Facebook routes should be here.
   @Post('facebook')
   async facebookLogin(@Body() dto: { accessToken: string }) {
