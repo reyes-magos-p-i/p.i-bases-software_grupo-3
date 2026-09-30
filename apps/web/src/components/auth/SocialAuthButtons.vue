@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { loginWithFacebook } from '@/facebook-auth'
-const emit = defineEmits<{ (e: 'google'): void; (e: 'facebook'): void }>()
+const emit = defineEmits<{
+  (e: 'google'): void
+  (e: 'facebook', accessToken: string): void
+}>()
 
 // TODO (Silvio): implementar el flujo OAuth de Google
 function onGoogle() {
@@ -10,8 +13,8 @@ function onGoogle() {
 // TODO (Diego): implementar el flujo OAuth de Facebook
 async function onFacebook() {
   const response = await loginWithFacebook()
-  if (response.status === 'connected') {
-    // TODO (diego): Send response.authResponse.accessToken to the backend
+  if (response.status === 'connected' && response.authResponse) {
+    emit('facebook', response.authResponse.accessToken)
   }
 }
 </script>

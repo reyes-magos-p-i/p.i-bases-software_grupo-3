@@ -1,3 +1,5 @@
+/// <reference path="./types/facebook.d.ts" />
+
 import { reactive } from 'vue'
 
 export const fbAuth = reactive({
@@ -11,7 +13,7 @@ export function applyLoginStatus(response: fb.StatusResponse) {
   fbAuth.authResponse = response.authResponse ?? null
 }
 
-export function loginWithFacebook() {
+export function loginWithFacebook(): Promise<fb.StatusResponse> {
   return new Promise((resolve) => {
     FB.login((response) => {
       applyLoginStatus(response)

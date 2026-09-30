@@ -11,6 +11,7 @@ import { applyLoginStatus } from './facebook-auth'
 
 const app = createApp(App)
 app.use(router)
+app.mount('#app')
 
 try {
   const response = await loadFacebookSdk()
@@ -24,4 +25,3 @@ try {
   console.error('Facebook SDK failed', err)
 }
 
-app.mount('#app')
