@@ -10,7 +10,6 @@ import { AuthService } from './auth.service';
 import { ClientsService } from '../clients/clients.service';
 import { RegisterDto } from './dto/register.dto';
 import { ConfigService } from '@nestjs/config';
-import { OAuth2Client } from 'google-auth-library'; //google login testing
 
 jest.mock('argon2');
 // mock for google lib
