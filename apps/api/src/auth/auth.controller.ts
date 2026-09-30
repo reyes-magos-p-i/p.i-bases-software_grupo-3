@@ -1,15 +1,14 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
-import { Logger } from '@nestjs/common';
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly auth: AuthService,
-    private readonly logger: Logger) {}
+  private readonly logger = new Logger(AuthController.name);
+
+  constructor(private readonly auth: AuthService) {}
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -28,7 +27,7 @@ export class AuthController {
   // TODO(Diego): Facebook routes should be here.
   @Post('facebook')
   async facebookLogin(@Body() dto: { accessToken: string }) {
-    this.logger.log(`Facebook login attempt with access token: ${dto.accessToken}`);
+    this.logger.log(`Facebook login attempt`);
     return this.auth.facebookLogin(dto.accessToken);
   }
 }
