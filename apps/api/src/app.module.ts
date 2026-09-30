@@ -18,7 +18,6 @@ import { AuthModule } from './auth/auth.module';
     DatabaseModule,
     AuthModule,
     UsersModule,
-    AuthModule,
   ],
   controllers: [ImageController],
 })
