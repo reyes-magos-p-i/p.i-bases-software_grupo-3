@@ -115,7 +115,7 @@ function submit() {
   >
     <div class="login-content">
       <template v-if="isClient">
-        <SocialAuthButtons mode="login" disabled />
+        <SocialAuthButtons mode="login"  @close-modal="close"/>
         <p class="availability-note">Google y Facebook estarán disponibles próximamente.</p>
         <div class="login-divider" aria-hidden="true"></div>
       </template>

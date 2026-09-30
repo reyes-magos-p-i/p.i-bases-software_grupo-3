@@ -4,6 +4,7 @@ import { loginWithGoogle } from '@/services/authService'
 const emit = defineEmits<{
   (e: 'google'): void
   (e: 'facebook', accessToken: string): void
+  (e: 'close-modal') : void
 }>()
 const props = withDefaults(defineProps<{ mode?: 'register' | 'login'; disabled?: boolean }>(), {
   mode: 'register',
@@ -16,8 +17,11 @@ async function onGoogle() {
   try{
     await loginWithGoogle()
     console.log('google login successful')
+
+
   }catch(error){
     console.error('google login failed or was cancelled', error)
+    emit('close-modal')
   }
 }
 

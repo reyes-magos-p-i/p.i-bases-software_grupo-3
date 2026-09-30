@@ -89,7 +89,7 @@ async function onSubmit() {
 
 <template>
   <BaseModal :open="open" title="Crear cuenta" @close="emit('close')">
-    <SocialAuthButtons @facebook="handleFacebookLogin" />
+    <SocialAuthButtons @facebook="handleFacebookLogin" @close-modal="emit('close')"/>
 
     <hr class="my-3" />
 
