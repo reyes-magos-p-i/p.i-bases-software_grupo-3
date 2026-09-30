@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { AuthService } from './auth.service';
@@ -18,9 +22,11 @@ describe('AuthService', () => {
   let clients: {
     findByEmail: jest.Mock;
     createWithLocalCredentials: jest.Mock;
+    findOrCreateSocial: jest.Mock;
   };
   let jwt: { sign: jest.Mock; signAsync: jest.Mock };
   let users: { findEmployeeWithLocalCredentialsByEmail: jest.Mock };
+  let config: { getOrThrow: jest.Mock };
 
   const registerDto: RegisterDto = {
     email: 'user@example.com',
@@ -38,12 +44,14 @@ describe('AuthService', () => {
     clients = {
       findByEmail: jest.fn(),
       createWithLocalCredentials: jest.fn(),
+      findOrCreateSocial: jest.fn(),
     };
     jwt = {
       sign: jest.fn().mockReturnValue('signed-token'),
       signAsync: jest.fn().mockResolvedValue('employee-token'),
     };
     users = { findEmployeeWithLocalCredentialsByEmail: jest.fn() };
+    config = { getOrThrow: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -51,7 +59,7 @@ describe('AuthService', () => {
         { provide: PasswordHasher, useValue: hasher },
         { provide: ClientsService, useValue: clients },
         { provide: JwtService, useValue: jwt },
-        { provide: ConfigService, useValue: { useValue: {} } },
+        { provide: ConfigService, useValue: config },
         { provide: UsersRepository, useValue: users },
       ],
     }).compile();
@@ -251,6 +259,84 @@ describe('AuthService', () => {
         type: 'client',
       });
       expect(result).toEqual({ accessToken: 'signed-token' });
+    });
+  });
+
+  describe('facebookLogin', () => {
+    const accessToken = 'facebook-user-token';
+
+    beforeEach(() => {
+      config.getOrThrow.mockImplementation((key: string) => {
+        const values = {
+          FACEBOOK_APP_ID: 'facebook-app-id',
+          FACEBOOK_APP_SECRET: 'facebook-app-secret',
+        };
+        return values[key as keyof typeof values];
+      });
+    });
+
+    it('verifies the token, loads the profile, persists the social client, and issues a JWT', async () => {
+      const fetchMock = jest.spyOn(global, 'fetch');
+      fetchMock
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: {
+              app_id: 'facebook-app-id',
+              user_id: 'facebook-user-id',
+              is_valid: true,
+            },
+          }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            id: 'facebook-user-id',
+            email: 'facebook@example.com',
+            first_name: 'Ana',
+            last_name: 'Perez',
+          }),
+        } as Response);
+      clients.findOrCreateSocial.mockResolvedValue({
+        id: 12,
+        email: 'facebook@example.com',
+      });
+
+      await expect(service.facebookLogin(accessToken)).resolves.toEqual({
+        accessToken: 'signed-token',
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const debugUrl = new URL(fetchMock.mock.calls[0]![0] as string);
+      expect(debugUrl.pathname).toBe('/v21.0/debug_token');
+      expect(debugUrl.searchParams.get('input_token')).toBe(accessToken);
+      expect(debugUrl.searchParams.get('access_token')).toBe(
+        'facebook-app-id|facebook-app-secret',
+      );
+      const profileUrl = new URL(fetchMock.mock.calls[1]![0] as string);
+      expect(profileUrl.pathname).toBe('/v21.0/me');
+      expect(profileUrl.searchParams.get('access_token')).toBe(accessToken);
+      expect(clients.findOrCreateSocial).toHaveBeenCalledWith({
+        provider: 'FACEBOOK',
+        providerUserId: 'facebook-user-id',
+        email: 'facebook@example.com',
+        firstName: 'Ana',
+        lastName: 'Perez',
+      });
+      expect(jwt.sign).toHaveBeenCalledWith({
+        sub: 12,
+        email: 'facebook@example.com',
+        type: 'client',
+      });
+    });
+
+    it('rejects a missing access token before calling Facebook', async () => {
+      const fetchMock = jest.spyOn(global, 'fetch');
+
+      await expect(service.facebookLogin('')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 });
