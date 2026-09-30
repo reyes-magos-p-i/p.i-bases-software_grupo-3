@@ -54,7 +54,8 @@ npm run dev -- --host 127.0.0.1 --port 5178 --strictPort
 ```
 
 Si los procesos ya estaban activos, reiniciarlos tras cambiar variables de entorno.
-Abrir `http://127.0.0.1:5178/`. El proxy de Vite retira `/api` al reenviar a Nest.
+Abrir `http://127.0.0.1:5178/`. El proxy de Vite conserva `/api` al reenviar a Nest,
+que utiliza ese prefijo global.
 
 ## Prueba manual
 
@@ -118,8 +119,23 @@ Abrir `http://127.0.0.1:5178/`. El proxy de Vite retira `/api` al reenviar a Nes
 
 ## Producción
 
-La configuración compartida usa HTTPS y Nginx `/api/` hacia Nest en 127.0.0.1:3000,
-retirando el prefijo. Configurar `NODE_ENV=production`, el origen HTTPS exacto como
+La configuración de Nginx debe conservar `/api/` hacia Nest en 127.0.0.1:3000.
+La configuración compartida anteriormente retiraba el prefijo y requiere este ajuste
+antes de desplegar la versión integrada con `dev`:
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+La ausencia de `/` final en `proxy_pass` conserva la ruta completa. Mantener los
+demás ajustes existentes de HTTPS y comprobar la configuración con `sudo nginx -t`
+antes de recargar Nginx. Configurar `NODE_ENV=production`, el origen HTTPS exacto como
 `FRONTEND_URL` y una `JWT_SECRET` privada estable. El frontend sigue usando `/api`.
 El navegador debe aceptar el certificado TLS. Nginx debe servir la SPA también al
 recargar `/dashboard`. Este incremento no modifica el servidor ni verifica una

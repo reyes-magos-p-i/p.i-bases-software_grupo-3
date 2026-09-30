@@ -157,13 +157,13 @@ configuración SMTP sigue siendo necesaria para iniciar el backend.
 
 ## Conexión local con Vue
 
-El ejemplo `apps/web/.env.example` utiliza `VITE_API_BASE_URL=/api`. Para la
+El archivo público `apps/web/.env.development` utiliza `VITE_API_BASE_URL=/api`. Para la
 prueba integrada, configurar ese valor en el entorno local de Vite y reiniciar
 el servidor de desarrollo si se modifica. No se editan automáticamente archivos
 `.env` privados. El backend se espera en `http://127.0.0.1:3000`.
 
-Vite reenvía `/api/users/creation-options` a `/users/creation-options` de Nest,
-retirando el prefijo `/api`. Así el navegador consulta su mismo origen durante
+Vite reenvía `/api/users/creation-options` a `/api/users/creation-options` de Nest,
+conservando el prefijo global `/api`. Así el navegador consulta su mismo origen durante
 el desarrollo local. Si se cambia el puerto del backend, también debe ajustarse
 el destino en `vite.config.ts`. El proxy no se incluye en los archivos de producción:
 el despliegue debe configurar su propia URL y enrutamiento hacia la API.
