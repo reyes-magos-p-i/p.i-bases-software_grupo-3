@@ -7,11 +7,10 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { ClientsService } from '../clients/clients.service';
-import { Client } from '../clients/client.model';
+import { Client, SocialProfile } from '../clients/client.model';
 import { splitFirstWord } from '../clients/name.util';
 import { RegisterDto } from './dto/register.dto';
 import { ConfigService } from '@nestjs/config';
-import { SocialProfile } from '../clients/client.model';
 import { UsersRepository } from '../users/users.repository';
 import type { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
