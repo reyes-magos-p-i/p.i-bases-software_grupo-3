@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { loginWithGoogle } from '@/services/authService';
+
 const props = withDefaults(defineProps<{ mode?: 'register' | 'login'; disabled?: boolean }>(), {
   mode: 'register',
   disabled: false,
@@ -6,8 +8,14 @@ const props = withDefaults(defineProps<{ mode?: 'register' | 'login'; disabled?:
 const emit = defineEmits<{ (e: 'google'): void; (e: 'facebook'): void }>()
 
 // OAuth handlers remain owned by their respective integrations.
-function onGoogle() {
+async function onGoogle() {
   if (!props.disabled) emit('google')
+  try{
+    await loginWithGoogle()
+    console.log('google login successful')
+  }catch(error){
+    console.error('google login failed or was cancelled', error)
+  }
 }
 
 function onFacebook() {
