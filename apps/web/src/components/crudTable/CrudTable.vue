@@ -1,37 +1,82 @@
 <script setup lang="ts">
+  import { ref } from 'vue'
+  import FilterDropdown from './FIlterDropdown.vue'
+  import SearchBar from './SearchBar.vue'
+  import SortButton from './SortButton.vue'
+
+  const sortColumn = ref<string | null>(null)
+  const sortDirection = ref<'asc' | 'desc' | null>(null)
+
 
   //define la tipo de elemento recibido por el componente padre
-  interface tableColumn{
+  interface TableColumn{
     key: string
     label: string
+    sortable?: boolean
+    filterable?: boolean
+    filterOptions?: string[]
   }
 
   //para uso con jsons rows es un array de strings
-  interface tableRow{
+  interface TableRow{
     [key: string]: unknown
   }
 
   defineProps<{
-    columns: tableColumn[]
-    rows: tableRow[]
+    columns: TableColumn[]
+    rows: TableRow[]
+    currentPage: number
+    totalPages: number
   }>()
 
   const emit = defineEmits<{
-    edit:[row:tableRow]
-    view: [row:tableRow]
-    delete: [row:tableRow]
-
+    edit:[row:TableRow]
+    view: [row:TableRow]
+    delete: [row:TableRow]
+    sort: [column: string, direction: 'asc' | 'desc']
+    filter: [column: string, value: string]
+    search: [value: string]
+    page: [page: number]
   }>()
+
+  function handleSort(column: string, direction: 'asc' | 'desc') {
+    sortColumn.value = column
+    sortDirection.value = direction
+
+    emit('sort', column, direction)
+  }
+
+  function handleFilter(column: string, value: string) {
+    emit('filter', column, value)
+  }
+
+  function handleSearch(value: string) {
+    emit('search', value)
+  }
 
 </script>
 
 <template>
   <div>
+    <SearchBar @search="handleSearch" />
+
     <table class="table">
       <thead>
         <tr>
+
           <th v-for="column in columns" :key="column.key">
-            {{ column.label }}
+            <div>
+             <SortButton v-if="column.sortable" :column="column.key"
+             :label="column.label" @sort="handleSort"
+             />
+              <span v-else>
+              {{ column.label }}
+              </span>
+              <FilterDropdown v-if="column.filterable" :column="column.key"
+              :options="column.filterOptions ?? []" @filter="handleFilter"
+              />
+            </div>
+
           </th>
           <th>Actions</th>
         </tr>
@@ -63,7 +108,7 @@
         </tr>
       </tbody>
     </table>
-
+    <CrudPagination/>
   </div>
 </template>
 

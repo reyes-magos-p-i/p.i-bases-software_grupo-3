@@ -3,6 +3,8 @@ import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import HeroCarousel from '@/components/landing/HeroCarousel.vue'
 import MovieCatalog from '@/components/landing/MovieCatalog.vue'
+import TableTest from '@/components/TableTest.vue';
+
 
 
 </script>
@@ -17,9 +19,9 @@ import MovieCatalog from '@/components/landing/MovieCatalog.vue'
 
       <MovieCatalog />
     </div>
- 
+    <Movie/>
   </main>
-
+  <TableTest/>
   <AppFooter />
 </template>
 

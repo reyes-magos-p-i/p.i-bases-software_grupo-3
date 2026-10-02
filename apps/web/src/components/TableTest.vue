@@ -1,54 +1,106 @@
 <script setup lang="ts">
-
+import { ref } from 'vue'
 import CrudTable from './crudTable/CrudTable.vue'
 
+const currentPage = ref(1)
+const totalPages = ref(3)
 
 const columns = [
-  { key: 'id', label: 'ID' },
-  { key: 'name', label: 'Name' },
-  { key: 'email', label: 'Email' },
-  {key: 'sos', label:'sus' }
-]
-
-const users = [
   {
-    id: '1',
-    name: 'Silvio',
-    email: 'silvio@example.com',
-    sos: 'wut'
+    key: 'name',
+    label: 'Name',
+    sortable: true,
+    filterable: false
   },
   {
-    id: '2',
-    name: 'John',
-    email: 'john@example.com',
-    sos: 'wut'
+    key: 'email',
+    label: 'Email',
+    sortable: true,
+    filterable: false
   },
   {
-    id: '3',
-    name: 'Mary',
-    email: 'mary@example.com',
-    sos: 'wut'
+    key: 'status',
+    label: 'Status',
+    sortable: true,
+    filterable: true,
+    filterOptions: ['Active', 'Inactive']
   }
 ]
 
-function editUser(user: Record<string, unknown>) {
-  console.log('Editing:', user)
+const rows = ref([
+  {
+    id: 1,
+    name: 'Silvio',
+    email: 'silvio@example.com',
+    status: 'Active'
+  },
+  {
+    id: 2,
+    name: 'Carlos',
+    email: 'carlos@example.com',
+    status: 'Inactive'
+  },
+  {
+    id: 3,
+    name: 'Ana',
+    email: 'ana@example.com',
+    status: 'Active'
+  }
+])
+
+function handleSearch(value: string) {
+  console.log('Search:', value)
 }
 
-function deleteUser(user: Record<string, unknown>) {
-  console.log('Deleting:', user)
+function handleSort(
+  column: string,
+  direction: 'asc' | 'desc'
+) {
+  console.log('Sort:', column, direction)
+}
+
+function handleFilter(
+  column: string,
+  value: string
+) {
+  console.log('Filter:', column, value)
+}
+
+function handlePage(page: number) {
+  currentPage.value = page
+
+  console.log('Page:', page)
+}
+
+function handleEdit(row: any) {
+  console.log('Edit:', row)
+}
+
+function handleView(row: any) {
+  console.log('View:', row)
+}
+
+function handleDelete(row: any) {
+  console.log('Delete:', row)
 }
 </script>
 
 <template>
   <div>
-    <h1>Users</h1>
+    <h1>Test CRUD Table</h1>
 
     <CrudTable
       :columns="columns"
-      :rows="users"
-      @edit="editUser"
-      @delete="deleteUser"
+      :rows="rows"
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      @search="handleSearch"
+      @sort="handleSort"
+      @filter="handleFilter"
+      @page="handlePage"
+      @edit="handleEdit"
+      @view="handleView"
+      @delete="handleDelete"
     />
   </div>
 </template>
