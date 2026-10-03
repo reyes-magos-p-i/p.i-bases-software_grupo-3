@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RegisterPayload } from '@/types/client'
 
-const { create, post, get } = vi.hoisted(() => ({ create: vi.fn(), post: vi.fn(), get: vi.fn() }))
+const { create, post, get, googleAuthCodeLogin } = vi.hoisted(() => ({
+  create: vi.fn(),
+  post: vi.fn(),
+  get: vi.fn(),
+  googleAuthCodeLogin: vi.fn(),
+}))
 vi.mock('axios', () => ({
   default: { create },
   isAxiosError: (error: { isAxiosError?: boolean }) => error?.isAxiosError === true,
 }))
+vi.mock('vue3-google-login', () => ({ googleAuthCodeLogin }))
 
 describe('registerUser', () => {
   const payload: RegisterPayload = {
@@ -93,7 +99,7 @@ describe('facebook authentication API', () => {
     const { facebookLogin } = await import('@/services/authService')
     const responseData = {
       accessToken: 'server-access-token',
-      user: { id: 7, firstName: 'Ana' },
+      client: { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Perez' },
     }
     post.mockResolvedValue({ data: responseData })
 
@@ -103,6 +109,27 @@ describe('facebook authentication API', () => {
       accessToken: 'facebook-access-token',
     })
     expect(localStorage.getItem('accessToken')).toBe('server-access-token')
+  })
+
+  it('logs in with Google, stores its token, and returns the client profile', async () => {
+    googleAuthCodeLogin.mockResolvedValue({ code: 'google-auth-code' })
+    post.mockResolvedValue({
+      data: {
+        accessToken: 'google-server-token',
+        client: { id: 8, email: 'ana@example.com', firstName: 'Ana', lastName: 'Perez' },
+      },
+    })
+    const { loginWithGoogle } = await import('@/services/authService')
+
+    await expect(loginWithGoogle()).resolves.toEqual({
+      id: 8,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Perez',
+    })
+
+    expect(post).toHaveBeenCalledExactlyOnceWith('/auth/google', { code: 'google-auth-code' })
+    expect(localStorage.getItem('accessToken')).toBe('google-server-token')
   })
 })
 

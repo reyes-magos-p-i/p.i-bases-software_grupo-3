@@ -307,10 +307,18 @@ describe('AuthService', () => {
       clients.findOrCreateSocial.mockResolvedValue({
         id: 12,
         email: 'facebook@example.com',
+        firstName: 'Ana',
+        firstSurname: 'Perez',
       });
 
       await expect(service.facebookLogin(accessToken)).resolves.toEqual({
         accessToken: 'signed-token',
+        client: {
+          id: 12,
+          email: 'facebook@example.com',
+          firstName: 'Ana',
+          lastName: 'Perez',
+        },
       });
 
       expect(fetchMock).toHaveBeenCalledTimes(2);

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { DOMWrapper, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
+import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 import { registerUser } from '@/services/authService'
 
 vi.mock('@/services/authService', () => ({
@@ -143,7 +144,24 @@ describe('RegisterModal.vue', () => {
       expect.not.objectContaining({ confirmPassword: 'Password123!' }),
     )
     expect(wrapper.emitted('registered')).toBeTruthy()
+    expect(wrapper.emitted('authenticated')).toBeUndefined()
     expect(wrapper.emitted('close')).toBeTruthy()
+  })
+
+  it('forwards the authenticated Google identity through the registration event', async () => {
+    const identity = {
+      id: 7,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Perez',
+    }
+    const wrapper = createWrapper()
+
+    wrapper.getComponent(SocialAuthButtons).vm.$emit('authenticated', identity)
+    await nextTick()
+
+    expect(wrapper.emitted('authenticated')).toEqual([[identity]])
+    expect(wrapper.emitted('close')).toHaveLength(1)
   })
 
   it('muestra mensaje de error si el servicio lanza una instancia de Error', async () => {

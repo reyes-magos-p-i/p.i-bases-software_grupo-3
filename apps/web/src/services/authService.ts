@@ -1,13 +1,18 @@
 import { isAxiosError } from 'axios'
 import { getApi } from '@/services/api'
 import type { RegisterPayload } from '@/types/client'
-//for login with google
+import type { ClientIdentity } from '@/types/client-auth'
 import { googleAuthCodeLogin } from 'vue3-google-login'
 import type { EmployeeIdentity, EmployeeLoginRequest } from '@/types/employee-auth'
 
-export async function facebookLogin(accessToken: string) {
+interface ClientAuthResponse {
+  accessToken: string
+  client: ClientIdentity
+}
+
+export async function facebookLogin(accessToken: string): Promise<ClientAuthResponse> {
   const api = getApi()
-  const response = await api.post('/auth/facebook', {
+  const response = await api.post<ClientAuthResponse>('/auth/facebook', {
     accessToken,
   })
   localStorage.setItem('accessToken', response.data.accessToken)
@@ -36,15 +41,15 @@ export async function registerUser(payload: RegisterPayload): Promise<void> {
   }
 }
 
-// reusable google login function
-export async function loginWithGoogle(): Promise<void> {
-  // waiting for auth code from google
+export async function loginWithGoogle(): Promise<ClientIdentity> {
   const api = getApi()
   const googleResponse = await googleAuthCodeLogin()
 
-  await api.post('/auth/google', {
+  const response = await api.post<ClientAuthResponse>('/auth/google', {
     code: googleResponse.code,
   })
+  localStorage.setItem('accessToken', response.data.accessToken)
+  return response.data.client
 }
 
 export class EmployeeAuthError extends Error {

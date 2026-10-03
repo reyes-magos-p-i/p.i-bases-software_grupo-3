@@ -145,6 +145,7 @@ export class AuthService {
           id: client.id,
           email: client.email,
           firstName: client.firstName,
+          lastName: client.firstSurname ?? '',
         },
         ... tokensPayload,
       };
@@ -239,7 +240,15 @@ export class AuthService {
 
     const client = await this.clients.findOrCreateSocial(socialProfile);
 
-    return this.issueToken(client);
+    return {
+      ...this.issueToken(client),
+      client: {
+        id: client.id,
+        email: client.email,
+        firstName: client.firstName,
+        lastName: client.firstSurname ?? '',
+      },
+    };
   }
 
 }

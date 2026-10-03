@@ -145,6 +145,46 @@ describe('AppHeader authentication navigation', () => {
     expect(page.findAll('dialog[open]')).toHaveLength(1)
   })
 
+  it('shows the signed-in client profile and clears it on logout', async () => {
+    const identity = {
+      id: 7,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Perez',
+    }
+    localStorage.setItem('accessToken', 'client-token')
+    await wrapper.get('.register-button').trigger('click')
+    wrapper.getComponent(RegisterModal).vm.$emit('authenticated', identity)
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Ana Perez')
+    expect(wrapper.find('.register-button').exists()).toBe(false)
+    await wrapper.get('.account-avatar').trigger('click')
+    expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
+    expect(wrapper.findAll('.account-actions button:disabled')).toHaveLength(3)
+
+    await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
+    expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(wrapper.find('.account-avatar').exists()).toBe(false)
+    expect(wrapper.find('.register-button').exists()).toBe(true)
+  })
+
+  it('shows a client profile after social authentication in the login dialog', async () => {
+    const identity = {
+      id: 8,
+      email: 'luis@example.com',
+      firstName: 'Luis',
+      lastName: 'Mora',
+    }
+    await wrapper.get('.login-button').trigger('click')
+    wrapper.getComponent(LoginModal).vm.$emit('authenticated', identity)
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Luis Mora')
+    expect(wrapper.find('.account-avatar').exists()).toBe(true)
+    expect(wrapper.find('.login-button[type="button"]').exists()).toBe(false)
+  })
+
   async function employeeForm() {
     await wrapper.get('.login-button').trigger('click')
     await page.get('.switch-mode').trigger('click')

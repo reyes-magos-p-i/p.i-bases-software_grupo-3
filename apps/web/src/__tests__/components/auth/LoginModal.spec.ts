@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import LoginModal from '@/components/auth/LoginModal.vue'
+import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 import { nextTick } from 'vue'
 
 describe('LoginModal', () => {
@@ -48,6 +49,22 @@ describe('LoginModal', () => {
       expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     },
   )
+
+  it('offers client social sign-in and forwards the authenticated identity', async () => {
+    const wrapper = render({ mode: 'client' })
+    const identity = {
+      id: 7,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Perez',
+    }
+    const socialButtons = wrapper.getComponent(SocialAuthButtons)
+
+    expect(socialButtons.props('disabled')).toBe(false)
+    socialButtons.vm.$emit('authenticated', identity)
+
+    expect(wrapper.emitted('authenticated')).toEqual([[identity]])
+  })
 
   it('shows email feedback after blur and clears it as the value is corrected', async () => {
     const wrapper = render()

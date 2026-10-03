@@ -2,6 +2,7 @@
 import { computed, nextTick, reactive, ref, useId, useTemplateRef, watch } from 'vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
+import type { ClientIdentity } from '@/types/client-auth'
 
 const props = withDefaults(
   defineProps<{
@@ -16,6 +17,7 @@ const props = withDefaults(
 )
 const emit = defineEmits<{
   close: []
+  authenticated: [identity: ClientIdentity]
   switchMode: [mode: 'client' | 'employee']
   submit: [credentials: { email: string; password: string }]
 }>()
@@ -27,6 +29,7 @@ const feedback = useTemplateRef<HTMLElement>('feedback')
 const form = reactive({ email: '', password: '' })
 const touched = reactive({ email: false, password: false })
 const showPassword = ref(false)
+const socialError = ref('')
 const encoder = new TextEncoder()
 const isClient = computed(() => props.mode === 'client')
 const emailError = computed(() => {
@@ -53,6 +56,7 @@ function clearPassword() {
 
 watch([() => props.open, () => props.mode], async ([open]) => {
   clearPassword()
+  socialError.value = ''
   form.email = ''
   if (open) {
     await nextTick()
@@ -115,8 +119,12 @@ function submit() {
   >
     <div class="login-content">
       <template v-if="isClient">
-        <SocialAuthButtons mode="login" disabled />
-        <p class="availability-note">Google y Facebook estarán disponibles próximamente.</p>
+        <SocialAuthButtons
+          mode="login"
+          @authenticated="emit('authenticated', $event)"
+          @error="socialError = $event"
+        />
+        <p v-if="socialError" class="server-error" role="alert">{{ socialError }}</p>
         <div class="login-divider" aria-hidden="true"></div>
       </template>
       <p v-else class="login-intro">Acceso para empleados y administradores.</p>
@@ -207,7 +215,7 @@ function submit() {
           Puedes volver a intentarlo en {{ retryAfterSeconds }} segundos.
         </p>
         <p v-if="!enabled" :id="`${id}-availability`" class="availability-note" role="status">
-          El inicio de sesión estará disponible próximamente.
+          El acceso con correo y contraseña estará disponible próximamente.
         </p>
         <button
           type="submit"
