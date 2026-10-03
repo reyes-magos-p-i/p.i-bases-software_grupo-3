@@ -14,12 +14,18 @@ import {
 
 describe('JwtStrategy', () => {
   let strategy: JwtStrategy;
-  let clients: { findById: jest.Mock };
+  let clients: {
+    findById: jest.Mock;
+    isEmailVerificationPending: jest.Mock;
+  };
   let users: { findEmployeeIdentityById: jest.Mock };
   const request = { headers: {} } as Request;
 
   beforeEach(async () => {
-    clients = { findById: jest.fn() };
+    clients = {
+      findById: jest.fn(),
+      isEmailVerificationPending: jest.fn().mockResolvedValue(false),
+    };
     users = { findEmployeeIdentityById: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -90,7 +96,17 @@ describe('JwtStrategy', () => {
       strategy.validate(request, { sub: 1, type: 'client' }),
     ).resolves.toEqual(client);
     expect(clients.findById).toHaveBeenCalledWith(1);
+    expect(clients.isEmailVerificationPending).toHaveBeenCalledWith(1);
     expect(users.findEmployeeIdentityById).not.toHaveBeenCalled();
+  });
+
+  it('rejects an otherwise valid client token while email confirmation is pending', async () => {
+    clients.findById.mockResolvedValue({ id: 1, email: 'ana@example.com' });
+    clients.isEmailVerificationPending.mockResolvedValue(true);
+
+    await expect(
+      strategy.validate(request, { sub: 1, type: 'client' }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(

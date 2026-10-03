@@ -3,7 +3,9 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { createHash, randomBytes } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { ClientsService } from '../clients/clients.service';
@@ -15,6 +17,7 @@ import { OAuth2Client } from 'google-auth-library'; // google lib for autheticat
 import { UsersRepository } from '../users/users.repository';
 import type { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
+import { EmailVerificationSender } from './notifications/email-verification-sender';
 
 // This non-account hash keeps missing credentials on the password verification path.
 const LOGIN_REFERENCE_HASH =
@@ -28,6 +31,7 @@ export class AuthService {
     private readonly passwordHasher: PasswordHasher,
     private readonly config: ConfigService,
     private readonly usersRepository: UsersRepository,
+    private readonly verificationSender: EmailVerificationSender,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -42,9 +46,11 @@ export class AuthService {
     const [firstName, secondName] = splitFirstWord(dto.firstName);
     const [firstSurname, secondSurname] = splitFirstWord(dto.lastName);
 
+    const token = this.createVerificationToken();
+    const expiresInMinutes = this.verificationTtlMinutes();
     const { passwordHash, salt } = await this.passwordHasher.hash(dto.password);
 
-    const client = await this.clients.createWithLocalCredentials(
+    const client = await this.clients.createPendingWithLocalCredentials(
       {
         email: dto.email,
         firstName,
@@ -60,9 +66,113 @@ export class AuthService {
       passwordHash,
       // Public registration historically stores padded Base64 in the SALT column.
       Buffer.from(salt, 'base64').toString('base64'),
+      token.hash,
+      expiresInMinutes,
     );
 
-    return { id: client.id, email: client.email }; // minimum data needed
+    await this.sendVerificationEmail(
+      client.email,
+      token.value,
+      expiresInMinutes,
+    );
+    return { status: 'pending_verification', email: client.email };
+  }
+
+  async resendEmailVerification(email: string): Promise<{ message: string }> {
+    const client = await this.clients.findPendingLocalClientByEmail(email);
+    if (!client) {
+      return {
+        message:
+          'Si existe una cuenta pendiente con ese correo, enviaremos un nuevo enlace.',
+      };
+    }
+    const token = this.createVerificationToken();
+    const expiresInMinutes = this.verificationTtlMinutes();
+    await this.clients.replaceEmailVerification(
+      client.id,
+      token.hash,
+      expiresInMinutes,
+    );
+    await this.sendVerificationEmail(
+      client.email,
+      token.value,
+      expiresInMinutes,
+    );
+    return {
+      message: 'Si existe una cuenta pendiente con ese correo, enviaremos un nuevo enlace.',
+    };
+  }
+
+  async confirmEmailVerification(token: string) {
+    const client = await this.clients.consumeEmailVerification(
+      this.hashVerificationToken(token),
+    );
+    if (!client) {
+      throw new BadRequestException({
+        code: 'EMAIL_VERIFICATION_INVALID',
+        message: 'Este enlace ya no es válido',
+      });
+    }
+    return {
+      accessToken: this.issueToken(client).accessToken,
+      client: this.clientIdentity(client),
+    };
+  }
+
+  private createVerificationToken() {
+    const value = randomBytes(32).toString('hex');
+    return { value, hash: this.hashVerificationToken(value) };
+  }
+
+  private hashVerificationToken(token: string): string {
+    return createHash('sha256').update(token, 'ascii').digest('hex');
+  }
+
+  private verificationTtlMinutes(): number {
+    const configured = this.config.get<unknown>('EMAIL_VERIFICATION_TTL_MINUTES');
+    if (configured === undefined) return 30;
+    if (
+      typeof configured !== 'string' ||
+      !/^[1-9]\d{0,3}$/u.test(configured) ||
+      Number(configured) > 1440
+    ) {
+      throw new Error(
+        'EMAIL_VERIFICATION_TTL_MINUTES must be an integer between 1 and 1440.',
+      );
+    }
+    return Number(configured);
+  }
+
+  private async sendVerificationEmail(
+    email: string,
+    token: string,
+    expiresInMinutes: number,
+  ) {
+    const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
+    const confirmationUrl = new URL('/verify-email', frontendUrl);
+    confirmationUrl.searchParams.set('token', token);
+    try {
+      await this.verificationSender.send({
+        email,
+        confirmationUrl: confirmationUrl.toString(),
+        expiresInMinutes,
+      });
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'EMAIL_DELIVERY_FAILED',
+        message:
+          'No se pudo enviar el correo de confirmación. Puedes solicitar que se reenvíe.',
+      });
+    }
+  }
+
+  private clientIdentity(client: Client) {
+    return {
+      id: client.id,
+      email: client.email,
+      firstName: client.firstName,
+      lastName: client.firstSurname ?? '',
+    };
   }
 
   async loginEmployee(dto: LoginDto): Promise<EmployeeLoginResult> {
@@ -122,7 +232,7 @@ export class AuthService {
       });
 
       const payload = ticket.getPayload();
-      if(!payload?.email){
+      if(!payload?.email || payload.email_verified !== true){
         throw new ConflictException('unable to verify with google or email not valid')
 
       }

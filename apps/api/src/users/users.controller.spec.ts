@@ -21,6 +21,7 @@ import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { UsersRepository } from './users.repository';
 import { UserRole } from './enums/user-role.enum';
+import { EmailVerificationSender } from '../auth/notifications/email-verification-sender';
 
 describe('UsersController (HTTP integration)', () => {
   let app: INestApplication<App>;
@@ -63,6 +64,8 @@ describe('UsersController (HTTP integration)', () => {
         get: (key: string) => ({ FRONTEND_URL: origin, NODE_ENV: 'test' })[key],
         getOrThrow: () => 'controller-test-secret',
       })
+      .overrideProvider(EmailVerificationSender)
+      .useValue({ send: jest.fn() })
       .overrideProvider(DatabaseService)
       .useValue({})
       .overrideProvider(UsersRepository)

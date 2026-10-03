@@ -46,6 +46,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         ? await this.users.findEmployeeIdentityById(payload.sub)
         : await this.clients.findById(payload.sub);
     if (!user) throw new UnauthorizedException();
+    if (
+      payload.type === 'client' &&
+      (await this.clients.isEmailVerificationPending(payload.sub))
+    ) {
+      throw new UnauthorizedException();
+    }
     return user;
   }
 }

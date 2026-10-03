@@ -1,4 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
+import oracle from 'oracledb';
 import { ClientsRepository } from './clients.repository';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -90,11 +91,122 @@ export class ClientsService {
     return (await this.findById(id))!;
   }
 
+  async createPendingWithLocalCredentials(
+    data: NewClient,
+    passwordHash: string,
+    salt: string,
+    tokenHash: string,
+    expiresInMinutes: number,
+  ): Promise<Client> {
+    const id = await this.clientsRepository.createClient(
+      {
+        ...data,
+        language: data.language ?? 'es',
+        passwordHash,
+        salt,
+      },
+      { tokenHash, expiresInMinutes },
+    );
+    return (await this.findById(id))!;
+  }
+
+  async findPendingLocalClientByEmail(email: string): Promise<Client | null> {
+    const result = await this.db.query<Client>(
+      `SELECT ${CLIENT_COLUMNS}
+         FROM CLIENTS c
+         JOIN CLIENT_LOCAL_CREDENTIALS l ON l.CLIENT_ID = c.CLIENT_ID
+         JOIN CLIENT_EMAIL_VERIFICATIONS v ON v.CLIENT_ID = c.CLIENT_ID
+        WHERE c.EMAIL = :email`,
+      { email },
+    );
+    return result.rows?.[0] ?? null;
+  }
+
+  async replaceEmailVerification(
+    clientId: number,
+    tokenHash: string,
+    expiresInMinutes: number,
+  ): Promise<void> {
+    const result = await this.db.query(
+      `MERGE INTO CLIENT_EMAIL_VERIFICATIONS target
+       USING (SELECT :clientId AS client_id FROM dual) source
+          ON (target.CLIENT_ID = source.client_id)
+       WHEN MATCHED THEN UPDATE SET
+         target.TOKEN_HASH = :tokenHash,
+         target.EXPIRES_AT =
+           SYSTIMESTAMP + NUMTODSINTERVAL(:expiresInMinutes, 'MINUTE'),
+         target.CREATED_AT = SYSTIMESTAMP
+       WHEN NOT MATCHED THEN INSERT (
+         CLIENT_ID, TOKEN_HASH, EXPIRES_AT, CREATED_AT
+       ) VALUES (
+         :clientId, :tokenHash,
+         SYSTIMESTAMP + NUMTODSINTERVAL(:expiresInMinutes, 'MINUTE'),
+         SYSTIMESTAMP
+       )`,
+      { clientId, tokenHash, expiresInMinutes },
+    );
+    if (result.rowsAffected !== 1) {
+      throw new Error('Oracle did not rotate a single email verification.');
+    }
+  }
+
+  async consumeEmailVerification(tokenHash: string): Promise<Client | null> {
+    return this.db.transaction(async (connection) => {
+      const result = await connection.execute<{ clientId?: unknown }>(
+        `DELETE FROM CLIENT_EMAIL_VERIFICATIONS
+          WHERE TOKEN_HASH = :tokenHash
+            AND EXPIRES_AT > SYSTIMESTAMP
+        RETURNING CLIENT_ID INTO :clientId`,
+        {
+          tokenHash: { val: tokenHash, type: oracle.STRING },
+          clientId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
+        },
+        { autoCommit: false },
+      );
+      const ids = result.outBinds?.clientId;
+      const clientId = Array.isArray(ids) ? ids[0] : undefined;
+      if (
+        result.rowsAffected !== 1 ||
+        typeof clientId !== 'number' ||
+        !Number.isSafeInteger(clientId) ||
+        clientId < 1
+      ) {
+        return null;
+      }
+      const clientResult = await connection.execute<Client>(
+        `SELECT ${CLIENT_COLUMNS} FROM CLIENTS c WHERE c.CLIENT_ID = :clientId`,
+        { clientId },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+      );
+      return clientResult.rows?.[0] ?? null;
+    });
+  }
+
+  async isEmailVerificationPending(clientId: number): Promise<boolean> {
+    const result = await this.db.query(
+      `SELECT 1 AS "pending"
+         FROM CLIENT_EMAIL_VERIFICATIONS
+        WHERE CLIENT_ID = :clientId AND ROWNUM = 1`,
+      { clientId },
+    );
+    return !!result.rows?.length;
+  }
+
+  async clearPendingEmailVerification(clientId: number): Promise<void> {
+    await this.db.query(
+      'DELETE FROM CLIENT_EMAIL_VERIFICATIONS WHERE CLIENT_ID = :clientId',
+      { clientId },
+    );
+  }
+
   // ---------- Google / Facebook  ----------
   async findOrCreateSocial(p: SocialProfile): Promise<Client> {
     // 1. the user is already registered?
     const linked = await this.findByExternal(p.provider, p.providerUserId);
-    if (linked) return linked;
+    if (linked) {
+      await this.clearPendingEmailVerification(linked.id);
+      return linked;
+    }
 
     // 2. Exists a local account linked with the email? If so,
     const existing = await this.findByEmail(p.email);
@@ -120,6 +232,7 @@ export class ClientsService {
         }
         throw err;
       }
+      await this.clearPendingEmailVerification(existing.id);
       return existing;
     }
 

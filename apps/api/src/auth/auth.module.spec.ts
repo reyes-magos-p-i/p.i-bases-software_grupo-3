@@ -16,6 +16,7 @@ import { UsersRepository } from '../users/users.repository';
 import { UserRole } from '../users/enums/user-role.enum';
 import { EmployeeSessionService } from './employee-session.service';
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
+import { EmailVerificationSender } from './notifications/email-verification-sender';
 
 
 describe('AuthModule', () => {
@@ -50,10 +51,15 @@ describe('AuthModule', () => {
     })
       .overrideProvider(ConfigService)
       .useValue({
-        getOrThrow: () => 'test-jwt-secret',
+        getOrThrow: (key: string) =>
+          key === 'FRONTEND_URL'
+            ? 'https://cinema.example'
+            : 'test-jwt-secret',
         get: (key: string) =>
           ({ FRONTEND_URL: 'https://cinema.example', NODE_ENV: 'test' })[key],
       })
+      .overrideProvider(EmailVerificationSender)
+      .useValue({ send: jest.fn() })
       .overrideProvider(DatabaseService)
       .useValue(db)
       .compile();
@@ -253,6 +259,7 @@ describe('AuthModule', () => {
       });
     connection.execute
       .mockResolvedValueOnce({ rowsAffected: 1, outBinds: { clientId: [42] } })
+      .mockResolvedValueOnce({ rowsAffected: 1 })
       .mockResolvedValueOnce({ rowsAffected: 1 });
     const password = 'Test-password-123!';
     await expect(
@@ -267,7 +274,10 @@ describe('AuthModule', () => {
         password,
         acceptTerms: true,
       }),
-    ).resolves.toEqual({ id: 42, email: 'cliente@example.com' });
+    ).resolves.toEqual({
+      status: 'pending_verification',
+      email: 'cliente@example.com',
+    });
     const [profileSql, profileBinds] = connection.execute.mock.calls[0];
     expect(profileSql).toContain('INSERT INTO CLIENTS');
     expect(profileBinds).toMatchObject({
@@ -289,6 +299,16 @@ describe('AuthModule', () => {
       true,
     );
     expect(db.transaction).toHaveBeenCalledTimes(1);
-    expect(connection.execute).toHaveBeenCalledTimes(2);
+    const verification = connection.execute.mock.calls[2];
+    expect(verification[0]).toContain('INSERT INTO CLIENT_EMAIL_VERIFICATIONS');
+    expect(verification[1].tokenHash.val).toMatch(/^[a-f0-9]{64}$/u);
+    expect(connection.execute).toHaveBeenCalledTimes(3);
+    expect(module.get(EmailVerificationSender).send).toHaveBeenCalledWith({
+      email: 'cliente@example.com',
+      confirmationUrl: expect.stringMatching(
+        /^https:\/\/cinema.example\/verify-email\?token=[a-f0-9]{64}$/u,
+      ),
+      expiresInMinutes: 30,
+    });
   });
 });
