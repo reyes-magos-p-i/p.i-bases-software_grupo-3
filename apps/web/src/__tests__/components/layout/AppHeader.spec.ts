@@ -11,6 +11,7 @@ import {
   employeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
+import { clearClientSession } from '@/services/client-session.service'
 
 vi.mock('@/services/authService', async (original) => ({
   ...(await original<typeof import('@/services/authService')>()),
@@ -38,6 +39,7 @@ describe('AppHeader authentication navigation', () => {
   }
 
   beforeEach(async () => {
+    clearClientSession()
     Object.assign(employeeSession.user, { value: null })
     Object.assign(employeeSession.status, { value: 'unknown' })
     vi.mocked(authenticateEmployee)
@@ -137,7 +139,7 @@ describe('AppHeader authentication navigation', () => {
     await page.get('.app-modal-close').trigger('click')
     expect(page.findAll('dialog[open]')).toHaveLength(0)
     await wrapper.get('.register-button').trigger('click')
-    wrapper.getComponent(RegisterModal).vm.$emit('registered')
+    wrapper.getComponent(RegisterModal).vm.$emit('close')
     await nextTick()
     expect(page.findAll('dialog[open]')).toHaveLength(0)
     await wrapper.get('.login-button').trigger('click')

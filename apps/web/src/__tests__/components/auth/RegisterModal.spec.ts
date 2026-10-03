@@ -3,10 +3,15 @@ import { DOMWrapper, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
-import { registerUser } from '@/services/authService'
+import { EmailDeliveryError, registerUser, resendEmailVerification } from '@/services/authService'
 
+const { mockedEmailDeliveryError } = vi.hoisted(() => ({
+  mockedEmailDeliveryError: class EmailDeliveryError extends Error {},
+}))
 vi.mock('@/services/authService', () => ({
+  EmailDeliveryError: mockedEmailDeliveryError,
   registerUser: vi.fn(),
+  resendEmailVerification: vi.fn(),
 }))
 
 describe('RegisterModal.vue', () => {
@@ -122,7 +127,7 @@ describe('RegisterModal.vue', () => {
     expect(wrapper.text()).toContain('Las contraseñas no coinciden')
   })
 
-  it('ejecuta registro con éxito y emite eventos', async () => {
+  it('keeps the registration dialog open and asks the user to confirm email', async () => {
     vi.mocked(registerUser).mockResolvedValueOnce(
       {} as unknown as Awaited<ReturnType<typeof registerUser>>,
     )
@@ -143,9 +148,35 @@ describe('RegisterModal.vue', () => {
     expect(registerUser).toHaveBeenCalledWith(
       expect.not.objectContaining({ confirmPassword: 'Password123!' }),
     )
-    expect(wrapper.emitted('registered')).toBeTruthy()
+    expect(wrapper.text()).toContain('Te enviamos un enlace de confirmación')
+    expect(wrapper.text()).toContain('juan.perez@example.com')
+    expect(wrapper.get('button[type="button"]').text()).toContain('Reenviar correo')
     expect(wrapper.emitted('authenticated')).toBeUndefined()
-    expect(wrapper.emitted('close')).toBeTruthy()
+    expect(wrapper.emitted('close')).toBeUndefined()
+  })
+
+  it('offers resend after delivery failure and reports a successful retry', async () => {
+    vi.mocked(registerUser).mockRejectedValueOnce(
+      new EmailDeliveryError('No se pudo enviar el correo'),
+    )
+    vi.mocked(resendEmailVerification).mockResolvedValueOnce(undefined)
+    const wrapper = createWrapper()
+
+    await wrapper.find('#email').setValue('ana@example.com')
+    await wrapper.find('#firstName').setValue('Ana')
+    await wrapper.find('#lastName').setValue('Perez')
+    await wrapper.find('#phone').setValue('1234567890')
+    await wrapper.find('#gender').setValue('F')
+    await wrapper.find('#birthDate').setValue('1990-01-01')
+    await wrapper.find('#password').setValue('Password123!')
+    await wrapper.find('#confirmPassword').setValue('Password123!')
+    await wrapper.find('#terms').setValue(true)
+    await wrapper.find('form').trigger('submit.prevent')
+
+    expect(wrapper.text()).toContain('La cuenta quedó pendiente')
+    await wrapper.get('button[type="button"]').trigger('click')
+    expect(resendEmailVerification).toHaveBeenCalledExactlyOnceWith('ana@example.com')
+    expect(wrapper.text()).toContain('Te enviamos un enlace de confirmación')
   })
 
   it('forwards the authenticated Google identity through the registration event', async () => {

@@ -2,6 +2,7 @@ import { isAxiosError } from 'axios'
 import { getApi } from '@/services/api'
 import type { RegisterPayload } from '@/types/client'
 import type { ClientIdentity } from '@/types/client-auth'
+import { establishClientSession } from '@/services/client-session.service'
 import { googleAuthCodeLogin } from 'vue3-google-login'
 import type { EmployeeIdentity, EmployeeLoginRequest } from '@/types/employee-auth'
 
@@ -15,8 +16,22 @@ export async function facebookLogin(accessToken: string): Promise<ClientAuthResp
   const response = await api.post<ClientAuthResponse>('/auth/facebook', {
     accessToken,
   })
-  localStorage.setItem('accessToken', response.data.accessToken)
+  establishClientSession(response.data.client, response.data.accessToken)
   return response.data
+}
+
+export class EmailDeliveryError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'EmailDeliveryError'
+  }
+}
+
+export class InvalidEmailVerificationError extends Error {
+  constructor() {
+    super('Este enlace ya no es válido')
+    this.name = 'InvalidEmailVerificationError'
+  }
 }
 
 export async function registerUser(payload: RegisterPayload): Promise<void> {
@@ -25,6 +40,12 @@ export async function registerUser(payload: RegisterPayload): Promise<void> {
     await api.post('/auth/register', payload, { timeout: 60000 })
   } catch (error) {
     if (isAxiosError(error)) {
+      const code: unknown = error.response?.data?.code
+      if (code === 'EMAIL_DELIVERY_FAILED') {
+        throw new EmailDeliveryError(
+          'No se pudo enviar el correo de confirmación. Puedes solicitar que se reenvíe.',
+        )
+      }
       const message: unknown = error.response?.data?.message
       if (typeof message === 'string' && message.trim()) {
         throw new Error(message)
@@ -41,6 +62,34 @@ export async function registerUser(payload: RegisterPayload): Promise<void> {
   }
 }
 
+export async function resendEmailVerification(email: string): Promise<void> {
+  const api = getApi()
+  try {
+    await api.post('/auth/resend-email-verification', { email })
+  } catch {
+    throw new Error(
+      'No se pudo reenviar el correo de confirmación. Inténtalo nuevamente.',
+    )
+  }
+}
+
+export async function confirmEmailVerification(token: string): Promise<ClientIdentity> {
+  const api = getApi()
+  try {
+    const response = await api.post<ClientAuthResponse>('/auth/confirm-email', { token })
+    establishClientSession(response.data.client, response.data.accessToken)
+    return response.data.client
+  } catch (error) {
+    if (
+      isAxiosError(error) &&
+      error.response?.data?.code === 'EMAIL_VERIFICATION_INVALID'
+    ) {
+      throw new InvalidEmailVerificationError()
+    }
+    throw new Error('No se pudo confirmar el correo. Inténtalo nuevamente.')
+  }
+}
+
 export async function loginWithGoogle(): Promise<ClientIdentity> {
   const api = getApi()
   const googleResponse = await googleAuthCodeLogin()
@@ -48,7 +97,7 @@ export async function loginWithGoogle(): Promise<ClientIdentity> {
   const response = await api.post<ClientAuthResponse>('/auth/google', {
     code: googleResponse.code,
   })
-  localStorage.setItem('accessToken', response.data.accessToken)
+  establishClientSession(response.data.client, response.data.accessToken)
   return response.data.client
 }
 

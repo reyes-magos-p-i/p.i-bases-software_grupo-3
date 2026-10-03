@@ -11,11 +11,12 @@ import {
   employeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
+import { clearClientSession, clientSession } from '@/services/client-session.service'
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
 const activeModal = ref<'register' | 'login' | null>(null)
-const clientUser = ref<ClientIdentity | null>(null)
+const clientUser = clientSession.user
 const loginMode = ref<'client' | 'employee'>('client')
 const router = useRouter()
 const route = useRoute()
@@ -140,8 +141,7 @@ function handleClientLogin(identity?: ClientIdentity) {
 }
 
 function logoutClient() {
-  localStorage.removeItem('accessToken')
-  clientUser.value = null
+  clearClientSession()
   activeModal.value = null
 }
 </script>
@@ -169,7 +169,6 @@ function logoutClient() {
         <RegisterModal
           :open="activeModal === 'register'"
           @close="activeModal = null"
-          @registered="activeModal = null"
           @authenticated="handleClientLogin"
         />
         <LoginModal

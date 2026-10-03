@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { registerUser } from '@/services/authService'
+import { reactive, ref, watch } from 'vue'
+import {
+  EmailDeliveryError,
+  registerUser,
+  resendEmailVerification,
+} from '@/services/authService'
 import BaseModal from '@/components/common/BaseModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 import type { ClientIdentity } from '@/types/client-auth'
 
-defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'registered'): void
   (e: 'authenticated', identity: ClientIdentity): void
 }>()
 
@@ -29,7 +32,21 @@ const form = reactive({
 // If a field has no error, its value will be an empty string and the template will not display an error.
 const errors = reactive<Record<string, string>>({})
 const loading = ref(false)
+const resendLoading = ref(false)
 const serverError = ref('')  // For Backend errors that are not field-specific (network issues, server errors).
+const verificationEmail = ref('')
+const verificationState = ref<'idle' | 'sent' | 'delivery-failed'>('idle')
+
+watch(
+  () => props.open,
+  (open) => {
+    if (!open) {
+      verificationState.value = 'idle'
+      verificationEmail.value = ''
+      serverError.value = ''
+    }
+  },
+)
 
 /**
  * TODO(Raul): Safeguard against common passwords, probably by using a
@@ -76,26 +93,50 @@ async function onSubmit() {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { confirmPassword , ...payload } = form
     await registerUser(payload)
-    emit('registered')
-    emit('close')
+    verificationEmail.value = payload.email
+    verificationState.value = 'sent'
   } catch (e) {  // prevent reading from undefined if the error is not an instance of Error
-    serverError.value = e instanceof Error ? e.message : 'Error inesperado'
+    if (e instanceof EmailDeliveryError) {
+      verificationEmail.value = form.email
+      verificationState.value = 'delivery-failed'
+      serverError.value = e.message
+    } else {
+      serverError.value = e instanceof Error ? e.message : 'Error inesperado'
+    }
   } finally {  // No matter what happens, we want to stop the loading state. for the next request.
     loading.value = false
+  }
+}
+
+async function resendVerificationEmail() {
+  if (!verificationEmail.value || resendLoading.value) return
+  resendLoading.value = true
+  serverError.value = ''
+  try {
+    await resendEmailVerification(verificationEmail.value)
+    verificationState.value = 'sent'
+  } catch (error) {
+    serverError.value =
+      error instanceof Error
+        ? error.message
+        : 'No se pudo reenviar el correo de confirmación.'
+  } finally {
+    resendLoading.value = false
   }
 }
 </script>
 
 <template>
   <BaseModal :open="open" title="Crear cuenta" @close="emit('close')">
-    <SocialAuthButtons
-      @authenticated="handleAuthenticated"
-      @error="handleSocialAuthError"
-    />
+    <template v-if="verificationState === 'idle'">
+      <SocialAuthButtons
+        @authenticated="handleAuthenticated"
+        @error="handleSocialAuthError"
+      />
 
-    <hr class="my-3" />
+      <hr class="my-3" />
 
-    <form novalidate @submit.prevent="onSubmit">
+      <form novalidate @submit.prevent="onSubmit">
       <div class="row g-3">
         <div class="col-12">
           <label class="form-label fw-bold" for="email">Correo Electrónico</label>
@@ -188,14 +229,37 @@ async function onSubmit() {
         </div>
       </div>
 
-      <div v-if="serverError" class="alert alert-danger mt-3 mb-0">{{ serverError }}</div>
+        <div v-if="serverError" class="alert alert-danger mt-3 mb-0">{{ serverError }}</div>
 
-      <div class="text-center mt-3">
-        <button type="submit" class="btn-brand" :disabled="loading">
-          {{ loading ? 'Creando...' : 'Crear cuenta' }}
-        </button>
-      </div>
-    </form>
+        <div class="text-center mt-3">
+          <button type="submit" class="btn-brand" :disabled="loading">
+            {{ loading ? 'Creando...' : 'Crear cuenta' }}
+          </button>
+        </div>
+      </form>
+    </template>
+
+    <section v-else class="verification-feedback" aria-live="polite">
+      <p v-if="verificationState === 'sent'" class="alert alert-success">
+        Te enviamos un enlace de confirmación a <strong>{{ verificationEmail }}</strong>.
+        Confirma tu correo para activar tu cuenta e iniciar sesión.
+      </p>
+      <p v-else class="alert alert-danger" role="alert">{{ serverError }}</p>
+      <p v-if="verificationState === 'delivery-failed'" class="small">
+        La cuenta quedó pendiente. Puedes volver a solicitar el correo.
+      </p>
+      <p v-if="serverError && verificationState === 'sent'" class="alert alert-danger" role="alert">
+        {{ serverError }}
+      </p>
+      <button
+        type="button"
+        class="btn-brand"
+        :disabled="resendLoading"
+        @click="resendVerificationEmail"
+      >
+        {{ resendLoading ? 'Enviando…' : 'Reenviar correo' }}
+      </button>
+    </section>
   </BaseModal>
 </template>
 
