@@ -16,7 +16,9 @@ export class AdministratorGuard implements CanActivate {
       !('role' in user) ||
       user.role !== UserRole.ADMINISTRATOR
     ) {
-      throw new ForbiddenException('No tiene permiso para crear usuarios.');
+      throw new ForbiddenException(
+        'No tiene permiso para realizar esta acción.',
+      );
     }
     return true;
   }
