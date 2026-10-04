@@ -14,7 +14,6 @@ export class ProjectorsRepository {
         SELECT projector_id, name
         FROM Projectors
         ORDER BY name
-        FETCH FIRST 100 ROWS ONLY
       `);
       this.logger.log(`Fetched ${result.rows?.length ?? 0} projectors from the database.`);
       this.logger.debug(`Database query result: ${JSON.stringify(result)}`);
