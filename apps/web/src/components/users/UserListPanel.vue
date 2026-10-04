@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
+import EditUserDialog from '@/components/users/EditUserDialog.vue'
 import { getEmployeeListOptions, getUsers } from '@/services/user.service'
 import type { BranchOption, UserListQuery, UserListResult, UserRole } from '@/types/user'
-import type { UserDetailSelection } from '@/types/user'
+import type { UserDetailSelection, UpdatedUser } from '@/types/user'
 
 const props = defineProps<{ section: 'clients' | 'employees'; role: UserRole }>()
-const emit = defineEmits<{ 'session-expired': []; forbidden: [] }>()
+const emit = defineEmits<{
+  'session-expired': []
+  forbidden: []
+  'user-updated': [selection: UserDetailSelection, user: UpdatedUser]
+}>()
 const id = useId()
 const filterContainer = ref<HTMLElement | null>(null)
 const selectedUser = ref<UserDetailSelection | null>(null)
+const editedUser = ref<UserDetailSelection | null>(null)
+const updateNotice = ref('')
+const updateFeedback = ref<HTMLElement | null>(null)
 const searchDraft = ref('')
 const appliedSearch = ref('')
 const validationError = ref('')
@@ -217,10 +225,23 @@ function viewUser(row: { [key: string]: unknown }) {
   if (!canRead.value || typeof row.id !== 'number') return
   selectedUser.value = { section: props.section, id: row.id }
 }
+function editUser(row: { [key: string]: unknown }) {
+  if (!canRead.value || typeof row.id !== 'number') return
+  updateNotice.value = ''
+  editedUser.value = { section: props.section, id: row.id }
+}
+function userUpdated(selection: UserDetailSelection, user: UpdatedUser) {
+  editedUser.value = null
+  updateNotice.value = 'El usuario fue modificado exitosamente.'
+  emit('user-updated', selection, user)
+  refresh()
+  void nextTick(() => updateFeedback.value?.focus())
+}
 watch(
   () => [props.section, props.role],
   () => {
     selectedUser.value = null
+    editedUser.value = null
     searchDraft.value = ''
     appliedSearch.value = ''
     validationError.value = ''
@@ -246,6 +267,9 @@ defineExpose({ refresh })
 
 <template>
   <div class="user-list-panel">
+    <p v-if="updateNotice" ref="updateFeedback" class="feedback" role="status" tabindex="-1">
+      {{ updateNotice }}
+    </p>
     <form class="search-bar" novalidate @submit.prevent="search">
       <div class="search-field">
         <label :for="id + '-search'">Buscar {{ isEmployeeList ? 'empleados' : 'clientes' }}</label>
@@ -380,7 +404,7 @@ defineExpose({ refresh })
                 </button>
               </span>
               <span title="Modificar" class="action-hint">
-                <button type="button" disabled aria-label="Modificar">
+                <button type="button" aria-label="Modificar" @click="editUser(row)">
                   <i class="bi bi-pencil-square" aria-hidden="true"></i>
                 </button>
               </span>
@@ -432,6 +456,13 @@ defineExpose({ refresh })
     <UserDetailDialog
       :selection="selectedUser"
       @close="selectedUser = null"
+      @session-expired="emit('session-expired')"
+      @forbidden="emit('forbidden')"
+    />
+    <EditUserDialog
+      :selection="editedUser"
+      @close="editedUser = null"
+      @updated="userUpdated"
       @session-expired="emit('session-expired')"
       @forbidden="emit('forbidden')"
     />

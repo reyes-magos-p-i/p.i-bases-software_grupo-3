@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { AxiosError, type AxiosResponse } from 'axios'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
+import EditUserDialog from '@/components/users/EditUserDialog.vue'
 import type { UserListResult } from '@/types/user'
 
 const { getUsers, getEmployeeListOptions } = vi.hoisted(() => ({
@@ -38,7 +39,7 @@ async function render(
 ) {
   wrapper = mount(UserListPanel, {
     props: { section, role },
-    global: { stubs: { UserDetailDialog: true } },
+    global: { stubs: { UserDetailDialog: true, EditUserDialog: true } },
   })
   await flushPromises()
   return wrapper
@@ -58,7 +59,38 @@ afterEach(() => {
 })
 
 describe('UserListPanel', () => {
-  it('lists records with a view action and disabled modification actions', async () => {
+  it('selects a user for editing, refreshes after success, and shows feedback', async () => {
+    const view = await render('clients', 'EMPLOYEE')
+    await view.get('button[aria-label="Modificar"]').trigger('click')
+    const dialog = view.getComponent(EditUserDialog)
+    const selection = { section: 'clients' as const, id: 42 }
+    expect(dialog.props('selection')).toEqual(selection)
+    const updated = { id: 42, role: 'CLIENT', email: 'new@example.com' }
+    dialog.vm.$emit('updated', selection, updated)
+    await flushPromises()
+    expect(dialog.props('selection')).toBeNull()
+    expect(view.text()).toContain('El usuario fue modificado exitosamente.')
+    expect(getUsers).toHaveBeenCalledTimes(2)
+    expect(view.emitted('user-updated')?.[0]).toEqual([selection, updated])
+  })
+  it('clears editing on cancellation and permission changes and forwards auth errors', async () => {
+    const view = await render('employees')
+    await view.get('button[aria-label="Modificar"]').trigger('click')
+    const dialog = view.getComponent(EditUserDialog)
+    dialog.vm.$emit('close')
+    await flushPromises()
+    expect(dialog.props('selection')).toBeNull()
+    expect(getUsers).toHaveBeenCalledTimes(1)
+    await view.get('button[aria-label="Modificar"]').trigger('click')
+    dialog.vm.$emit('session-expired')
+    dialog.vm.$emit('forbidden')
+    expect(view.emitted('session-expired')).toHaveLength(1)
+    expect(view.emitted('forbidden')).toHaveLength(1)
+    await view.setProps({ role: 'EMPLOYEE' })
+    await flushPromises()
+    expect(dialog.props('selection')).toBeNull()
+  })
+  it('lists records with view and modification actions', async () => {
     const view = await render('clients', 'EMPLOYEE')
     expect(view.text()).toContain('21 resultados')
     expect(view.text()).toContain('Ana María Núñez')
@@ -71,7 +103,7 @@ describe('UserListPanel', () => {
       view.findAll('.actions button').map((button) => button.attributes('aria-label')),
     ).toEqual(['Ver', 'Modificar', 'Desactivar'])
     expect(view.get('button[aria-label="Ver"]').attributes('disabled')).toBeUndefined()
-    expect(view.get('button[aria-label="Modificar"]').attributes('disabled')).toBeDefined()
+    expect(view.get('button[aria-label="Modificar"]').attributes('disabled')).toBeUndefined()
     expect(view.get('button[aria-label="Desactivar"]').attributes('disabled')).toBeDefined()
     for (const button of view.findAll('.actions button')) {
       expect(button.find('i.bi').exists()).toBe(true)
