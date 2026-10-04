@@ -18,6 +18,7 @@ describe('CreateUserValidationPipe', () => {
     firstName: 'José',
     firstSurname: 'Núñez',
     secondSurname: 'Solano',
+    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '+506 8888-8888',
     address: { districtId: 7, details: 'Casa azul' },
@@ -27,6 +28,15 @@ describe('CreateUserValidationPipe', () => {
   beforeEach(() => {
     pipe = new CreateUserValidationPipe();
   });
+
+  it.each([undefined, null, '2026-02-30'])(
+    'rejects invalid hire dates for new employees: %p',
+    async (hireDate) => {
+      await expect(pipe.transform({ ...employee, hireDate })).rejects.toThrow(
+        BadRequestException,
+      );
+    },
+  );
 
   const rejection = async (value: unknown): Promise<BadRequestException> => {
     const result: unknown = await pipe

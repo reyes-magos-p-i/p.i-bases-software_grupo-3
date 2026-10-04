@@ -40,6 +40,7 @@ describe('UsersController (HTTP integration)', () => {
     firstName: 'José',
     firstSurname: 'Núñez',
     secondSurname: 'Solano',
+    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
     address: { districtId: 7, details: 'Casa azul' },

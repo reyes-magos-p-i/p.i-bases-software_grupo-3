@@ -11,6 +11,7 @@ describe('CreateEmployeeDto', () => {
     firstSurname: 'Núñez',
     secondSurname: 'Solano',
     birthday: '2000-02-29',
+    hireDate: '2026-10-01',
     phoneNumber: '+506 8888-8888',
     address: { districtId: 1 },
     branchId: 2,
@@ -18,6 +19,19 @@ describe('CreateEmployeeDto', () => {
 
   const validatePayload = (payload: Record<string, unknown>) =>
     validate(plainToInstance(CreateEmployeeDto, payload));
+
+  it.each([
+    undefined,
+    null,
+    '',
+    '2026-02-30',
+    '0000-01-01',
+    '2026-10-01T00:00:00Z',
+    '01/10/2026',
+  ])('rejects a missing or invalid hire date %p', async (hireDate) => {
+    const errors = await validatePayload({ ...validPayload, hireDate });
+    expect(errors.map((error) => error.property)).toContain('hireDate');
+  });
 
   it.each([
     {},

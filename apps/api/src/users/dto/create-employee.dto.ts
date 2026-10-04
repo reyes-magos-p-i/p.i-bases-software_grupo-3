@@ -54,6 +54,20 @@ export class CreateEmployeeDto extends CreateUserBaseDto {
   })
   birthday: string;
 
+  @IsDefined({ message: 'La fecha de contratación es obligatoria.' })
+  @IsDateString(
+    { strict: true },
+    { message: 'La fecha de contratación debe ser una fecha válida.' },
+  )
+  @Length(10, 10, {
+    message: 'La fecha de contratación debe tener el formato YYYY-MM-DD.',
+  })
+  @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/u, {
+    message:
+      'La fecha de contratación debe tener el formato YYYY-MM-DD con un año entre 0001 y 9999.',
+  })
+  hireDate: string;
+
   @IsDefined({ message: 'El teléfono es obligatorio.' })
   @IsString({ message: 'El teléfono debe ser texto.' })
   @Matches(/\S/u, {

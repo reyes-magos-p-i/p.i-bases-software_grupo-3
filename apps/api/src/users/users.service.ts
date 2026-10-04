@@ -14,6 +14,10 @@ import { UserRole } from './enums/user-role.enum';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { UsersRepository } from './users.repository';
 import { ClientsRepository } from '../clients/clients.repository';
+import type {
+  ListClientsQueryDto,
+  ListEmployeesQueryDto,
+} from './dto/list-users-query.dto';
 
 @Injectable()
 export class UsersService {
@@ -27,6 +31,18 @@ export class UsersService {
 
   getCreationOptions(): Promise<UserCreationOptionsDto> {
     return this.usersRepository.getCreationOptions();
+  }
+
+  listClients(query: ListClientsQueryDto) {
+    return this.clientsRepository.listClients(query);
+  }
+
+  listEmployees(query: ListEmployeesQueryDto) {
+    return this.usersRepository.listEmployees(query);
+  }
+
+  getEmployeeListOptions() {
+    return this.usersRepository.getEmployeeListOptions();
   }
 
   async create(
@@ -88,6 +104,7 @@ export class UsersService {
           details: data.address.details,
         },
         branchId: data.branchId,
+        hireDate: data.hireDate,
         passwordHash,
         salt,
       });

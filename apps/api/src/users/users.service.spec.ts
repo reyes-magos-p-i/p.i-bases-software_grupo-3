@@ -19,10 +19,13 @@ describe('UsersService', () => {
   let module: TestingModule;
   let service: UsersService;
   const repository = {
+    listEmployees: jest.fn(),
+    getEmployeeListOptions: jest.fn(),
     getCreationOptions: jest.fn(),
     createEmployee: jest.fn(),
   };
   const clientsRepository = {
+    listClients: jest.fn(),
     clientEmailExists: jest.fn(),
     createClient: jest.fn(),
   };
@@ -50,6 +53,7 @@ describe('UsersService', () => {
     secondName: null,
     firstSurname: 'Núñez',
     secondSurname: 'Solano',
+    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
     address: { districtId: 7, details: 'Casa azul' },
@@ -85,6 +89,32 @@ describe('UsersService', () => {
 
   afterEach(async () => {
     await module.close();
+  });
+
+  it('delegates list queries and options without credential operations', async () => {
+    const query = {
+      page: 1,
+      pageSize: 10,
+      sortBy: 'id',
+      sortDirection: 'asc' as const,
+    };
+    const result = {
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+      totalPages: 0,
+    };
+    clientsRepository.listClients.mockResolvedValue(result);
+    repository.listEmployees.mockResolvedValue(result);
+    repository.getEmployeeListOptions.mockResolvedValue({ branches: [] });
+    expect(await service.listClients(query)).toEqual(result);
+    expect(await service.listEmployees(query)).toEqual(result);
+    expect(await service.getEmployeeListOptions()).toEqual({ branches: [] });
+    expect(clientsRepository.listClients).toHaveBeenCalledWith(query);
+    expect(repository.listEmployees).toHaveBeenCalledWith(query);
+    expect(generator.generate).not.toHaveBeenCalled();
+    expect(sender.send).not.toHaveBeenCalled();
   });
 
   describe('getCreationOptions', () => {

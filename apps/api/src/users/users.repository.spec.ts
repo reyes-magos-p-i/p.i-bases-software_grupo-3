@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { UserRole } from './enums/user-role.enum';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import { UsersRepository } from './users.repository';
+import { ListEmployeesQueryDto } from './dto/list-users-query.dto';
 
 describe('UsersRepository', () => {
   let module: TestingModule;
@@ -57,6 +58,124 @@ describe('UsersRepository', () => {
 
   afterEach(async () => {
     await module.close();
+  });
+
+  describe('listEmployees', () => {
+    it('combines bound filters, escapes wildcards and returns a complete paginated profile', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 21 }] })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              ID: 42,
+              NAME: 'Ana Núñez',
+              EMAIL: 'ana@example.com',
+              PHONE_NUMBER: '88888888',
+              ROLE: UserRole.EMPLOYEE,
+              BRANCH_ID: 3,
+              BRANCH_NAME: 'Centro',
+              CREATED_AT: null,
+              HIRE_DATE: '2026-10-01',
+              PASSWORD_HASH: 'private',
+            },
+          ],
+        });
+      const query = Object.assign(new ListEmployeesQueryDto(), {
+        search: 'Núñez%_\\',
+        role: [UserRole.EMPLOYEE, UserRole.ADMINISTRATOR],
+        branchId: [3, 5],
+        page: 99,
+        sortBy: 'hireDate',
+        sortDirection: 'desc',
+      });
+      const result = await repository.listEmployees(query);
+      expect(result).toMatchObject({
+        total: 21,
+        page: 3,
+        totalPages: 3,
+        pageSize: 10,
+      });
+      expect(result.items[0]).toEqual({
+        id: 42,
+        name: 'Ana Núñez',
+        email: 'ana@example.com',
+        phoneNumber: '88888888',
+        role: UserRole.EMPLOYEE,
+        branchId: 3,
+        branchName: 'Centro',
+        createdAt: null,
+        hireDate: '2026-10-01',
+      });
+      const [sql, binds] = connection.execute.mock.calls[1] as [
+        string,
+        Record<string, oracle.BindParameter>,
+      ];
+      expect(sql).toContain(
+        'ORDER BY e.HIRE_DATE DESC NULLS LAST, e.EMPLOYEE_ID ASC',
+      );
+      expect(sql).toContain(
+        'e.ROLE IN (:role0, :role1) AND e.BRANCH_ID IN (:branchId0, :branchId1)',
+      );
+      expect(sql).not.toContain(query.search);
+      expect(binds.search.val).toBe('%núñez\\%\\_\\\\%');
+      expect(binds.offset.val).toBe(20);
+      expect(binds.role0.val).toBe(UserRole.EMPLOYEE);
+      expect(binds.role1.val).toBe(UserRole.ADMINISTRATOR);
+      expect(binds.branchId0.val).toBe(3);
+      expect(binds.branchId1.val).toBe(5);
+      expect(connection.execute.mock.calls[0][0]).toContain(
+        'e.ROLE IN (:role0, :role1) AND e.BRANCH_ID IN (:branchId0, :branchId1)',
+      );
+      expect(connection.execute.mock.calls[0][1]).toEqual(
+        expect.objectContaining({
+          role0: binds.role0,
+          role1: binds.role1,
+          branchId0: binds.branchId0,
+          branchId1: binds.branchId1,
+        }),
+      );
+    });
+    it('returns zero results without a page query', async () => {
+      connection.execute.mockResolvedValue({ rows: [{ TOTAL: 0 }] });
+      expect(
+        await repository.listEmployees(new ListEmployeesQueryDto()),
+      ).toEqual({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 });
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+    });
+    it.each(['id', 'name', 'email', 'createdAt', 'role', 'branch'])(
+      'supports safe ordering by %s and unknown historical dates',
+      async (sortBy) => {
+        connection.execute
+          .mockResolvedValueOnce({ rows: [{ TOTAL: 1 }] })
+          .mockResolvedValueOnce({ rows: [] });
+        const result = await repository.listEmployees(
+          Object.assign(new ListEmployeesQueryDto(), { sortBy }),
+        );
+        expect(result.total).toBe(1);
+        expect(connection.execute.mock.calls[1][0]).toContain(
+          'NULLS LAST, e.EMPLOYEE_ID ASC',
+        );
+      },
+    );
+    it('propagates a database failure and closes the connection', async () => {
+      connection.execute.mockRejectedValue(new Error('Query unavailable'));
+      await expect(
+        repository.listEmployees(new ListEmployeesQueryDto()),
+      ).rejects.toThrow('Query unavailable');
+      expect(connection.close).toHaveBeenCalledTimes(1);
+    });
+    it('returns real branch options independently of creation catalogs', async () => {
+      connection.execute.mockResolvedValue({
+        rows: [{ BRANCH_ID: 3, NAME: 'Centro' }],
+      });
+      expect(await repository.getEmployeeListOptions()).toEqual({
+        branches: [{ id: 3, label: 'Centro' }],
+      });
+      connection.execute.mockResolvedValue({});
+      expect(await repository.getEmployeeListOptions()).toEqual({
+        branches: [],
+      });
+    });
   });
 
   describe('findEmployeeWithLocalCredentialsByEmail', () => {
@@ -469,6 +588,7 @@ describe('UsersRepository', () => {
       firstName: 'Ana',
       firstSurname: 'Núñez',
       secondSurname: 'Solano',
+      hireDate: '2026-10-01',
       birthday: '2000-02-29',
       phoneNumber: '+506 8888-8888',
       address: { districtId: 71, details: 'Casa azul' },
@@ -499,7 +619,7 @@ describe('UsersRepository', () => {
         expect(connection.execute).toHaveBeenCalledTimes(3);
         const profileSql: string = connection.execute.mock.calls[1][0];
         expect(profileSql.replace(/\s+/gu, ' ').trim()).toBe(
-          "INSERT INTO EMPLOYEES ( FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME, BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID ) VALUES ( :firstName, :secondName, :firstSurname, :secondSurname, TO_DATE(:birthday, 'FXYYYY-MM-DD'), :phoneNumber, :email, :role, :addressId, :branchId ) RETURNING EMPLOYEE_ID INTO :employeeId",
+          "INSERT INTO EMPLOYEES ( FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME, BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID, HIRE_DATE ) VALUES ( :firstName, :secondName, :firstSurname, :secondSurname, TO_DATE(:birthday, 'FXYYYY-MM-DD'), :phoneNumber, :email, :role, :addressId, :branchId, TO_DATE(:hireDate, 'FXYYYY-MM-DD') ) RETURNING EMPLOYEE_ID INTO :employeeId",
         );
         expect(connection.execute).toHaveBeenNthCalledWith(
           2,
@@ -510,6 +630,7 @@ describe('UsersRepository', () => {
             firstSurname: { val: data.firstSurname, type: oracle.STRING },
             secondSurname: { val: data.secondSurname, type: oracle.STRING },
             birthday: { val: data.birthday, type: oracle.STRING },
+            hireDate: { val: data.hireDate, type: oracle.STRING },
             phoneNumber: { val: data.phoneNumber, type: oracle.STRING },
             email: { val: data.email, type: oracle.STRING },
             role: { val: role, type: oracle.STRING },
@@ -766,6 +887,7 @@ describe('UsersRepository', () => {
           firstName: 'Ana',
           firstSurname: 'Núñez',
           secondSurname: 'Solano',
+          hireDate: '2026-10-01',
           birthday: '2000-02-29',
           phoneNumber: '88888888',
           address: { districtId: 999 },
@@ -796,6 +918,7 @@ describe('UsersRepository', () => {
       firstName: 'Ana',
       firstSurname: 'Núñez',
       secondSurname: 'Solano',
+      hireDate: '2026-10-01',
       birthday: '2000-02-29',
       phoneNumber: '88888888',
       branchId: 3,

@@ -6,10 +6,128 @@ import { DatabaseService } from '../database/database.service';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import type { CreateAddressDto } from './dto/create-address.dto';
 import type { EmployeeWithLocalCredentials } from './types/employee-with-local-credentials.type';
+import type { ListEmployeesQueryDto } from './dto/list-users-query.dto';
+import type {
+  EmployeeListOptionsDto,
+  ListedEmployeeDto,
+  ListedUsersDto,
+} from './dto/listed-users.dto';
 
 @Injectable()
 export class UsersRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  async getEmployeeListOptions(): Promise<EmployeeListOptionsDto> {
+    const result = await this.db.query<{ BRANCH_ID: number; NAME: string }>(
+      'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
+    );
+    return {
+      branches: (result.rows ?? []).map((row) => ({
+        id: row.BRANCH_ID,
+        label: row.NAME,
+      })),
+    };
+  }
+
+  async listEmployees(
+    query: ListEmployeesQueryDto,
+  ): Promise<ListedUsersDto<ListedEmployeeDto>> {
+    const name =
+      "REGEXP_REPLACE(TRIM(e.FIRST_NAME || ' ' || e.SECOND_NAME || ' ' || e.FIRST_SURNAME || ' ' || e.SECOND_SURNAME), '[[:space:]]+', ' ')";
+    const conditions: string[] = [];
+    const binds: oracle.BindParameters = {};
+    if (query.search) {
+      const terms = query.search.split(' ').map((term, index) => {
+        binds[`name${index}`] = {
+          val: `%${term.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
+          type: oracle.STRING,
+        };
+        return `LOWER(${name}) LIKE :name${index} ESCAPE '\\'`;
+      });
+      conditions.push(
+        `((${terms.join(' AND ')}) OR LOWER(e.EMAIL) LIKE :search ESCAPE '\\' OR e.PHONE_NUMBER LIKE :search ESCAPE '\\' OR TO_CHAR(e.EMPLOYEE_ID) LIKE :search ESCAPE '\\')`,
+      );
+      binds.search = {
+        val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
+        type: oracle.STRING,
+      };
+    }
+    if (query.role?.length) {
+      const parameters = query.role.map((role, index) => {
+        binds[`role${index}`] = { val: role, type: oracle.STRING };
+        return `:role${index}`;
+      });
+      conditions.push(`e.ROLE IN (${parameters.join(', ')})`);
+    }
+    if (query.branchId?.length) {
+      const parameters = query.branchId.map((branchId, index) => {
+        binds[`branchId${index}`] = { val: branchId, type: oracle.NUMBER };
+        return `:branchId${index}`;
+      });
+      conditions.push(`e.BRANCH_ID IN (${parameters.join(', ')})`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const from = `FROM EMPLOYEES e JOIN CINEMAS b ON b.BRANCH_ID = e.BRANCH_ID ${where}`;
+    const count = await this.db.query<{ TOTAL: number }>(
+      `SELECT COUNT(*) AS TOTAL ${from}`,
+      binds,
+    );
+    const total = count.rows?.[0]?.TOTAL ?? 0;
+    const totalPages = Math.ceil(total / query.pageSize);
+    const page = Math.min(query.page, Math.max(1, totalPages));
+    if (total === 0)
+      return { items: [], total, page, pageSize: query.pageSize, totalPages };
+    const sort =
+      {
+        id: 'e.EMPLOYEE_ID',
+        name,
+        email: 'LOWER(e.EMAIL)',
+        createdAt: 'e.CREATED_AT',
+        hireDate: 'e.HIRE_DATE',
+        role: 'e.ROLE',
+        branch: 'LOWER(b.NAME)',
+      }[query.sortBy] ?? 'e.EMPLOYEE_ID';
+    const result = await this.db.query<{
+      ID: number;
+      NAME: string;
+      EMAIL: string;
+      PHONE_NUMBER: string;
+      CREATED_AT: string | null;
+      ROLE: UserRole.EMPLOYEE | UserRole.ADMINISTRATOR;
+      BRANCH_ID: number;
+      BRANCH_NAME: string;
+      HIRE_DATE: string | null;
+    }>(
+      `SELECT e.EMPLOYEE_ID AS ID, ${name} AS NAME, e.EMAIL, e.PHONE_NUMBER,
+              TO_CHAR(e.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS CREATED_AT,
+              e.ROLE, e.BRANCH_ID, b.NAME AS BRANCH_NAME, TO_CHAR(e.HIRE_DATE, 'YYYY-MM-DD') AS HIRE_DATE
+       ${from}
+       ORDER BY ${sort} ${query.sortDirection === 'desc' ? 'DESC' : 'ASC'} NULLS LAST, e.EMPLOYEE_ID ASC
+       OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY`,
+      {
+        ...binds,
+        offset: { val: (page - 1) * query.pageSize, type: oracle.NUMBER },
+        pageSize: { val: query.pageSize, type: oracle.NUMBER },
+      },
+    );
+    return {
+      items: (result.rows ?? []).map((row) => ({
+        id: row.ID,
+        name: row.NAME,
+        email: row.EMAIL,
+        phoneNumber: row.PHONE_NUMBER,
+        createdAt: row.CREATED_AT,
+        role: row.ROLE,
+        branchId: row.BRANCH_ID,
+        branchName: row.BRANCH_NAME,
+        hireDate: row.HIRE_DATE,
+      })),
+      total,
+      page,
+      pageSize: query.pageSize,
+      totalPages,
+    };
+  }
 
   async findEmployeeWithLocalCredentialsByEmail(
     email: string,
@@ -168,11 +286,11 @@ export class UsersRepository {
       const result = await connection.execute<{ employeeId?: unknown }>(
         `INSERT INTO EMPLOYEES (
           FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME,
-          BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID
+          BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID, HIRE_DATE
         ) VALUES (
           :firstName, :secondName, :firstSurname, :secondSurname,
           TO_DATE(:birthday, 'FXYYYY-MM-DD'), :phoneNumber, :email, :role,
-          :addressId, :branchId
+          :addressId, :branchId, TO_DATE(:hireDate, 'FXYYYY-MM-DD')
         ) RETURNING EMPLOYEE_ID INTO :employeeId`,
         {
           firstName: { val: data.firstName, type: oracle.STRING },
@@ -180,6 +298,7 @@ export class UsersRepository {
           firstSurname: { val: data.firstSurname, type: oracle.STRING },
           secondSurname: { val: data.secondSurname, type: oracle.STRING },
           birthday: { val: data.birthday, type: oracle.STRING },
+          hireDate: { val: data.hireDate, type: oracle.STRING },
           phoneNumber: { val: data.phoneNumber, type: oracle.STRING },
           email: { val: data.email, type: oracle.STRING },
           role: { val: data.role, type: oracle.STRING },
