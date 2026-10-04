@@ -60,6 +60,92 @@ describe('ClientsRepository', () => {
     await module.close();
   });
 
+  describe('findClientDetailById', () => {
+    const row = {
+      ID: 42,
+      FIRST_NAME: 'Ana',
+      SECOND_NAME: 'María',
+      FIRST_SURNAME: 'Núñez',
+      SECOND_SURNAME: 'Solano',
+      BIRTHDAY: '2000-02-29',
+      PHONE_NUMBER: '88888888',
+      EMAIL: 'ana@example.com',
+      GENDER: 'N',
+      LANGUAGE: 'es',
+      CREATED_AT: null,
+      ADDRESS_ID: 7,
+      ADDRESS_DETAILS: 'Casa azul',
+      DISTRICT_ID: 3,
+      DISTRICT_NAME: 'Carmen',
+      CANTON_ID: 2,
+      CANTON_NAME: 'San José',
+      PROVINCE_ID: 1,
+      PROVINCE_NAME: 'San José',
+      PASSWORD_HASH: 'private',
+      ACCESS_TOKEN: 'private',
+    };
+    it('returns individual fields and the full address without credentials', async () => {
+      connection.execute.mockResolvedValue({ rows: [row] });
+      expect(await repository.findClientDetailById(42)).toEqual({
+        id: 42,
+        role: 'CLIENT',
+        firstName: 'Ana',
+        secondName: 'María',
+        firstSurname: 'Núñez',
+        secondSurname: 'Solano',
+        birthday: '2000-02-29',
+        phoneNumber: '88888888',
+        email: 'ana@example.com',
+        gender: 'N',
+        language: 'es',
+        createdAt: null,
+        address: {
+          id: 7,
+          details: 'Casa azul',
+          districtId: 3,
+          districtName: 'Carmen',
+          cantonId: 2,
+          cantonName: 'San José',
+          provinceId: 1,
+          provinceName: 'San José',
+        },
+      });
+      const [sql, binds] = connection.execute.mock.calls[0] as [
+        string,
+        oracle.BindParameters,
+      ];
+      expect(sql).toContain('WHERE c.CLIENT_ID = :id');
+      expect(sql).toContain('LEFT JOIN PROVINCES');
+      expect(sql).toContain("TO_CHAR(c.BIRTHDAY, 'YYYY-MM-DD')");
+      expect(sql).not.toMatch(/PASSWORD|CREDENTIALS|ACCESS_TOKEN/u);
+      expect(binds).toEqual({ id: { val: 42, type: oracle.NUMBER } });
+    });
+    it('preserves absent optional fields and address', async () => {
+      connection.execute.mockResolvedValue({
+        rows: [{ ...row, ADDRESS_ID: null, SECOND_NAME: null, BIRTHDAY: null }],
+      });
+      expect(await repository.findClientDetailById(42)).toMatchObject({
+        address: null,
+        secondName: null,
+        birthday: null,
+      });
+    });
+    it.each([{ rows: [] }, {}])(
+      'returns null for a missing client: %p',
+      async (result) => {
+        connection.execute.mockResolvedValue(result);
+        expect(await repository.findClientDetailById(42)).toBeNull();
+      },
+    );
+    it('propagates read failures and releases the connection', async () => {
+      connection.execute.mockRejectedValue(new Error('Unavailable'));
+      await expect(repository.findClientDetailById(42)).rejects.toThrow(
+        'Unavailable',
+      );
+      expect(connection.close).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('listClients', () => {
     it('matches first names and surnames even when a second name is between them', async () => {
       connection.execute

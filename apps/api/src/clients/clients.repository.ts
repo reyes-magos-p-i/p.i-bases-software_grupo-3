@@ -1,6 +1,8 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import oracle from 'oracledb';
 import { DatabaseService } from '../database/database.service';
+import { UserRole } from '../users/enums/user-role.enum';
+import type { ClientDetailDto } from '../users/dto/user-detail.dto';
 import type { NewClient, NewClientWithLocalCredentials } from './client.model';
 import type { ListClientsQueryDto } from '../users/dto/list-users-query.dto';
 import type {
@@ -11,6 +13,75 @@ import type {
 @Injectable()
 export class ClientsRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  async findClientDetailById(id: number): Promise<ClientDetailDto | null> {
+    const result = await this.db.query<{
+      ID: number;
+      FIRST_NAME: string;
+      SECOND_NAME: string | null;
+      FIRST_SURNAME: string | null;
+      SECOND_SURNAME: string | null;
+      BIRTHDAY: string | null;
+      PHONE_NUMBER: string | null;
+      EMAIL: string;
+      GENDER: string | null;
+      LANGUAGE: string;
+      CREATED_AT: string | null;
+      ADDRESS_ID: number | null;
+      ADDRESS_DETAILS: string | null;
+      DISTRICT_ID: number;
+      DISTRICT_NAME: string;
+      CANTON_ID: number;
+      CANTON_NAME: string;
+      PROVINCE_ID: number;
+      PROVINCE_NAME: string;
+    }>(
+      `SELECT c.CLIENT_ID AS ID, c.FIRST_NAME, c.SECOND_NAME, c.FIRST_SURNAME, c.SECOND_SURNAME,
+              TO_CHAR(c.BIRTHDAY, 'YYYY-MM-DD') AS BIRTHDAY, c.PHONE_NUMBER, c.EMAIL,
+              c.GENDER, c.LANGUAGE,
+              TO_CHAR(c.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS CREATED_AT,
+              a.ID_ADDRESS AS ADDRESS_ID, a.DETAILS AS ADDRESS_DETAILS,
+              d.ID_DISTRICT AS DISTRICT_ID, d.NAME AS DISTRICT_NAME,
+              k.ID_CANTON AS CANTON_ID, k.NAME AS CANTON_NAME,
+              p.ID_PROVINCE AS PROVINCE_ID, p.NAME AS PROVINCE_NAME
+       FROM CLIENTS c
+       LEFT JOIN ADDRESSES a ON a.ID_ADDRESS = c.ID_ADDRESS
+       LEFT JOIN DISTRICTS d ON d.ID_DISTRICT = a.ID_DISTRICT
+       LEFT JOIN CANTONS k ON k.ID_CANTON = d.ID_CANTON
+       LEFT JOIN PROVINCES p ON p.ID_PROVINCE = k.ID_PROVINCE
+       WHERE c.CLIENT_ID = :id`,
+      { id: { val: id, type: oracle.NUMBER } },
+    );
+    const row = result.rows?.[0];
+    if (!row) return null;
+    return {
+      id: row.ID,
+      role: UserRole.CLIENT,
+      firstName: row.FIRST_NAME,
+      secondName: row.SECOND_NAME,
+      firstSurname: row.FIRST_SURNAME,
+      secondSurname: row.SECOND_SURNAME,
+      birthday: row.BIRTHDAY,
+      phoneNumber: row.PHONE_NUMBER,
+      email: row.EMAIL,
+      gender: row.GENDER,
+      language: row.LANGUAGE,
+      createdAt: row.CREATED_AT,
+      address:
+        row.ADDRESS_ID === null
+          ? null
+          : {
+              id: row.ADDRESS_ID,
+              provinceId: row.PROVINCE_ID,
+              provinceName: row.PROVINCE_NAME,
+              cantonId: row.CANTON_ID,
+              cantonName: row.CANTON_NAME,
+              districtId: row.DISTRICT_ID,
+              districtName: row.DISTRICT_NAME,
+              details: row.ADDRESS_DETAILS,
+            },
+    };
+  }
 
   async listClients(
     query: ListClientsQueryDto,
