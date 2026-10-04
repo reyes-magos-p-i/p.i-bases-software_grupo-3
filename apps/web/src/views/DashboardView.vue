@@ -272,6 +272,7 @@ function navigate(section: string) {
         ref="user-list"
         :section="activeSection"
         :role="role"
+        :current-user-id="identity?.id"
         @session-expired="sessionExpired"
         @forbidden="refreshPermissions"
         @user-updated="userUpdated"

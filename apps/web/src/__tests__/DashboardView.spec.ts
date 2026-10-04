@@ -156,6 +156,11 @@ async function renderDashboard() {
 }
 
 describe('DashboardView', () => {
+  it('provides the current staff ID to protect self deactivation', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    expect(view.getComponent(UserListPanel).props('currentUserId')).toBe(21)
+  })
   it('refreshes the displayed name after editing the active administrator', async () => {
     const view = await renderDashboard()
     await flushPromises()
