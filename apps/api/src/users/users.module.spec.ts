@@ -160,6 +160,21 @@ describe('UsersModule (application HTTP integration)', () => {
     await app.close();
   });
 
+  it('mounts partial update routes with the real service and repositories', async () => {
+    connection.execute
+      .mockResolvedValueOnce({
+        rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+      })
+      .mockResolvedValueOnce({ rows: [{ EMAIL: 'old@example.com' }] })
+      .mockResolvedValueOnce({ rowsAffected: 1 });
+    await browser
+      .patch('/users/clients/42')
+      .send({ phoneNumber: null })
+      .expect(200, { id: 42, email: 'old@example.com', role: 'CLIENT' });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
   describe('GET /users/creation-options', () => {
     it('mounts detail routes with actual repositories and reports missing users', async () => {
       for (const section of ['clients', 'employees']) {
@@ -348,7 +363,7 @@ describe('UsersModule (application HTTP integration)', () => {
       expect(response.body).toEqual({
         id: body.role === 'CLIENT' ? 43 : 42,
         role: body.role,
-        email: body.role === 'CLIENT' ? body.email.toLowerCase() : body.email,
+        email: body.email.toLowerCase(),
       });
       expect(operations).toEqual(
         body.role === 'CLIENT'

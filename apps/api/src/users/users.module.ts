@@ -12,6 +12,7 @@ import { SmtpInitialCredentialsSender } from './notifications/smtp-initial-crede
 import { CreateUserValidationPipe } from './pipes/create-user-validation.pipe';
 import { UsersController } from './users.controller';
 import { UsersListController } from './users-list.controller';
+import { UsersUpdateController } from './users-update.controller';
 import { UsersPersistenceModule } from './users-persistence.module';
 import { UsersService } from './users.service';
 
@@ -23,7 +24,7 @@ import { UsersService } from './users.service';
     PasswordHashingModule,
     ClientsModule,
   ],
-  controllers: [UsersController, UsersListController],
+  controllers: [UsersController, UsersListController, UsersUpdateController],
   providers: [
     UsersService,
     AdministratorGuard,
