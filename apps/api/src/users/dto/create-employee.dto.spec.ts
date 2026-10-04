@@ -4,6 +4,23 @@ import { validate } from 'class-validator';
 import { CreateEmployeeDto } from './create-employee.dto';
 
 describe('CreateEmployeeDto', () => {
+  it.each(['22222222', '+1 88888888', '', '888888888'])(
+    'rejects an invalid staff mobile %p',
+    async (phoneNumber) => {
+      expect(
+        (await validatePayload({ ...validPayload, phoneNumber })).map(
+          (error) => error.property,
+        ),
+      ).toEqual(['phoneNumber']);
+    },
+  );
+  it.each([0, -1])('rejects a nonpositive branch %p', async (branchId) => {
+    expect(
+      (await validatePayload({ ...validPayload, branchId })).map(
+        (error) => error.property,
+      ),
+    ).toEqual(['branchId']);
+  });
   const validPayload = {
     role: 'EMPLOYEE',
     email: 'empleado@example.com',
@@ -195,7 +212,7 @@ describe('CreateEmployeeDto', () => {
   it.each(['branchId'])(
     'accepts safe integer boundaries for %s',
     async (field) => {
-      for (const value of [Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]) {
+      for (const value of [1, Number.MAX_SAFE_INTEGER]) {
         await expect(
           validatePayload({ ...validPayload, [field]: value }),
         ).resolves.toEqual([]);
@@ -206,7 +223,6 @@ describe('CreateEmployeeDto', () => {
   it.each([
     ['firstSurname', 100],
     ['secondSurname', 100],
-    ['phoneNumber', 20],
   ] as const)('enforces the byte limit for %s', async (field, limit) => {
     for (const value of [
       'a'.repeat(limit),
@@ -229,13 +245,13 @@ describe('CreateEmployeeDto', () => {
     }
   });
 
-  it('preserves the casing of employee email addresses', async () => {
+  it('normalizes employee email addresses', async () => {
     const employee = plainToInstance(CreateEmployeeDto, {
       ...validPayload,
       email: 'Persona@Example.com',
     });
     await expect(validate(employee)).resolves.toEqual([]);
-    expect(employee.email).toBe('Persona@Example.com');
+    expect(employee.email).toBe('persona@example.com');
   });
 
   it.each([

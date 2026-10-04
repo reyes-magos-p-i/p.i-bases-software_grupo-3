@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsDefined,
@@ -13,6 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { MaxUtf8Bytes } from '../../common/validation/max-utf8-bytes.decorator';
+import { CostaRicaMobile } from '../../common/validation/costa-rica-mobile.decorator';
 import { UserRole } from '../enums/user-role.enum';
 import { CreateUserBaseDto } from './create-user-base.dto';
 import { CreateAddressDto } from './create-address.dto';
@@ -24,6 +25,9 @@ export class CreateEmployeeDto extends CreateUserBaseDto {
   declare role: UserRole.ADMINISTRATOR | UserRole.EMPLOYEE;
 
   @IsDefined({ message: 'El primer apellido es obligatorio.' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString({ message: 'El primer apellido debe ser texto.' })
   @Matches(/\S/u, {
     message:
@@ -33,6 +37,9 @@ export class CreateEmployeeDto extends CreateUserBaseDto {
   firstSurname: string;
 
   @IsDefined({ message: 'El segundo apellido es obligatorio.' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString({ message: 'El segundo apellido debe ser texto.' })
   @Matches(/\S/u, {
     message:
@@ -70,10 +77,7 @@ export class CreateEmployeeDto extends CreateUserBaseDto {
 
   @IsDefined({ message: 'El teléfono es obligatorio.' })
   @IsString({ message: 'El teléfono debe ser texto.' })
-  @Matches(/\S/u, {
-    message: 'El teléfono no puede estar vacío ni contener solo espacios.',
-  })
-  @MaxUtf8Bytes(20)
+  @CostaRicaMobile()
   phoneNumber: string;
 
   @IsDefined({ message: 'La dirección es obligatoria.' })
@@ -86,7 +90,7 @@ export class CreateEmployeeDto extends CreateUserBaseDto {
   @IsInt({
     message: 'El identificador de la sucursal debe ser un número entero.',
   })
-  @Min(Number.MIN_SAFE_INTEGER, {
+  @Min(1, {
     message: 'El identificador de la sucursal está fuera del rango admitido.',
   })
   @Max(Number.MAX_SAFE_INTEGER, {
