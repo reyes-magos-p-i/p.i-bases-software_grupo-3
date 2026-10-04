@@ -1,1 +1,4 @@
-export class Projector {}
+export class Projector {
+    projectorId: number;
+    name: string;
+}
