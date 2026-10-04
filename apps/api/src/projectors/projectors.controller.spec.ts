@@ -8,7 +8,7 @@ describe('ProjectorsController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProjectorsController],
-      providers: [ProjectorsService],
+      providers: [{ provide: ProjectorsService, useValue: {} }],
     }).compile();
 
     controller = module.get<ProjectorsController>(ProjectorsController);
