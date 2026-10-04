@@ -92,3 +92,47 @@ export interface UserListResult {
   pageSize: number
   totalPages: number
 }
+
+export interface UserDetailAddress {
+  id: number
+  provinceId: number
+  provinceName: string
+  cantonId: number
+  cantonName: string
+  districtId: number
+  districtName: string
+  details: string | null
+}
+
+interface UserDetailBase {
+  id: number
+  firstName: string
+  secondName: string | null
+  firstSurname: string | null
+  secondSurname: string | null
+  birthday: string | null
+  phoneNumber: string | null
+  email: string
+  address: UserDetailAddress | null
+  createdAt: string | null
+}
+
+export interface ClientDetail extends UserDetailBase {
+  role: 'CLIENT'
+  gender: string | null
+  language: string
+}
+
+export interface EmployeeDetail extends UserDetailBase {
+  role: 'EMPLOYEE' | 'ADMINISTRATOR'
+  branchId: number
+  branchName: string
+  hireDate: string | null
+}
+
+export type UserDetail = ClientDetail | EmployeeDetail
+
+export interface UserDetailSelection {
+  section: 'clients' | 'employees'
+  id: number
+}
