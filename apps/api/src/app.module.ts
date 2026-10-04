@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { TheatersModule } from './theaters/theaters.module';
 import { CinemasModule } from './cinemas/cinemas.module';
+import { ProjectorsModule } from './projectors/projectors.module';
 
 
 @Module({
@@ -23,6 +24,7 @@ import { CinemasModule } from './cinemas/cinemas.module';
     UsersModule,
     TheatersModule,
     CinemasModule,
+    ProjectorsModule,
   ],
   controllers: [ImageController],
 })
