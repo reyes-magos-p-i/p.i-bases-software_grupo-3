@@ -247,9 +247,13 @@ describe('User list HTTP permissions and validation', () => {
     expect(service.listEmployees).not.toHaveBeenCalled();
   });
   it('reports zero matches as a successful result with a count', async () => {
-    await get('/users/clients')
+    const response = await get('/users/clients')
       .query({ search: 'Sin coincidencias' })
       .expect(200, empty);
+    expect(response.body).toEqual(empty);
+    expect(service.listClients).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'Sin coincidencias' }),
+    );
   });
   it('rejects identities deleted since login', async () => {
     repository.findEmployeeIdentityById.mockResolvedValue(null);

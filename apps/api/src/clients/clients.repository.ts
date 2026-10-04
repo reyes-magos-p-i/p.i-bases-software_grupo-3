@@ -193,16 +193,16 @@ export class ClientsRepository {
     if (query.search) {
       const terms = query.search.split(' ').map((term, index) => {
         binds[`name${index}`] = {
-          val: `%${term.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
+          val: `%${term.toLowerCase().replace(/[\\%_]/gu, String.raw`\$&`)}%`,
           type: oracle.STRING,
         };
-        return `LOWER(${name}) LIKE :name${index} ESCAPE '\\'`;
+        return String.raw`LOWER(${name}) LIKE :name${index} ESCAPE '\'`;
       });
       binds.search = {
-        val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
+        val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, String.raw`\$&`)}%`,
         type: oracle.STRING,
       };
-      where += ` AND ((${terms.join(' AND ')}) OR LOWER(c.EMAIL) LIKE :search ESCAPE '\\' OR c.PHONE_NUMBER LIKE :search ESCAPE '\\' OR TO_CHAR(c.CLIENT_ID) LIKE :search ESCAPE '\\')`;
+      where += String.raw` AND ((${terms.join(' AND ')}) OR LOWER(c.EMAIL) LIKE :search ESCAPE '\' OR c.PHONE_NUMBER LIKE :search ESCAPE '\' OR TO_CHAR(c.CLIENT_ID) LIKE :search ESCAPE '\')`;
     }
     const count = await this.db.query<{ TOTAL: number }>(
       `SELECT COUNT(*) AS TOTAL FROM CLIENTS c ${where}`,

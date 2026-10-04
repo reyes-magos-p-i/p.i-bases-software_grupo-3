@@ -89,6 +89,11 @@ describe('ClientsRepository', () => {
     });
   });
   describe('updateClient', () => {
+    beforeEach(() => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ EMAIL: 'old@example.com' }],
+      });
+    });
     it('updates selected name fields without changing other columns', async () => {
       connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
       await repository.updateClient(42, {
@@ -107,11 +112,6 @@ describe('ClientsRepository', () => {
       expect(binds.firstSurname.val).toBe('Núñez');
       expect(binds).not.toHaveProperty('phoneNumber');
       expect(connection.commit).toHaveBeenCalledTimes(1);
-    });
-    beforeEach(() => {
-      connection.execute.mockResolvedValueOnce({
-        rows: [{ EMAIL: 'old@example.com' }],
-      });
     });
     it('creates a private replacement address and updates only selected client fields', async () => {
       connection.execute.mockResolvedValueOnce({
@@ -356,6 +356,9 @@ describe('ClientsRepository', () => {
       expect(sql).toContain('DESC NULLS LAST, c.CLIENT_ID ASC');
       expect(sql).not.toContain("O'Connor");
       expect(binds.search.val).toBe("%o'connor\\%\\_\\\\%");
+      expect(binds.name0.val).toBe(binds.search.val);
+      expect(sql).toContain(String.raw`LIKE :search ESCAPE '\'`);
+      expect(sql).toContain(String.raw`LIKE :name0 ESCAPE '\'`);
       expect(binds.offset.val).toBe(10);
     });
     it.each([{ rows: [{ TOTAL: 0 }] }, {}])(

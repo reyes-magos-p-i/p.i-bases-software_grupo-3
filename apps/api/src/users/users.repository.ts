@@ -278,16 +278,16 @@ export class UsersRepository {
     if (query.search) {
       const terms = query.search.split(' ').map((term, index) => {
         binds[`name${index}`] = {
-          val: `%${term.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
+          val: `%${term.toLowerCase().replace(/[\\%_]/gu, String.raw`\$&`)}%`,
           type: oracle.STRING,
         };
-        return `LOWER(${name}) LIKE :name${index} ESCAPE '\\'`;
+        return String.raw`LOWER(${name}) LIKE :name${index} ESCAPE '\'`;
       });
       conditions.push(
-        `((${terms.join(' AND ')}) OR LOWER(e.EMAIL) LIKE :search ESCAPE '\\' OR e.PHONE_NUMBER LIKE :search ESCAPE '\\' OR TO_CHAR(e.EMPLOYEE_ID) LIKE :search ESCAPE '\\')`,
+        String.raw`((${terms.join(' AND ')}) OR LOWER(e.EMAIL) LIKE :search ESCAPE '\' OR e.PHONE_NUMBER LIKE :search ESCAPE '\' OR TO_CHAR(e.EMPLOYEE_ID) LIKE :search ESCAPE '\')`,
       );
       binds.search = {
-        val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
+        val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, String.raw`\$&`)}%`,
         type: oracle.STRING,
       };
     }

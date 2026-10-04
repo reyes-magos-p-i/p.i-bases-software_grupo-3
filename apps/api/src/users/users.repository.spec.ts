@@ -138,6 +138,11 @@ describe('UsersRepository', () => {
     });
   });
   describe('updateEmployee', () => {
+    beforeEach(() => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ EMAIL: 'old@example.com', ROLE: UserRole.EMPLOYEE }],
+      });
+    });
     it('prevents removing the last active administrator role', async () => {
       connection.execute
         .mockReset()
@@ -213,11 +218,6 @@ describe('UsersRepository', () => {
       expect(binds.secondSurname.val).toBe('Rojas');
       expect(binds).not.toHaveProperty('role');
       expect(connection.commit).toHaveBeenCalledTimes(1);
-    });
-    beforeEach(() => {
-      connection.execute.mockResolvedValueOnce({
-        rows: [{ EMAIL: 'old@example.com', ROLE: UserRole.EMPLOYEE }],
-      });
     });
     it('updates only editable fields and creates an independent address atomically', async () => {
       connection.execute
@@ -475,6 +475,9 @@ describe('UsersRepository', () => {
       );
       expect(sql).not.toContain(query.search);
       expect(binds.search.val).toBe('%núñez\\%\\_\\\\%');
+      expect(binds.name0.val).toBe(binds.search.val);
+      expect(sql).toContain(String.raw`LIKE :search ESCAPE '\'`);
+      expect(sql).toContain(String.raw`LIKE :name0 ESCAPE '\'`);
       expect(binds.offset.val).toBe(20);
       expect(binds.role0.val).toBe(UserRole.EMPLOYEE);
       expect(binds.role1.val).toBe(UserRole.ADMINISTRATOR);

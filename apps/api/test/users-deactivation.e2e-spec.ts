@@ -65,10 +65,10 @@ describe('Compiled user deactivation lifecycle', () => {
     const bind = binds[key];
     return typeof bind === 'object' ? bind.val : bind;
   };
-  const execute = jest.fn(async (sql: string, binds: Binds = {}) => {
+  const execute = jest.fn((sql: string, binds: Binds = {}) => {
     statements.push(sql);
     const upper = sql.toUpperCase();
-    if (upper.startsWith('LOCK TABLE')) return {};
+    if (upper.startsWith('LOCK TABLE')) return Promise.resolve({});
     const staff = upper.includes('EMPLOYEES');
     let selected = accounts.filter((a) =>
       staff ? a.role !== 'CLIENT' : a.role === 'CLIENT',
@@ -90,11 +90,11 @@ describe('Compiled user deactivation lifecycle', () => {
         if (binds.role !== undefined)
           account.role = value(binds, 'role') as Account['role'];
       }
-      return { rowsAffected: selected.length };
+      return Promise.resolve({ rowsAffected: selected.length });
     }
     if (upper.includes('COUNT(*)'))
-      return { rows: [{ TOTAL: selected.length }] };
-    return {
+      return Promise.resolve({ rows: [{ TOTAL: selected.length }] });
+    return Promise.resolve({
       rows: selected.map((a) => ({
         ID: a.id,
         EMPLOYEE_ID: a.id,
@@ -118,7 +118,7 @@ describe('Compiled user deactivation lifecycle', () => {
         firstName: 'Ana',
         status: a.active ? 'ACTIVE' : 'INACTIVE',
       })),
-    };
+    });
   });
   const database = {
     query: execute,

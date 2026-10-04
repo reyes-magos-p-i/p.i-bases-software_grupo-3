@@ -185,7 +185,11 @@ describe('UsersModule (application HTTP integration)', () => {
             ],
           })
           .mockResolvedValueOnce({ rows: [] });
-        await browser.get(`/users/${section}/42`).expect(404);
+        const response = await browser.get(`/users/${section}/42`).expect(404);
+        expect(response.body).toMatchObject({
+          statusCode: 404,
+          message: 'El usuario seleccionado no existe.',
+        });
       }
     });
     it('mounts client and employee listing routes with the actual repositories', async () => {
