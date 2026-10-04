@@ -258,6 +258,7 @@ describe('AuthModule', () => {
         return { rows: [{ id: 42, email: 'cliente@example.com' }] };
       });
     connection.execute
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rowsAffected: 1, outBinds: { clientId: [42] } })
       .mockResolvedValueOnce({ rowsAffected: 1 })
       .mockResolvedValueOnce({ rowsAffected: 1 });
@@ -278,7 +279,7 @@ describe('AuthModule', () => {
       status: 'pending_verification',
       email: 'cliente@example.com',
     });
-    const [profileSql, profileBinds] = connection.execute.mock.calls[0];
+    const [profileSql, profileBinds] = connection.execute.mock.calls[1];
     expect(profileSql).toContain('INSERT INTO CLIENTS');
     expect(profileBinds).toMatchObject({
       firstName: { val: 'Ana' },
@@ -290,7 +291,7 @@ describe('AuthModule', () => {
       language: { val: 'en' },
       addressId: { val: null },
     });
-    const credentials = connection.execute.mock.calls[1][1];
+    const credentials = connection.execute.mock.calls[2][1];
     expect(credentials.passwordHash.val).toContain(
       '$argon2id$v=19$m=65536,t=3,p=4$',
     );
@@ -298,11 +299,11 @@ describe('AuthModule', () => {
     await expect(verify(credentials.passwordHash.val, password)).resolves.toBe(
       true,
     );
-    expect(db.transaction).toHaveBeenCalledTimes(1);
-    const verification = connection.execute.mock.calls[2];
+    expect(db.transaction).toHaveBeenCalledTimes(2);
+    const verification = connection.execute.mock.calls[3];
     expect(verification[0]).toContain('INSERT INTO CLIENT_EMAIL_VERIFICATIONS');
     expect(verification[1].tokenHash.val).toMatch(/^[a-f0-9]{64}$/u);
-    expect(connection.execute).toHaveBeenCalledTimes(3);
+    expect(connection.execute).toHaveBeenCalledTimes(4);
     expect(module.get(EmailVerificationSender).send).toHaveBeenCalledWith({
       email: 'cliente@example.com',
       confirmationUrl: expect.stringMatching(

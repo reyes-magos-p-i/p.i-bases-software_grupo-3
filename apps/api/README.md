@@ -153,6 +153,15 @@ correo y permite llamar a `/auth/resend-email-verification`. El endpoint de
 reenvío responde de forma genérica para no revelar si una dirección tiene una
 cuenta pendiente.
 
+Si se vuelve a enviar el formulario con un correo que ya tiene una cuenta
+pendiente, se reenvía el enlace desde el mismo flujo en lugar de rechazarlo como
+duplicado. La antigüedad de la cuenta no se reinicia al reenviar: después de
+siete días desde el registro inicial, el API elimina la cuenta pendiente y sus
+credenciales en una transacción. Una limpieza periódica corre cada hora; al
+intentar registrarse o reenviar para ese correo, también se elimina de inmediato
+si el plazo ya venció. Los siete días de retención son independientes de los
+minutos de validez de cada enlace.
+
 ## Project setup
 
 ```bash

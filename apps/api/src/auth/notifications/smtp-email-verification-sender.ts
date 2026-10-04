@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { isEmail, isFQDN } from 'class-validator';
-import { readFileSync } from 'fs';
 import { join } from 'path';
 import nodemailer, { type Mail, type SMTPSentMessageInfo } from 'nodemailer';
 import { EmailVerificationSender } from './email-verification-sender';

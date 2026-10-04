@@ -35,9 +35,18 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    await this.clients.deleteExpiredPendingClientByEmail(dto.email);
     // SAFEGUARD: we do not assign a password from the 'Register' form if the account exists
     // This will be managed in the 'User settings' when implemented in the navigation bar.
-    if (await this.clients.findByEmail(dto.email)) {
+    const existing = await this.clients.findByEmail(dto.email);
+    if (existing) {
+      const pending = await this.clients.findPendingLocalClientByEmail(
+        dto.email,
+      );
+      if (pending) {
+        await this.replaceAndSendVerification(pending);
+        return { status: 'pending_verification', email: pending.email };
+      }
       throw new ConflictException(
         'Este correo ya está registrado. Si usaste Google o Facebook, entra con ese botón.',
       );
@@ -79,6 +88,7 @@ export class AuthService {
   }
 
   async resendEmailVerification(email: string): Promise<{ message: string }> {
+    await this.clients.deleteExpiredPendingClientByEmail(email);
     const client = await this.clients.findPendingLocalClientByEmail(email);
     if (!client) {
       return {
@@ -86,6 +96,13 @@ export class AuthService {
           'Si existe una cuenta pendiente con ese correo, enviaremos un nuevo enlace.',
       };
     }
+    await this.replaceAndSendVerification(client);
+    return {
+      message: 'Si existe una cuenta pendiente con ese correo, enviaremos un nuevo enlace.',
+    };
+  }
+
+  private async replaceAndSendVerification(client: Client): Promise<void> {
     const token = this.createVerificationToken();
     const expiresInMinutes = this.verificationTtlMinutes();
     await this.clients.replaceEmailVerification(
@@ -98,9 +115,6 @@ export class AuthService {
       token.value,
       expiresInMinutes,
     );
-    return {
-      message: 'Si existe una cuenta pendiente con ese correo, enviaremos un nuevo enlace.',
-    };
   }
 
   async confirmEmailVerification(token: string) {

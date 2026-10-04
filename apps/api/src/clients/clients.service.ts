@@ -24,6 +24,8 @@ const CLIENT_COLUMNS = `
   c.gender AS "gender",
   c.language AS "language"`;
 
+export const PENDING_CLIENT_RETENTION_DAYS = 7;
+
 @Injectable()
 export class ClientsService {
   constructor(
@@ -122,6 +124,66 @@ export class ClientsService {
     return result.rows?.[0] ?? null;
   }
 
+  async deleteExpiredPendingClientByEmail(email: string): Promise<void> {
+    await this.purgeExpiredPendingClients(email);
+  }
+
+  async deleteExpiredPendingClients(): Promise<void> {
+    await this.purgeExpiredPendingClients();
+  }
+
+  private async purgeExpiredPendingClients(email?: string): Promise<void> {
+    await this.db.transaction(async (connection) => {
+      const result = await connection.execute<{ clientId?: unknown }>(
+        `SELECT v.CLIENT_ID AS "clientId"
+           FROM CLIENT_EMAIL_VERIFICATIONS v
+           JOIN CLIENT_LOCAL_CREDENTIALS l ON l.CLIENT_ID = v.CLIENT_ID
+          WHERE v.CREATED_AT <=
+                SYSTIMESTAMP - NUMTODSINTERVAL(:retentionDays, 'DAY')
+            ${email === undefined ? '' : 'AND EXISTS (SELECT 1 FROM CLIENTS c WHERE c.CLIENT_ID = v.CLIENT_ID AND c.EMAIL = :email)'}
+          FOR UPDATE OF v.CLIENT_ID SKIP LOCKED`,
+        email === undefined
+          ? { retentionDays: PENDING_CLIENT_RETENTION_DAYS }
+          : { retentionDays: PENDING_CLIENT_RETENTION_DAYS, email },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+      );
+
+      for (const row of result.rows ?? []) {
+        const clientId = row.clientId;
+        if (
+          typeof clientId !== 'number' ||
+          !Number.isSafeInteger(clientId) ||
+          clientId < 1
+        ) {
+          throw new Error('Oracle returned an invalid pending client identifier.');
+        }
+
+        const credentials = await connection.execute(
+          'DELETE FROM CLIENT_LOCAL_CREDENTIALS WHERE CLIENT_ID = :clientId',
+          { clientId: { val: clientId, type: oracle.NUMBER } },
+          { autoCommit: false },
+        );
+        if (credentials.rowsAffected !== 1) {
+          throw new Error('Oracle did not delete a single pending credential.');
+        }
+
+        const client = await connection.execute(
+          `DELETE FROM CLIENTS
+            WHERE CLIENT_ID = :clientId
+              AND EXISTS (
+                SELECT 1 FROM CLIENT_EMAIL_VERIFICATIONS
+                 WHERE CLIENT_ID = :clientId
+              )`,
+          { clientId: { val: clientId, type: oracle.NUMBER } },
+          { autoCommit: false },
+        );
+        if (client.rowsAffected !== 1) {
+          throw new Error('Oracle did not delete a single expired pending client.');
+        }
+      }
+    });
+  }
+
   async replaceEmailVerification(
     clientId: number,
     tokenHash: string,
@@ -134,8 +196,7 @@ export class ClientsService {
        WHEN MATCHED THEN UPDATE SET
          target.TOKEN_HASH = :tokenHash,
          target.EXPIRES_AT =
-           SYSTIMESTAMP + NUMTODSINTERVAL(:expiresInMinutes, 'MINUTE'),
-         target.CREATED_AT = SYSTIMESTAMP
+           SYSTIMESTAMP + NUMTODSINTERVAL(:expiresInMinutes, 'MINUTE')
        WHEN NOT MATCHED THEN INSERT (
          CLIENT_ID, TOKEN_HASH, EXPIRES_AT, CREATED_AT
        ) VALUES (

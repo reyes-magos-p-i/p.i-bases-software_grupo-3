@@ -29,6 +29,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let clients: {
     findByEmail: jest.Mock;
+    deleteExpiredPendingClientByEmail: jest.Mock;
     createWithLocalCredentials: jest.Mock;
     createPendingWithLocalCredentials: jest.Mock;
     findPendingLocalClientByEmail: jest.Mock;
@@ -56,6 +57,7 @@ describe('AuthService', () => {
   beforeEach(async () => {
     clients = {
       findByEmail: jest.fn(),
+      deleteExpiredPendingClientByEmail: jest.fn(),
       createWithLocalCredentials: jest.fn(),
       createPendingWithLocalCredentials: jest.fn(),
       findPendingLocalClientByEmail: jest.fn(),
@@ -149,6 +151,26 @@ describe('AuthService', () => {
         ),
         expiresInMinutes: 30,
       });
+    });
+
+    it('resends confirmation for an existing pending registration instead of reporting a duplicate', async () => {
+      const pendingClient = { id: 5, email: registerDto.email };
+      clients.findByEmail.mockResolvedValue(pendingClient);
+      clients.findPendingLocalClientByEmail.mockResolvedValue(pendingClient);
+
+      await expect(service.register(registerDto)).resolves.toEqual({
+        status: 'pending_verification',
+        email: pendingClient.email,
+      });
+
+      expect(clients.replaceEmailVerification).toHaveBeenCalledWith(
+        pendingClient.id,
+        expect.stringMatching(/^[a-f0-9]{64}$/u),
+        30,
+      );
+      expect(verificationSender.send).toHaveBeenCalledTimes(1);
+      expect(clients.createPendingWithLocalCredentials).not.toHaveBeenCalled();
+      expect(hasher.hash).not.toHaveBeenCalled();
     });
 
     it('keeps the account pending and reports email delivery failure for resend', async () => {

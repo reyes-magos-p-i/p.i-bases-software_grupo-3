@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
+import oracle from 'oracledb';
 import { ClientsService } from './clients.service';
 import { DatabaseService } from '../database/database.service';
 import { ClientsRepository } from './clients.repository';
@@ -150,6 +151,60 @@ describe('ClientsService', () => {
         expect(db.query).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('deleteExpiredPendingClients', () => {
+    it('deletes only pending clients older than the retention period transactionally', async () => {
+      conn.execute
+        .mockResolvedValueOnce({ rows: [{ clientId: 42 }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+
+      await service.deleteExpiredPendingClients();
+
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+      expect(conn.execute).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining(
+          "NUMTODSINTERVAL(:retentionDays, 'DAY')",
+        ),
+        { retentionDays: 7 },
+        expect.objectContaining({ autoCommit: false }),
+      );
+      expect(conn.execute).toHaveBeenNthCalledWith(
+        2,
+        'DELETE FROM CLIENT_LOCAL_CREDENTIALS WHERE CLIENT_ID = :clientId',
+        { clientId: { val: 42, type: oracle.NUMBER } },
+        { autoCommit: false },
+      );
+      expect(conn.execute.mock.calls[2][0]).toContain('DELETE FROM CLIENTS');
+      expect(conn.execute.mock.calls[2][1]).toEqual({
+        clientId: { val: 42, type: oracle.NUMBER },
+      });
+    });
+
+    it('uses the email to purge an expired pending registration before re-registering', async () => {
+      conn.execute.mockResolvedValueOnce({ rows: [] });
+
+      await service.deleteExpiredPendingClientByEmail('ana@example.com');
+
+      expect(conn.execute).toHaveBeenCalledWith(
+        expect.stringContaining('AND EXISTS'),
+        { retentionDays: 7, email: 'ana@example.com' },
+        expect.objectContaining({ autoCommit: false }),
+      );
+      expect(conn.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not extend the seven-day pending-account retention when rotating the link', async () => {
+      db.query.mockResolvedValue({ rowsAffected: 1 });
+
+      await service.replaceEmailVerification(42, 'a'.repeat(64), 30);
+
+      const [sql] = db.query.mock.calls[0];
+      expect(sql).toContain('target.EXPIRES_AT');
+      expect(sql).not.toContain('target.CREATED_AT = SYSTIMESTAMP');
+    });
   });
 
   describe('findOrCreateSocial', () => {
