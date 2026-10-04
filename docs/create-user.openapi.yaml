@@ -144,6 +144,7 @@ paths:
                   firstSurname: Núñez
                   secondSurname: Solano
                   birthday: "2000-02-29"
+                  hireDate: "2026-10-01"
                   phoneNumber: "+506 8888-8888"
                   address:
                     districtId: 7
@@ -158,6 +159,7 @@ paths:
                   firstSurname: Núñez
                   secondSurname: Solano
                   birthday: "1990-05-20"
+                  hireDate: "2026-10-01"
                   phoneNumber: "+506 8888-8888"
                   address:
                     districtId: 7
@@ -339,8 +341,8 @@ components:
         phoneNumber:
           type: string
           nullable: true
-          x-max-utf8-bytes: 20
-          description: Máximo 20 bytes UTF-8; permite cadena vacía.
+          pattern: '^(?:\+506[ -]?)?[678]\d{3}[ -]?\d{4}$'
+          description: Celular de Costa Rica. Admite prefijo +506 y separador entre grupos de cuatro dígitos; se normaliza a ocho dígitos. Opcional, admite null.
         address:
           description: |
             Dirección nueva opcional. Si se omite o es null, no se crea una
@@ -369,6 +371,7 @@ components:
         - firstSurname
         - secondSurname
         - birthday
+        - hireDate
         - phoneNumber
         - address
         - branchId
@@ -399,14 +402,20 @@ components:
           description: Fecha real con formato YYYY-MM-DD, sin hora ni zona horaria.
         phoneNumber:
           type: string
-          pattern: '\S'
-          x-max-utf8-bytes: 20
-          description: Máximo 20 bytes UTF-8; no admite vacío ni solo espacios.
+          pattern: '^(?:\+506[ -]?)?[678]\d{3}[ -]?\d{4}$'
+          description: Celular de Costa Rica obligatorio; admite prefijo +506 y separador entre grupos de cuatro dígitos. Se normaliza a ocho dígitos.
+        hireDate:
+          type: string
+          format: date
+          minLength: 10
+          maxLength: 10
+          pattern: '^(?!0000)\d{4}-\d{2}-\d{2}$'
+          description: Fecha de contratación obligatoria para empleados y administradores; fecha real con año entre 0001 y 9999, sin hora ni zona horaria. La fecha de registro la genera Oracle automáticamente.
         address:
           $ref: "#/components/schemas/CreateAddress"
         branchId:
           type: integer
-          minimum: -9007199254740991
+          minimum: 1
           maximum: 9007199254740991
           description: Referencia obligatoria a una sucursal existente en CINEMAS.BRANCH_ID.
     CreateAddress:
@@ -420,7 +429,7 @@ components:
       properties:
         districtId:
           type: integer
-          minimum: -9007199254740991
+          minimum: 1
           maximum: 9007199254740991
           description: Referencia obligatoria a DISTRICTS.ID_DISTRICT.
         details:
@@ -434,17 +443,17 @@ components:
       type: string
       format: email
       x-max-utf8-bytes: 150
-      description: Correo válido, máximo 150 bytes UTF-8.
+      description: Correo válido, máximo 150 bytes UTF-8. Se eliminan espacios externos y se normaliza a minúsculas.
     RequiredName:
       type: string
       pattern: '\S'
       x-max-utf8-bytes: 100
-      description: Máximo 100 bytes UTF-8; no admite vacío ni solo espacios.
+      description: Máximo 100 bytes UTF-8 después de eliminar espacios externos; no admite vacío ni solo espacios.
     OptionalName:
       type: string
       nullable: true
       x-max-utf8-bytes: 100
-      description: Máximo 100 bytes UTF-8; permite null y cadena vacía.
+      description: Máximo 100 bytes UTF-8 después de eliminar espacios externos; permite null. Una cadena vacía se normaliza a null.
     CreatedUser:
       type: object
       additionalProperties: false

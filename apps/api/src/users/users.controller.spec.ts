@@ -40,6 +40,7 @@ describe('UsersController (HTTP integration)', () => {
     firstName: 'José',
     firstSurname: 'Núñez',
     secondSurname: 'Solano',
+    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
     address: { districtId: 7, details: 'Casa azul' },
@@ -267,9 +268,17 @@ describe('UsersController (HTTP integration)', () => {
         CreateAddressDto,
       );
       expect(service.create).toHaveBeenCalledWith(
-        expect.objectContaining({ ...employee, role }),
+        expect.objectContaining({
+          ...employee,
+          role,
+          email: employee.email.toLowerCase(),
+        }),
       );
-      expect(response.body).toEqual({ id: 42, role, email: employee.email });
+      expect(response.body).toEqual({
+        id: 42,
+        role,
+        email: employee.email.toLowerCase(),
+      });
     },
   );
 

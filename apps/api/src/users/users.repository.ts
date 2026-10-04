@@ -1,15 +1,307 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import oracle from 'oracledb';
 import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
+import type { EmployeeDetailDto } from './dto/user-detail.dto';
 import { DatabaseService } from '../database/database.service';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import type { CreateAddressDto } from './dto/create-address.dto';
+import type { UpdateEmployeeDto, UpdatedUserDto } from './dto/update-user.dto';
 import type { EmployeeWithLocalCredentials } from './types/employee-with-local-credentials.type';
+import type { ListEmployeesQueryDto } from './dto/list-users-query.dto';
+import type {
+  EmployeeListOptionsDto,
+  ListedEmployeeDto,
+  ListedUsersDto,
+} from './dto/listed-users.dto';
 
 @Injectable()
 export class UsersRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  async updateEmployee(
+    id: number,
+    data: UpdateEmployeeDto,
+  ): Promise<UpdatedUserDto> {
+    try {
+      return await this.db.transaction(async (connection) => {
+        const current = await connection.execute<{
+          EMAIL: string;
+          ROLE: UserRole.EMPLOYEE | UserRole.ADMINISTRATOR;
+        }>(
+          'SELECT EMAIL, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :id FOR UPDATE',
+          { id: { val: id, type: oracle.NUMBER } },
+          { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+        );
+        const row = current.rows?.[0];
+        if (!row)
+          throw new NotFoundException('El usuario seleccionado no existe.');
+        if (data.email !== undefined) {
+          const duplicate = await connection.execute(
+            'SELECT 1 FROM EMPLOYEES WHERE LOWER(TRIM(EMAIL)) = :email AND EMPLOYEE_ID <> :id AND ROWNUM = 1',
+            { email: data.email, id },
+            { autoCommit: false },
+          );
+          if (duplicate.rows?.length)
+            throw new ConflictException(
+              'El correo electrónico ya está registrado para otro empleado.',
+            );
+        }
+        const changes: string[] = [];
+        const binds: oracle.BindParameters = {
+          id: { val: id, type: oracle.NUMBER },
+        };
+        if (data.branchId !== undefined) {
+          const branch = await connection.execute(
+            'SELECT 1 FROM CINEMAS WHERE BRANCH_ID = :branchId FOR UPDATE',
+            { branchId: { val: data.branchId, type: oracle.NUMBER } },
+            { autoCommit: false },
+          );
+          if (!branch.rows?.length)
+            throw new BadRequestException(
+              'La sucursal seleccionada no existe.',
+            );
+          changes.push('BRANCH_ID = :branchId');
+          binds.branchId = { val: data.branchId, type: oracle.NUMBER };
+        }
+        for (const [field, column] of [
+          ['firstName', 'FIRST_NAME'],
+          ['secondName', 'SECOND_NAME'],
+          ['firstSurname', 'FIRST_SURNAME'],
+          ['secondSurname', 'SECOND_SURNAME'],
+          ['email', 'EMAIL'],
+          ['phoneNumber', 'PHONE_NUMBER'],
+          ['role', 'ROLE'],
+        ] as const) {
+          if (data[field] !== undefined) {
+            changes.push(`${column} = :${field}`);
+            binds[field] = { val: data[field], type: oracle.STRING };
+          }
+        }
+        if (data.address !== undefined) {
+          const addressId = await this.insertAddress(connection, data.address);
+          changes.push('ID_ADDRESS = :addressId');
+          binds.addressId = { val: addressId, type: oracle.NUMBER };
+        }
+        const result = await connection.execute(
+          `UPDATE EMPLOYEES SET ${changes.join(', ')} WHERE EMPLOYEE_ID = :id`,
+          binds,
+          { autoCommit: false },
+        );
+        if (result.rowsAffected !== 1)
+          throw new Error('Oracle did not update a single employee.');
+        return {
+          id,
+          email: data.email ?? row.EMAIL,
+          role: data.role ?? row.ROLE,
+        };
+      });
+    } catch (error) {
+      const failure = error as { errorNum?: number; message?: string } | null;
+      if (
+        failure?.errorNum === 1 &&
+        /\bUQ_EMPLOYEES_EMAIL\b/u.test(failure.message ?? '')
+      ) {
+        throw new ConflictException(
+          'El correo electrónico ya está registrado para otro empleado.',
+        );
+      }
+      if (failure?.errorNum === 2291)
+        throw new BadRequestException('El distrito de la dirección no existe.');
+      throw error;
+    }
+  }
+
+  async findEmployeeDetailById(id: number): Promise<EmployeeDetailDto | null> {
+    const result = await this.db.query<{
+      ID: number;
+      FIRST_NAME: string;
+      SECOND_NAME: string | null;
+      FIRST_SURNAME: string;
+      SECOND_SURNAME: string;
+      BIRTHDAY: string;
+      PHONE_NUMBER: string;
+      EMAIL: string;
+      ROLE: UserRole.EMPLOYEE | UserRole.ADMINISTRATOR;
+      BRANCH_ID: number;
+      BRANCH_NAME: string;
+      CREATED_AT: string | null;
+      HIRE_DATE: string | null;
+      ADDRESS_ID: number | null;
+      ADDRESS_DETAILS: string | null;
+      DISTRICT_ID: number;
+      DISTRICT_NAME: string;
+      CANTON_ID: number;
+      CANTON_NAME: string;
+      PROVINCE_ID: number;
+      PROVINCE_NAME: string;
+    }>(
+      `SELECT e.EMPLOYEE_ID AS ID, e.FIRST_NAME, e.SECOND_NAME, e.FIRST_SURNAME, e.SECOND_SURNAME,
+              TO_CHAR(e.BIRTHDAY, 'YYYY-MM-DD') AS BIRTHDAY, e.PHONE_NUMBER, e.EMAIL,
+              e.ROLE, e.BRANCH_ID, b.NAME AS BRANCH_NAME,
+              TO_CHAR(e.HIRE_DATE, 'YYYY-MM-DD') AS HIRE_DATE,
+              TO_CHAR(e.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS CREATED_AT,
+              a.ID_ADDRESS AS ADDRESS_ID, a.DETAILS AS ADDRESS_DETAILS,
+              d.ID_DISTRICT AS DISTRICT_ID, d.NAME AS DISTRICT_NAME,
+              k.ID_CANTON AS CANTON_ID, k.NAME AS CANTON_NAME,
+              p.ID_PROVINCE AS PROVINCE_ID, p.NAME AS PROVINCE_NAME
+       FROM EMPLOYEES e
+       JOIN CINEMAS b ON b.BRANCH_ID = e.BRANCH_ID
+       LEFT JOIN ADDRESSES a ON a.ID_ADDRESS = e.ID_ADDRESS
+       LEFT JOIN DISTRICTS d ON d.ID_DISTRICT = a.ID_DISTRICT
+       LEFT JOIN CANTONS k ON k.ID_CANTON = d.ID_CANTON
+       LEFT JOIN PROVINCES p ON p.ID_PROVINCE = k.ID_PROVINCE
+       WHERE e.EMPLOYEE_ID = :id`,
+      { id: { val: id, type: oracle.NUMBER } },
+    );
+    const row = result.rows?.[0];
+    if (!row) return null;
+    return {
+      id: row.ID,
+      role: row.ROLE,
+      firstName: row.FIRST_NAME,
+      secondName: row.SECOND_NAME,
+      firstSurname: row.FIRST_SURNAME,
+      secondSurname: row.SECOND_SURNAME,
+      birthday: row.BIRTHDAY,
+      phoneNumber: row.PHONE_NUMBER,
+      email: row.EMAIL,
+      createdAt: row.CREATED_AT,
+      branchId: row.BRANCH_ID,
+      branchName: row.BRANCH_NAME,
+      hireDate: row.HIRE_DATE,
+      address:
+        row.ADDRESS_ID === null
+          ? null
+          : {
+              id: row.ADDRESS_ID,
+              provinceId: row.PROVINCE_ID,
+              provinceName: row.PROVINCE_NAME,
+              cantonId: row.CANTON_ID,
+              cantonName: row.CANTON_NAME,
+              districtId: row.DISTRICT_ID,
+              districtName: row.DISTRICT_NAME,
+              details: row.ADDRESS_DETAILS,
+            },
+    };
+  }
+
+  async getEmployeeListOptions(): Promise<EmployeeListOptionsDto> {
+    const result = await this.db.query<{ BRANCH_ID: number; NAME: string }>(
+      'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
+    );
+    return {
+      branches: (result.rows ?? []).map((row) => ({
+        id: row.BRANCH_ID,
+        label: row.NAME,
+      })),
+    };
+  }
+
+  async listEmployees(
+    query: ListEmployeesQueryDto,
+  ): Promise<ListedUsersDto<ListedEmployeeDto>> {
+    const name =
+      "REGEXP_REPLACE(TRIM(e.FIRST_NAME || ' ' || e.SECOND_NAME || ' ' || e.FIRST_SURNAME || ' ' || e.SECOND_SURNAME), '[[:space:]]+', ' ')";
+    const conditions: string[] = [];
+    const binds: oracle.BindParameters = {};
+    if (query.search) {
+      const terms = query.search.split(' ').map((term, index) => {
+        binds[`name${index}`] = {
+          val: `%${term.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
+          type: oracle.STRING,
+        };
+        return `LOWER(${name}) LIKE :name${index} ESCAPE '\\'`;
+      });
+      conditions.push(
+        `((${terms.join(' AND ')}) OR LOWER(e.EMAIL) LIKE :search ESCAPE '\\' OR e.PHONE_NUMBER LIKE :search ESCAPE '\\' OR TO_CHAR(e.EMPLOYEE_ID) LIKE :search ESCAPE '\\')`,
+      );
+      binds.search = {
+        val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
+        type: oracle.STRING,
+      };
+    }
+    if (query.role?.length) {
+      const parameters = query.role.map((role, index) => {
+        binds[`role${index}`] = { val: role, type: oracle.STRING };
+        return `:role${index}`;
+      });
+      conditions.push(`e.ROLE IN (${parameters.join(', ')})`);
+    }
+    if (query.branchId?.length) {
+      const parameters = query.branchId.map((branchId, index) => {
+        binds[`branchId${index}`] = { val: branchId, type: oracle.NUMBER };
+        return `:branchId${index}`;
+      });
+      conditions.push(`e.BRANCH_ID IN (${parameters.join(', ')})`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const from = `FROM EMPLOYEES e JOIN CINEMAS b ON b.BRANCH_ID = e.BRANCH_ID ${where}`;
+    const count = await this.db.query<{ TOTAL: number }>(
+      `SELECT COUNT(*) AS TOTAL ${from}`,
+      binds,
+    );
+    const total = count.rows?.[0]?.TOTAL ?? 0;
+    const totalPages = Math.ceil(total / query.pageSize);
+    const page = Math.min(query.page, Math.max(1, totalPages));
+    if (total === 0)
+      return { items: [], total, page, pageSize: query.pageSize, totalPages };
+    const sort =
+      {
+        id: 'e.EMPLOYEE_ID',
+        name,
+        email: 'LOWER(e.EMAIL)',
+        createdAt: 'e.CREATED_AT',
+        hireDate: 'e.HIRE_DATE',
+        role: 'e.ROLE',
+        branch: 'LOWER(b.NAME)',
+      }[query.sortBy] ?? 'e.EMPLOYEE_ID';
+    const result = await this.db.query<{
+      ID: number;
+      NAME: string;
+      EMAIL: string;
+      PHONE_NUMBER: string;
+      CREATED_AT: string | null;
+      ROLE: UserRole.EMPLOYEE | UserRole.ADMINISTRATOR;
+      BRANCH_ID: number;
+      BRANCH_NAME: string;
+      HIRE_DATE: string | null;
+    }>(
+      `SELECT e.EMPLOYEE_ID AS ID, ${name} AS NAME, e.EMAIL, e.PHONE_NUMBER,
+              TO_CHAR(e.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS CREATED_AT,
+              e.ROLE, e.BRANCH_ID, b.NAME AS BRANCH_NAME, TO_CHAR(e.HIRE_DATE, 'YYYY-MM-DD') AS HIRE_DATE
+       ${from}
+       ORDER BY ${sort} ${query.sortDirection === 'desc' ? 'DESC' : 'ASC'} NULLS LAST, e.EMPLOYEE_ID ASC
+       OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY`,
+      {
+        ...binds,
+        offset: { val: (page - 1) * query.pageSize, type: oracle.NUMBER },
+        pageSize: { val: query.pageSize, type: oracle.NUMBER },
+      },
+    );
+    return {
+      items: (result.rows ?? []).map((row) => ({
+        id: row.ID,
+        name: row.NAME,
+        email: row.EMAIL,
+        phoneNumber: row.PHONE_NUMBER,
+        createdAt: row.CREATED_AT,
+        role: row.ROLE,
+        branchId: row.BRANCH_ID,
+        branchName: row.BRANCH_NAME,
+        hireDate: row.HIRE_DATE,
+      })),
+      total,
+      page,
+      pageSize: query.pageSize,
+      totalPages,
+    };
+  }
 
   async findEmployeeWithLocalCredentialsByEmail(
     email: string,
@@ -168,11 +460,11 @@ export class UsersRepository {
       const result = await connection.execute<{ employeeId?: unknown }>(
         `INSERT INTO EMPLOYEES (
           FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME,
-          BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID
+          BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID, HIRE_DATE
         ) VALUES (
           :firstName, :secondName, :firstSurname, :secondSurname,
           TO_DATE(:birthday, 'FXYYYY-MM-DD'), :phoneNumber, :email, :role,
-          :addressId, :branchId
+          :addressId, :branchId, TO_DATE(:hireDate, 'FXYYYY-MM-DD')
         ) RETURNING EMPLOYEE_ID INTO :employeeId`,
         {
           firstName: { val: data.firstName, type: oracle.STRING },
@@ -180,6 +472,7 @@ export class UsersRepository {
           firstSurname: { val: data.firstSurname, type: oracle.STRING },
           secondSurname: { val: data.secondSurname, type: oracle.STRING },
           birthday: { val: data.birthday, type: oracle.STRING },
+          hireDate: { val: data.hireDate, type: oracle.STRING },
           phoneNumber: { val: data.phoneNumber, type: oracle.STRING },
           email: { val: data.email, type: oracle.STRING },
           role: { val: data.role, type: oracle.STRING },

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
+import { validText, validEmail, validMobile, normalizeMobile } from '@/utils/user-validation'
 import { facebookLogin, registerUser } from '@/services/authService'
 import BaseModal from '@/components/common/BaseModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
@@ -24,7 +25,7 @@ const form = reactive({
 // If a field has no error, its value will be an empty string and the template will not display an error.
 const errors = reactive<Record<string, string>>({})
 const loading = ref(false)
-const serverError = ref('')  // For Backend errors that are not field-specific (network issues, server errors).
+const serverError = ref('') // For Backend errors that are not field-specific (network issues, server errors).
 
 /**
  * TODO(Raul): Safeguard against common passwords, probably by using a
@@ -35,15 +36,26 @@ const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*_-]).{8,}$/
 function validate(): boolean {
   Object.keys(errors).forEach((k) => delete errors[k])
 
-  if (!/^\S+@\S+\.\S+$/.test(form.email)) errors.email = 'Ingresa un correo válido'
+  if (!validEmail(form.email)) errors.email = 'Ingresa un correo válido'
   if (!form.firstName.trim()) errors.firstName = 'Requerido'
   if (!form.lastName.trim()) errors.lastName = 'Requerido'
   if (!form.phone.trim()) errors.phone = 'Requerido'
+  else if (!validMobile(form.phone))
+    errors.phone = 'Ingresa un celular de Costa Rica de ocho dígitos que comience con 6, 7 u 8.'
+  for (const field of ['firstName', 'lastName'] as const) {
+    if (form[field].trim() && !validText(form[field].trim(), 100))
+      errors[field] = 'Ingresa texto válido de hasta 100 bytes en UTF-8.'
+  }
   if (!form.gender) errors.gender = 'Selecciona una opción'
   if (!form.birthDate) errors.birthDate = 'Requerido'
   if (!PASSWORD_RULE.test(form.password))
-    errors.password = 'Mínimo 8 caracteres con mayúscula, minúscula, número y un carácter especial (!@#$%^&*_-).'
-  if (form.password === form.email || form.password === form.firstName || form.password === form.lastName)
+    errors.password =
+      'Mínimo 8 caracteres con mayúscula, minúscula, número y un carácter especial (!@#$%^&*_-).'
+  if (
+    form.password === form.email ||
+    form.password === form.firstName ||
+    form.password === form.lastName
+  )
     errors.password = 'La contraseña no puede ser igual al correo ni al nombre de usuario'
   if (form.password !== form.confirmPassword)
     errors.confirmPassword = 'Las contraseñas no coinciden'
@@ -62,9 +74,7 @@ async function handleFacebookLogin(accessToken: string) {
     emit('close')
   } catch (error) {
     serverError.value =
-      error instanceof Error
-        ? error.message
-        : 'No se pudo iniciar sesión con Facebook'
+      error instanceof Error ? error.message : 'No se pudo iniciar sesión con Facebook'
   }
 }
 
@@ -75,13 +85,21 @@ async function onSubmit() {
   loading.value = true
   try {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { confirmPassword , ...payload } = form
-    await registerUser(payload)
+    const { confirmPassword, ...payload } = form
+    await registerUser({
+      ...payload,
+      email: form.email.trim().toLowerCase(),
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      phone: normalizeMobile(form.phone),
+    })
     emit('registered')
     emit('close')
-  } catch (e) {  // prevent reading from undefined if the error is not an instance of Error
+  } catch (e) {
+    // prevent reading from undefined if the error is not an instance of Error
     serverError.value = e instanceof Error ? e.message : 'Error inesperado'
-  } finally {  // No matter what happens, we want to stop the loading state. for the next request.
+  } finally {
+    // No matter what happens, we want to stop the loading state. for the next request.
     loading.value = false
   }
 }
@@ -89,7 +107,7 @@ async function onSubmit() {
 
 <template>
   <BaseModal :open="open" title="Crear cuenta" @close="emit('close')">
-    <SocialAuthButtons @facebook="handleFacebookLogin" @close-modal="emit('close')"/>
+    <SocialAuthButtons @facebook="handleFacebookLogin" @close-modal="emit('close')" />
 
     <hr class="my-3" />
 
@@ -97,41 +115,61 @@ async function onSubmit() {
       <div class="row g-3">
         <div class="col-12">
           <label class="form-label fw-bold" for="email">Correo Electrónico</label>
-            <!-- Model binding -->
-            <input
-              id="email"
-              v-model="form.email"
-              type="email"
-              class="form-control"
-              :class="{ 'is-invalid': errors.email }"
-              autocomplete="email"
-            />
+          <!-- Model binding -->
+          <input
+            id="email"
+            v-model="form.email"
+            type="email"
+            class="form-control"
+            :class="{ 'is-invalid': errors.email }"
+            autocomplete="email"
+          />
           <div class="invalid-feedback">{{ errors.email }}</div>
         </div>
 
         <div class="col-6">
           <label class="form-label fw-bold" for="firstName">Nombre</label>
-          <input id="firstName" v-model="form.firstName" class="form-control"
-                 :class="{ 'is-invalid': errors.firstName }" autocomplete="given-name" />
+          <input
+            id="firstName"
+            v-model="form.firstName"
+            class="form-control"
+            :class="{ 'is-invalid': errors.firstName }"
+            autocomplete="given-name"
+          />
           <div class="invalid-feedback">{{ errors.firstName }}</div>
         </div>
         <div class="col-6">
           <label class="form-label fw-bold" for="lastName">Apellidos</label>
-          <input id="lastName" v-model="form.lastName" class="form-control"
-                 :class="{ 'is-invalid': errors.lastName }" autocomplete="family-name" />
+          <input
+            id="lastName"
+            v-model="form.lastName"
+            class="form-control"
+            :class="{ 'is-invalid': errors.lastName }"
+            autocomplete="family-name"
+          />
           <div class="invalid-feedback">{{ errors.lastName }}</div>
         </div>
 
         <div class="col-6">
           <label class="form-label fw-bold" for="phone">Teléfono</label>
-          <input id="phone" v-model="form.phone" type="tel" class="form-control"
-                 :class="{ 'is-invalid': errors.phone }" autocomplete="tel" />
+          <input
+            id="phone"
+            v-model="form.phone"
+            type="tel"
+            class="form-control"
+            :class="{ 'is-invalid': errors.phone }"
+            autocomplete="tel"
+          />
           <div class="invalid-feedback">{{ errors.phone }}</div>
         </div>
         <div class="col-6">
           <label class="form-label fw-bold" for="gender">Género</label>
-          <select id="gender" v-model="form.gender" class="form-select"
-                  :class="{ 'is-invalid': errors.gender }">
+          <select
+            id="gender"
+            v-model="form.gender"
+            class="form-select"
+            :class="{ 'is-invalid': errors.gender }"
+          >
             <option value="" disabled>Seleccionar</option>
             <option value="M">Masculino</option>
             <option value="F">Femenino</option>
@@ -143,8 +181,13 @@ async function onSubmit() {
 
         <div class="col-6">
           <label class="form-label fw-bold" for="birthDate">Fecha de nacimiento</label>
-          <input id="birthDate" v-model="form.birthDate" type="date" class="form-control"
-                 :class="{ 'is-invalid': errors.birthDate }" />
+          <input
+            id="birthDate"
+            v-model="form.birthDate"
+            type="date"
+            class="form-control"
+            :class="{ 'is-invalid': errors.birthDate }"
+          />
           <div class="invalid-feedback">{{ errors.birthDate }}</div>
         </div>
         <div class="col-6">
@@ -157,25 +200,42 @@ async function onSubmit() {
 
         <div class="col-12">
           <label class="form-label fw-bold" for="password">Contraseña</label>
-          <input id="password" v-model="form.password" type="password" class="form-control"
-                 :class="{ 'is-invalid': errors.password }" autocomplete="new-password" />
+          <input
+            id="password"
+            v-model="form.password"
+            type="password"
+            class="form-control"
+            :class="{ 'is-invalid': errors.password }"
+            autocomplete="new-password"
+          />
           <div class="invalid-feedback">{{ errors.password }}</div>
           <div class="form-text small">
-            Mínimo 8 caracteres. Incluye mayúscula, minúscula, número y un carácter especial (!@#$%^&*_-).
+            Mínimo 8 caracteres. Incluye mayúscula, minúscula, número y un carácter especial
+            (!@#$%^&*_-).
           </div>
         </div>
         <div class="col-12">
           <label class="form-label fw-bold" for="confirmPassword">Repetir contraseña</label>
-          <input id="confirmPassword" v-model="form.confirmPassword" type="password"
-                 class="form-control" :class="{ 'is-invalid': errors.confirmPassword }"
-                 autocomplete="new-password" />
+          <input
+            id="confirmPassword"
+            v-model="form.confirmPassword"
+            type="password"
+            class="form-control"
+            :class="{ 'is-invalid': errors.confirmPassword }"
+            autocomplete="new-password"
+          />
           <div class="invalid-feedback">{{ errors.confirmPassword }}</div>
         </div>
 
         <div class="col-12">
           <div class="form-check d-flex justify-content-center gap-2">
-            <input id="terms" v-model="form.acceptTerms" type="checkbox" class="form-check-input"
-                   :class="{ 'is-invalid': errors.acceptTerms }" />
+            <input
+              id="terms"
+              v-model="form.acceptTerms"
+              type="checkbox"
+              class="form-check-input"
+              :class="{ 'is-invalid': errors.acceptTerms }"
+            />
             <label class="form-check-label" for="terms">
               Acepto <a href="#" class="fw-bold text-dark">Términos y Condiciones.</a>
             </label>
