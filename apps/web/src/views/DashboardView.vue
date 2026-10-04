@@ -6,6 +6,7 @@ import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
+import type { UserDetailSelection } from '@/types/user'
 import { createUser, getUserCreationOptions } from '@/services/user.service'
 import {
   closeEmployeeSession,
@@ -48,6 +49,12 @@ async function refreshPermissions() {
   } catch {
     if (!disposed)
       void router.replace({ path: '/', query: { login: 'employee', reason: 'unavailable' } })
+  }
+}
+
+function userUpdated(selection: UserDetailSelection) {
+  if (selection.section === 'employees' && selection.id === identity.value?.id) {
+    void refreshPermissions()
   }
 }
 
@@ -267,6 +274,7 @@ function navigate(section: string) {
         :role="role"
         @session-expired="sessionExpired"
         @forbidden="refreshPermissions"
+        @user-updated="userUpdated"
       />
     </section>
     <CreateUserDialog

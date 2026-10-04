@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import DashboardView from '@/views/DashboardView.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
+import UserListPanel from '@/components/users/UserListPanel.vue'
 import { nextTick } from 'vue'
 import {
   employeeSession,
@@ -155,6 +156,63 @@ async function renderDashboard() {
 }
 
 describe('DashboardView', () => {
+  it('refreshes the displayed name after editing the active administrator', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    vi.mocked(restoreEmployeeSession).mockImplementationOnce(async () => {
+      const identity = { id: 21, role: 'ADMINISTRATOR' as const, firstName: 'Alicia' }
+      Object.assign(employeeSession.user, { value: identity })
+      return identity
+    })
+    view
+      .getComponent(UserListPanel)
+      .vm.$emit(
+        'user-updated',
+        { section: 'employees', id: 21 },
+        { id: 21, role: 'ADMINISTRATOR', email: 'ana@example.com' },
+      )
+    await flushPromises()
+    expect(restoreEmployeeSession).toHaveBeenCalledWith(true)
+    expect(view.getComponent(DashboardLayout).props('userName')).toBe('Alicia')
+  })
+  it('refreshes session permissions after editing the active administrator', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    vi.mocked(restoreEmployeeSession).mockImplementationOnce(async () => {
+      await setRole('EMPLOYEE')
+      return { id: 21, role: 'EMPLOYEE', firstName: 'Ana' }
+    })
+    view
+      .getComponent(UserListPanel)
+      .vm.$emit(
+        'user-updated',
+        { section: 'employees', id: 21 },
+        { id: 21, role: 'EMPLOYEE', email: 'ana@example.com' },
+      )
+    await flushPromises()
+    expect(restoreEmployeeSession).toHaveBeenCalledWith(true)
+    expect(getUsers.mock.calls[getUsers.mock.calls.length - 1]?.[0]).toBe('clients')
+  })
+  it('preserves the session when a different user is modified', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    view
+      .getComponent(UserListPanel)
+      .vm.$emit(
+        'user-updated',
+        { section: 'clients', id: 21 },
+        { id: 21, role: 'CLIENT', email: 'ana@example.com' },
+      )
+    view
+      .getComponent(UserListPanel)
+      .vm.$emit(
+        'user-updated',
+        { section: 'employees', id: 42 },
+        { id: 42, role: 'EMPLOYEE', email: 'ana@example.com' },
+      )
+    await flushPromises()
+    expect(restoreEmployeeSession).not.toHaveBeenCalled()
+  })
   it('loads each section and handles an expired listing session', async () => {
     const view = await renderDashboard()
     await flushPromises()
