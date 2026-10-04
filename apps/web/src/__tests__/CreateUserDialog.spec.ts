@@ -83,6 +83,19 @@ async function renderDialog(props: Partial<InstanceType<typeof CreateUserDialog>
 }
 
 describe('client form', () => {
+  it('shows a character counter while retaining the Oracle storage limit', async () => {
+    const view = await renderDialog({ mode: 'client' })
+    await view.get('.address-toggle input').setValue(true)
+    await view.get('[name="details"]').setValue('á🎬')
+    expect(view.text()).toContain('2/255')
+  })
+  it('rejects non-Costa-Rican mobiles before creating a client', async () => {
+    const view = await filledClient()
+    await view.get('[name="phoneNumber"]').setValue('22222222')
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')).toBeUndefined()
+    expect(view.get('[name="phoneNumber"]').attributes('aria-invalid')).toBe('true')
+  })
   async function filledClient(
     props: Partial<InstanceType<typeof CreateUserDialog>['$props']> = {},
   ) {
@@ -156,7 +169,7 @@ describe('client form', () => {
           secondSurname: 'Rojas',
           email: 'ana@example.com',
           birthday: '2000-02-29',
-          phoneNumber: '+506 8888-8888',
+          phoneNumber: '88888888',
           language: 'en',
           address: { districtId: 111, details: 'Casa azul' },
         },
@@ -727,7 +740,6 @@ describe('CreateUserDialog', () => {
     ['secondName', 100],
     ['firstSurname', 100],
     ['secondSurname', 100],
-    ['phoneNumber', 20],
     ['details', 255],
   ] as const)(
     'checks the UTF-8 limit for %s without confusing bytes with characters',

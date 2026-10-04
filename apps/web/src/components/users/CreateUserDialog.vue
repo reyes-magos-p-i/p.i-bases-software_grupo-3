@@ -10,6 +10,13 @@ import {
   watch,
 } from 'vue'
 import type { BranchOption, CreateEmployeeRequest, CreateUserRequest } from '@/types/user'
+import {
+  characterCount,
+  validText,
+  validEmail,
+  validMobile,
+  normalizeMobile,
+} from '@/utils/user-validation'
 import type { CantonOption, DistrictOption, ProvinceOption } from '@/types/address'
 
 const props = withDefaults(
@@ -148,7 +155,6 @@ const groups = computed<{ label: string; fields: TextFieldDefinition[] }[]>(() =
         label: 'Teléfono',
         type: 'tel',
         required: !isClient.value,
-        maxBytes: 20,
       },
     ],
   },
@@ -175,7 +181,6 @@ const textFields = computed<TextFieldDefinition[]>(() => [
 const dirty = reactive<Partial<Record<FieldName, boolean>>>({})
 const touched = reactive<Partial<Record<FieldName, boolean>>>({})
 const errors = reactive<Partial<Record<FieldName, string>>>({})
-const encoder = new TextEncoder()
 const title = computed(() =>
   isClient.value
     ? 'Crear cliente'
@@ -247,29 +252,20 @@ function validateField(
   if (control.disabled && !includeDisabled) return ''
   const definition = textFields.value.find((item) => item.name === field)
   if (definition) {
-    const value = draft[definition.name]
+    const raw = draft[definition.name]
+    const value = field === 'details' ? raw : raw.trim()
     if (definition.type === 'date' && control.validity.badInput)
       return 'Introduce una fecha válida.'
     if (definition.required && !value.trim()) return 'Este campo es obligatorio.'
     if (!definition.required && !value) return ''
     if (/[\uD800-\uDFFF]/u.test(value)) return 'El texto contiene un carácter no válido.'
-    if (definition.maxBytes && encoder.encode(value).length > definition.maxBytes) {
+    if (definition.maxBytes && !validText(value, definition.maxBytes)) {
       return 'El texto es demasiado largo. Reduce su longitud.'
     }
-    if (definition.type === 'email') {
-      const localPart = value.split('@')[0] ?? ''
-      const topLevelDomain = value.split('.').pop() ?? ''
-      if (
-        control.validity.typeMismatch ||
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value) ||
-        !/^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/iu.test(topLevelDomain) ||
-        localPart.startsWith('.') ||
-        localPart.endsWith('.') ||
-        localPart.includes('..') ||
-        encoder.encode(localPart).length > 64
-      )
-        return 'Introduce un correo electrónico válido, por ejemplo: nombre@ejemplo.com.'
-    }
+    if (definition.type === 'email' && !validEmail(value))
+      return 'Introduce un correo electrónico válido, por ejemplo: nombre@ejemplo.com.'
+    if (definition.type === 'tel' && !validMobile(value))
+      return 'Ingresa un celular de Costa Rica de ocho dígitos que comience con 6, 7 u 8.'
     if (definition.type === 'date') {
       if (field === 'hireDate' && value.startsWith('0000-')) return 'Introduce una fecha válida.'
       const date = new Date(value + 'T00:00:00Z')
@@ -343,9 +339,9 @@ async function submit() {
   }
   if (needsAddress.value && draft.districtId === '') return
   const base = {
-    email: draft.email,
-    firstName: draft.firstName,
-    ...(draft.secondName ? { secondName: draft.secondName } : {}),
+    email: draft.email.trim().toLowerCase(),
+    firstName: draft.firstName.trim(),
+    ...(draft.secondName.trim() ? { secondName: draft.secondName.trim() } : {}),
   }
   const address =
     draft.districtId === ''
@@ -359,10 +355,10 @@ async function submit() {
     emit('submit', {
       ...base,
       role: 'CLIENT',
-      ...(draft.firstSurname ? { firstSurname: draft.firstSurname } : {}),
-      ...(draft.secondSurname ? { secondSurname: draft.secondSurname } : {}),
+      ...(draft.firstSurname.trim() ? { firstSurname: draft.firstSurname.trim() } : {}),
+      ...(draft.secondSurname.trim() ? { secondSurname: draft.secondSurname.trim() } : {}),
       ...(draft.birthday ? { birthday: draft.birthday } : {}),
-      ...(draft.phoneNumber ? { phoneNumber: draft.phoneNumber } : {}),
+      ...(draft.phoneNumber.trim() ? { phoneNumber: normalizeMobile(draft.phoneNumber) } : {}),
       ...(addressEnabled.value ? { address } : {}),
       language: draft.language,
     })
@@ -373,11 +369,11 @@ async function submit() {
   emit('submit', {
     ...base,
     role: draft.role,
-    firstSurname: draft.firstSurname,
-    secondSurname: draft.secondSurname,
+    firstSurname: draft.firstSurname.trim(),
+    secondSurname: draft.secondSurname.trim(),
     birthday: draft.birthday,
     hireDate: draft.hireDate,
-    phoneNumber: draft.phoneNumber,
+    phoneNumber: normalizeMobile(draft.phoneNumber),
     branchId: draft.branchId,
     address,
   })
@@ -819,7 +815,7 @@ defineExpose({ open, complete })
               :aria-describedby="description('details', true)"
             ></textarea>
             <p :id="id + '-details-help'" class="field-help">
-              Escribe las señas u otras referencias de la dirección.
+              {{ characterCount(draft.details) }}/255
             </p>
             <p
               v-if="errors.details"
