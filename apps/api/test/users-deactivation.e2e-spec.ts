@@ -242,9 +242,15 @@ describe('Compiled user deactivation lifecycle', () => {
     },
   );
   it('revokes a client token that was valid before deactivation', async () => {
-    await get('auth/me', 99, 'client').expect(200);
+    const identity = await get('auth/me', 99, 'client').expect(200);
+    expect(identity.body).toMatchObject({ id: 99 });
     await patch().send({}).expect(204);
-    await get('auth/me', 99, 'client').expect(401);
+    expect(accounts.find((a) => a.id === 99)).toMatchObject({
+      active: false,
+      email: 'client@example.com',
+    });
+    const revokedSession = await get('auth/me', 99, 'client').expect(401);
+    expect(revokedSession.body).toMatchObject({ statusCode: 401 });
   });
   it('revokes an employee session and blocks future login while preserving the account', async () => {
     await get('auth/me', 42).expect(200);

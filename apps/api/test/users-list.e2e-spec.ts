@@ -160,9 +160,13 @@ describe('Compiled user listing', () => {
       role: 'EMPLOYEE',
       firstName: 'Ana',
     });
-    await get('clients').expect(200);
+    const response = await get('clients').expect(200);
+    expect(response.body).toEqual(page);
+    expect(service.listClients).toHaveBeenCalledTimes(1);
     await get('employees').expect(403);
     await get('employees/options').expect(403);
+    expect(service.listEmployees).not.toHaveBeenCalled();
+    expect(service.getEmployeeListOptions).not.toHaveBeenCalled();
   });
   it('rejects unauthenticated consultation', async () => {
     await request(app.getHttpServer()).get('/api/users/clients').expect(401);

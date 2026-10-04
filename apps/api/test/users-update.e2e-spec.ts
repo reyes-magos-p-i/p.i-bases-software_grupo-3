@@ -229,13 +229,18 @@ describe('Compiled user updates', () => {
       role: 'EMPLOYEE',
       firstName: 'Ana',
     });
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .get('/api/users/edit-options')
       .set(
         'Cookie',
         `${EMPLOYEE_SESSION_COOKIE}=${jwt.sign({ sub: 21, type: 'employee' })}`,
       )
-      .expect(200, { provinces: [], cantons: [], districts: [] });
+      .expect(200);
+    expect(response.body).toEqual({
+      provinces: [],
+      cantons: [],
+      districts: [],
+    });
   });
   it.each([
     'birthday',
@@ -299,11 +304,23 @@ describe('Compiled user updates', () => {
     clientsRepository.updateClient.mockRejectedValueOnce(
       new NotFoundException('El usuario seleccionado no existe.'),
     );
-    await patch().send({ email: 'ana@example.com' }).expect(404);
+    const missingUser = await patch()
+      .send({ email: 'ana@example.com' })
+      .expect(404);
+    expect(missingUser.body).toMatchObject({
+      statusCode: 404,
+      message: 'El usuario seleccionado no existe.',
+    });
     clientsRepository.updateClient.mockRejectedValueOnce(
       new ConflictException('El correo electrónico ya está registrado.'),
     );
-    await patch().send({ email: 'ana@example.com' }).expect(409);
+    const duplicateEmail = await patch()
+      .send({ email: 'ana@example.com' })
+      .expect(409);
+    expect(duplicateEmail.body).toMatchObject({
+      statusCode: 409,
+      message: 'El correo electrónico ya está registrado.',
+    });
   });
   it('does not expose unexpected persistence failures', async () => {
     clientsRepository.updateClient.mockRejectedValueOnce(
