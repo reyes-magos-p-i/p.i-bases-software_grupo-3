@@ -11,6 +11,11 @@ import type { CreateClientDto } from './dto/create-client.dto';
 import type { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreatedUserDto } from './dto/created-user.dto';
 import type { UserCreationOptionsDto } from './dto/user-creation-options.dto';
+import type {
+  UpdateClientDto,
+  UpdateEmployeeDto,
+  UserEditOptionsDto,
+} from './dto/update-user.dto';
 import { UserRole } from './enums/user-role.enum';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { UsersRepository } from './users.repository';
@@ -32,6 +37,27 @@ export class UsersService {
 
   getCreationOptions(): Promise<UserCreationOptionsDto> {
     return this.usersRepository.getCreationOptions();
+  }
+
+  async getEditOptions(): Promise<UserEditOptionsDto> {
+    const { provinces, cantons, districts } = await this.getCreationOptions();
+    return { provinces, cantons, districts };
+  }
+
+  updateClient(id: number, data: UpdateClientDto) {
+    this.requireChanges(data);
+    return this.clientsRepository.updateClient(id, data);
+  }
+
+  updateEmployee(id: number, data: UpdateEmployeeDto) {
+    this.requireChanges(data);
+    return this.usersRepository.updateEmployee(id, data);
+  }
+
+  private requireChanges(data: UpdateClientDto | UpdateEmployeeDto) {
+    if (!Object.values(data).some((value) => value !== undefined)) {
+      throw new BadRequestException('No hay cambios para guardar.');
+    }
   }
 
   listClients(query: ListClientsQueryDto) {

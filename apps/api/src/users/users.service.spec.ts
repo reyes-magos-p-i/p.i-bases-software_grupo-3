@@ -20,6 +20,7 @@ describe('UsersService', () => {
   let module: TestingModule;
   let service: UsersService;
   const repository = {
+    updateEmployee: jest.fn(),
     findEmployeeDetailById: jest.fn(),
     listEmployees: jest.fn(),
     getEmployeeListOptions: jest.fn(),
@@ -27,6 +28,7 @@ describe('UsersService', () => {
     createEmployee: jest.fn(),
   };
   const clientsRepository = {
+    updateClient: jest.fn(),
     findClientDetailById: jest.fn(),
     listClients: jest.fn(),
     clientEmailExists: jest.fn(),
@@ -92,6 +94,53 @@ describe('UsersService', () => {
 
   afterEach(async () => {
     await module.close();
+  });
+
+  it('returns only address catalogs for staff editing', async () => {
+    const catalogs = {
+      provinces: [{ id: 1 }],
+      cantons: [],
+      districts: [],
+      branches: [{ id: 9 }],
+    };
+    repository.getCreationOptions.mockResolvedValue(catalogs);
+    expect(await service.getEditOptions()).toEqual({
+      provinces: catalogs.provinces,
+      cantons: [],
+      districts: [],
+    });
+  });
+
+  it('updates clients and employees without generating or sending passwords', async () => {
+    const clientChanges = { phoneNumber: null };
+    const staffChanges = { role: UserRole.ADMINISTRATOR as const };
+    clientsRepository.updateClient.mockResolvedValue({
+      id: 42,
+      role: UserRole.CLIENT,
+    });
+    repository.updateEmployee.mockResolvedValue({
+      id: 42,
+      role: UserRole.ADMINISTRATOR,
+    });
+    await service.updateClient(42, clientChanges);
+    await service.updateEmployee(42, staffChanges);
+    expect(clientsRepository.updateClient).toHaveBeenCalledWith(
+      42,
+      clientChanges,
+    );
+    expect(repository.updateEmployee).toHaveBeenCalledWith(42, staffChanges);
+    expect(generator.generate).not.toHaveBeenCalled();
+    expect(hasher.hash).not.toHaveBeenCalled();
+    expect(sender.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects empty partial updates before persistence', () => {
+    expect(() => service.updateClient(42, {})).toThrow(BadRequestException);
+    expect(() => service.updateEmployee(42, { role: undefined })).toThrow(
+      BadRequestException,
+    );
+    expect(repository.updateEmployee).not.toHaveBeenCalled();
+    expect(clientsRepository.updateClient).not.toHaveBeenCalled();
   });
 
   describe.each(['client', 'employee'])('%s details', (section) => {
