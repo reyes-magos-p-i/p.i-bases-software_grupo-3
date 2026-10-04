@@ -135,11 +135,15 @@ describe('Compiled user creation validation', () => {
 
   it.each([
     { ...client, email: 'invalid' },
+    { ...client, phoneNumber: '22222222' },
+    { ...employee, phoneNumber: '+1 88888888' },
+    { ...employee, branchId: 0 },
     { ...employee, branchId: '1' },
     { ...employee, hireDate: undefined },
     { ...employee, hireDate: '2026-02-30' },
     { ...employee, hireDate: '0000-01-01' },
     { ...employee, address: { districtId: '7' } },
+    { ...employee, address: { districtId: 0 } },
     { ...client, role: 'UNKNOWN' },
   ])('rejects invalid input before persistence: %p', async (body) => {
     const response = await browser.post('/api/users').send(body).expect(400);

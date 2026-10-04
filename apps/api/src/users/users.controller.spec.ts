@@ -268,9 +268,17 @@ describe('UsersController (HTTP integration)', () => {
         CreateAddressDto,
       );
       expect(service.create).toHaveBeenCalledWith(
-        expect.objectContaining({ ...employee, role }),
+        expect.objectContaining({
+          ...employee,
+          role,
+          email: employee.email.toLowerCase(),
+        }),
       );
-      expect(response.body).toEqual({ id: 42, role, email: employee.email });
+      expect(response.body).toEqual({
+        id: 42,
+        role,
+        email: employee.email.toLowerCase(),
+      });
     },
   );
 

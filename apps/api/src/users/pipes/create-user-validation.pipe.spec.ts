@@ -140,11 +140,16 @@ describe('CreateUserValidationPipe', () => {
   );
 
   it.each(['EMPLOYEE', 'ADMINISTRATOR'])(
-    'creates a validated employee instance for %s without changing email casing',
+    'creates a validated employee instance for %s with normalized email and mobile',
     async (role) => {
       const result = await pipe.transform({ ...employee, role });
       expect(result).toBeInstanceOf(CreateEmployeeDto);
-      expect(result).toMatchObject({ ...employee, role });
+      expect(result).toMatchObject({
+        ...employee,
+        role,
+        email: employee.email.toLowerCase(),
+        phoneNumber: '88888888',
+      });
     },
   );
 

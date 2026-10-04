@@ -341,8 +341,8 @@ components:
         phoneNumber:
           type: string
           nullable: true
-          x-max-utf8-bytes: 20
-          description: Máximo 20 bytes UTF-8; permite cadena vacía.
+          pattern: '^(?:\+506[ -]?)?[678]\d{3}[ -]?\d{4}$'
+          description: Celular de Costa Rica. Admite prefijo +506 y separador entre grupos de cuatro dígitos; se normaliza a ocho dígitos. Opcional, admite null.
         address:
           description: |
             Dirección nueva opcional. Si se omite o es null, no se crea una
@@ -402,9 +402,8 @@ components:
           description: Fecha real con formato YYYY-MM-DD, sin hora ni zona horaria.
         phoneNumber:
           type: string
-          pattern: '\S'
-          x-max-utf8-bytes: 20
-          description: Máximo 20 bytes UTF-8; no admite vacío ni solo espacios.
+          pattern: '^(?:\+506[ -]?)?[678]\d{3}[ -]?\d{4}$'
+          description: Celular de Costa Rica obligatorio; admite prefijo +506 y separador entre grupos de cuatro dígitos. Se normaliza a ocho dígitos.
         hireDate:
           type: string
           format: date
@@ -416,7 +415,7 @@ components:
           $ref: "#/components/schemas/CreateAddress"
         branchId:
           type: integer
-          minimum: -9007199254740991
+          minimum: 1
           maximum: 9007199254740991
           description: Referencia obligatoria a una sucursal existente en CINEMAS.BRANCH_ID.
     CreateAddress:
@@ -430,7 +429,7 @@ components:
       properties:
         districtId:
           type: integer
-          minimum: -9007199254740991
+          minimum: 1
           maximum: 9007199254740991
           description: Referencia obligatoria a DISTRICTS.ID_DISTRICT.
         details:
@@ -444,17 +443,17 @@ components:
       type: string
       format: email
       x-max-utf8-bytes: 150
-      description: Correo válido, máximo 150 bytes UTF-8.
+      description: Correo válido, máximo 150 bytes UTF-8. Se eliminan espacios externos y se normaliza a minúsculas.
     RequiredName:
       type: string
       pattern: '\S'
       x-max-utf8-bytes: 100
-      description: Máximo 100 bytes UTF-8; no admite vacío ni solo espacios.
+      description: Máximo 100 bytes UTF-8 después de eliminar espacios externos; no admite vacío ni solo espacios.
     OptionalName:
       type: string
       nullable: true
       x-max-utf8-bytes: 100
-      description: Máximo 100 bytes UTF-8; permite null y cadena vacía.
+      description: Máximo 100 bytes UTF-8 después de eliminar espacios externos; permite null. Una cadena vacía se normaliza a null.
     CreatedUser:
       type: object
       additionalProperties: false
