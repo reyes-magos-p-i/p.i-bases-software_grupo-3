@@ -40,6 +40,7 @@ export interface CreateEmployeeRequest extends CreateUserBase {
   firstSurname: string
   secondSurname: string
   birthday: string
+  hireDate: string
   phoneNumber: string
   address: CreateAddressRequest
   branchId: number
@@ -57,4 +58,37 @@ export interface UserApiError {
   statusCode: number
   message: string | string[]
   error?: string
+}
+
+export interface ListedClient {
+  id: number
+  name: string
+  email: string
+  phoneNumber: string | null
+  createdAt: string | null
+}
+
+export interface ListedEmployee extends ListedClient {
+  role: 'EMPLOYEE' | 'ADMINISTRATOR'
+  branchId: number
+  branchName: string
+  hireDate: string | null
+}
+
+export interface UserListQuery {
+  search?: string
+  page: number
+  pageSize: number
+  sortBy: string
+  sortDirection: 'asc' | 'desc'
+  role?: ('EMPLOYEE' | 'ADMINISTRATOR')[]
+  branchId?: number[]
+}
+
+export interface UserListResult {
+  items: (ListedClient | ListedEmployee)[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
 }
