@@ -20,6 +20,7 @@ describe('UsersService', () => {
   let module: TestingModule;
   let service: UsersService;
   const repository = {
+    deactivateEmployee: jest.fn(),
     updateEmployee: jest.fn(),
     findEmployeeDetailById: jest.fn(),
     listEmployees: jest.fn(),
@@ -28,6 +29,7 @@ describe('UsersService', () => {
     createEmployee: jest.fn(),
   };
   const clientsRepository = {
+    deactivateClient: jest.fn(),
     updateClient: jest.fn(),
     findClientDetailById: jest.fn(),
     listClients: jest.fn(),
@@ -96,6 +98,24 @@ describe('UsersService', () => {
     await module.close();
   });
 
+  it('delegates client deactivation without generating or sending credentials', async () => {
+    await service.deactivateClient(42);
+    expect(clientsRepository.deactivateClient).toHaveBeenCalledWith(42);
+    expect(generator.generate).not.toHaveBeenCalled();
+    expect(sender.send).not.toHaveBeenCalled();
+  });
+  it('delegates staff deactivation with the authenticated actor', async () => {
+    await service.deactivateEmployee(42, 21);
+    expect(repository.deactivateEmployee).toHaveBeenCalledWith(42, 21);
+  });
+  it('preserves the repository conflict instead of reporting success', async () => {
+    repository.deactivateEmployee.mockRejectedValue(
+      new ConflictException('protected'),
+    );
+    await expect(service.deactivateEmployee(42, 21)).rejects.toThrow(
+      ConflictException,
+    );
+  });
   it('returns only address catalogs for staff editing', async () => {
     const catalogs = {
       provinces: [{ id: 1 }],
