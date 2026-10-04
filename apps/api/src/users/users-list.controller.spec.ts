@@ -1,4 +1,9 @@
-import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import {
+  NotFoundException,
+  ValidationPipe,
+  type INestApplication,
+} from '@nestjs/common';
+import { ClientsService } from '../clients/clients.service';
 import { Test } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -19,11 +24,14 @@ describe('User list HTTP permissions and validation', () => {
   let app: INestApplication<App>;
   let jwt: JwtService;
   const service = {
+    getClientDetail: jest.fn(),
+    getEmployeeDetail: jest.fn(),
     listClients: jest.fn(),
     listEmployees: jest.fn(),
     getEmployeeListOptions: jest.fn(),
   };
   const repository = { findEmployeeIdentityById: jest.fn() };
+  const clients = { findById: jest.fn() };
   const empty = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
   const get = (path: string) =>
     request(app.getHttpServer())
@@ -51,6 +59,8 @@ describe('User list HTTP permissions and validation', () => {
       .useValue({})
       .overrideProvider(UsersRepository)
       .useValue(repository)
+      .overrideProvider(ClientsService)
+      .useValue(clients)
       .compile();
     jwt = module.get(JwtService);
     app = module.createNestApplication({ logger: false });
@@ -73,9 +83,80 @@ describe('User list HTTP permissions and validation', () => {
     service.listClients.mockResolvedValue(empty);
     service.listEmployees.mockResolvedValue(empty);
     service.getEmployeeListOptions.mockResolvedValue({ branches: [] });
+    service.getClientDetail.mockResolvedValue({
+      id: 42,
+      role: 'CLIENT',
+      firstName: 'Ana',
+    });
+    service.getEmployeeDetail.mockResolvedValue({
+      id: 42,
+      role: 'EMPLOYEE',
+      firstName: 'José',
+    });
+    clients.findById.mockResolvedValue({ id: 99, firstName: 'Cliente' });
   });
   afterAll(async () => {
     await app.close();
+  });
+  it.each(['EMPLOYEE', 'ADMINISTRATOR'])(
+    'allows %s to view the selected client',
+    async (role) => {
+      repository.findEmployeeIdentityById.mockResolvedValue({ id: 21, role });
+      await get('/users/clients/42').expect(200, {
+        id: 42,
+        role: 'CLIENT',
+        firstName: 'Ana',
+      });
+      expect(service.getClientDetail).toHaveBeenCalledWith(42);
+      expect(service.getEmployeeDetail).not.toHaveBeenCalled();
+    },
+  );
+  it('allows administrators to view staff but rejects employees', async () => {
+    await get('/users/employees/42').expect(200);
+    expect(service.getEmployeeDetail).toHaveBeenCalledWith(42);
+    service.getEmployeeDetail.mockClear();
+    repository.findEmployeeIdentityById.mockResolvedValue({
+      id: 21,
+      role: 'EMPLOYEE',
+    });
+    await get('/users/employees/42').expect(403);
+    expect(service.getEmployeeDetail).not.toHaveBeenCalled();
+  });
+  it.each(['/users/clients', '/users/clients/42', '/users/employees/42'])(
+    'rejects client bearer tokens on %s',
+    async (path) => {
+      await request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${jwt.sign({ sub: 99, type: 'client' })}`)
+        .expect(403);
+      expect(service.getClientDetail).not.toHaveBeenCalled();
+      expect(service.getEmployeeDetail).not.toHaveBeenCalled();
+      expect(service.listClients).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['0', '-1', '1.5', '1e2', 'CL42', '9007199254740992'])(
+    'rejects invalid detail IDs before querying: %s',
+    async (id) => {
+      await get('/users/clients/' + id).expect(400);
+      expect(service.getClientDetail).not.toHaveBeenCalled();
+    },
+  );
+  it('reports users deleted after selection with 404', async () => {
+    service.getClientDetail.mockRejectedValue(
+      new NotFoundException('El usuario seleccionado no existe.'),
+    );
+    const response = await get('/users/clients/42').expect(404);
+    expect(response.body.message).toBe('El usuario seleccionado no existe.');
+  });
+  it('keeps infrastructure errors private on detail endpoints', async () => {
+    service.getEmployeeDetail.mockRejectedValue(
+      new Error('Private Oracle query'),
+    );
+    const response = await get('/users/employees/42').expect(500);
+    expect(response.body).toEqual({
+      statusCode: 500,
+      message: 'Internal server error',
+    });
   });
   it.each(['/users/clients', '/users/employees', '/users/employees/options'])(
     'requires a verified session for %s',

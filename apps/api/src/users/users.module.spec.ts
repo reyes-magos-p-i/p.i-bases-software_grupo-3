@@ -161,6 +161,18 @@ describe('UsersModule (application HTTP integration)', () => {
   });
 
   describe('GET /users/creation-options', () => {
+    it('mounts detail routes with actual repositories and reports missing users', async () => {
+      for (const section of ['clients', 'employees']) {
+        connection.execute
+          .mockResolvedValueOnce({
+            rows: [
+              { EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' },
+            ],
+          })
+          .mockResolvedValueOnce({ rows: [] });
+        await browser.get(`/users/${section}/42`).expect(404);
+      }
+    });
     it('mounts client and employee listing routes with the actual repositories', async () => {
       connection.execute
         .mockResolvedValueOnce({
