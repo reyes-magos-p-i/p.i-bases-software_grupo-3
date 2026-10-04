@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import { getEmployeeListOptions, getUsers } from '@/services/user.service'
@@ -8,6 +8,7 @@ import type { BranchOption, UserListQuery, UserListResult, UserRole } from '@/ty
 const props = defineProps<{ section: 'clients' | 'employees'; role: UserRole }>()
 const emit = defineEmits<{ 'session-expired': []; forbidden: [] }>()
 const id = useId()
+const filterContainer = ref<HTMLElement | null>(null)
 const searchDraft = ref('')
 const appliedSearch = ref('')
 const validationError = ref('')
@@ -25,6 +26,24 @@ const optionsLoading = ref(false)
 let listRequest: AbortController | undefined
 let optionsRequest: AbortController | undefined
 let disposed = false
+function closeFilters(event: PointerEvent | KeyboardEvent) {
+  if ('key' in event && event.key !== 'Escape') return
+  const container = filterContainer.value
+  if (!container) return
+  for (const picker of container.querySelectorAll<HTMLDetailsElement>('details[open]')) {
+    if (
+      event.type === 'pointerdown' &&
+      event.target instanceof Node &&
+      picker.contains(event.target)
+    )
+      continue
+    picker.open = false
+  }
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', closeFilters)
+  document.addEventListener('keydown', closeFilters)
+})
 const isEmployeeList = computed(() => props.section === 'employees')
 const canRead = computed(
   () => props.role === 'ADMINISTRATOR' || (props.role === 'EMPLOYEE' && !isEmployeeList.value),
@@ -208,6 +227,8 @@ watch(
   { immediate: true },
 )
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeFilters)
+  document.removeEventListener('keydown', closeFilters)
   disposed = true
   listRequest?.abort()
   optionsRequest?.abort()
@@ -241,7 +262,7 @@ defineExpose({ refresh })
     <p v-if="validationError" :id="id + '-validation'" class="feedback error" role="alert">
       {{ validationError }}
     </p>
-    <div class="filters">
+    <div ref="filterContainer" class="filters">
       <details v-if="isEmployeeList" class="filter-picker">
         <summary>
           Rol
@@ -345,15 +366,21 @@ defineExpose({ refresh })
         >
           <template #actions>
             <div class="user-actions">
-              <button type="button" disabled title="Ver (próximamente)">
-                <i class="bi bi-eye" aria-hidden="true"></i>Ver
-              </button>
-              <button type="button" disabled title="Modificar (próximamente)">
-                <i class="bi bi-pencil-square" aria-hidden="true"></i>Modificar
-              </button>
-              <button type="button" disabled title="Desactivar (próximamente)">
-                <i class="bi bi-person-slash" aria-hidden="true"></i>Desactivar
-              </button>
+              <span title="Ver" class="action-hint">
+                <button type="button" disabled aria-label="Ver">
+                  <i class="bi bi-eye" aria-hidden="true"></i>
+                </button>
+              </span>
+              <span title="Modificar" class="action-hint">
+                <button type="button" disabled aria-label="Modificar">
+                  <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                </button>
+              </span>
+              <span title="Desactivar" class="action-hint">
+                <button type="button" disabled aria-label="Desactivar">
+                  <i class="bi bi-person-slash" aria-hidden="true"></i>
+                </button>
+              </span>
             </div>
           </template>
         </CrudTable>
@@ -455,6 +482,13 @@ input[aria-invalid='true'] {
   flex: 1;
   min-width: 150px;
 }
+.filters select,
+.filter-picker summary {
+  box-sizing: border-box;
+  height: 44px;
+  line-height: 20px;
+  padding: 11px 12px;
+}
 .filter-picker {
   position: relative;
   flex: 1;
@@ -462,7 +496,6 @@ input[aria-invalid='true'] {
   align-self: end;
 }
 .filter-picker summary {
-  padding: 12px;
   min-height: 44px;
   border: 1px solid #bdb8b8;
   border-radius: var(--radius-small);
@@ -496,6 +529,24 @@ input[aria-invalid='true'] {
   background: var(--color-white);
   box-shadow: 0 4px 12px #00000014;
 }
+.filter-picker[open] .checkbox-options {
+  animation: filter-open 160ms ease-out;
+}
+@keyframes filter-open {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .filter-picker[open] .checkbox-options {
+    animation: none;
+  }
+}
 .checkbox-options label {
   display: flex;
   align-items: center;
@@ -527,6 +578,23 @@ input[aria-invalid='true'] {
   gap: 6px;
   padding: 8px;
   text-decoration: none;
+  justify-content: center;
+  width: 36px;
+  min-height: 36px;
+  pointer-events: none;
+  background: transparent;
+  border: 0;
+  color: var(--color-primary);
+  font-size: 1.125rem;
+}
+.action-hint {
+  display: inline-flex;
+}
+:deep(.crud-table th:first-child),
+:deep(.crud-table td:first-child) {
+  min-width: 100px;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 button {
   padding: 10px 16px;

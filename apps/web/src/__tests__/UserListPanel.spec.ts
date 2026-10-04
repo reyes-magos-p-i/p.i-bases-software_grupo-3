@@ -63,16 +63,20 @@ describe('UserListPanel', () => {
     expect(view.find('input[name="role"]').exists()).toBe(false)
     expect(view.get('tbody td').text()).toBe('CL42')
     expect(view.findAll('th').slice(-1)[0]?.text()).toBe('Acciones')
-    expect(view.findAll('.actions button').map((button) => button.text())).toEqual([
+    expect(
+      view.findAll('.actions button').map((button) => button.attributes('aria-label')),
+    ).toEqual(['Ver', 'Modificar', 'Desactivar'])
+    for (const button of view.findAll('.actions button')) {
+      expect(button.attributes('disabled')).toBeDefined()
+      expect(button.find('i.bi').exists()).toBe(true)
+      expect(button.text()).toBe('')
+      await button.trigger('click')
+    }
+    expect(view.findAll('.action-hint').map((hint) => hint.attributes('title'))).toEqual([
       'Ver',
       'Modificar',
       'Desactivar',
     ])
-    for (const button of view.findAll('.actions button')) {
-      expect(button.attributes('disabled')).toBeDefined()
-      expect(button.find('i.bi').exists()).toBe(true)
-      await button.trigger('click')
-    }
     expect(view.getComponent({ name: 'CrudTable' }).emitted()).toEqual({})
     expect(view.find('select[name="pageSize"]').exists()).toBe(false)
     expect(view.get('nav').text()).toBe('Página 1 de 3')
@@ -83,6 +87,43 @@ describe('UserListPanel', () => {
       { page: 1, pageSize: 10, sortBy: 'id', sortDirection: 'asc' },
       expect.any(AbortSignal),
     )
+  })
+  it('closes filters on outside pointer interactions while preserving checkbox selections', async () => {
+    const view = await render('employees')
+    document.body.appendChild(view.element)
+    const picker = view.findAll<HTMLDetailsElement>('details')[0]!
+    picker.element.open = true
+    await view.get('input[name="role"][value="EMPLOYEE"]').setValue(true)
+    await flushPromises()
+    view
+      .get('input[name="role"][value="EMPLOYEE"]')
+      .element.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(picker.element.open).toBe(true)
+    document.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(picker.element.open).toBe(false)
+    expect(view.get<HTMLInputElement>('input[name="role"][value="EMPLOYEE"]').element.checked).toBe(
+      true,
+    )
+    picker.element.open = true
+    await view.get('select[name="sortBy"]').trigger('pointerdown')
+    expect(picker.element.open).toBe(false)
+  })
+  it('closes open filters with Escape and removes document listeners when unmounted', async () => {
+    const view = await render('employees')
+    const pickers = view.findAll<HTMLDetailsElement>('details')
+    pickers.forEach((picker) => {
+      picker.element.open = true
+    })
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' }))
+    expect(pickers.every((picker) => picker.element.open)).toBe(true)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(pickers.every((picker) => !picker.element.open)).toBe(true)
+    const remove = vi.spyOn(document, 'removeEventListener')
+    view.unmount()
+    wrapper = undefined
+    expect(remove).toHaveBeenCalledWith('pointerdown', expect.any(Function))
+    expect(remove).toHaveBeenCalledWith('keydown', expect.any(Function))
+    remove.mockRestore()
   })
   it('searches full names and surnames with normalized whitespace', async () => {
     const view = await render()

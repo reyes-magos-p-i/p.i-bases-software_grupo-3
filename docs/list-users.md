@@ -99,6 +99,8 @@ y siguiente, etiquetadas para lectores de pantalla. Con cero resultados muestra
 
 Los filtros de roles y sucursales usan checkboxes dentro de desplegables; las listas
 largas tienen desplazamiento vertical. Se pueden seleccionar varias opciones.
+Los selectores comparten la misma altura. Los desplegables se cierran al tocar fuera
+o pulsar Escape y animan su apertura, respetando la preferencia de movimiento reducido.
 Ninguna selección significa incluir todas. Dentro de cada filtro se acepta cualquiera
 de los valores elegidos; búsqueda, roles y sucursales se combinan conjuntamente.
 Cambiar o limpiar filtros vuelve a la primera página. El ordenamiento sigue siendo
@@ -119,7 +121,9 @@ La contratación se devuelve como `YYYY-MM-DD`, sin conversión de zona horaria.
 
 `CrudTable` conserva sus eventos `edit`, `view` y `delete` y sus acciones por defecto.
 Un slot permite personalizar las acciones. En ambas listas, «Acciones» es la última
-columna y muestra Ver, Modificar y Desactivar con íconos de Bootstrap. Los tres
+columna y muestra solo los íconos de Ver, Modificar y Desactivar de Bootstrap,
+con etiquetas accesibles y tooltips nativos al mantener el cursor encima. El navegador
+controla el retardo de estos mensajes. Los IDs se mantienen en una sola línea. Los tres
 botones están desactivados; sus operaciones quedan para futuras historias.
 Los filtros y la paginación están fuera de la tabla.
 
