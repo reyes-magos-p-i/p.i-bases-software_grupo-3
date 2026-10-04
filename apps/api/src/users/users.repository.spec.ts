@@ -60,6 +60,94 @@ describe('UsersRepository', () => {
     await module.close();
   });
 
+  describe('findEmployeeDetailById', () => {
+    const row = {
+      ID: 42,
+      FIRST_NAME: 'Ana',
+      SECOND_NAME: null,
+      FIRST_SURNAME: 'Núñez',
+      SECOND_SURNAME: 'Solano',
+      BIRTHDAY: '2000-02-29',
+      PHONE_NUMBER: '88888888',
+      EMAIL: 'ana@example.com',
+      ROLE: 'ADMINISTRATOR',
+      BRANCH_ID: 5,
+      BRANCH_NAME: 'Centro',
+      CREATED_AT: null,
+      HIRE_DATE: null,
+      ADDRESS_ID: 7,
+      ADDRESS_DETAILS: null,
+      DISTRICT_ID: 3,
+      DISTRICT_NAME: 'Carmen',
+      CANTON_ID: 2,
+      CANTON_NAME: 'San José',
+      PROVINCE_ID: 1,
+      PROVINCE_NAME: 'San José',
+      PASSWORD_HASH: 'private',
+      SALT: 'private',
+    };
+    it('returns staff data, branch and address without credentials', async () => {
+      connection.execute.mockResolvedValue({ rows: [row] });
+      expect(await repository.findEmployeeDetailById(42)).toEqual({
+        id: 42,
+        role: 'ADMINISTRATOR',
+        firstName: 'Ana',
+        secondName: null,
+        firstSurname: 'Núñez',
+        secondSurname: 'Solano',
+        birthday: '2000-02-29',
+        phoneNumber: '88888888',
+        email: 'ana@example.com',
+        branchId: 5,
+        branchName: 'Centro',
+        createdAt: null,
+        hireDate: null,
+        address: {
+          id: 7,
+          details: null,
+          districtId: 3,
+          districtName: 'Carmen',
+          cantonId: 2,
+          cantonName: 'San José',
+          provinceId: 1,
+          provinceName: 'San José',
+        },
+      });
+      const [sql, binds] = connection.execute.mock.calls[0] as [
+        string,
+        oracle.BindParameters,
+      ];
+      expect(sql).toContain('WHERE e.EMPLOYEE_ID = :id');
+      expect(sql).toContain("TO_CHAR(e.HIRE_DATE, 'YYYY-MM-DD')");
+      expect(sql).toContain('JOIN CINEMAS');
+      expect(sql).not.toMatch(/PASSWORD|CREDENTIALS|SALT/u);
+      expect(binds).toEqual({ id: { val: 42, type: oracle.NUMBER } });
+    });
+    it('handles an absent address without hiding an existing employee', async () => {
+      connection.execute.mockResolvedValue({
+        rows: [{ ...row, ADDRESS_ID: null, ROLE: 'EMPLOYEE' }],
+      });
+      expect(await repository.findEmployeeDetailById(42)).toMatchObject({
+        address: null,
+        role: 'EMPLOYEE',
+      });
+    });
+    it.each([{ rows: [] }, {}])(
+      'returns null for missing staff: %p',
+      async (result) => {
+        connection.execute.mockResolvedValue(result);
+        expect(await repository.findEmployeeDetailById(42)).toBeNull();
+      },
+    );
+    it('propagates read failures and releases the connection', async () => {
+      connection.execute.mockRejectedValue(new Error('Unavailable'));
+      await expect(repository.findEmployeeDetailById(42)).rejects.toThrow(
+        'Unavailable',
+      );
+      expect(connection.close).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('listEmployees', () => {
     it('combines bound filters, escapes wildcards and returns a complete paginated profile', async () => {
       connection.execute

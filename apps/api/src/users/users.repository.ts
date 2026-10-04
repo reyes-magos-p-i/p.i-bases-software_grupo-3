@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import oracle from 'oracledb';
 import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
+import type { EmployeeDetailDto } from './dto/user-detail.dto';
 import { DatabaseService } from '../database/database.service';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import type { CreateAddressDto } from './dto/create-address.dto';
@@ -16,6 +17,80 @@ import type {
 @Injectable()
 export class UsersRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  async findEmployeeDetailById(id: number): Promise<EmployeeDetailDto | null> {
+    const result = await this.db.query<{
+      ID: number;
+      FIRST_NAME: string;
+      SECOND_NAME: string | null;
+      FIRST_SURNAME: string;
+      SECOND_SURNAME: string;
+      BIRTHDAY: string;
+      PHONE_NUMBER: string;
+      EMAIL: string;
+      ROLE: UserRole.EMPLOYEE | UserRole.ADMINISTRATOR;
+      BRANCH_ID: number;
+      BRANCH_NAME: string;
+      CREATED_AT: string | null;
+      HIRE_DATE: string | null;
+      ADDRESS_ID: number | null;
+      ADDRESS_DETAILS: string | null;
+      DISTRICT_ID: number;
+      DISTRICT_NAME: string;
+      CANTON_ID: number;
+      CANTON_NAME: string;
+      PROVINCE_ID: number;
+      PROVINCE_NAME: string;
+    }>(
+      `SELECT e.EMPLOYEE_ID AS ID, e.FIRST_NAME, e.SECOND_NAME, e.FIRST_SURNAME, e.SECOND_SURNAME,
+              TO_CHAR(e.BIRTHDAY, 'YYYY-MM-DD') AS BIRTHDAY, e.PHONE_NUMBER, e.EMAIL,
+              e.ROLE, e.BRANCH_ID, b.NAME AS BRANCH_NAME,
+              TO_CHAR(e.HIRE_DATE, 'YYYY-MM-DD') AS HIRE_DATE,
+              TO_CHAR(e.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS CREATED_AT,
+              a.ID_ADDRESS AS ADDRESS_ID, a.DETAILS AS ADDRESS_DETAILS,
+              d.ID_DISTRICT AS DISTRICT_ID, d.NAME AS DISTRICT_NAME,
+              k.ID_CANTON AS CANTON_ID, k.NAME AS CANTON_NAME,
+              p.ID_PROVINCE AS PROVINCE_ID, p.NAME AS PROVINCE_NAME
+       FROM EMPLOYEES e
+       JOIN CINEMAS b ON b.BRANCH_ID = e.BRANCH_ID
+       LEFT JOIN ADDRESSES a ON a.ID_ADDRESS = e.ID_ADDRESS
+       LEFT JOIN DISTRICTS d ON d.ID_DISTRICT = a.ID_DISTRICT
+       LEFT JOIN CANTONS k ON k.ID_CANTON = d.ID_CANTON
+       LEFT JOIN PROVINCES p ON p.ID_PROVINCE = k.ID_PROVINCE
+       WHERE e.EMPLOYEE_ID = :id`,
+      { id: { val: id, type: oracle.NUMBER } },
+    );
+    const row = result.rows?.[0];
+    if (!row) return null;
+    return {
+      id: row.ID,
+      role: row.ROLE,
+      firstName: row.FIRST_NAME,
+      secondName: row.SECOND_NAME,
+      firstSurname: row.FIRST_SURNAME,
+      secondSurname: row.SECOND_SURNAME,
+      birthday: row.BIRTHDAY,
+      phoneNumber: row.PHONE_NUMBER,
+      email: row.EMAIL,
+      createdAt: row.CREATED_AT,
+      branchId: row.BRANCH_ID,
+      branchName: row.BRANCH_NAME,
+      hireDate: row.HIRE_DATE,
+      address:
+        row.ADDRESS_ID === null
+          ? null
+          : {
+              id: row.ADDRESS_ID,
+              provinceId: row.PROVINCE_ID,
+              provinceName: row.PROVINCE_NAME,
+              cantonId: row.CANTON_ID,
+              cantonName: row.CANTON_NAME,
+              districtId: row.DISTRICT_ID,
+              districtName: row.DISTRICT_NAME,
+              details: row.ADDRESS_DETAILS,
+            },
+    };
+  }
 
   async getEmployeeListOptions(): Promise<EmployeeListOptionsDto> {
     const result = await this.db.query<{ BRANCH_ID: number; NAME: string }>(
