@@ -136,3 +136,29 @@ export interface UserDetailSelection {
   section: 'clients' | 'employees'
   id: number
 }
+
+export interface UpdateClientRequest {
+  firstName?: string
+  secondName?: string | null
+  firstSurname?: string | null
+  secondSurname?: string | null
+  email?: string
+  phoneNumber?: string | null
+  address?: CreateAddressRequest | null
+}
+
+export interface UpdateEmployeeRequest {
+  branchId?: number
+  firstName?: string
+  secondName?: string | null
+  firstSurname?: string
+  secondSurname?: string
+  email?: string
+  phoneNumber?: string
+  address?: CreateAddressRequest
+  role?: 'EMPLOYEE' | 'ADMINISTRATOR'
+}
+
+export type UpdateUserRequest = UpdateClientRequest | UpdateEmployeeRequest
+export type UpdatedUser = CreatedUser
+export type UserEditOptions = Omit<UserCreationOptions, 'branches'>

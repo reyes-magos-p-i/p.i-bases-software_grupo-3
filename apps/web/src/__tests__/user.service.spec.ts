@@ -6,10 +6,11 @@ import type {
   UserApiError,
 } from '@/types/user'
 
-const { create, post, get } = vi.hoisted(() => ({
+const { create, post, get, patch } = vi.hoisted(() => ({
   create: vi.fn(),
   post: vi.fn(),
   get: vi.fn(),
+  patch: vi.fn(),
 }))
 
 vi.mock('axios', () => ({ default: { create } }))
@@ -42,11 +43,55 @@ describe('createUser', () => {
       defaults: config,
       post,
       get,
+      patch,
     }))
   })
 
   afterEach(() => {
     vi.unstubAllEnvs()
+  })
+
+  it('loads address-only edit catalogs with cancellation and timeout', async () => {
+    const { getUserEditOptions } = await import('@/services/user.service')
+    const signal = new AbortController().signal
+    const catalogs = { provinces: [], cantons: [], districts: [] }
+    get.mockResolvedValue({ data: catalogs })
+    expect(await getUserEditOptions(signal)).toEqual(catalogs)
+    expect(get).toHaveBeenCalledWith('/users/edit-options', { signal, timeout: 10000 })
+  })
+
+  it.each(['clients', 'employees'] as const)(
+    'patches the selected %s user without immutable fields',
+    async (section) => {
+      const { updateUser } = await import('@/services/user.service')
+      const changes = {
+        email: 'new@example.com',
+        firstName: 'Alicia',
+        secondName: null,
+        ...(section === 'employees' ? { branchId: 6 } : {}),
+      }
+      const result = {
+        id: 42,
+        role: section === 'clients' ? 'CLIENT' : 'EMPLOYEE',
+        email: changes.email,
+      }
+      patch.mockResolvedValue({ data: result })
+      expect(await updateUser({ section, id: 42 }, changes)).toEqual(result)
+      expect(patch).toHaveBeenCalledExactlyOnceWith(`/users/${section}/42`, changes, {
+        timeout: 10000,
+      })
+      expect(post).not.toHaveBeenCalled()
+    },
+  )
+
+  it('propagates failed writes without retrying', async () => {
+    const { updateUser } = await import('@/services/user.service')
+    const error = new Error('Connection lost')
+    patch.mockRejectedValue(error)
+    await expect(updateUser({ section: 'clients', id: 42 }, { phoneNumber: null })).rejects.toBe(
+      error,
+    )
+    expect(patch).toHaveBeenCalledTimes(1)
   })
 
   it.each([client, employee, { ...employee, role: 'ADMINISTRATOR' as const }])(
