@@ -81,6 +81,96 @@ describe('registerUser', () => {
   })
 })
 
+describe('email verification API', () => {
+  const client = {
+    id: 7,
+    email: 'ana@example.com',
+    firstName: 'Ana',
+    lastName: 'Perez',
+  }
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.resetAllMocks()
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    localStorage.clear()
+    create.mockImplementation((defaults) => ({ defaults, post, get }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    localStorage.clear()
+  })
+
+  it('reports the specific registration email-delivery failure', async () => {
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { data: { code: 'EMAIL_DELIVERY_FAILED' } },
+    })
+    const { EmailDeliveryError, registerUser } = await import('@/services/authService')
+
+    await expect(
+      registerUser({
+        email: client.email,
+        firstName: 'Ana',
+        lastName: 'Perez',
+        phone: '12345678',
+        gender: 'F',
+        birthDate: '1990-01-01',
+        language: 'es',
+        password: 'Password123!',
+        acceptTerms: true,
+      }),
+    ).rejects.toBeInstanceOf(EmailDeliveryError)
+  })
+
+  it('resends a verification email and maps any request failure to a safe message', async () => {
+    const { resendEmailVerification } = await import('@/services/authService')
+    post.mockResolvedValueOnce({ status: 204 })
+    await expect(resendEmailVerification(client.email)).resolves.toBeUndefined()
+    expect(post).toHaveBeenNthCalledWith(1, '/auth/resend-email-verification', {
+      email: client.email,
+    })
+
+    post.mockRejectedValueOnce(new Error('private transport detail'))
+    await expect(resendEmailVerification(client.email)).rejects.toThrow(
+      'No se pudo reenviar el correo de confirmación. Inténtalo nuevamente.',
+    )
+    expect(post).toHaveBeenCalledTimes(2)
+  })
+
+  it('confirms email, establishes a client session and returns the identity', async () => {
+    post.mockResolvedValue({
+      data: { accessToken: 'verified-token', client },
+    })
+    const { confirmEmailVerification } = await import('@/services/authService')
+
+    await expect(confirmEmailVerification('one-time-token')).resolves.toEqual(client)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/auth/confirm-email', {
+      token: 'one-time-token',
+    })
+    expect(localStorage.getItem('accessToken')).toBe('verified-token')
+  })
+
+  it('distinguishes invalid verification links from other confirmation failures', async () => {
+    const { confirmEmailVerification, InvalidEmailVerificationError } =
+      await import('@/services/authService')
+    post.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { data: { code: 'EMAIL_VERIFICATION_INVALID' } },
+    })
+    await expect(confirmEmailVerification('expired-token')).rejects.toBeInstanceOf(
+      InvalidEmailVerificationError,
+    )
+
+    post.mockRejectedValueOnce(new Error('private transport detail'))
+    await expect(confirmEmailVerification('token')).rejects.toThrow(
+      'No se pudo confirmar el correo. Inténtalo nuevamente.',
+    )
+    expect(post).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('facebook authentication API', () => {
   beforeEach(() => {
     vi.resetModules()
