@@ -92,6 +92,7 @@ const draft = reactive<
   firstSurname: '',
   secondSurname: '',
   birthday: '',
+  hireDate: '',
   email: '',
   phoneNumber: '',
   role: 'EMPLOYEE',
@@ -151,6 +152,21 @@ const groups = computed<{ label: string; fields: TextFieldDefinition[] }[]>(() =
       },
     ],
   },
+  ...(!isClient.value
+    ? [
+        {
+          label: 'Datos laborales',
+          fields: [
+            {
+              name: 'hireDate' as const,
+              label: 'Fecha de contratación',
+              type: 'date' as const,
+              required: true,
+            },
+          ],
+        },
+      ]
+    : []),
 ])
 const textFields = computed<TextFieldDefinition[]>(() => [
   ...groups.value.flatMap((group) => group.fields),
@@ -255,6 +271,7 @@ function validateField(
         return 'Introduce un correo electrónico válido, por ejemplo: nombre@ejemplo.com.'
     }
     if (definition.type === 'date') {
+      if (field === 'hireDate' && value.startsWith('0000-')) return 'Introduce una fecha válida.'
       const date = new Date(value + 'T00:00:00Z')
       if (
         !/^\d{4}-\d{2}-\d{2}$/u.test(value) ||
@@ -359,6 +376,7 @@ async function submit() {
     firstSurname: draft.firstSurname,
     secondSurname: draft.secondSurname,
     birthday: draft.birthday,
+    hireDate: draft.hireDate,
     phoneNumber: draft.phoneNumber,
     branchId: draft.branchId,
     address,
@@ -374,6 +392,7 @@ function complete() {
     firstSurname: '',
     secondSurname: '',
     birthday: '',
+    hireDate: '',
     email: '',
     phoneNumber: '',
     role: 'EMPLOYEE',

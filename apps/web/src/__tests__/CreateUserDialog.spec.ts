@@ -252,6 +252,22 @@ describe('client form', () => {
 })
 
 describe('CreateUserDialog', () => {
+  it('requires a valid hire date for staff and omits it for clients', async () => {
+    const view = await renderDialog()
+    const field = view.get('[name="hireDate"]')
+    expect(field.attributes('required')).toBeDefined()
+    await field.setValue('2026-10-01')
+    await field.trigger('focusout')
+    expect(field.attributes('aria-invalid')).toBe('false')
+    await field.setValue('0000-01-01')
+    await field.trigger('focusout')
+    expect(field.attributes('aria-invalid')).toBe('true')
+    await field.setValue('')
+    await field.trigger('focusout')
+    expect(field.attributes('aria-invalid')).toBe('true')
+    await view.setProps({ mode: 'client' })
+    expect(view.find('[name="hireDate"]').exists()).toBe(false)
+  })
   it('opens a labelled modal and focuses the first field without opening twice', async () => {
     const view = await renderDialog()
     const dialog = view.get<HTMLDialogElement>('dialog')
@@ -342,6 +358,7 @@ describe('CreateUserDialog', () => {
       'firstSurname',
       'secondSurname',
       'birthday',
+      'hireDate',
       'email',
       'phoneNumber',
       'role',
@@ -351,7 +368,7 @@ describe('CreateUserDialog', () => {
       'branchId',
     ]
 
-    expect(view.findAll('input, select, textarea')).toHaveLength(13)
+    expect(view.findAll('input, select, textarea')).toHaveLength(14)
     for (const name of required) {
       const field = view.get('[name="' + name + '"]')
       expect(field.attributes('required')).toBeDefined()
@@ -534,6 +551,7 @@ describe('CreateUserDialog', () => {
       secondSurname: 'Rojas',
       email: 'ana@example.com',
       birthday: '2000-02-29',
+      hireDate: '2026-10-01',
       phoneNumber: '88888888',
       role: 'ADMINISTRATOR',
       branchId: '1',
@@ -555,6 +573,7 @@ describe('CreateUserDialog', () => {
           secondSurname: 'Rojas',
           email: 'ana@example.com',
           birthday: '2000-02-29',
+          hireDate: '2026-10-01',
           phoneNumber: '88888888',
           role: 'ADMINISTRATOR',
           branchId: 1,
