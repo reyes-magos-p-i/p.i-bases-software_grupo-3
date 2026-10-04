@@ -27,6 +27,7 @@ describe('createUser', () => {
     secondName: null,
     firstSurname: 'Núñez',
     secondSurname: 'Solano',
+    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '+506 8888-8888',
     address: { districtId: 7, details: 'Casa azul' },
@@ -156,6 +157,77 @@ describe('createUser', () => {
   })
 
   describe('getUserCreationOptions', () => {
+    it('serializes selected roles and branches as comma-separated query values', async () => {
+      const { getUsers } = await import('@/services/user.service')
+      get.mockResolvedValue({ data: { items: [], total: 0 } })
+      await getUsers('employees', {
+        page: 1,
+        pageSize: 10,
+        sortBy: 'id',
+        sortDirection: 'asc',
+        role: ['EMPLOYEE', 'ADMINISTRATOR'],
+        branchId: [3, 5],
+      })
+      expect(get).toHaveBeenCalledWith(
+        '/users/employees',
+        expect.objectContaining({
+          params: {
+            page: 1,
+            pageSize: 10,
+            sortBy: 'id',
+            sortDirection: 'asc',
+            role: 'EMPLOYEE,ADMINISTRATOR',
+            branchId: '3,5',
+          },
+        }),
+      )
+    })
+    it('omits empty filter arrays instead of sending invalid empty values', async () => {
+      const { getUsers } = await import('@/services/user.service')
+      get.mockResolvedValue({ data: { items: [], total: 0 } })
+      await getUsers('employees', {
+        page: 1,
+        pageSize: 10,
+        sortBy: 'id',
+        sortDirection: 'asc',
+        role: [],
+        branchId: [],
+      })
+      expect(get.mock.calls[0]?.[1].params).toMatchObject({ role: undefined, branchId: undefined })
+    })
+    it.each(['clients', 'employees'] as const)(
+      'requests the %s page with filters, timeout and cancellation',
+      async (section) => {
+        const { getUsers } = await import('@/services/user.service')
+        const query = {
+          page: 2,
+          pageSize: 25,
+          search: 'Ana Núñez',
+          sortBy: 'name',
+          sortDirection: 'asc' as const,
+        }
+        const signal = new AbortController().signal
+        const data = { items: [], total: 0, page: 1, pageSize: 25, totalPages: 0 }
+        get.mockResolvedValue({ data })
+        expect(await getUsers(section, query, signal)).toEqual(data)
+        expect(get).toHaveBeenCalledExactlyOnceWith('/users/' + section, {
+          params: query,
+          signal,
+          timeout: 10000,
+        })
+      },
+    )
+    it('loads only the branch options needed by employee filtering', async () => {
+      const { getEmployeeListOptions } = await import('@/services/user.service')
+      const data = { branches: [{ id: 3, label: 'Centro' }] }
+      const signal = new AbortController().signal
+      get.mockResolvedValue({ data })
+      expect(await getEmployeeListOptions(signal)).toEqual(data)
+      expect(get).toHaveBeenCalledExactlyOnceWith('/users/employees/options', {
+        signal,
+        timeout: 10000,
+      })
+    })
     it('loads catalog data through the same Axios instance with a timeout and signal', async () => {
       vi.stubEnv('VITE_API_BASE_URL', '/api')
       const { getUserCreationOptions } = await import('@/services/user.service')
