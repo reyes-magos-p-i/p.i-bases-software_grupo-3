@@ -74,6 +74,26 @@ describe('JwtStrategy', () => {
     },
   );
 
+  it.each(['client', 'employee'] as const)(
+    'revokes an existing %s token on the next request',
+    async (type) => {
+      const lookup =
+        type === 'client' ? clients.findById : users.findEmployeeIdentityById;
+      lookup
+        .mockResolvedValueOnce({
+          id: 21,
+          role: UserRole.EMPLOYEE,
+          firstName: 'Ana',
+        })
+        .mockResolvedValueOnce(null);
+      const payload = { sub: 21, type };
+      await expect(strategy.validate(request, payload)).resolves.toBeDefined();
+      await expect(strategy.validate(request, payload)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(lookup).toHaveBeenCalledTimes(2);
+    },
+  );
   it('rejects when the client no longer exists', async () => {
     clients.findById.mockResolvedValue(null);
 

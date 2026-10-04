@@ -17,6 +17,7 @@ jest.mock('google-auth-library', () => ({
   OAuth2Client: jest.fn(),
 }));
 
+import { OAuth2Client } from 'google-auth-library';
 import { UsersRepository } from '../users/users.repository';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { EmployeeWithLocalCredentials } from '../users/types/employee-with-local-credentials.type';
@@ -256,6 +257,39 @@ describe('AuthService', () => {
     });
   });
 
+  it('does not issue a Google token for a deactivated social client', async () => {
+    const denied = new UnauthorizedException('blocked');
+    (OAuth2Client as unknown as jest.Mock).mockImplementation(() => ({
+      getToken: jest
+        .fn()
+        .mockResolvedValue({ tokens: { id_token: 'provider-token' } }),
+      verifyIdToken: jest.fn().mockResolvedValue({
+        getPayload: () => ({ sub: 'google-id', email: 'user@example.com' }),
+      }),
+    }));
+    clients.findOrCreateSocial.mockRejectedValue(denied);
+    const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(service.googleLogin('authorization-code')).rejects.toBe(
+        denied,
+      );
+      expect(jwt.sign).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it('keeps the email of a deactivated client reserved at registration', async () => {
+    clients.findByEmail.mockResolvedValue({
+      id: 42,
+      status: 'INACTIVE',
+      email: registerDto.email,
+    });
+    await expect(service.register(registerDto)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(hasher.hash).not.toHaveBeenCalled();
+    expect(clients.createWithLocalCredentials).not.toHaveBeenCalled();
+  });
   describe('issueToken', () => {
     it('signs a payload with type: client', () => {
       const result = service.issueToken({ id: 9, email: 'x@y.com' } as never);
