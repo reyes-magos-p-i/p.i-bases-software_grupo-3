@@ -492,8 +492,15 @@ describe('UsersRepository', () => {
           role1: binds.role1,
           branchId0: binds.branchId0,
           branchId1: binds.branchId1,
+          search: binds.search,
+          name0: binds.name0,
         }),
       );
+      for (const statement of [connection.execute.mock.calls[0][0], sql]) {
+        expect(statement).toContain("WHERE e.STATUS = 'ACTIVE' AND ((");
+        expect(statement).toContain(String.raw`LIKE :name0 ESCAPE '\'`);
+        expect(statement).toContain(String.raw`LIKE :search ESCAPE '\'`);
+      }
     });
     it('returns zero results without a page query', async () => {
       connection.execute.mockResolvedValue({ rows: [{ TOTAL: 0 }] });

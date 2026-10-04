@@ -360,6 +360,15 @@ describe('ClientsRepository', () => {
       expect(sql).toContain(String.raw`LIKE :search ESCAPE '\'`);
       expect(sql).toContain(String.raw`LIKE :name0 ESCAPE '\'`);
       expect(binds.offset.val).toBe(10);
+      expect(connection.execute.mock.calls[0][1]).toEqual({
+        search: binds.search,
+        name0: binds.name0,
+      });
+      for (const statement of [connection.execute.mock.calls[0][0], sql]) {
+        expect(statement).toContain("WHERE c.STATUS = 'ACTIVE' AND ((");
+        expect(statement).toContain(String.raw`LIKE :name0 ESCAPE '\'`);
+        expect(statement).toContain(String.raw`LIKE :search ESCAPE '\'`);
+      }
     });
     it.each([{ rows: [{ TOTAL: 0 }] }, {}])(
       'returns an empty successful result: %p',

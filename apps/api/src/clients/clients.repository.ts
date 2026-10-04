@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import oracle from 'oracledb';
+import { buildUserSearch } from '../users/user-search.util';
 import { DatabaseService } from '../database/database.service';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { ClientDetailDto } from '../users/dto/user-detail.dto';
@@ -191,18 +192,7 @@ export class ClientsRepository {
     const binds: oracle.BindParameters = {};
     let where = "WHERE c.STATUS = 'ACTIVE'";
     if (query.search) {
-      const terms = query.search.split(' ').map((term, index) => {
-        binds[`name${index}`] = {
-          val: `%${term.toLowerCase().replace(/[\\%_]/gu, String.raw`\$&`)}%`,
-          type: oracle.STRING,
-        };
-        return String.raw`LOWER(${name}) LIKE :name${index} ESCAPE '\'`;
-      });
-      binds.search = {
-        val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, String.raw`\$&`)}%`,
-        type: oracle.STRING,
-      };
-      where += String.raw` AND ((${terms.join(' AND ')}) OR LOWER(c.EMAIL) LIKE :search ESCAPE '\' OR c.PHONE_NUMBER LIKE :search ESCAPE '\' OR TO_CHAR(c.CLIENT_ID) LIKE :search ESCAPE '\')`;
+      where += ` AND ${buildUserSearch(query.search, 'clients', name, binds)}`;
     }
     const count = await this.db.query<{ TOTAL: number }>(
       `SELECT COUNT(*) AS TOTAL FROM CLIENTS c ${where}`,

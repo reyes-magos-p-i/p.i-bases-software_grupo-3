@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import oracle from 'oracledb';
+import { buildUserSearch } from './user-search.util';
 import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
 import type { EmployeeDetailDto } from './dto/user-detail.dto';
@@ -276,20 +277,7 @@ export class UsersRepository {
     const conditions: string[] = ["e.STATUS = 'ACTIVE'"];
     const binds: oracle.BindParameters = {};
     if (query.search) {
-      const terms = query.search.split(' ').map((term, index) => {
-        binds[`name${index}`] = {
-          val: `%${term.toLowerCase().replace(/[\\%_]/gu, String.raw`\$&`)}%`,
-          type: oracle.STRING,
-        };
-        return String.raw`LOWER(${name}) LIKE :name${index} ESCAPE '\'`;
-      });
-      conditions.push(
-        String.raw`((${terms.join(' AND ')}) OR LOWER(e.EMAIL) LIKE :search ESCAPE '\' OR e.PHONE_NUMBER LIKE :search ESCAPE '\' OR TO_CHAR(e.EMPLOYEE_ID) LIKE :search ESCAPE '\')`,
-      );
-      binds.search = {
-        val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, String.raw`\$&`)}%`,
-        type: oracle.STRING,
-      };
+      conditions.push(buildUserSearch(query.search, 'employees', name, binds));
     }
     if (query.role?.length) {
       const parameters = query.role.map((role, index) => {

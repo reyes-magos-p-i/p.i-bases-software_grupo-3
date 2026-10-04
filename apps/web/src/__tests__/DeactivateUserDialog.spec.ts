@@ -94,6 +94,27 @@ describe('DeactivateUserDialog', () => {
     expect(deactivateUser).toHaveBeenCalledWith(selection)
     expect(wrapper?.emitted('deactivated')).toHaveLength(1)
   })
+  it('clears the previous failure and restores confirmation when reopened for another user', async () => {
+    deactivateUser.mockRejectedValueOnce(failure(404))
+    const view = await render()
+    await button('Confirmar desactivación').trigger('click')
+    await flushPromises()
+    expect(page.get('[role="alert"]').text()).toContain('ya está inactivo')
+    expect(button('Confirmar desactivación').attributes('disabled')).toBeDefined()
+    await button('Cancelar').trigger('click')
+    await view.setProps({ selection: null })
+    await flushPromises()
+    const nextSelection = { ...selection, id: 43, name: 'Luis Rojas', displayId: 'CL43' }
+    await view.setProps({ selection: nextSelection })
+    await flushPromises()
+    expect(page.find('[role="alert"]').exists()).toBe(false)
+    expect(page.text()).toContain('Luis Rojas')
+    expect(button('Confirmar desactivación').attributes('disabled')).toBeUndefined()
+    await button('Confirmar desactivación').trigger('click')
+    await flushPromises()
+    expect(deactivateUser).toHaveBeenLastCalledWith(nextSelection)
+    expect(view.emitted('deactivated')).toHaveLength(1)
+  })
   it('prevents duplicate confirmation and closing while saving', async () => {
     let resolve!: () => void
     deactivateUser.mockImplementation(
