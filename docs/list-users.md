@@ -126,7 +126,7 @@ con etiquetas accesibles y tooltips nativos al mantener el cursor encima. El nav
 controla el retardo de estos mensajes. Los IDs se mantienen en una sola línea.
 Ver abre el diálogo de [`detalle del usuario`](view-user.md). Modificar abre el
 formulario de [`edición del usuario`](update-user.md), con confirmación antes de
-guardar y refresco del listado tras el éxito. Desactivar permanece deshabilitado.
+guardar y refresco del listado tras el éxito. Desactivar abre su diálogo de confirmación.
 Los filtros y la paginación están fuera de la tabla.
 
 Después de una creación confirmada se refresca la lista activa, conservando sus
@@ -140,7 +140,7 @@ ni inicia reintentos automáticos.
 1. Ingresar con un administrador y abrir ambas secciones. Comprobar registros,
    columnas, fechas, prefijos de ID y total; recorrer las páginas con las flechas.
    Comprobar que Acciones es la última columna, Ver abre el detalle del seleccionado
-   y Modificar abre la edición con confirmación. Desactivar permanece deshabilitado.
+   y Modificar abre la edición con confirmación. Desactivar abre su diálogo de confirmación.
 2. Buscar un nombre, un apellido y una combinación que omita el segundo nombre.
    Probar mayúsculas, tildes y nombres compuestos; limpiar la búsqueda.
 3. Buscar un nombre inexistente: mostrar cero resultados y «No hay coincidencias».
@@ -163,3 +163,12 @@ build, `npm run test:e2e`. En `apps/web`: `npm run test:cov`, `npm run lint` y
 Las pruebas automatizadas simulan Oracle y SMTP; las pruebas E2E del backend
 ejercitan también los DTO compilados. La comprobación manual en navegador y la
 verificación de los triggers en Oracle complementan estas pruebas.
+
+## Usuarios activos
+
+Los listados, búsquedas y conteos incluyen únicamente cuentas activas. El ícono
+Desactivar abre la confirmación; los administradores pueden desactivar personal
+y clientes, y los empleados pueden desactivar clientes. Tras el éxito se recarga
+el listado y se ajusta la página conservando filtros y orden. Ver
+[Desactivar un usuario](deactivate-user.md) para preparar el estado en Oracle,
+los permisos y las protecciones.
