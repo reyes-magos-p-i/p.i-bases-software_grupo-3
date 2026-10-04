@@ -17,7 +17,7 @@ function handleClick() {
 </script>
 
 <template>
-  <button class="btn" @click="handleClick">
+  <button class="btn w-full" @click="handleClick">
     {{ label }}
 
     <span v-if="direction === 'asc'">↑</span>

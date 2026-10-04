@@ -54,6 +54,8 @@
     emit('search', value)
   }
 
+
+
 </script>
 
 <template>
@@ -67,6 +69,7 @@
           <th v-for="column in columns" :key="column.key">
             <div>
              <SortButton v-if="column.sortable" :column="column.key"
+             :direction="sortDirection = 'desc'"
              :label="column.label" @sort="handleSort"
              />
               <span v-else>
@@ -89,15 +92,16 @@
           </td>
 
           <td class="actions">
-            <button @click="emit('edit', row)">
-              Edit /
+            <button class="btn btn-sm btn-warning" @click="emit('edit', row)">
+                <i class="fa-solid fa-pen"></i>
             </button>
-            <button @click="emit('view', row)">
-              view /
+            <button class="btn btn-sm btn-info" @click="emit('view', row)">
+               <i class="fa-solid fa-eye"></i>
             </button>
-             <button @click="emit('delete', row)">
-              erase
+             <button class="btn btn-sm btn-error" @click="emit('delete', row)">
+                <i class="fa-solid fa-trash"></i>
             </button>
+
           </td>
         </tr>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import CrudTable from './crudTable/CrudTable.vue'
+import CrudTable from './SilviocrudTable/CrudTable.vue'
 
 const currentPage = ref(1)
 const totalPages = ref(3)

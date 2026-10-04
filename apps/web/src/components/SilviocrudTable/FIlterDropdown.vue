@@ -14,19 +14,23 @@ function handleChange(event: Event) {
   emit('filter', props.column, target.value)
 }
 </script>
-// cambiar para que funcione con Daisy ui
+
 <template>
-  <div class="dropdown">
-  <select @change="handleChange">
+  <select
+    class="select select-bordered bg-white text-black border-gray-300 w-full"
+    @change="handleChange"
+  >
     <option value="">All</option>
 
-    <option
-      v-for="option in options"
-      :key="option"
-      :value="option"
-    >
-      {{ option }}
-    </option>
+```
+<option
+  v-for="option in options"
+  :key="option"
+  :value="option"
+>
+  {{ option }}
+</option>
+```
+
   </select>
-  </div>
 </template>
