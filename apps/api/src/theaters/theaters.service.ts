@@ -1,15 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { CreateTheaterDto } from './dto/create-theater.dto';
 import { UpdateTheaterDto } from './dto/update-theater.dto';
+import { TheaterRepository } from './theater.repository/theater.repository';
 
 @Injectable()
 export class TheatersService {
+  constructor(private readonly theatersRepository: TheaterRepository) {}
   create(createTheaterDto: CreateTheaterDto) {
     return 'This action adds a new theater';
   }
 
   findAll() {
-    return `This action returns all theaters`;
+    return this.theatersRepository.getAllTheaters();
   }
 
   findOne(id: number) {
