@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ClientsRepository } from './clients.repository';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -12,6 +16,7 @@ import { splitFirstWord } from './name.util';
 
 // "C" alias
 const CLIENT_COLUMNS = `
+  c.status AS "status",
   c.client_id AS "id",
   c.email AS "email",
   c.first_name AS "firstName",
@@ -33,7 +38,7 @@ export class ClientsService {
   // ---------- QUERYS ----------
   async findById(id: number): Promise<Client | null> {
     const r = await this.db.query<Client>(
-      `SELECT ${CLIENT_COLUMNS} FROM Clients c WHERE c.client_id = :id`,
+      `SELECT ${CLIENT_COLUMNS} FROM Clients c WHERE c.client_id = :id AND c.status = 'ACTIVE'`,
       { id },
     );
     return r.rows?.[0] ?? null;
@@ -69,7 +74,7 @@ export class ClientsService {
       `SELECT ${CLIENT_COLUMNS}, l.password_hash AS "passwordHash"
          FROM Clients c
          JOIN Client_local_credentials l ON l.client_id = c.client_id
-        WHERE c.email = :email`,
+        WHERE c.email = :email AND c.status = 'ACTIVE'`,
       { email },
     );
     return r.rows?.[0] ?? null;
@@ -94,11 +99,15 @@ export class ClientsService {
   async findOrCreateSocial(p: SocialProfile): Promise<Client> {
     // 1. the user is already registered?
     const linked = await this.findByExternal(p.provider, p.providerUserId);
-    if (linked) return linked;
+    if (linked) {
+      this.requireActive(linked);
+      return linked;
+    }
 
     // 2. Exists a local account linked with the email? If so,
     const existing = await this.findByEmail(p.email);
     if (existing) {
+      this.requireActive(existing);
       try {
         await this.db.query(
           `INSERT INTO Client_external_credentials
@@ -125,6 +134,13 @@ export class ClientsService {
 
     // otherwise creates a Social account in Client_external_credentials
     return this.createSocial(p);
+  }
+
+  private requireActive(client: Client) {
+    if (client.status !== 'ACTIVE')
+      throw new UnauthorizedException(
+        'No se pudo iniciar sesión con esta cuenta.',
+      );
   }
 
   private async createSocial(p: SocialProfile): Promise<Client> {

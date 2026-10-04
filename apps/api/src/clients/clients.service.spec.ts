@@ -10,7 +10,12 @@ describe('ClientsService', () => {
   let conn: { execute: jest.Mock };
   let repository: { createClient: jest.Mock; insertClient: jest.Mock };
 
-  const client = { id: 1, email: 'ana@example.com', firstName: 'Ana' };
+  const client = {
+    status: 'ACTIVE',
+    id: 1,
+    email: 'ana@example.com',
+    firstName: 'Ana',
+  };
 
   beforeEach(async () => {
     conn = { execute: jest.fn() };
@@ -153,6 +158,42 @@ describe('ClientsService', () => {
   });
 
   describe('findOrCreateSocial', () => {
+    it.each(['GOOGLE', 'FACEBOOK'] as const)(
+      'rejects an inactive %s link without recreating or relinking',
+      async (provider) => {
+        db.query.mockResolvedValueOnce({
+          rows: [{ ...client, status: 'INACTIVE' }],
+        });
+        await expect(
+          service.findOrCreateSocial({
+            provider,
+            providerUserId: 'old-id',
+            email: client.email,
+            firstName: 'Ana',
+            lastName: 'Rojas',
+          }),
+        ).rejects.toMatchObject({ status: 401 });
+        expect(db.query).toHaveBeenCalledTimes(1);
+        expect(db.transaction).not.toHaveBeenCalled();
+        expect(repository.insertClient).not.toHaveBeenCalled();
+      },
+    );
+    it('rejects linking a new provider to an inactive email', async () => {
+      db.query
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ ...client, status: 'INACTIVE' }] });
+      await expect(
+        service.findOrCreateSocial({
+          provider: 'GOOGLE',
+          providerUserId: 'new-id',
+          email: client.email,
+          firstName: 'Ana',
+          lastName: 'Rojas',
+        }),
+      ).rejects.toMatchObject({ status: 401 });
+      expect(db.query).toHaveBeenCalledTimes(2);
+      expect(db.transaction).not.toHaveBeenCalled();
+    });
     it('returns the client already linked to this provider account', async () => {
       db.query.mockResolvedValueOnce({ rows: [client] }); // findByExternal hit
 

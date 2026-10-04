@@ -593,6 +593,7 @@ describe('Employee authentication (HTTP integration)', () => {
 
   it('preserves client token validation and the existing client profile', async () => {
     const client = {
+      status: 'ACTIVE' as const,
       id: 21,
       email: 'client@example.com',
       firstName: 'Ana',
