@@ -1,8 +1,17 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import oracle from 'oracledb';
 import { DatabaseService } from '../database/database.service';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { ClientDetailDto } from '../users/dto/user-detail.dto';
+import type {
+  UpdateClientDto,
+  UpdatedUserDto,
+} from '../users/dto/update-user.dto';
 import type { NewClient, NewClientWithLocalCredentials } from './client.model';
 import type { ListClientsQueryDto } from '../users/dto/list-users-query.dto';
 import type {
@@ -13,6 +22,81 @@ import type {
 @Injectable()
 export class ClientsRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  async updateClient(
+    id: number,
+    data: UpdateClientDto,
+  ): Promise<UpdatedUserDto> {
+    try {
+      return await this.db.transaction(async (connection) => {
+        const current = await connection.execute<{ EMAIL: string }>(
+          'SELECT EMAIL FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
+          { id: { val: id, type: oracle.NUMBER } },
+          { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+        );
+        const row = current.rows?.[0];
+        if (!row)
+          throw new NotFoundException('El usuario seleccionado no existe.');
+        if (data.email !== undefined) {
+          const duplicate = await connection.execute(
+            'SELECT 1 FROM CLIENTS WHERE EMAIL = :email AND CLIENT_ID <> :id AND ROWNUM = 1',
+            { email: data.email, id },
+            { autoCommit: false },
+          );
+          if (duplicate.rows?.length)
+            throw new ConflictException(
+              'El correo electrónico ya está registrado para otro cliente.',
+            );
+        }
+        const changes: string[] = [];
+        const binds: oracle.BindParameters = {
+          id: { val: id, type: oracle.NUMBER },
+        };
+        for (const [field, column] of [
+          ['firstName', 'FIRST_NAME'],
+          ['secondName', 'SECOND_NAME'],
+          ['firstSurname', 'FIRST_SURNAME'],
+          ['secondSurname', 'SECOND_SURNAME'],
+          ['email', 'EMAIL'],
+          ['phoneNumber', 'PHONE_NUMBER'],
+        ] as const) {
+          if (data[field] !== undefined) {
+            changes.push(`${column} = :${field}`);
+            binds[field] = { val: data[field], type: oracle.STRING };
+          }
+        }
+        if (data.address !== undefined) {
+          const addressId =
+            data.address === null
+              ? null
+              : await this.insertAddress(connection, data.address);
+          changes.push('ID_ADDRESS = :addressId');
+          binds.addressId = { val: addressId, type: oracle.NUMBER };
+        }
+        const result = await connection.execute(
+          `UPDATE CLIENTS SET ${changes.join(', ')} WHERE CLIENT_ID = :id`,
+          binds,
+          { autoCommit: false },
+        );
+        if (result.rowsAffected !== 1)
+          throw new Error('Oracle did not update a single client.');
+        return { id, email: data.email ?? row.EMAIL, role: UserRole.CLIENT };
+      });
+    } catch (error) {
+      const failure = error as { errorNum?: number; message?: string } | null;
+      if (
+        failure?.errorNum === 1 &&
+        /\bUQ_CLIENTS_EMAIL\b/u.test(failure.message ?? '')
+      ) {
+        throw new ConflictException(
+          'El correo electrónico ya está registrado para otro cliente.',
+        );
+      }
+      if (failure?.errorNum === 2291)
+        throw new BadRequestException('El distrito de la dirección no existe.');
+      throw error;
+    }
+  }
 
   async findClientDetailById(id: number): Promise<ClientDetailDto | null> {
     const result = await this.db.query<{

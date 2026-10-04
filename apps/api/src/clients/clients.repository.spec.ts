@@ -60,6 +60,126 @@ describe('ClientsRepository', () => {
     await module.close();
   });
 
+  describe('updateClient', () => {
+    it('updates selected name fields without changing other columns', async () => {
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
+      await repository.updateClient(42, {
+        firstName: 'María',
+        secondName: null,
+        firstSurname: 'Núñez',
+        secondSurname: null,
+      });
+      const [sql, binds] = connection.execute.mock.calls[1];
+      expect(sql).toBe(
+        'UPDATE CLIENTS SET FIRST_NAME = :firstName, SECOND_NAME = :secondName, FIRST_SURNAME = :firstSurname, SECOND_SURNAME = :secondSurname WHERE CLIENT_ID = :id',
+      );
+      expect(binds.firstName.val).toBe('María');
+      expect(binds.secondName.val).toBeNull();
+      expect(binds.secondSurname.val).toBeNull();
+      expect(binds.firstSurname.val).toBe('Núñez');
+      expect(binds).not.toHaveProperty('phoneNumber');
+      expect(connection.commit).toHaveBeenCalledTimes(1);
+    });
+    beforeEach(() => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ EMAIL: 'old@example.com' }],
+      });
+    });
+    it('creates a private replacement address and updates only selected client fields', async () => {
+      connection.execute.mockResolvedValueOnce({
+        rowsAffected: 1,
+        outBinds: { addressId: [55] },
+      });
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
+      expect(
+        await repository.updateClient(42, {
+          phoneNumber: '88888888',
+          address: { districtId: 7, details: 'Casa azul' },
+        }),
+      ).toEqual({ id: 42, email: 'old@example.com', role: 'CLIENT' });
+      const [sql, binds, options] = connection.execute.mock.calls[2];
+      expect(sql).toBe(
+        'UPDATE CLIENTS SET PHONE_NUMBER = :phoneNumber, ID_ADDRESS = :addressId WHERE CLIENT_ID = :id',
+      );
+      expect(binds.id.val).toBe(42);
+      expect(binds.addressId.val).toBe(55);
+      expect(options.autoCommit).toBe(false);
+      expect(connection.execute.mock.calls[0][0]).toContain('FOR UPDATE');
+      expect(
+        connection.execute.mock.calls.some(([statement]: [string]) =>
+          /UPDATE ADDRESSES|DELETE|GENDER|PASSWORD|FIRST_NAME/u.test(statement),
+        ),
+      ).toBe(false);
+      expect(connection.commit).toHaveBeenCalledTimes(1);
+    });
+    it('allows explicitly clearing optional fields', async () => {
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
+      await repository.updateClient(42, { address: null, phoneNumber: null });
+      const [, binds] = connection.execute.mock.calls[1];
+      expect(binds.addressId.val).toBeNull();
+      expect(binds.phoneNumber.val).toBeNull();
+      expect(connection.execute).toHaveBeenCalledTimes(2);
+    });
+    it('checks email uniqueness while excluding the selected client', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+      expect(
+        await repository.updateClient(42, { email: 'new@example.com' }),
+      ).toEqual({ id: 42, email: 'new@example.com', role: 'CLIENT' });
+      expect(connection.execute.mock.calls[1][1]).toEqual({
+        email: 'new@example.com',
+        id: 42,
+      });
+      expect(connection.execute.mock.calls[2][0]).not.toContain('PHONE_NUMBER');
+    });
+    it('does not write when the client no longer exists', async () => {
+      connection.execute.mockReset().mockResolvedValue({});
+      await expect(
+        repository.updateClient(42, { phoneNumber: null }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+    });
+    it('rolls back a duplicate email', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [1] });
+      await expect(
+        repository.updateClient(42, { email: 'other@example.com' }),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(connection.commit).not.toHaveBeenCalled();
+    });
+    it.each([
+      [
+        { errorNum: 1, message: 'ORA-00001: (PRODUCTION.UQ_CLIENTS_EMAIL)' },
+        409,
+      ],
+      [{ errorNum: 2291 }, 400],
+    ])(
+      'translates known Oracle errors after rollback',
+      async (failure, expected) => {
+        connection.execute.mockRejectedValueOnce(failure);
+        await expect(
+          repository.updateClient(42, { phoneNumber: '88888888' }),
+        ).rejects.toMatchObject({ status: expected });
+        expect(connection.rollback).toHaveBeenCalledTimes(1);
+      },
+    );
+    it('rolls back an unexpected update count', async () => {
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 0 });
+      await expect(
+        repository.updateClient(42, { phoneNumber: null }),
+      ).rejects.toThrow('single client');
+      expect(connection.commit).not.toHaveBeenCalled();
+    });
+    it('preserves unknown Oracle failures', async () => {
+      const failure = { errorNum: 1, message: 'another constraint' };
+      connection.execute.mockRejectedValueOnce(failure);
+      await expect(
+        repository.updateClient(42, { phoneNumber: null }),
+      ).rejects.toBe(failure);
+    });
+  });
+
   describe('findClientDetailById', () => {
     const row = {
       ID: 42,
