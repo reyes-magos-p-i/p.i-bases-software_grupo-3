@@ -24,7 +24,7 @@ historia del listado. Esta historia no modifica la base de datos.
 ## Campos y presentación
 
 Se muestran primer y segundo nombre, primer y segundo apellido, nacimiento, celular,
-correo y rol. La dirección se desglosa en provincia, cantón, distrito y detalle.
+correo. El rol se muestra únicamente para personal. La dirección se desglosa en provincia, cantón, distrito y detalle.
 Los clientes incluyen su género e idioma existentes. El personal incluye sucursal
 y fecha de contratación. Todos muestran ID y fecha de registro.
 
@@ -42,9 +42,9 @@ El historial de compras no forma parte de esta historia.
 `UserDetailDialog` reutiliza `BaseModal` y adopta la estética del diálogo de creación:
 encabezado vino, grupos de campos y dos columnas, con una columna en móvil. Los
 colores proceden de `variables.css`. Los datos se presentan como texto seleccionable,
-sin controles de edición. El modal permite cerrar con la X, el botón Cerrar, Escape
+sin recuadros ni controles de edición. El modal permite cerrar con la X, el botón Cerrar, Escape
 o el fondo; bloquea el desplazamiento de la página y devuelve el foco al botón que
-lo abrió. Modificar y Desactivar permanecen desactivados.
+lo abrió. Modificar abre el formulario de edición; Desactivar permanece desactivado.
 
 ## Estados y errores
 

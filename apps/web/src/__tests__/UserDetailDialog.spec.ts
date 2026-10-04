@@ -123,7 +123,7 @@ describe('UserDetailDialog', () => {
   it('shows distinct personal fields and the full address as read-only values', async () => {
     await render()
     expect(field('ID')).toBe('CL42')
-    expect(field('Rol')).toBe('Cliente')
+    expect(page.findAll('dt').some((item) => item.text() === 'Rol')).toBe(false)
     expect(field('Primer nombre')).toBe('Ana')
     expect(field('Segundo nombre')).toBe('María')
     expect(field('Primer apellido')).toBe('Núñez')
@@ -148,6 +148,7 @@ describe('UserDetailDialog', () => {
       getUserDetail.mockResolvedValue({ ...employee, role })
       await render({ section: 'employees', id: 42 })
       expect(field('ID')).toBe(role === 'ADMINISTRATOR' ? 'ADM42' : 'EMP42')
+      expect(field('Rol')).toBe(role === 'ADMINISTRATOR' ? 'Administrador' : 'Empleado')
       expect(field('Sucursal')).toBe('Centro')
       expect(field('Fecha de contratación')).toBe('01/10/2026')
       expect(field('Fecha de registro')).toBe('Desconocida')

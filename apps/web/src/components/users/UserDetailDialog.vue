@@ -43,7 +43,7 @@ const groups = computed(() => {
       label: 'Identificación',
       fields: [
         { label: 'ID', value: `${prefix}${detail.id}` },
-        { label: 'Rol', value: roleNames[detail.role] },
+        ...(detail.role === 'CLIENT' ? [] : [{ label: 'Rol', value: roleNames[detail.role] }]),
       ],
     },
     {
@@ -269,11 +269,6 @@ dt {
 }
 dd {
   margin: 0;
-  padding: 10px 12px;
-  min-height: 44px;
-  border: 1px solid var(--color-light_gray);
-  border-radius: var(--radius-small);
-  background: var(--color-white);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
