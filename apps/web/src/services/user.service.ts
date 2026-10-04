@@ -76,3 +76,13 @@ export async function updateUser(
   )
   return response.data
 }
+
+export async function deactivateUser(selection: UserDetailSelection): Promise<void> {
+  await getApi().patch<void>(
+    `/users/${selection.section}/${selection.id}/deactivate`,
+    {},
+    {
+      timeout: 10000,
+    },
+  )
+}
