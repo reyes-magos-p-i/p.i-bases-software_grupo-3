@@ -124,8 +124,9 @@ Un slot permite personalizar las acciones. En ambas listas, «Acciones» es la �
 columna y muestra solo los íconos de Ver, Modificar y Desactivar de Bootstrap,
 con etiquetas accesibles y tooltips nativos al mantener el cursor encima. El navegador
 controla el retardo de estos mensajes. Los IDs se mantienen en una sola línea.
-Ver abre el diálogo de [`detalle del usuario`](view-user.md). Modificar y Desactivar
-permanecen desactivados; sus operaciones quedan para futuras historias.
+Ver abre el diálogo de [`detalle del usuario`](view-user.md). Modificar abre el
+formulario de [`edición del usuario`](update-user.md), con confirmación antes de
+guardar y refresco del listado tras el éxito. Desactivar permanece deshabilitado.
 Los filtros y la paginación están fuera de la tabla.
 
 Después de una creación confirmada se refresca la lista activa, conservando sus
@@ -139,7 +140,7 @@ ni inicia reintentos automáticos.
 1. Ingresar con un administrador y abrir ambas secciones. Comprobar registros,
    columnas, fechas, prefijos de ID y total; recorrer las páginas con las flechas.
    Comprobar que Acciones es la última columna, Ver abre el detalle del seleccionado
-   y Modificar y Desactivar permanecen desactivados.
+   y Modificar abre la edición con confirmación. Desactivar permanece deshabilitado.
 2. Buscar un nombre, un apellido y una combinación que omita el segundo nombre.
    Probar mayúsculas, tildes y nombres compuestos; limpiar la búsqueda.
 3. Buscar un nombre inexistente: mostrar cero resultados y «No hay coincidencias».
