@@ -2,10 +2,85 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import oracle from 'oracledb';
 import { DatabaseService } from '../database/database.service';
 import type { NewClient, NewClientWithLocalCredentials } from './client.model';
+import type { ListClientsQueryDto } from '../users/dto/list-users-query.dto';
+import type {
+  ListedClientDto,
+  ListedUsersDto,
+} from '../users/dto/listed-users.dto';
 
 @Injectable()
 export class ClientsRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  async listClients(
+    query: ListClientsQueryDto,
+  ): Promise<ListedUsersDto<ListedClientDto>> {
+    const name =
+      "REGEXP_REPLACE(TRIM(c.FIRST_NAME || ' ' || c.SECOND_NAME || ' ' || c.FIRST_SURNAME || ' ' || c.SECOND_SURNAME), '[[:space:]]+', ' ')";
+    const binds: oracle.BindParameters = {};
+    let where = '';
+    if (query.search) {
+      const terms = query.search.split(' ').map((term, index) => {
+        binds[`name${index}`] = {
+          val: `%${term.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
+          type: oracle.STRING,
+        };
+        return `LOWER(${name}) LIKE :name${index} ESCAPE '\\'`;
+      });
+      binds.search = {
+        val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
+        type: oracle.STRING,
+      };
+      where = `WHERE ((${terms.join(' AND ')}) OR LOWER(c.EMAIL) LIKE :search ESCAPE '\\' OR c.PHONE_NUMBER LIKE :search ESCAPE '\\' OR TO_CHAR(c.CLIENT_ID) LIKE :search ESCAPE '\\')`;
+    }
+    const count = await this.db.query<{ TOTAL: number }>(
+      `SELECT COUNT(*) AS TOTAL FROM CLIENTS c ${where}`,
+      binds,
+    );
+    const total = count.rows?.[0]?.TOTAL ?? 0;
+    const totalPages = Math.ceil(total / query.pageSize);
+    const page = Math.min(query.page, Math.max(1, totalPages));
+    if (total === 0)
+      return { items: [], total, page, pageSize: query.pageSize, totalPages };
+    const sort =
+      {
+        id: 'c.CLIENT_ID',
+        name,
+        email: 'LOWER(c.EMAIL)',
+        createdAt: 'c.CREATED_AT',
+      }[query.sortBy] ?? 'c.CLIENT_ID';
+    const result = await this.db.query<{
+      ID: number;
+      NAME: string;
+      EMAIL: string;
+      PHONE_NUMBER: string | null;
+      CREATED_AT: string | null;
+    }>(
+      `SELECT c.CLIENT_ID AS ID, ${name} AS NAME, c.EMAIL, c.PHONE_NUMBER,
+              TO_CHAR(c.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS CREATED_AT
+       FROM CLIENTS c ${where}
+       ORDER BY ${sort} ${query.sortDirection === 'desc' ? 'DESC' : 'ASC'} NULLS LAST, c.CLIENT_ID ASC
+       OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY`,
+      {
+        ...binds,
+        offset: { val: (page - 1) * query.pageSize, type: oracle.NUMBER },
+        pageSize: { val: query.pageSize, type: oracle.NUMBER },
+      },
+    );
+    return {
+      items: (result.rows ?? []).map((row) => ({
+        id: row.ID,
+        name: row.NAME,
+        email: row.EMAIL,
+        phoneNumber: row.PHONE_NUMBER,
+        createdAt: row.CREATED_AT,
+      })),
+      total,
+      page,
+      pageSize: query.pageSize,
+      totalPages,
+    };
+  }
 
   async clientEmailExists(email: string): Promise<boolean> {
     const result = await this.db.query(

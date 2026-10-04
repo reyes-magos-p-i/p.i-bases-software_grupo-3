@@ -10,6 +10,7 @@ import { DatabaseService } from '../database/database.service';
 import { ConfigService } from '@nestjs/config';
 import type { NewClientWithLocalCredentials } from './client.model';
 import { ClientsRepository } from './clients.repository';
+import { ListClientsQueryDto } from '../users/dto/list-users-query.dto';
 
 describe('ClientsRepository', () => {
   let module: TestingModule;
@@ -57,6 +58,106 @@ describe('ClientsRepository', () => {
 
   afterEach(async () => {
     await module.close();
+  });
+
+  describe('listClients', () => {
+    it('matches first names and surnames even when a second name is between them', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 1 }] })
+        .mockResolvedValueOnce({ rows: [] });
+      await repository.listClients(
+        Object.assign(new ListClientsQueryDto(), { search: 'Ana Núñez' }),
+      );
+      const [sql, binds] = connection.execute.mock.calls[0] as [
+        string,
+        Record<string, oracle.BindParameter>,
+      ];
+      expect(sql).toContain("LIKE :name0 ESCAPE '\\' AND LOWER(");
+      expect(binds.name0.val).toBe('%ana%');
+      expect(binds.name1.val).toBe('%núñez%');
+    });
+    it('searches the full name with parameters and exposes only listing fields', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 11 }] })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              ID: 42,
+              NAME: 'Ana María Núñez',
+              EMAIL: 'ana@example.com',
+              PHONE_NUMBER: null,
+              CREATED_AT: null,
+              PASSWORD_HASH: 'private',
+            },
+          ],
+        });
+      const result = await repository.listClients(
+        Object.assign(new ListClientsQueryDto(), {
+          search: "O'Connor%_\\",
+          page: 2,
+          sortBy: 'name',
+          sortDirection: 'desc',
+        }),
+      );
+      expect(result).toEqual({
+        items: [
+          {
+            id: 42,
+            name: 'Ana María Núñez',
+            email: 'ana@example.com',
+            phoneNumber: null,
+            createdAt: null,
+          },
+        ],
+        total: 11,
+        page: 2,
+        pageSize: 10,
+        totalPages: 2,
+      });
+      const [sql, binds] = connection.execute.mock.calls[1] as [
+        string,
+        Record<string, oracle.BindParameter>,
+      ];
+      expect(sql).toContain('REGEXP_REPLACE');
+      expect(sql).toContain('DESC NULLS LAST, c.CLIENT_ID ASC');
+      expect(sql).not.toContain("O'Connor");
+      expect(binds.search.val).toBe("%o'connor\\%\\_\\\\%");
+      expect(binds.offset.val).toBe(10);
+    });
+    it.each([{ rows: [{ TOTAL: 0 }] }, {}])(
+      'returns an empty successful result: %p',
+      async (count) => {
+        connection.execute.mockResolvedValue(count);
+        expect(await repository.listClients(new ListClientsQueryDto())).toEqual(
+          { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 },
+        );
+        expect(connection.execute).toHaveBeenCalledTimes(1);
+      },
+    );
+    it.each(['id', 'email', 'createdAt'])(
+      'orders by %s and clamps pages after the last result',
+      async (sortBy) => {
+        connection.execute
+          .mockResolvedValueOnce({ rows: [{ TOTAL: 1 }] })
+          .mockResolvedValueOnce({ rows: [] });
+        const result = await repository.listClients(
+          Object.assign(new ListClientsQueryDto(), { sortBy, page: 20 }),
+        );
+        expect(result.page).toBe(1);
+        expect(connection.execute.mock.calls[1][0]).toContain(
+          'ASC NULLS LAST, c.CLIENT_ID ASC',
+        );
+      },
+    );
+    it('fails rather than returning a partial result if the page query fails', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 1 }] })
+        .mockRejectedValueOnce(new Error('Query unavailable'));
+      await expect(
+        repository.listClients(new ListClientsQueryDto()),
+      ).rejects.toThrow('Query unavailable');
+      expect(connection.close).toHaveBeenCalledTimes(2);
+    });
   });
 
   const insertedAddress = { rowsAffected: 1, outBinds: { addressId: [7] } };
