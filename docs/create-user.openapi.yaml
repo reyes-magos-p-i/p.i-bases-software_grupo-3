@@ -144,6 +144,7 @@ paths:
                   firstSurname: Núñez
                   secondSurname: Solano
                   birthday: "2000-02-29"
+                  hireDate: "2026-10-01"
                   phoneNumber: "+506 8888-8888"
                   address:
                     districtId: 7
@@ -158,6 +159,7 @@ paths:
                   firstSurname: Núñez
                   secondSurname: Solano
                   birthday: "1990-05-20"
+                  hireDate: "2026-10-01"
                   phoneNumber: "+506 8888-8888"
                   address:
                     districtId: 7
@@ -369,6 +371,7 @@ components:
         - firstSurname
         - secondSurname
         - birthday
+        - hireDate
         - phoneNumber
         - address
         - branchId
@@ -402,6 +405,13 @@ components:
           pattern: '\S'
           x-max-utf8-bytes: 20
           description: Máximo 20 bytes UTF-8; no admite vacío ni solo espacios.
+        hireDate:
+          type: string
+          format: date
+          minLength: 10
+          maxLength: 10
+          pattern: '^(?!0000)\d{4}-\d{2}-\d{2}$'
+          description: Fecha de contratación obligatoria para empleados y administradores; fecha real con año entre 0001 y 9999, sin hora ni zona horaria. La fecha de registro la genera Oracle automáticamente.
         address:
           $ref: "#/components/schemas/CreateAddress"
         branchId:
