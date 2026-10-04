@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   BadRequestException,
   ConflictException,
+  NotFoundException,
 } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PasswordGenerator } from '../common/security/password-generator';
@@ -19,12 +20,14 @@ describe('UsersService', () => {
   let module: TestingModule;
   let service: UsersService;
   const repository = {
+    findEmployeeDetailById: jest.fn(),
     listEmployees: jest.fn(),
     getEmployeeListOptions: jest.fn(),
     getCreationOptions: jest.fn(),
     createEmployee: jest.fn(),
   };
   const clientsRepository = {
+    findClientDetailById: jest.fn(),
     listClients: jest.fn(),
     clientEmailExists: jest.fn(),
     createClient: jest.fn(),
@@ -89,6 +92,50 @@ describe('UsersService', () => {
 
   afterEach(async () => {
     await module.close();
+  });
+
+  describe.each(['client', 'employee'])('%s details', (section) => {
+    it('delegates the selected ID without invoking credential operations', async () => {
+      const detail = { id: 42, firstName: 'Ana' };
+      const read =
+        section === 'client'
+          ? clientsRepository.findClientDetailById
+          : repository.findEmployeeDetailById;
+      read.mockResolvedValue(detail);
+      expect(
+        await (section === 'client'
+          ? service.getClientDetail(42)
+          : service.getEmployeeDetail(42)),
+      ).toBe(detail);
+      expect(read).toHaveBeenCalledWith(42);
+      expect(generator.generate).not.toHaveBeenCalled();
+      expect(hasher.hash).not.toHaveBeenCalled();
+      expect(sender.send).not.toHaveBeenCalled();
+    });
+    it('reports missing records with a 404', async () => {
+      const read =
+        section === 'client'
+          ? clientsRepository.findClientDetailById
+          : repository.findEmployeeDetailById;
+      read.mockResolvedValue(null);
+      await expect(
+        section === 'client'
+          ? service.getClientDetail(42)
+          : service.getEmployeeDetail(42),
+      ).rejects.toThrow(NotFoundException);
+    });
+    it('does not convert database failures into missing users', async () => {
+      const read =
+        section === 'client'
+          ? clientsRepository.findClientDetailById
+          : repository.findEmployeeDetailById;
+      read.mockRejectedValue(new Error('Unavailable'));
+      await expect(
+        section === 'client'
+          ? service.getClientDetail(42)
+          : service.getEmployeeDetail(42),
+      ).rejects.toThrow('Unavailable');
+    });
   });
 
   it('delegates list queries and options without credential operations', async () => {

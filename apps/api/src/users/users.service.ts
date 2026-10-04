@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { PasswordGenerator } from '../common/security/password-generator';
 import { PasswordHasher } from '../common/security/password-hasher';
@@ -43,6 +44,20 @@ export class UsersService {
 
   getEmployeeListOptions() {
     return this.usersRepository.getEmployeeListOptions();
+  }
+
+  async getClientDetail(id: number) {
+    const user = await this.clientsRepository.findClientDetailById(id);
+    if (!user)
+      throw new NotFoundException('El usuario seleccionado no existe.');
+    return user;
+  }
+
+  async getEmployeeDetail(id: number) {
+    const user = await this.usersRepository.findEmployeeDetailById(id);
+    if (!user)
+      throw new NotFoundException('El usuario seleccionado no existe.');
+    return user;
   }
 
   async create(
