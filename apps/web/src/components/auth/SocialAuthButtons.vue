@@ -17,11 +17,11 @@ async function onGoogle() {
   try{
     await loginWithGoogle()
     console.log('google login successful')
-
+    emit('close-modal')
 
   }catch(error){
     console.error('google login failed or was cancelled', error)
-    emit('close-modal')
+  
   }
 }
 
