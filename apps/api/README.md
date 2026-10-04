@@ -132,7 +132,7 @@ un navegador simulado que conserva y envía la cookie según su ruta.
 
 El registro con correo y contraseña crea la cuenta como pendiente y guarda un
 hash SHA-256 de un token aleatorio de un solo uso. El enlace vence en
-`EMAIL_VERIFICATION_TTL_MINUTES` (30 minutos por defecto; se permiten valores
+`EMAIL_VERIFICATION_TTL_MINUTES` (15 minutos por defecto; se permiten valores
 enteros de 1 a 1440). Al confirmarlo, el token se consume en una transacción,
 se activa la cuenta y se devuelve la sesión de cliente. Los tokens de clientes
 no pueden autenticar mientras exista una verificación pendiente.

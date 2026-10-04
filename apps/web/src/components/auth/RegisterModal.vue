@@ -54,15 +54,62 @@ watch(
  */
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*_-]).{8,}$/
 
+function normalizeCostaRicaPhone(phone: string): string {
+  return phone.trim().replace(/[-\s]/gu, '')
+}
+
+function isAdult(birthDate: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(birthDate)
+  if (!match) return false
+  const [, yearText, monthText, dayText] = match
+  const birthYear = Number(yearText)
+  const birthMonth = Number(monthText)
+  const birthDay = Number(dayText)
+  const parsedDate = new Date(Date.UTC(birthYear, birthMonth - 1, birthDay))
+  if (
+    parsedDate.getUTCFullYear() !== birthYear ||
+    parsedDate.getUTCMonth() + 1 !== birthMonth ||
+    parsedDate.getUTCDate() !== birthDay
+  ) return false
+
+  const todayParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Costa_Rica',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts()
+  const today = Object.fromEntries(
+    todayParts.map(({ type, value }) => [type, value]),
+  )
+  const todayYear = Number(today.year)
+  const todayMonth = Number(today.month)
+  const todayDay = Number(today.day)
+
+  return (
+    birthYear < todayYear - 18 ||
+    (birthYear === todayYear - 18 &&
+      (birthMonth < todayMonth ||
+        (birthMonth === todayMonth && birthDay <= todayDay)))
+  )
+}
+
 function validate(): boolean {
   Object.keys(errors).forEach((k) => delete errors[k])
 
   if (!/^\S+@\S+\.\S+$/.test(form.email)) errors.email = 'Ingresa un correo válido'
   if (!form.firstName.trim()) errors.firstName = 'Requerido'
   if (!form.lastName.trim()) errors.lastName = 'Requerido'
-  if (!form.phone.trim()) errors.phone = 'Requerido'
+  if (!form.phone.trim()) {
+    errors.phone = 'Requerido'
+  } else if (!/^\d{4}[-\s]?\d{4}$/u.test(form.phone.trim())) {
+    errors.phone = 'Ingresa un teléfono costarricense válido de 8 dígitos'
+  }
   if (!form.gender) errors.gender = 'Selecciona una opción'
-  if (!form.birthDate) errors.birthDate = 'Requerido'
+  if (!form.birthDate) {
+    errors.birthDate = 'Requerido'
+  } else if (!isAdult(form.birthDate)) {
+    errors.birthDate = 'Debes tener al menos 18 años para registrarte'
+  }
   if (!PASSWORD_RULE.test(form.password))
     errors.password = 'Mínimo 8 caracteres con mayúscula, minúscula, número y un carácter especial (!@#$%^&*_-).'
   if (form.password === form.email || form.password === form.firstName || form.password === form.lastName)
@@ -91,8 +138,11 @@ async function onSubmit() {
   loading.value = true
   try {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { confirmPassword , ...payload } = form
-    await registerUser(payload)
+    const { confirmPassword: _confirmPassword, ...payload } = form
+    await registerUser({
+      ...payload,
+      phone: normalizeCostaRicaPhone(payload.phone),
+    })
     verificationEmail.value = payload.email
     verificationState.value = 'sent'
   } catch (e) {  // prevent reading from undefined if the error is not an instance of Error
@@ -168,8 +218,10 @@ async function resendVerificationEmail() {
         <div class="col-6">
           <label class="form-label fw-bold" for="phone">Teléfono</label>
           <input id="phone" v-model="form.phone" type="tel" class="form-control"
-                 :class="{ 'is-invalid': errors.phone }" autocomplete="tel" />
+                 :class="{ 'is-invalid': errors.phone }" autocomplete="tel"
+                 inputmode="numeric" maxlength="9" placeholder="8888-1234" />
           <div class="invalid-feedback">{{ errors.phone }}</div>
+          <div class="form-text small">Ingresa 8 dígitos, por ejemplo 8888-1234.</div>
         </div>
         <div class="col-6">
           <label class="form-label fw-bold" for="gender">Género</label>

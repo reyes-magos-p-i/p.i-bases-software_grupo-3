@@ -85,6 +85,51 @@ describe('RegisterModal.vue', () => {
     })
   }
 
+  function dateOneDayBeforeTurningEighteen(): string {
+    const today = Object.fromEntries(
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Costa_Rica',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
+        .formatToParts()
+        .map(({ type, value }) => [type, value]),
+    )
+    const date = new Date(
+      Date.UTC(
+        Number(today.year) - 18,
+        Number(today.month) - 1,
+        Number(today.day) + 1,
+      ),
+    )
+    return [
+      date.getUTCFullYear(),
+      String(date.getUTCMonth() + 1).padStart(2, '0'),
+      String(date.getUTCDate()).padStart(2, '0'),
+    ].join('-')
+  }
+
+  it('rejects telephone numbers that are not eight Costa Rican digits', async () => {
+    const wrapper = createWrapper()
+    await wrapper.find('#phone').setValue('1234567')
+    await wrapper.find('form').trigger('submit.prevent')
+
+    expect(wrapper.text()).toContain(
+      'Ingresa un teléfono costarricense válido de 8 dígitos',
+    )
+    expect(registerUser).not.toHaveBeenCalled()
+  })
+
+  it('blocks registration for a user who has not turned 18', async () => {
+    const wrapper = createWrapper()
+    await wrapper.find('#birthDate').setValue(dateOneDayBeforeTurningEighteen())
+    await wrapper.find('form').trigger('submit.prevent')
+
+    expect(wrapper.text()).toContain('Debes tener al menos 18 años para registrarte')
+    expect(registerUser).not.toHaveBeenCalled()
+  })
+
   it('no envía el formulario si los campos obligatorios están vacíos', async () => {
     const wrapper = createWrapper()
     await wrapper.find('form').trigger('submit.prevent')
@@ -136,7 +181,7 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#email').setValue('juan.perez@example.com')
     await wrapper.find('#firstName').setValue('Juan')
     await wrapper.find('#lastName').setValue('Perez')
-    await wrapper.find('#phone').setValue('1234567890')
+    await wrapper.find('#phone').setValue('8888-1234')
     await wrapper.find('#gender').setValue('M')
     await wrapper.find('#birthDate').setValue('1990-01-01')
     await wrapper.find('#password').setValue('Password123!')
@@ -145,6 +190,11 @@ describe('RegisterModal.vue', () => {
 
     await wrapper.find('form').trigger('submit.prevent')
 
+    expect(registerUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phone: '88881234',
+      }),
+    )
     expect(registerUser).toHaveBeenCalledWith(
       expect.not.objectContaining({ confirmPassword: 'Password123!' }),
     )
@@ -165,7 +215,7 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#email').setValue('ana@example.com')
     await wrapper.find('#firstName').setValue('Ana')
     await wrapper.find('#lastName').setValue('Perez')
-    await wrapper.find('#phone').setValue('1234567890')
+    await wrapper.find('#phone').setValue('8888-1234')
     await wrapper.find('#gender').setValue('F')
     await wrapper.find('#birthDate').setValue('1990-01-01')
     await wrapper.find('#password').setValue('Password123!')
@@ -202,7 +252,7 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#email').setValue('test@example.com')
     await wrapper.find('#firstName').setValue('Test')
     await wrapper.find('#lastName').setValue('User')
-    await wrapper.find('#phone').setValue('1234567890')
+    await wrapper.find('#phone').setValue('8888-1234')
     await wrapper.find('#gender').setValue('F')
     await wrapper.find('#birthDate').setValue('1995-05-05')
     await wrapper.find('#password').setValue('ValidPass1!')
@@ -221,7 +271,7 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#email').setValue('test@example.com')
     await wrapper.find('#firstName').setValue('Test')
     await wrapper.find('#lastName').setValue('User')
-    await wrapper.find('#phone').setValue('1234567890')
+    await wrapper.find('#phone').setValue('8888-1234')
     await wrapper.find('#gender').setValue('F')
     await wrapper.find('#birthDate').setValue('1995-05-05')
     await wrapper.find('#password').setValue('ValidPass1!')
