@@ -157,6 +157,24 @@ describe('createUser', () => {
   })
 
   describe('getUserCreationOptions', () => {
+    it.each(['clients', 'employees'] as const)(
+      'requests the selected %s detail with timeout and cancellation',
+      async (section) => {
+        const { getUserDetail } = await import('@/services/user.service')
+        const data = { id: 42, firstName: 'Ana' }
+        const signal = new AbortController().signal
+        get.mockResolvedValue({ data })
+        expect(await getUserDetail({ id: 42, section }, signal)).toEqual(data)
+        expect(get).toHaveBeenCalledWith(`/users/${section}/42`, { signal, timeout: 10000 })
+      },
+    )
+    it.each([401, 403, 404, 500])('propagates detail HTTP %s without retrying', async (status) => {
+      const { getUserDetail } = await import('@/services/user.service')
+      const failure = Object.assign(new Error('HTTP failure'), { response: { status } })
+      get.mockRejectedValue(failure)
+      await expect(getUserDetail({ id: 42, section: 'clients' })).rejects.toBe(failure)
+      expect(get).toHaveBeenCalledTimes(1)
+    })
     it('serializes selected roles and branches as comma-separated query values', async () => {
       const { getUsers } = await import('@/services/user.service')
       get.mockResolvedValue({ data: { items: [], total: 0 } })
