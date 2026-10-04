@@ -1,4 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import oracle from 'oracledb';
 import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
@@ -6,6 +11,7 @@ import type { EmployeeDetailDto } from './dto/user-detail.dto';
 import { DatabaseService } from '../database/database.service';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import type { CreateAddressDto } from './dto/create-address.dto';
+import type { UpdateEmployeeDto, UpdatedUserDto } from './dto/update-user.dto';
 import type { EmployeeWithLocalCredentials } from './types/employee-with-local-credentials.type';
 import type { ListEmployeesQueryDto } from './dto/list-users-query.dto';
 import type {
@@ -17,6 +23,99 @@ import type {
 @Injectable()
 export class UsersRepository {
   constructor(private readonly db: DatabaseService) {}
+
+  async updateEmployee(
+    id: number,
+    data: UpdateEmployeeDto,
+  ): Promise<UpdatedUserDto> {
+    try {
+      return await this.db.transaction(async (connection) => {
+        const current = await connection.execute<{
+          EMAIL: string;
+          ROLE: UserRole.EMPLOYEE | UserRole.ADMINISTRATOR;
+        }>(
+          'SELECT EMAIL, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :id FOR UPDATE',
+          { id: { val: id, type: oracle.NUMBER } },
+          { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+        );
+        const row = current.rows?.[0];
+        if (!row)
+          throw new NotFoundException('El usuario seleccionado no existe.');
+        if (data.email !== undefined) {
+          const duplicate = await connection.execute(
+            'SELECT 1 FROM EMPLOYEES WHERE LOWER(TRIM(EMAIL)) = :email AND EMPLOYEE_ID <> :id AND ROWNUM = 1',
+            { email: data.email, id },
+            { autoCommit: false },
+          );
+          if (duplicate.rows?.length)
+            throw new ConflictException(
+              'El correo electrónico ya está registrado para otro empleado.',
+            );
+        }
+        const changes: string[] = [];
+        const binds: oracle.BindParameters = {
+          id: { val: id, type: oracle.NUMBER },
+        };
+        if (data.branchId !== undefined) {
+          const branch = await connection.execute(
+            'SELECT 1 FROM CINEMAS WHERE BRANCH_ID = :branchId FOR UPDATE',
+            { branchId: { val: data.branchId, type: oracle.NUMBER } },
+            { autoCommit: false },
+          );
+          if (!branch.rows?.length)
+            throw new BadRequestException(
+              'La sucursal seleccionada no existe.',
+            );
+          changes.push('BRANCH_ID = :branchId');
+          binds.branchId = { val: data.branchId, type: oracle.NUMBER };
+        }
+        for (const [field, column] of [
+          ['firstName', 'FIRST_NAME'],
+          ['secondName', 'SECOND_NAME'],
+          ['firstSurname', 'FIRST_SURNAME'],
+          ['secondSurname', 'SECOND_SURNAME'],
+          ['email', 'EMAIL'],
+          ['phoneNumber', 'PHONE_NUMBER'],
+          ['role', 'ROLE'],
+        ] as const) {
+          if (data[field] !== undefined) {
+            changes.push(`${column} = :${field}`);
+            binds[field] = { val: data[field], type: oracle.STRING };
+          }
+        }
+        if (data.address !== undefined) {
+          const addressId = await this.insertAddress(connection, data.address);
+          changes.push('ID_ADDRESS = :addressId');
+          binds.addressId = { val: addressId, type: oracle.NUMBER };
+        }
+        const result = await connection.execute(
+          `UPDATE EMPLOYEES SET ${changes.join(', ')} WHERE EMPLOYEE_ID = :id`,
+          binds,
+          { autoCommit: false },
+        );
+        if (result.rowsAffected !== 1)
+          throw new Error('Oracle did not update a single employee.');
+        return {
+          id,
+          email: data.email ?? row.EMAIL,
+          role: data.role ?? row.ROLE,
+        };
+      });
+    } catch (error) {
+      const failure = error as { errorNum?: number; message?: string } | null;
+      if (
+        failure?.errorNum === 1 &&
+        /\bUQ_EMPLOYEES_EMAIL\b/u.test(failure.message ?? '')
+      ) {
+        throw new ConflictException(
+          'El correo electrónico ya está registrado para otro empleado.',
+        );
+      }
+      if (failure?.errorNum === 2291)
+        throw new BadRequestException('El distrito de la dirección no existe.');
+      throw error;
+    }
+  }
 
   async findEmployeeDetailById(id: number): Promise<EmployeeDetailDto | null> {
     const result = await this.db.query<{
