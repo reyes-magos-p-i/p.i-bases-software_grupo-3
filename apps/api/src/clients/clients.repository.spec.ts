@@ -60,6 +60,34 @@ describe('ClientsRepository', () => {
     await module.close();
   });
 
+  describe('deactivateClient', () => {
+    it('updates only the status and commits exactly one client', async () => {
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
+      await repository.deactivateClient(42);
+      expect(connection.execute).toHaveBeenCalledWith(
+        "UPDATE CLIENTS SET STATUS = 'INACTIVE' WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
+        { id: { val: 42, type: oracle.NUMBER } },
+        { autoCommit: false },
+      );
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+      expect(connection.commit).toHaveBeenCalledTimes(1);
+    });
+    it('reports inactive or nonexistent clients without committing', async () => {
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 0 });
+      await expect(repository.deactivateClient(42)).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+    });
+    it('rolls back unexpected persistence outcomes', async () => {
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 2 });
+      await expect(repository.deactivateClient(42)).rejects.toThrow(
+        'single client',
+      );
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+    });
+  });
   describe('updateClient', () => {
     it('updates selected name fields without changing other columns', async () => {
       connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
@@ -71,7 +99,7 @@ describe('ClientsRepository', () => {
       });
       const [sql, binds] = connection.execute.mock.calls[1];
       expect(sql).toBe(
-        'UPDATE CLIENTS SET FIRST_NAME = :firstName, SECOND_NAME = :secondName, FIRST_SURNAME = :firstSurname, SECOND_SURNAME = :secondSurname WHERE CLIENT_ID = :id',
+        "UPDATE CLIENTS SET FIRST_NAME = :firstName, SECOND_NAME = :secondName, FIRST_SURNAME = :firstSurname, SECOND_SURNAME = :secondSurname WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
       );
       expect(binds.firstName.val).toBe('María');
       expect(binds.secondName.val).toBeNull();
@@ -99,7 +127,7 @@ describe('ClientsRepository', () => {
       ).toEqual({ id: 42, email: 'old@example.com', role: 'CLIENT' });
       const [sql, binds, options] = connection.execute.mock.calls[2];
       expect(sql).toBe(
-        'UPDATE CLIENTS SET PHONE_NUMBER = :phoneNumber, ID_ADDRESS = :addressId WHERE CLIENT_ID = :id',
+        "UPDATE CLIENTS SET PHONE_NUMBER = :phoneNumber, ID_ADDRESS = :addressId WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
       );
       expect(binds.id.val).toBe(42);
       expect(binds.addressId.val).toBe(55);

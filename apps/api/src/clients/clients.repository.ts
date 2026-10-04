@@ -23,6 +23,22 @@ import type {
 export class ClientsRepository {
   constructor(private readonly db: DatabaseService) {}
 
+  async deactivateClient(id: number): Promise<void> {
+    await this.db.transaction(async (connection) => {
+      const result = await connection.execute(
+        "UPDATE CLIENTS SET STATUS = 'INACTIVE' WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
+        { id: { val: id, type: oracle.NUMBER } },
+        { autoCommit: false },
+      );
+      if (result.rowsAffected === 0)
+        throw new NotFoundException(
+          'El usuario seleccionado no existe o ya está inactivo.',
+        );
+      if (result.rowsAffected !== 1)
+        throw new Error('Oracle did not deactivate a single client.');
+    });
+  }
+
   async updateClient(
     id: number,
     data: UpdateClientDto,
@@ -30,7 +46,7 @@ export class ClientsRepository {
     try {
       return await this.db.transaction(async (connection) => {
         const current = await connection.execute<{ EMAIL: string }>(
-          'SELECT EMAIL FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
+          "SELECT EMAIL FROM CLIENTS WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE' FOR UPDATE",
           { id: { val: id, type: oracle.NUMBER } },
           { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
         );
@@ -74,7 +90,7 @@ export class ClientsRepository {
           binds.addressId = { val: addressId, type: oracle.NUMBER };
         }
         const result = await connection.execute(
-          `UPDATE CLIENTS SET ${changes.join(', ')} WHERE CLIENT_ID = :id`,
+          `UPDATE CLIENTS SET ${changes.join(', ')} WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'`,
           binds,
           { autoCommit: false },
         );
@@ -133,7 +149,7 @@ export class ClientsRepository {
        LEFT JOIN DISTRICTS d ON d.ID_DISTRICT = a.ID_DISTRICT
        LEFT JOIN CANTONS k ON k.ID_CANTON = d.ID_CANTON
        LEFT JOIN PROVINCES p ON p.ID_PROVINCE = k.ID_PROVINCE
-       WHERE c.CLIENT_ID = :id`,
+       WHERE c.CLIENT_ID = :id AND c.STATUS = 'ACTIVE'`,
       { id: { val: id, type: oracle.NUMBER } },
     );
     const row = result.rows?.[0];
@@ -173,7 +189,7 @@ export class ClientsRepository {
     const name =
       "REGEXP_REPLACE(TRIM(c.FIRST_NAME || ' ' || c.SECOND_NAME || ' ' || c.FIRST_SURNAME || ' ' || c.SECOND_SURNAME), '[[:space:]]+', ' ')";
     const binds: oracle.BindParameters = {};
-    let where = '';
+    let where = "WHERE c.STATUS = 'ACTIVE'";
     if (query.search) {
       const terms = query.search.split(' ').map((term, index) => {
         binds[`name${index}`] = {
@@ -186,7 +202,7 @@ export class ClientsRepository {
         val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
         type: oracle.STRING,
       };
-      where = `WHERE ((${terms.join(' AND ')}) OR LOWER(c.EMAIL) LIKE :search ESCAPE '\\' OR c.PHONE_NUMBER LIKE :search ESCAPE '\\' OR TO_CHAR(c.CLIENT_ID) LIKE :search ESCAPE '\\')`;
+      where += ` AND ((${terms.join(' AND ')}) OR LOWER(c.EMAIL) LIKE :search ESCAPE '\\' OR c.PHONE_NUMBER LIKE :search ESCAPE '\\' OR TO_CHAR(c.CLIENT_ID) LIKE :search ESCAPE '\\')`;
     }
     const count = await this.db.query<{ TOTAL: number }>(
       `SELECT COUNT(*) AS TOTAL FROM CLIENTS c ${where}`,
