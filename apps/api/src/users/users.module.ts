@@ -10,6 +10,7 @@ import { InitialCredentialsSender } from './notifications/initial-credentials-se
 import { SmtpInitialCredentialsSender } from './notifications/smtp-initial-credentials-sender';
 import { CreateUserValidationPipe } from './pipes/create-user-validation.pipe';
 import { UsersController } from './users.controller';
+import { UsersListController } from './users-list.controller';
 import { UsersPersistenceModule } from './users-persistence.module';
 import { UsersService } from './users.service';
 
@@ -21,7 +22,7 @@ import { UsersService } from './users.service';
     PasswordHashingModule,
     ClientsModule,
   ],
-  controllers: [UsersController],
+  controllers: [UsersController, UsersListController],
   providers: [
     UsersService,
     AdministratorGuard,

@@ -58,6 +58,7 @@ describe('UsersModule (application HTTP integration)', () => {
     firstName: 'Ana',
     firstSurname: 'Solano',
     secondSurname: 'Rojas',
+    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
     branchId: 1,
@@ -160,6 +161,34 @@ describe('UsersModule (application HTTP integration)', () => {
   });
 
   describe('GET /users/creation-options', () => {
+    it('mounts client and employee listing routes with the actual repositories', async () => {
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        })
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] });
+      await browser.get('/users/clients').expect(200, {
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        })
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] });
+      await browser.get('/users/employees').expect(200, {
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+      expect(sendMail).not.toHaveBeenCalled();
+      expect(connection.commit).not.toHaveBeenCalled();
+    });
     it('reads Oracle catalogs through the registered route without creating users or sending credentials', async () => {
       const generate = jest.spyOn(app.get(PasswordGenerator), 'generate');
       const hash = jest.spyOn(app.get(PasswordHasher), 'hash');
