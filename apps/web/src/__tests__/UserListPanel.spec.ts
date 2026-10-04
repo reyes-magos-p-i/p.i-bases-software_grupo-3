@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { AxiosError, type AxiosResponse } from 'axios'
 import UserListPanel from '@/components/users/UserListPanel.vue'
+import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
 import type { UserListResult } from '@/types/user'
 
 const { getUsers, getEmployeeListOptions } = vi.hoisted(() => ({
@@ -35,7 +36,10 @@ async function render(
   section: 'clients' | 'employees' = 'clients',
   role: 'ADMINISTRATOR' | 'EMPLOYEE' = 'ADMINISTRATOR',
 ) {
-  wrapper = mount(UserListPanel, { props: { section, role } })
+  wrapper = mount(UserListPanel, {
+    props: { section, role },
+    global: { stubs: { UserDetailDialog: true } },
+  })
   await flushPromises()
   return wrapper
 }
@@ -54,7 +58,7 @@ afterEach(() => {
 })
 
 describe('UserListPanel', () => {
-  it('lists real records and a total with disabled actions and no employee filters', async () => {
+  it('lists records with a view action and disabled modification actions', async () => {
     const view = await render('clients', 'EMPLOYEE')
     expect(view.text()).toContain('21 resultados')
     expect(view.text()).toContain('Ana María Núñez')
@@ -66,11 +70,12 @@ describe('UserListPanel', () => {
     expect(
       view.findAll('.actions button').map((button) => button.attributes('aria-label')),
     ).toEqual(['Ver', 'Modificar', 'Desactivar'])
+    expect(view.get('button[aria-label="Ver"]').attributes('disabled')).toBeUndefined()
+    expect(view.get('button[aria-label="Modificar"]').attributes('disabled')).toBeDefined()
+    expect(view.get('button[aria-label="Desactivar"]').attributes('disabled')).toBeDefined()
     for (const button of view.findAll('.actions button')) {
-      expect(button.attributes('disabled')).toBeDefined()
       expect(button.find('i.bi').exists()).toBe(true)
       expect(button.text()).toBe('')
-      await button.trigger('click')
     }
     expect(view.findAll('.action-hint').map((hint) => hint.attributes('title'))).toEqual([
       'Ver',
@@ -87,6 +92,30 @@ describe('UserListPanel', () => {
       { page: 1, pageSize: 10, sortBy: 'id', sortDirection: 'asc' },
       expect.any(AbortSignal),
     )
+  })
+  it.each(['clients', 'employees'] as const)(
+    'selects a numeric ID from %s and clears it on close',
+    async (section) => {
+      const view = await render(section)
+      await view.get('button[aria-label="Ver"]').trigger('click')
+      const dialog = view.getComponent(UserDetailDialog)
+      expect(dialog.props('selection')).toEqual({ id: 42, section })
+      dialog.vm.$emit('close')
+      await flushPromises()
+      expect(dialog.props('selection')).toBeNull()
+    },
+  )
+  it('closes selected details when permissions change and propagates authorization errors', async () => {
+    const view = await render('employees')
+    await view.get('button[aria-label="Ver"]').trigger('click')
+    const dialog = view.getComponent(UserDetailDialog)
+    dialog.vm.$emit('session-expired')
+    dialog.vm.$emit('forbidden')
+    expect(view.emitted('session-expired')).toHaveLength(1)
+    expect(view.emitted('forbidden')).toHaveLength(1)
+    await view.setProps({ role: 'EMPLOYEE' })
+    await flushPromises()
+    expect(dialog.props('selection')).toBeNull()
   })
   it('closes filters on outside pointer interactions while preserving checkbox selections', async () => {
     const view = await render('employees')

@@ -2,13 +2,16 @@
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
+import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
 import { getEmployeeListOptions, getUsers } from '@/services/user.service'
 import type { BranchOption, UserListQuery, UserListResult, UserRole } from '@/types/user'
+import type { UserDetailSelection } from '@/types/user'
 
 const props = defineProps<{ section: 'clients' | 'employees'; role: UserRole }>()
 const emit = defineEmits<{ 'session-expired': []; forbidden: [] }>()
 const id = useId()
 const filterContainer = ref<HTMLElement | null>(null)
+const selectedUser = ref<UserDetailSelection | null>(null)
 const searchDraft = ref('')
 const appliedSearch = ref('')
 const validationError = ref('')
@@ -210,9 +213,14 @@ function changePage(value: number) {
 function refresh() {
   void load()
 }
+function viewUser(row: { [key: string]: unknown }) {
+  if (!canRead.value || typeof row.id !== 'number') return
+  selectedUser.value = { section: props.section, id: row.id }
+}
 watch(
   () => [props.section, props.role],
   () => {
+    selectedUser.value = null
     searchDraft.value = ''
     appliedSearch.value = ''
     validationError.value = ''
@@ -364,10 +372,10 @@ defineExpose({ refresh })
           :rows="rows"
           :caption="isEmployeeList ? 'Empleados' : 'Clientes'"
         >
-          <template #actions>
+          <template #actions="{ row }">
             <div class="user-actions">
               <span title="Ver" class="action-hint">
-                <button type="button" disabled aria-label="Ver">
+                <button type="button" aria-label="Ver" @click="viewUser(row)">
                   <i class="bi bi-eye" aria-hidden="true"></i>
                 </button>
               </span>
@@ -421,6 +429,12 @@ defineExpose({ refresh })
         </footer>
       </template>
     </div>
+    <UserDetailDialog
+      :selection="selectedUser"
+      @close="selectedUser = null"
+      @session-expired="emit('session-expired')"
+      @forbidden="emit('forbidden')"
+    />
   </div>
 </template>
 
@@ -455,7 +469,7 @@ label {
   position: absolute;
   left: 14px;
   top: 14px;
-  color: #6b6565;
+  color: var(--color-gray);
 }
 input,
 select,
@@ -466,7 +480,7 @@ button {
 }
 input,
 select {
-  border: 1px solid #bdb8b8;
+  border: 1px solid var(--color-light_gray);
   background: var(--color-white);
   color: var(--color-dark);
   padding: 10px 12px;
@@ -476,7 +490,7 @@ input {
   padding-left: 40px;
 }
 input[aria-invalid='true'] {
-  border-color: #a52121;
+  border-color: var(--color-error);
 }
 .filters label {
   flex: 1;
@@ -497,7 +511,7 @@ input[aria-invalid='true'] {
 }
 .filter-picker summary {
   min-height: 44px;
-  border: 1px solid #bdb8b8;
+  border: 1px solid var(--color-light_gray);
   border-radius: var(--radius-small);
   background: var(--color-white);
   cursor: pointer;
@@ -506,7 +520,7 @@ input[aria-invalid='true'] {
 }
 .filter-picker summary span {
   margin-left: 8px;
-  color: #5d5555;
+  color: var(--color-gray);
   font-weight: 400;
 }
 .filter-picker summary:focus-visible {
@@ -524,10 +538,10 @@ input[aria-invalid='true'] {
   overflow-y: auto;
   margin: 0;
   padding: 8px;
-  border: 1px solid #bdb8b8;
+  border: 1px solid var(--color-light_gray);
   border-radius: var(--radius-small);
   background: var(--color-white);
-  box-shadow: 0 4px 12px #00000014;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-black) 8%, transparent);
 }
 .filter-picker[open] .checkbox-options {
   animation: filter-open 160ms ease-out;
@@ -581,11 +595,16 @@ input[aria-invalid='true'] {
   justify-content: center;
   width: 36px;
   min-height: 36px;
-  pointer-events: none;
   background: transparent;
   border: 0;
   color: var(--color-primary);
   font-size: 1.125rem;
+}
+.user-actions button:disabled {
+  pointer-events: none;
+}
+.user-actions button:not(:disabled):hover {
+  background: var(--color-light_gray);
 }
 .action-hint {
   display: inline-flex;
@@ -626,13 +645,13 @@ button:focus-visible {
   background: var(--color-white);
 }
 .error {
-  color: #8c1c1c;
-  border-left: 4px solid #a52121;
+  color: var(--color-error);
+  border-left: 4px solid var(--color-error);
 }
 .result-count {
   margin: 0 0 12px;
   font-size: 0.875rem;
-  color: #5d5555;
+  color: var(--color-gray);
 }
 .empty-state {
   text-align: center;
