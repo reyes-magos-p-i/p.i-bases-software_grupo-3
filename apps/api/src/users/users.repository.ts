@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -24,23 +25,87 @@ import type {
 export class UsersRepository {
   constructor(private readonly db: DatabaseService) {}
 
+  async deactivateEmployee(id: number, actorId: number): Promise<void> {
+    if (id === actorId)
+      throw new ConflictException('No puedes desactivar tu propia cuenta.');
+    await this.db.transaction(async (connection) => {
+      await this.lockEmployeeLifecycle(connection);
+      const actor = await connection.execute<{ ROLE: string }>(
+        "SELECT ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :actorId AND STATUS = 'ACTIVE'",
+        { actorId: { val: actorId, type: oracle.NUMBER } },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+      );
+      if (actor.rows?.[0]?.ROLE !== UserRole.ADMINISTRATOR)
+        throw new ForbiddenException(
+          'No tienes permiso para desactivar personal.',
+        );
+      const selected = await connection.execute<{ ROLE: string }>(
+        "SELECT ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE' FOR UPDATE",
+        { id: { val: id, type: oracle.NUMBER } },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+      );
+      const employee = selected.rows?.[0];
+      if (!employee)
+        throw new NotFoundException(
+          'El usuario seleccionado no existe o ya está inactivo.',
+        );
+      if (employee.ROLE === UserRole.ADMINISTRATOR)
+        await this.requireAnotherAdministrator(connection);
+      const result = await connection.execute(
+        "UPDATE EMPLOYEES SET STATUS = 'INACTIVE' WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE'",
+        { id: { val: id, type: oracle.NUMBER } },
+        { autoCommit: false },
+      );
+      if (result.rowsAffected !== 1)
+        throw new Error('Oracle did not deactivate a single employee.');
+    });
+  }
+
+  private lockEmployeeLifecycle(connection: oracle.Connection) {
+    // Serialize role changes and deactivation before locking individual employees.
+    return connection.execute(
+      'LOCK TABLE EMPLOYEES IN SHARE ROW EXCLUSIVE MODE',
+      {},
+      { autoCommit: false },
+    );
+  }
+
+  private async requireAnotherAdministrator(connection: oracle.Connection) {
+    const administrators = await connection.execute<{ TOTAL: number }>(
+      "SELECT COUNT(*) AS TOTAL FROM EMPLOYEES WHERE ROLE = 'ADMINISTRATOR' AND STATUS = 'ACTIVE'",
+      {},
+      { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+    );
+    if ((administrators.rows?.[0]?.TOTAL ?? 0) <= 1)
+      throw new ConflictException(
+        'Debe permanecer al menos un administrador activo.',
+      );
+  }
+
   async updateEmployee(
     id: number,
     data: UpdateEmployeeDto,
   ): Promise<UpdatedUserDto> {
     try {
       return await this.db.transaction(async (connection) => {
+        if (data.role !== undefined)
+          await this.lockEmployeeLifecycle(connection);
         const current = await connection.execute<{
           EMAIL: string;
           ROLE: UserRole.EMPLOYEE | UserRole.ADMINISTRATOR;
         }>(
-          'SELECT EMAIL, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :id FOR UPDATE',
+          "SELECT EMAIL, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE' FOR UPDATE",
           { id: { val: id, type: oracle.NUMBER } },
           { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
         );
         const row = current.rows?.[0];
         if (!row)
           throw new NotFoundException('El usuario seleccionado no existe.');
+        if (
+          row.ROLE === UserRole.ADMINISTRATOR &&
+          data.role === UserRole.EMPLOYEE
+        )
+          await this.requireAnotherAdministrator(connection);
         if (data.email !== undefined) {
           const duplicate = await connection.execute(
             'SELECT 1 FROM EMPLOYEES WHERE LOWER(TRIM(EMAIL)) = :email AND EMPLOYEE_ID <> :id AND ROWNUM = 1',
@@ -89,7 +154,7 @@ export class UsersRepository {
           binds.addressId = { val: addressId, type: oracle.NUMBER };
         }
         const result = await connection.execute(
-          `UPDATE EMPLOYEES SET ${changes.join(', ')} WHERE EMPLOYEE_ID = :id`,
+          `UPDATE EMPLOYEES SET ${changes.join(', ')} WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE'`,
           binds,
           { autoCommit: false },
         );
@@ -156,7 +221,7 @@ export class UsersRepository {
        LEFT JOIN DISTRICTS d ON d.ID_DISTRICT = a.ID_DISTRICT
        LEFT JOIN CANTONS k ON k.ID_CANTON = d.ID_CANTON
        LEFT JOIN PROVINCES p ON p.ID_PROVINCE = k.ID_PROVINCE
-       WHERE e.EMPLOYEE_ID = :id`,
+       WHERE e.EMPLOYEE_ID = :id AND e.STATUS = 'ACTIVE'`,
       { id: { val: id, type: oracle.NUMBER } },
     );
     const row = result.rows?.[0];
@@ -208,7 +273,7 @@ export class UsersRepository {
   ): Promise<ListedUsersDto<ListedEmployeeDto>> {
     const name =
       "REGEXP_REPLACE(TRIM(e.FIRST_NAME || ' ' || e.SECOND_NAME || ' ' || e.FIRST_SURNAME || ' ' || e.SECOND_SURNAME), '[[:space:]]+', ' ')";
-    const conditions: string[] = [];
+    const conditions: string[] = ["e.STATUS = 'ACTIVE'"];
     const binds: oracle.BindParameters = {};
     if (query.search) {
       const terms = query.search.split(' ').map((term, index) => {
@@ -322,7 +387,7 @@ export class UsersRepository {
               c.EMPLOYEE_ID AS CREDENTIALS_EMPLOYEE_ID, c.PASSWORD_HASH
        FROM EMPLOYEES e
        LEFT JOIN EMPLOYEE_LOCAL_CREDENTIALS c ON c.EMPLOYEE_ID = e.EMPLOYEE_ID
-       WHERE LOWER(TRIM(e.EMAIL)) = :email
+       WHERE LOWER(TRIM(e.EMAIL)) = :email AND e.STATUS = 'ACTIVE'
        FETCH FIRST 2 ROWS ONLY`,
       { email: { val: email.trim().toLowerCase(), type: oracle.STRING } },
       { outFormat: oracle.OUT_FORMAT_OBJECT },
@@ -431,7 +496,7 @@ export class UsersRepository {
       ROLE: unknown;
       FIRST_NAME: unknown;
     }>(
-      'SELECT EMPLOYEE_ID, ROLE, FIRST_NAME FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
+      "SELECT EMPLOYEE_ID, ROLE, FIRST_NAME FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId AND STATUS = 'ACTIVE'",
       { employeeId: { val: employeeId, type: oracle.NUMBER } },
       { outFormat: oracle.OUT_FORMAT_OBJECT },
     );
