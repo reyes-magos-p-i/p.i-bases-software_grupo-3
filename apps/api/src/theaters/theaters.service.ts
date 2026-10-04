@@ -7,7 +7,7 @@ import { TheaterRepository } from './theater.repository/theater.repository';
 export class TheatersService {
   constructor(private readonly theatersRepository: TheaterRepository) {}
   create(createTheaterDto: CreateTheaterDto) {
-    return 'This action adds a new theater';
+    return this.theatersRepository.createTheater(createTheaterDto);
   }
 
   findAll() {

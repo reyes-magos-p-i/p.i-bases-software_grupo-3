@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { Theater } from '../entities/theater.entity';
+import { CreateTheaterDto } from '../dto/create-theater.dto';
+import oracledb from 'oracledb';
 
 @Injectable()
 export class TheaterRepository {
@@ -39,4 +41,50 @@ export class TheaterRepository {
       throw error;
     }
   }
+
+    async createTheater(dto: CreateTheaterDto): Promise<Theater> {
+    try {
+        const { branchId, numberOfSeats, dimensionX, dimensionY, projectorName } = dto;
+
+        const theaterId = await this.db.transaction(async (conn) => {
+        const projectorResult = await conn.execute(
+        `SELECT projector_id FROM Projectors WHERE name = :projectorName`,
+        { projectorName },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+        );
+
+        const projectorId = (projectorResult.rows as { PROJECTOR_ID: number }[] | undefined)?.[0]?.PROJECTOR_ID;
+
+        if (projectorId == null) {
+        throw new Error(`Projector not found: ${projectorName}`);
+        }
+
+        const theaterResult = await conn.execute(
+        `INSERT INTO Theaters (branch_id, number_seats, dimension_x, dimension_y, projector_id)
+            VALUES (:branchId, :numberOfSeats, :dimensionX, :dimensionY, :projectorId)
+            RETURNING theater_id INTO :theaterId`,
+            {
+                branchId,
+                numberOfSeats,
+                dimensionX,
+                dimensionY,
+                projectorId,
+                theaterId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+            },
+        );
+        return (theaterResult.outBinds as { theaterId: number[] }).theaterId[0];
+        });
+        return {
+          theaterId,
+          branchId,
+          numberOfSeats,
+          dimensionX,
+          dimensionY,
+          projectorName,
+        };
+    } catch (error) {
+        this.logger.error('Error creating theater', error as Error);
+        throw error;
+    }
+    }
 }
