@@ -208,7 +208,7 @@ describe('DashboardView', () => {
     expect(view.text()).not.toContain('El número de sala se genera automáticamente.')
     expect(view.get<HTMLSelectElement>('[name="status"]').element.value).toBe('Disponible')
 
-    await view.get('[name="numberOfSeats"]').setValue('250')
+    await view.get('[name="numberOfSeats"]').setValue('240')
     await view.get('[name="projectorName"]').setValue('IMAX')
     await view.get('[name="branchId"]').setValue('3')
     await view.get('[name="dimensionX"]').setValue('20')
@@ -217,7 +217,7 @@ describe('DashboardView', () => {
     await flushPromises()
 
     expect(createTheater).toHaveBeenCalledExactlyOnceWith({
-      numberOfSeats: 250,
+      numberOfSeats: 240,
       dimensionX: 20,
       dimensionY: 12,
       projectorName: 'IMAX',
@@ -238,6 +238,20 @@ describe('DashboardView', () => {
 
     expect(createTheater).not.toHaveBeenCalled()
     expect(view.get('.field-error').text()).toContain('entre 1 y 4999')
+  })
+
+  it('rejects theater seat counts that do not match the dimensions', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Salas"]').trigger('click')
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+    await view.get('[name="numberOfSeats"]').setValue('250')
+    await view.get('[name="dimensionX"]').setValue('20')
+    await view.get('[name="dimensionY"]').setValue('12')
+    await view.get('.theater-dialog form').trigger('submit')
+
+    expect(createTheater).not.toHaveBeenCalled()
+    expect(view.get('.field-error').text()).toContain('igual a Dimensión X por Dimensión Y')
   })
 
   it('moves to clients and hides administrator options when the server reports an employee role', async () => {

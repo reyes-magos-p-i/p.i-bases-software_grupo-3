@@ -55,6 +55,16 @@ function validate() {
     errors.dimensionX = 'Introduce una dimensión válida.'
   if (!Number.isInteger(dimensionY) || dimensionY < 1)
     errors.dimensionY = 'Introduce una dimensión válida.'
+  if (
+    Number.isInteger(seats) &&
+    Number.isInteger(dimensionX) &&
+    Number.isInteger(dimensionY) &&
+    seats >= 1 &&
+    dimensionX >= 1 &&
+    dimensionY >= 1 &&
+    seats !== dimensionX * dimensionY
+  )
+    errors.numberOfSeats = 'El número de asientos debe ser igual a Dimensión X por Dimensión Y.'
   if (!props.projectors.some((item) => item.name === draft.projectorName))
     errors.projectorName = 'Selecciona un tipo de proyector.'
   if (!props.cinemas.some((item) => String(item.branchId) === String(draft.branchId)))
