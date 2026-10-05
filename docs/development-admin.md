@@ -87,6 +87,11 @@ transacción perdedora y se devuelve `409`, sin enviar credenciales ni revelar e
 mensaje privado de Oracle. Otros errores de integridad no se convierten en un
 conflicto de correo.
 
+Las altas de personal traducen `UQ_EMPLOYEES_EMAIL` a `409` con rollback,
+sin enviar credenciales. Tanto clientes como empleados conservan reservado su
+correo al desactivarse. Las restricciones únicas protegen también las altas
+concurrentes; otros fallos de Oracle mantienen su tratamiento de error interno.
+
 ### Flujos disponibles
 
 `UsersModule` está registrado en `AppModule` y expone `POST /users` y
