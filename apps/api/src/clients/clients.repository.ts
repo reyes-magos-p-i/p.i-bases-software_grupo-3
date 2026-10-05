@@ -16,7 +16,10 @@ export class ClientsRepository {
     return !!result.rows?.length;
   }
 
-  async createClient(data: NewClientWithLocalCredentials): Promise<number> {
+  async createClient(
+    data: NewClientWithLocalCredentials,
+    emailVerification?: { tokenHash: string; expiresInMinutes: number },
+  ): Promise<number> {
     try {
       return await this.db.transaction(async (connection) => {
         const clientId = await this.insertClient(connection, data);
@@ -33,6 +36,29 @@ export class ClientsRepository {
         );
         if (credentialsResult.rowsAffected !== 1) {
           throw new Error('Oracle did not create a single credentials record.');
+        }
+
+        if (emailVerification) {
+          const verificationResult = await connection.execute(
+            `INSERT INTO CLIENT_EMAIL_VERIFICATIONS (
+               CLIENT_ID, TOKEN_HASH, EXPIRES_AT
+             ) VALUES (
+               :clientId, :tokenHash,
+               SYSTIMESTAMP + NUMTODSINTERVAL(:expiresInMinutes, 'MINUTE')
+             )`,
+            {
+              clientId: { val: clientId, type: oracle.NUMBER },
+              tokenHash: { val: emailVerification.tokenHash, type: oracle.STRING },
+              expiresInMinutes: {
+                val: emailVerification.expiresInMinutes,
+                type: oracle.NUMBER,
+              },
+            },
+            { autoCommit: false },
+          );
+          if (verificationResult.rowsAffected !== 1) {
+            throw new Error('Oracle did not create a single email verification.');
+          }
         }
 
         return clientId;

@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
+import oracle from 'oracledb';
 import { ClientsService } from './clients.service';
 import { DatabaseService } from '../database/database.service';
 import { ClientsRepository } from './clients.repository';
@@ -84,6 +85,124 @@ describe('ClientsService', () => {
     });
   });
 
+  describe('pending email verification', () => {
+    it('creates a pending client with its verification token and returns the public client', async () => {
+      repository.createClient.mockResolvedValue(12);
+      db.query.mockResolvedValue({ rows: [{ ...client, id: 12 }] });
+
+      await expect(
+        service.createPendingWithLocalCredentials(
+          { email: client.email, firstName: 'Ana' },
+          'password-hash',
+          'salt',
+          'token-hash',
+          30,
+        ),
+      ).resolves.toEqual({ ...client, id: 12 });
+      expect(repository.createClient).toHaveBeenCalledWith(
+        {
+          email: client.email,
+          firstName: 'Ana',
+          language: 'es',
+          passwordHash: 'password-hash',
+          salt: 'salt',
+        },
+        { tokenHash: 'token-hash', expiresInMinutes: 30 },
+      );
+    });
+
+    it('finds a pending local client by email or returns null when absent', async () => {
+      db.query
+        .mockResolvedValueOnce({ rows: [client] })
+        .mockResolvedValueOnce({});
+
+      await expect(
+        service.findPendingLocalClientByEmail(client.email),
+      ).resolves.toEqual(client);
+      await expect(
+        service.findPendingLocalClientByEmail('missing@example.com'),
+      ).resolves.toBeNull();
+      expect(db.query).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('JOIN CLIENT_EMAIL_VERIFICATIONS'),
+        { email: client.email },
+      );
+    });
+
+    it('rotates one verification and reports an unexpected row count', async () => {
+      db.query
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 0 });
+      await expect(
+        service.replaceEmailVerification(42, 'hash', 20),
+      ).resolves.toBeUndefined();
+      await expect(
+        service.replaceEmailVerification(42, 'hash', 20),
+      ).rejects.toThrow('Oracle did not rotate a single email verification.');
+    });
+
+    it.each([
+      { rowsAffected: 0, outBinds: { clientId: [42] } },
+      { rowsAffected: 1, outBinds: { clientId: 42 } },
+      { rowsAffected: 1, outBinds: { clientId: [0] } },
+      { rowsAffected: 1, outBinds: { clientId: ['42'] } },
+    ])(
+      'rejects an unavailable or invalid verification row: %p',
+      async (result) => {
+        conn.execute.mockResolvedValueOnce(result);
+        await expect(
+          service.consumeEmailVerification('token-hash'),
+        ).resolves.toBeNull();
+        expect(conn.execute).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('returns null when a consumed token no longer has a corresponding client', async () => {
+      conn.execute
+        .mockResolvedValueOnce({
+          rowsAffected: 1,
+          outBinds: { clientId: [42] },
+        })
+        .mockResolvedValueOnce({});
+      await expect(
+        service.consumeEmailVerification('token-hash'),
+      ).resolves.toBeNull();
+    });
+
+    it('returns the client after consuming an unexpired verification token', async () => {
+      conn.execute
+        .mockResolvedValueOnce({
+          rowsAffected: 1,
+          outBinds: { clientId: [42] },
+        })
+        .mockResolvedValueOnce({ rows: [client] });
+      await expect(
+        service.consumeEmailVerification('token-hash'),
+      ).resolves.toEqual(client);
+      expect(conn.execute).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM CLIENT_EMAIL_VERIFICATIONS'),
+        expect.objectContaining({
+          tokenHash: { val: 'token-hash', type: oracle.STRING },
+          clientId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
+        }),
+        { autoCommit: false },
+      );
+    });
+
+    it('checks pending status and clears a verification by client id', async () => {
+      db.query
+        .mockResolvedValueOnce({ rows: [{ pending: 1 }] })
+        .mockResolvedValueOnce({});
+      await expect(service.isEmailVerificationPending(42)).resolves.toBe(true);
+      await expect(service.isEmailVerificationPending(43)).resolves.toBe(false);
+      await service.clearPendingEmailVerification(42);
+      expect(db.query).toHaveBeenLastCalledWith(
+        'DELETE FROM CLIENT_EMAIL_VERIFICATIONS WHERE CLIENT_ID = :clientId',
+        { clientId: 42 },
+      );
+    });
+  });
+
   describe('createWithLocalCredentials', () => {
     it('delegates to the shared repository and returns the existing public client contract', async () => {
       repository.createClient.mockResolvedValue(7);
@@ -150,6 +269,119 @@ describe('ClientsService', () => {
         expect(db.query).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('deleteExpiredPendingClients', () => {
+    it('deletes only pending clients older than the retention period transactionally', async () => {
+      conn.execute
+        .mockResolvedValueOnce({ rows: [{ clientId: 42 }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+
+      await service.deleteExpiredPendingClients();
+
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+      expect(conn.execute).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining("NUMTODSINTERVAL(:retentionDays, 'DAY')"),
+        { retentionDays: 7 },
+        expect.objectContaining({ autoCommit: false }),
+      );
+      expect(conn.execute).toHaveBeenNthCalledWith(
+        2,
+        'DELETE FROM CLIENT_LOCAL_CREDENTIALS WHERE CLIENT_ID = :clientId',
+        { clientId: { val: 42, type: oracle.NUMBER } },
+        { autoCommit: false },
+      );
+      expect(conn.execute.mock.calls[2][0]).toContain('DELETE FROM CLIENTS');
+      expect(conn.execute.mock.calls[2][1]).toEqual({
+        clientId: { val: 42, type: oracle.NUMBER },
+      });
+    });
+
+    it('uses the email to purge an expired pending registration before re-registering', async () => {
+      conn.execute.mockResolvedValueOnce({ rows: [] });
+
+      await service.deleteExpiredPendingClientByEmail('ana@example.com');
+
+      expect(conn.execute).toHaveBeenCalledWith(
+        expect.stringContaining('AND EXISTS'),
+        { retentionDays: 7, email: 'ana@example.com' },
+        expect.objectContaining({ autoCommit: false }),
+      );
+      expect(conn.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not delete a row when Oracle returns an invalid pending client id', async () => {
+      conn.execute.mockResolvedValueOnce({ rows: [{ clientId: '42' }] });
+      await expect(service.deleteExpiredPendingClients()).rejects.toThrow(
+        'Oracle returned an invalid pending client identifier.',
+      );
+      expect(conn.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('requires exactly one credential deletion before deleting a pending client', async () => {
+      conn.execute
+        .mockResolvedValueOnce({ rows: [{ clientId: 42 }] })
+        .mockResolvedValueOnce({ rowsAffected: 0 });
+      await expect(service.deleteExpiredPendingClients()).rejects.toThrow(
+        'Oracle did not delete a single pending credential.',
+      );
+      expect(conn.execute).toHaveBeenCalledTimes(2);
+    });
+
+    it('requires exactly one pending client deletion after removing credentials', async () => {
+      conn.execute
+        .mockResolvedValueOnce({ rows: [{ clientId: 42 }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 0 });
+      await expect(service.deleteExpiredPendingClients()).rejects.toThrow(
+        'Oracle did not delete a single expired pending client.',
+      );
+    });
+
+    it('safely handles a cleanup query with no rows', async () => {
+      conn.execute.mockResolvedValueOnce({});
+      await expect(
+        service.deleteExpiredPendingClients(),
+      ).resolves.toBeUndefined();
+      expect(conn.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('deletes multiple pending clients sequentially on the transaction connection', async () => {
+      conn.execute
+        .mockResolvedValueOnce({ rows: [{ clientId: 42 }, { clientId: 43 }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+
+      await service.deleteExpiredPendingClients();
+
+      expect(conn.execute).toHaveBeenCalledTimes(5);
+      expect(conn.execute.mock.calls[1][1]).toEqual({
+        clientId: { val: 42, type: oracle.NUMBER },
+      });
+      expect(conn.execute.mock.calls[2][1]).toEqual({
+        clientId: { val: 42, type: oracle.NUMBER },
+      });
+      expect(conn.execute.mock.calls[3][1]).toEqual({
+        clientId: { val: 43, type: oracle.NUMBER },
+      });
+      expect(conn.execute.mock.calls[4][1]).toEqual({
+        clientId: { val: 43, type: oracle.NUMBER },
+      });
+    });
+
+    it('does not extend the seven-day pending-account retention when rotating the link', async () => {
+      db.query.mockResolvedValue({ rowsAffected: 1 });
+
+      await service.replaceEmailVerification(42, 'a'.repeat(64), 30);
+
+      const [sql] = db.query.mock.calls[0];
+      expect(sql).toContain('target.EXPIRES_AT');
+      expect(sql).not.toContain('target.CREATED_AT = SYSTIMESTAMP');
+    });
   });
 
   describe('findOrCreateSocial', () => {

@@ -10,6 +10,8 @@ describe('AuthController', () => {
   let controller: AuthController;
   let auth: {
     register: jest.Mock;
+    confirmEmailVerification: jest.Mock;
+    resendEmailVerification: jest.Mock;
     loginEmployee: jest.Mock;
     facebookLogin: jest.Mock;
   };
@@ -19,6 +21,8 @@ describe('AuthController', () => {
   beforeEach(async () => {
     auth = {
       register: jest.fn(),
+      confirmEmailVerification: jest.fn(),
+      resendEmailVerification: jest.fn(),
       loginEmployee: jest.fn(),
       facebookLogin: jest.fn(),
     };
@@ -48,6 +52,26 @@ describe('AuthController', () => {
 
     expect(auth.register).toHaveBeenCalledWith(dto);
     expect(result).toEqual({ id: 1, email: 'a@b.com' });
+  });
+
+  it('confirms client email and returns the client session', async () => {
+    const result = { accessToken: 'client-token', client: { id: 1 } };
+    auth.confirmEmailVerification.mockResolvedValue(result);
+
+    await expect(
+      controller.confirmEmail({ token: 'a'.repeat(64) }),
+    ).resolves.toEqual(result);
+    expect(auth.confirmEmailVerification).toHaveBeenCalledWith('a'.repeat(64));
+  });
+
+  it('resends client email verification', async () => {
+    const dto = { email: 'client@example.com' };
+    auth.resendEmailVerification.mockResolvedValue({ message: 'sent' });
+
+    await expect(controller.resendEmailVerification(dto)).resolves.toEqual({
+      message: 'sent',
+    });
+    expect(auth.resendEmailVerification).toHaveBeenCalledWith(dto.email);
   });
 
   it('facebookLogin() delegates the access token and returns the service result', async () => {

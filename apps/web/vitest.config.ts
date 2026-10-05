@@ -13,7 +13,9 @@ export default mergeConfig(
         provider: 'v8',
         reporter: ['text', 'lcov'],
         reportsDirectory: './coverage',
-        exclude: ['apps/web/src/loadFBSDK.ts',],
+        exclude: [
+          'apps/web/src/loadFBSDK.ts',
+        ],
       },
     },
   }),

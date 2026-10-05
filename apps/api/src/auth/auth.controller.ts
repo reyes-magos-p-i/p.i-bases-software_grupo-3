@@ -20,6 +20,8 @@ import { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
 import { EmployeeSessionService } from './employee-session.service';
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
+import { ConfirmEmailVerificationDto } from './dto/confirm-email-verification.dto';
+import { ResendEmailVerificationDto } from './dto/resend-email-verification.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -30,8 +32,22 @@ export class AuthController {
   ) {}
 
   @Post('register')
+  @UseGuards(ThrottlerGuard)
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
+  }
+
+  @Post('confirm-email')
+  @UseGuards(ThrottlerGuard)
+  @Header('Cache-Control', 'no-store')
+  confirmEmail(@Body() dto: ConfirmEmailVerificationDto) {
+    return this.auth.confirmEmailVerification(dto.token);
+  }
+
+  @Post('resend-email-verification')
+  @UseGuards(ThrottlerGuard)
+  resendEmailVerification(@Body() dto: ResendEmailVerificationDto) {
+    return this.auth.resendEmailVerification(dto.email);
   }
 
   @Post('employees/login')

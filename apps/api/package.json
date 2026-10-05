@@ -45,7 +45,8 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "vue3-google-login": "^2.1.4"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",

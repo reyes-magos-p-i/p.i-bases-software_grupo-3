@@ -1,33 +1,36 @@
 <script setup lang="ts">
 import { loginWithFacebook } from '@/facebook-auth'
-import { loginWithGoogle } from '@/services/authService'
+import { facebookLogin, loginWithGoogle } from '@/services/authService'
+import type { ClientIdentity } from '@/types/client-auth'
+
 const emit = defineEmits<{
-  (e: 'google'): void
-  (e: 'facebook', accessToken: string): void
-  (e: 'close-modal'): void
+  (e: 'authenticated', identity: ClientIdentity): void
+  (e: 'error', message: string): void
 }>()
 const props = withDefaults(defineProps<{ mode?: 'register' | 'login'; disabled?: boolean }>(), {
   mode: 'register',
   disabled: false,
 })
 
-// OAuth handlers remain owned by their respective integrations.
 async function onGoogle() {
-  if (!props.disabled) emit('google')
+  if (props.disabled) return
   try {
-    await loginWithGoogle()
-    console.log('google login successful')
-    emit('close-modal')
-  } catch (error) {
-    console.error('google login failed or was cancelled', error)
+    emit('authenticated', await loginWithGoogle())
+  } catch {
+    emit('error', 'No se pudo iniciar sesión con Google. Inténtalo nuevamente.')
   }
 }
 
-// TODO (Diego): implementar el flujo OAuth de Facebook
 async function onFacebook() {
-  const response = await loginWithFacebook()
-  if (response.status === 'connected' && response.authResponse) {
-    emit('facebook', response.authResponse.accessToken)
+  if (props.disabled) return
+  try {
+    const response = await loginWithFacebook()
+    if (response.status === 'connected' && response.authResponse) {
+      const result = await facebookLogin(response.authResponse.accessToken)
+      emit('authenticated', result.client)
+    }
+  } catch {
+    emit('error', 'No se pudo conectar con Facebook. Inténtalo nuevamente.')
   }
 }
 </script>

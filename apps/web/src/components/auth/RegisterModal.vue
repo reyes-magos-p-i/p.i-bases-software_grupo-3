@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { facebookLogin, registerUser } from '@/services/authService'
+import { reactive, ref, watch } from 'vue'
+import {
+  EmailDeliveryError,
+  registerUser,
+  resendEmailVerification,
+} from '@/services/authService'
 import BaseModal from '@/components/common/BaseModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
+import type { ClientIdentity } from '@/types/client-auth'
 
-defineProps<{ open: boolean }>()
-const emit = defineEmits<{ (e: 'close'): void; (e: 'registered'): void }>()
+const props = defineProps<{ open: boolean }>()
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'authenticated', identity: ClientIdentity): void
+}>()
 
 const form = reactive({
   email: '',
@@ -24,7 +32,21 @@ const form = reactive({
 // If a field has no error, its value will be an empty string and the template will not display an error.
 const errors = reactive<Record<string, string>>({})
 const loading = ref(false)
+const resendLoading = ref(false)
 const serverError = ref('')  // For Backend errors that are not field-specific (network issues, server errors).
+const verificationEmail = ref('')
+const verificationState = ref<'idle' | 'sent' | 'delivery-failed'>('idle')
+
+watch(
+  () => props.open,
+  (open) => {
+    if (!open) {
+      verificationState.value = 'idle'
+      verificationEmail.value = ''
+      serverError.value = ''
+    }
+  },
+)
 
 /**
  * TODO(Raul): Safeguard against common passwords, probably by using a
@@ -32,15 +54,62 @@ const serverError = ref('')  // For Backend errors that are not field-specific (
  */
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*_-]).{8,}$/
 
+function normalizeCostaRicaPhone(phone: string): string {
+  return phone.trim().replace(/[-\s]/gu, '')
+}
+
+function isAdult(birthDate: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(birthDate)
+  if (!match) return false
+  const [, yearText, monthText, dayText] = match
+  const birthYear = Number(yearText)
+  const birthMonth = Number(monthText)
+  const birthDay = Number(dayText)
+  const parsedDate = new Date(Date.UTC(birthYear, birthMonth - 1, birthDay))
+  if (
+    parsedDate.getUTCFullYear() !== birthYear ||
+    parsedDate.getUTCMonth() + 1 !== birthMonth ||
+    parsedDate.getUTCDate() !== birthDay
+  ) return false
+
+  const todayParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Costa_Rica',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts()
+  const today = Object.fromEntries(
+    todayParts.map(({ type, value }) => [type, value]),
+  )
+  const todayYear = Number(today.year)
+  const todayMonth = Number(today.month)
+  const todayDay = Number(today.day)
+
+  return (
+    birthYear < todayYear - 18 ||
+    (birthYear === todayYear - 18 &&
+      (birthMonth < todayMonth ||
+        (birthMonth === todayMonth && birthDay <= todayDay)))
+  )
+}
+
 function validate(): boolean {
   Object.keys(errors).forEach((k) => delete errors[k])
 
   if (!/^\S+@\S+\.\S+$/.test(form.email)) errors.email = 'Ingresa un correo válido'
   if (!form.firstName.trim()) errors.firstName = 'Requerido'
   if (!form.lastName.trim()) errors.lastName = 'Requerido'
-  if (!form.phone.trim()) errors.phone = 'Requerido'
+  if (!form.phone.trim()) {
+    errors.phone = 'Requerido'
+  } else if (!/^\d{4}[-\s]?\d{4}$/u.test(form.phone.trim())) {
+    errors.phone = 'Ingresa un teléfono costarricense válido de 8 dígitos'
+  }
   if (!form.gender) errors.gender = 'Selecciona una opción'
-  if (!form.birthDate) errors.birthDate = 'Requerido'
+  if (!form.birthDate) {
+    errors.birthDate = 'Requerido'
+  } else if (!isAdult(form.birthDate)) {
+    errors.birthDate = 'Debes tener al menos 18 años para registrarte'
+  }
   if (!PASSWORD_RULE.test(form.password))
     errors.password = 'Mínimo 8 caracteres con mayúscula, minúscula, número y un carácter especial (!@#$%^&*_-).'
   if (form.password === form.email || form.password === form.firstName || form.password === form.lastName)
@@ -52,20 +121,14 @@ function validate(): boolean {
   return Object.keys(errors).length === 0
 }
 
-async function handleFacebookLogin(accessToken: string) {
+function handleAuthenticated(identity: ClientIdentity) {
   serverError.value = ''
+  emit('authenticated', identity)
+  emit('close')
+}
 
-  try {
-    await facebookLogin(accessToken)
-
-    emit('registered')
-    emit('close')
-  } catch (error) {
-    serverError.value =
-      error instanceof Error
-        ? error.message
-        : 'No se pudo iniciar sesión con Facebook'
-  }
+function handleSocialAuthError(message: string) {
+  serverError.value = message
 }
 
 async function onSubmit() {
@@ -75,25 +138,55 @@ async function onSubmit() {
   loading.value = true
   try {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { confirmPassword , ...payload } = form
-    await registerUser(payload)
-    emit('registered')
-    emit('close')
+    const { confirmPassword: _confirmPassword, ...payload } = form
+    await registerUser({
+      ...payload,
+      phone: normalizeCostaRicaPhone(payload.phone),
+    })
+    verificationEmail.value = payload.email
+    verificationState.value = 'sent'
   } catch (e) {  // prevent reading from undefined if the error is not an instance of Error
-    serverError.value = e instanceof Error ? e.message : 'Error inesperado'
+    if (e instanceof EmailDeliveryError) {
+      verificationEmail.value = form.email
+      verificationState.value = 'delivery-failed'
+      serverError.value = e.message
+    } else {
+      serverError.value = e instanceof Error ? e.message : 'Error inesperado'
+    }
   } finally {  // No matter what happens, we want to stop the loading state. for the next request.
     loading.value = false
+  }
+}
+
+async function resendVerificationEmail() {
+  if (!verificationEmail.value || resendLoading.value) return
+  resendLoading.value = true
+  serverError.value = ''
+  try {
+    await resendEmailVerification(verificationEmail.value)
+    verificationState.value = 'sent'
+  } catch (error) {
+    serverError.value =
+      error instanceof Error
+        ? error.message
+        : 'No se pudo reenviar el correo de confirmación.'
+  } finally {
+    resendLoading.value = false
   }
 }
 </script>
 
 <template>
   <BaseModal :open="open" title="Crear cuenta" @close="emit('close')">
-    <SocialAuthButtons @facebook="handleFacebookLogin" @close-modal="emit('close')"/>
+    <template v-if="verificationState === 'idle'">
+      <SocialAuthButtons
+        @authenticated="handleAuthenticated"
+        @error="handleSocialAuthError"
+      />
 
-    <hr class="my-3" />
+      <hr class="my-3" />
 
-    <form novalidate @submit.prevent="onSubmit">
+      <form novalidate @submit.prevent="onSubmit">
       <div class="row g-3">
         <div class="col-12">
           <label class="form-label fw-bold" for="email">Correo Electrónico</label>
@@ -125,8 +218,10 @@ async function onSubmit() {
         <div class="col-6">
           <label class="form-label fw-bold" for="phone">Teléfono</label>
           <input id="phone" v-model="form.phone" type="tel" class="form-control"
-                 :class="{ 'is-invalid': errors.phone }" autocomplete="tel" />
+                 :class="{ 'is-invalid': errors.phone }" autocomplete="tel"
+                 inputmode="numeric" maxlength="9" placeholder="8888-1234" />
           <div class="invalid-feedback">{{ errors.phone }}</div>
+          <div class="form-text small">Ingresa 8 dígitos, por ejemplo 8888-1234.</div>
         </div>
         <div class="col-6">
           <label class="form-label fw-bold" for="gender">Género</label>
@@ -186,14 +281,37 @@ async function onSubmit() {
         </div>
       </div>
 
-      <div v-if="serverError" class="alert alert-danger mt-3 mb-0">{{ serverError }}</div>
+        <div v-if="serverError" class="alert alert-danger mt-3 mb-0">{{ serverError }}</div>
 
-      <div class="text-center mt-3">
-        <button type="submit" class="btn-brand" :disabled="loading">
-          {{ loading ? 'Creando...' : 'Crear cuenta' }}
-        </button>
-      </div>
-    </form>
+        <div class="text-center mt-3">
+          <button type="submit" class="btn-brand" :disabled="loading">
+            {{ loading ? 'Creando...' : 'Crear cuenta' }}
+          </button>
+        </div>
+      </form>
+    </template>
+
+    <section v-else class="verification-feedback" aria-live="polite">
+      <p v-if="verificationState === 'sent'" class="alert alert-success">
+        Te enviamos un enlace de confirmación a <strong>{{ verificationEmail }}</strong>.
+        Confirma tu correo para activar tu cuenta e iniciar sesión.
+      </p>
+      <p v-else class="alert alert-danger" role="alert">{{ serverError }}</p>
+      <p v-if="verificationState === 'delivery-failed'" class="small">
+        La cuenta quedó pendiente. Puedes volver a solicitar el correo.
+      </p>
+      <p v-if="serverError && verificationState === 'sent'" class="alert alert-danger" role="alert">
+        {{ serverError }}
+      </p>
+      <button
+        type="button"
+        class="btn-brand"
+        :disabled="resendLoading"
+        @click="resendVerificationEmail"
+      >
+        {{ resendLoading ? 'Enviando…' : 'Reenviar correo' }}
+      </button>
+    </section>
   </BaseModal>
 </template>
 
