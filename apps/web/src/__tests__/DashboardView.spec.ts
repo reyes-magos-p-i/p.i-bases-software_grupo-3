@@ -219,6 +219,7 @@ describe('DashboardView', () => {
   })
 
   it('closes the session before returning to the portal', async () => {
+    localStorage.setItem('accessToken', 'client-token')
     const view = await renderDashboard()
 
     await view.get('.logout-button').trigger('click')
@@ -226,6 +227,7 @@ describe('DashboardView', () => {
 
     expect(router.currentRoute.value.path).toBe('/')
     expect(closeEmployeeSession).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem('accessToken')).toBeNull()
   })
 
   it('does not navigate away when logout fails and permits a retry', async () => {
