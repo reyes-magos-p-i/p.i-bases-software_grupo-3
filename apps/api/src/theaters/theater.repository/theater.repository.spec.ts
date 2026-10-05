@@ -147,7 +147,9 @@ describe('TheaterRepository', () => {
     });
 
       it('defaults isActive to true when it is omitted', async () => {
-        const { isActive: ignoredIsActive, ...dtoWithoutActive } = theaterDto;
+        const dtoWithoutActive = { ...theaterDto };
+        delete dtoWithoutActive.isActive;
+
         connection.execute
           .mockResolvedValueOnce({ rows: [{ PROJECTOR_ID: 42 }] })
           .mockResolvedValueOnce({ outBinds: { theaterId: [8] } });
