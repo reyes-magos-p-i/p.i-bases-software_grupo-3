@@ -1,1 +1,3 @@
-export class CreateProjectorDto {}
+export class CreateProjectorDto {
+    name: string;
+}
