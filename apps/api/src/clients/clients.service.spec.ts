@@ -348,6 +348,31 @@ describe('ClientsService', () => {
       expect(conn.execute).toHaveBeenCalledTimes(1);
     });
 
+    it('deletes multiple pending clients sequentially on the transaction connection', async () => {
+      conn.execute
+        .mockResolvedValueOnce({ rows: [{ clientId: 42 }, { clientId: 43 }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+
+      await service.deleteExpiredPendingClients();
+
+      expect(conn.execute).toHaveBeenCalledTimes(5);
+      expect(conn.execute.mock.calls[1][1]).toEqual({
+        clientId: { val: 42, type: oracle.NUMBER },
+      });
+      expect(conn.execute.mock.calls[2][1]).toEqual({
+        clientId: { val: 42, type: oracle.NUMBER },
+      });
+      expect(conn.execute.mock.calls[3][1]).toEqual({
+        clientId: { val: 43, type: oracle.NUMBER },
+      });
+      expect(conn.execute.mock.calls[4][1]).toEqual({
+        clientId: { val: 43, type: oracle.NUMBER },
+      });
+    });
+
     it('does not extend the seven-day pending-account retention when rotating the link', async () => {
       db.query.mockResolvedValue({ rowsAffected: 1 });
 

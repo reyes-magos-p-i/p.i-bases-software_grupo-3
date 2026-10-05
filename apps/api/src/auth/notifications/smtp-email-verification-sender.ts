@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { join } from 'path';
+import { join } from 'node:path';
 import type { Mail, SMTPSentMessageInfo } from 'nodemailer';
 import { createSmtpTransport } from '../../common/smtp-transport';
 import { EmailVerificationSender } from './email-verification-sender';

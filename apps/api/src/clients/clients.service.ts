@@ -148,40 +148,52 @@ export class ClientsService {
         { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
       );
 
-      for (const row of result.rows ?? []) {
-        const clientId = row.clientId;
+      const clientIds = (result.rows ?? []).map(({ clientId }) => {
         if (
           typeof clientId !== 'number' ||
           !Number.isSafeInteger(clientId) ||
           clientId < 1
         ) {
-          throw new Error('Oracle returned an invalid pending client identifier.');
+          throw new Error(
+            'Oracle returned an invalid pending client identifier.',
+          );
         }
+        return clientId;
+      });
 
-        const credentials = await connection.execute(
-          'DELETE FROM CLIENT_LOCAL_CREDENTIALS WHERE CLIENT_ID = :clientId',
-          { clientId: { val: clientId, type: oracle.NUMBER } },
-          { autoCommit: false },
-        );
-        if (credentials.rowsAffected !== 1) {
-          throw new Error('Oracle did not delete a single pending credential.');
-        }
-
-        const client = await connection.execute(
-          `DELETE FROM CLIENTS
-            WHERE CLIENT_ID = :clientId
-              AND EXISTS (
-                SELECT 1 FROM CLIENT_EMAIL_VERIFICATIONS
-                 WHERE CLIENT_ID = :clientId
-              )`,
-          { clientId: { val: clientId, type: oracle.NUMBER } },
-          { autoCommit: false },
-        );
-        if (client.rowsAffected !== 1) {
-          throw new Error('Oracle did not delete a single expired pending client.');
-        }
-      }
+      await clientIds.reduce<Promise<void>>(async (previous, clientId) => {
+        await previous;
+        await this.deleteExpiredPendingClient(connection, clientId);
+      }, Promise.resolve());
     });
+  }
+
+  private async deleteExpiredPendingClient(
+    connection: oracle.Connection,
+    clientId: number,
+  ): Promise<void> {
+    const credentials = await connection.execute(
+      'DELETE FROM CLIENT_LOCAL_CREDENTIALS WHERE CLIENT_ID = :clientId',
+      { clientId: { val: clientId, type: oracle.NUMBER } },
+      { autoCommit: false },
+    );
+    if (credentials.rowsAffected !== 1) {
+      throw new Error('Oracle did not delete a single pending credential.');
+    }
+
+    const client = await connection.execute(
+      `DELETE FROM CLIENTS
+        WHERE CLIENT_ID = :clientId
+          AND EXISTS (
+            SELECT 1 FROM CLIENT_EMAIL_VERIFICATIONS
+             WHERE CLIENT_ID = :clientId
+          )`,
+      { clientId: { val: clientId, type: oracle.NUMBER } },
+      { autoCommit: false },
+    );
+    if (client.rowsAffected !== 1) {
+      throw new Error('Oracle did not delete a single expired pending client.');
+    }
   }
 
   async replaceEmailVerification(
