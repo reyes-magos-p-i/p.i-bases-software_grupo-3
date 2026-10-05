@@ -1,19 +1,32 @@
 import {
+  IsArray,
   IsInt,
   IsNotEmpty,
-  IsOptional,
   IsString,
-  MaxLength
-
+  Min,
 } from 'class-validator';
 
 export class CreateMovieDto {
+  @IsString()
+  @IsNotEmpty()
   title: string;
-  runningTime: number;
-  synopsis: string;
-  poster_image: string;
-  releaseYear: number;
-  clasification?: number;
 
+  @IsInt()
+  @Min(1)
+  runningTime: number;
+
+  @IsInt()
+  releaseYear: number;
+
+  @IsInt()
+  classificationId: number;
+
+  @IsArray()
+  @IsInt({ each: true })
+  languageIds: number[];
+
+  @IsArray()
+  @IsInt({ each: true })
+  genreIds: number[];
 }
 
