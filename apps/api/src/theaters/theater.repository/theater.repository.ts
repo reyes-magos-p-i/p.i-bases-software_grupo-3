@@ -86,5 +86,42 @@ export class TheaterRepository {
         this.logger.error('Error creating theater', error as Error);
         throw error;
     }
+  }
+
+  async getTheaterById(id: number): Promise<Theater | null> {
+    try {
+      const result = await this.db.query(
+        `SELECT t.theater_id,
+                t.branch_id,
+                t.number_seats,
+                t.dimension_x,
+                t.dimension_y,
+                p.name AS projector_name
+         FROM Theaters t
+         JOIN Projectors p ON p.projector_id = t.projector_id
+         WHERE t.theater_id = :id`,
+        { id },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+
+      const rows = (result.rows ?? []) as { THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string }[];
+
+      if (rows.length === 0) {
+        return null;
+      }
+
+      const row = rows[0];
+      return {
+        theaterId: row.THEATER_ID,
+        branchId: row.BRANCH_ID,
+        numberOfSeats: row.NUMBER_SEATS,
+        dimensionX: row.DIMENSION_X,
+        dimensionY: row.DIMENSION_Y,
+        projectorName: row.PROJECTOR_NAME,
+      };
+    } catch (error) {
+      this.logger.error('Error fetching theater by ID', error as Error);
+      throw error;
     }
+  }
 }

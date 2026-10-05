@@ -15,7 +15,7 @@ export class TheatersService {
   }
 
   findOne(id: number) {
-    return `This action returns a #${id} theater`;
+    return this.theatersRepository.getTheaterById(id);
   }
 
   update(id: number, updateTheaterDto: UpdateTheaterDto) {
