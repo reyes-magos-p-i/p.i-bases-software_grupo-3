@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
+import MovieCrud from '@/components/Movies/MovieCrud.vue';
 </script>
 
 <template>
@@ -9,6 +10,7 @@ import AppFooter from '@/components/layout/AppFooter.vue'
     <div class="landing-container home-content">
         <h1>Oops, no hay nada aqui. Estamos trabajando en ello.</h1>
     </div>
+    <MovieCrud></MovieCrud>
   </main>
   <AppFooter />
 </template>
