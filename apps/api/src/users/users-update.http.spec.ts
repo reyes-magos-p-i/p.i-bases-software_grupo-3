@@ -1,63 +1,43 @@
-import type { INestApplication } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  ValidationPipe,
+  type INestApplication,
+} from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import { AuthModule } from '../auth/auth.module';
+import { EMPLOYEE_SESSION_COOKIE } from '../auth/employee-session.service';
+import { ClientsRepository } from '../clients/clients.repository';
+import { ClientsService } from '../clients/clients.service';
+import { DatabaseService } from '../database/database.service';
+import { PasswordGenerator } from '../common/security/password-generator';
+import { PasswordHasher } from '../common/security/password-hasher';
+import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
+import { UsersRepository } from './users.repository';
+import { UsersService } from './users.service';
+import { UsersUpdateController } from './users-update.controller';
 
-// Compiled decorators preserve the DTO metadata used by the production validation pipe.
-const runtime = process
-  .getBuiltinModule('node:module')
-  .createRequire(__filename);
-const { Test } = runtime('@nestjs/testing') as typeof import('@nestjs/testing');
-const { ValidationPipe, NotFoundException, ConflictException } = runtime(
-  '@nestjs/common',
-) as typeof import('@nestjs/common');
-const { ConfigModule, ConfigService } = runtime(
-  '@nestjs/config',
-) as typeof import('@nestjs/config');
-const { JwtService } = runtime('@nestjs/jwt') as typeof import('@nestjs/jwt');
-const { AuthModule } = runtime(
-  '../dist/auth/auth.module.js',
-) as typeof import('../src/auth/auth.module');
-const { UsersUpdateController } = runtime(
-  '../dist/users/users-update.controller.js',
-) as typeof import('../src/users/users-update.controller');
-const { UsersService } = runtime(
-  '../dist/users/users.service.js',
-) as typeof import('../src/users/users.service');
-const { UsersRepository } = runtime(
-  '../dist/users/users.repository.js',
-) as typeof import('../src/users/users.repository');
-const { ClientsRepository } = runtime(
-  '../dist/clients/clients.repository.js',
-) as typeof import('../src/clients/clients.repository');
-const { ClientsService } = runtime(
-  '../dist/clients/clients.service.js',
-) as typeof import('../src/clients/clients.service');
-const { DatabaseService } = runtime(
-  '../dist/database/database.service.js',
-) as typeof import('../src/database/database.service');
-const { PasswordGenerator } = runtime(
-  '../dist/common/security/password-generator.js',
-) as typeof import('../src/common/security/password-generator');
-const { PasswordHasher } = runtime(
-  '../dist/common/security/password-hasher.js',
-) as typeof import('../src/common/security/password-hasher');
-const { InitialCredentialsSender } = runtime(
-  '../dist/users/notifications/initial-credentials-sender.js',
-) as typeof import('../src/users/notifications/initial-credentials-sender');
-const { EMPLOYEE_SESSION_COOKIE } = runtime(
-  '../dist/auth/employee-session.service.js',
-) as typeof import('../src/auth/employee-session.service');
+const secret = randomUUID();
 
-describe('Compiled user updates', () => {
+describe('User update and deactivation HTTP contracts', () => {
   let app: INestApplication<App>;
   let jwt: InstanceType<typeof JwtService>;
   const origin = 'http://localhost:5173';
   const repository = {
     findEmployeeIdentityById: jest.fn(),
     updateEmployee: jest.fn(),
+    deactivateEmployee: jest.fn(),
     getCreationOptions: jest.fn(),
   };
-  const clientsRepository = { updateClient: jest.fn() };
+  const clientsRepository = {
+    updateClient: jest.fn(),
+    deactivateClient: jest.fn(),
+  };
   const clients = { findById: jest.fn() };
   const generator = { generate: jest.fn() };
   const hasher = { hash: jest.fn() };
@@ -70,6 +50,8 @@ describe('Compiled user updates', () => {
         'Cookie',
         `${EMPLOYEE_SESSION_COOKIE}=${jwt.sign({ sub: 21, type: 'employee' })}`,
       );
+  const deactivate = (section = 'clients', id = '42') =>
+    patch(section, id + '/deactivate');
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -90,7 +72,7 @@ describe('Compiled user updates', () => {
       .overrideProvider(ConfigService)
       .useValue({
         get: (key: string) => ({ NODE_ENV: 'test', FRONTEND_URL: origin })[key],
-        getOrThrow: () => 'update-test-secret',
+        getOrThrow: () => secret,
       })
       .overrideProvider(DatabaseService)
       .useValue({})
@@ -328,5 +310,126 @@ describe('Compiled user updates', () => {
     );
     const response = await patch().send({ phoneNumber: null }).expect(500);
     expect(response.text).not.toContain('private database details');
+  });
+
+  describe('deactivation', () => {
+    it.each(['ADMINISTRATOR', 'EMPLOYEE'])(
+      'allows %s to deactivate clients without changing credentials',
+      async (role) => {
+        repository.findEmployeeIdentityById.mockResolvedValue({
+          id: 21,
+          role,
+          firstName: 'Ana',
+        });
+        const response = await deactivate().send({}).expect(204);
+        expect(response.text).toBe('');
+        expect(clientsRepository.deactivateClient).toHaveBeenCalledWith(42);
+        expect(generator.generate).not.toHaveBeenCalled();
+        expect(hasher.hash).not.toHaveBeenCalled();
+        expect(sender.send).not.toHaveBeenCalled();
+      },
+    );
+    it('passes the authenticated administrator to staff deactivation', async () => {
+      await deactivate('employees').expect(204);
+      expect(repository.deactivateEmployee).toHaveBeenCalledWith(42, 21);
+    });
+    it('rejects employees on staff deactivation', async () => {
+      repository.findEmployeeIdentityById.mockResolvedValue({
+        id: 21,
+        role: 'EMPLOYEE',
+        firstName: 'Ana',
+      });
+      await deactivate('employees').expect(403);
+      expect(repository.deactivateEmployee).not.toHaveBeenCalled();
+    });
+    it.each(['clients', 'employees'])(
+      'rejects missing sessions and client tokens for %s',
+      async (section) => {
+        await deactivate(section).unset('Cookie').expect(401);
+        await deactivate(section)
+          .unset('Cookie')
+          .set(
+            'Authorization',
+            `Bearer ${jwt.sign({ sub: 99, type: 'client' })}`,
+          )
+          .expect(403);
+        expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
+        expect(repository.deactivateEmployee).not.toHaveBeenCalled();
+      },
+    );
+    it.each([undefined, 'https://external.example'])(
+      'rejects origin %p before deactivation',
+      async (originValue) => {
+        const call = deactivate();
+        if (originValue) call.set('Origin', originValue);
+        else call.unset('Origin');
+        await call.expect(403);
+        expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
+      },
+    );
+    it.each(['0', '-1', '1.5', 'ADM42', '9007199254740992'])(
+      'rejects invalid target %s',
+      async (id) => {
+        await deactivate('clients', id).expect(400);
+        expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
+      },
+    );
+    it.each([
+      { status: 'ACTIVE' },
+      { actorId: 42 },
+      { password: randomUUID() },
+      [],
+    ])('rejects a nonempty or invalid body %p', async (body) => {
+      await deactivate().send(body).expect(400);
+      expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
+    });
+    it.each(['clients', 'employees'])(
+      'distinguishes missing and already inactive %s',
+      async (section) => {
+        const remove =
+          section === 'clients'
+            ? clientsRepository.deactivateClient
+            : repository.deactivateEmployee;
+        const name = section === 'clients' ? 'cliente' : 'empleado';
+        remove.mockRejectedValueOnce(
+          new NotFoundException(`El ${name} seleccionado no existe.`),
+        );
+        const missing = await deactivate(section).expect(404);
+        expect(missing.body.message).toBe(`El ${name} seleccionado no existe.`);
+        remove.mockRejectedValueOnce(
+          new ConflictException(`El ${name} ya está desactivado.`),
+        );
+        const inactive = await deactivate(section).expect(409);
+        expect(inactive.body.message).toBe(`El ${name} ya está desactivado.`);
+      },
+    );
+    it.each([
+      'No puedes desactivar tu propia cuenta.',
+      'Debe permanecer al menos un administrador activo.',
+    ])('preserves the protected-account conflict: %s', async (message) => {
+      repository.deactivateEmployee.mockRejectedValueOnce(
+        new ConflictException(message),
+      );
+      const response = await deactivate('employees').expect(409);
+      expect(response.body.message).toBe(message);
+    });
+    it('rejects the same employee cookie when its identity is no longer active', async () => {
+      await deactivate().expect(204);
+      repository.findEmployeeIdentityById.mockResolvedValue(null);
+      clientsRepository.deactivateClient.mockClear();
+      await deactivate().expect(401);
+      expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
+    });
+    it('keeps persistence errors private', async () => {
+      clientsRepository.deactivateClient.mockRejectedValueOnce(
+        new Error('Private Oracle details'),
+      );
+      const response = await deactivate().expect(500);
+      expect(response.body).toEqual({
+        statusCode: 500,
+        message: 'Internal server error',
+      });
+      expect(response.text).not.toContain('Oracle');
+    });
   });
 });

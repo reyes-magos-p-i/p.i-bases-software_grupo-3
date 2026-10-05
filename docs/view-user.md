@@ -75,8 +75,6 @@ los nuevos. Las respuestas tardías de solicitudes canceladas no se muestran.
 5. Comprobar X, Cerrar, Escape, foco, texto seleccionable y ventana móvil.
 
 Ejecutar `npm run test:cov`, `npm run lint` y `npm run build` en ambos proyectos.
-Después del build de la API, ejecutar
-`npm run test:e2e -- --runInBand --runTestsByPath test/user-detail.e2e-spec.ts`.
 En PowerShell con scripts deshabilitados, usar `npm.cmd`.
-Las pruebas automatizadas simulan Oracle y ejercitan HTTP con DTO compilados;
+Las pruebas unitarias y HTTP aisladas simulan Oracle y comprueban los DTO y permisos;
 la comprobación visual en navegador complementa estas pruebas.

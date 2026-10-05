@@ -148,6 +148,21 @@ describe('User list HTTP permissions and validation', () => {
     const response = await get('/users/clients/42').expect(404);
     expect(response.body.message).toBe('El usuario seleccionado no existe.');
   });
+  it.each(['/users/clients/42', '/users/employees/42'])(
+    'does not expose details without a session on %s',
+    async (path) => {
+      const response = await request(app.getHttpServer()).get(path).expect(401);
+      expect(response.body.statusCode).toBe(401);
+      expect(service.getClientDetail).not.toHaveBeenCalled();
+      expect(service.getEmployeeDetail).not.toHaveBeenCalled();
+    },
+  );
+  it('normalizes repeated search whitespace before querying', async () => {
+    await get('/users/clients').query({ search: '  Ana  Núñez  ' }).expect(200);
+    expect(service.listClients).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'Ana Núñez' }),
+    );
+  });
   it('keeps infrastructure errors private on detail endpoints', async () => {
     service.getEmployeeDetail.mockRejectedValue(
       new Error('Private Oracle query'),

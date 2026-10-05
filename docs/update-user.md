@@ -98,11 +98,11 @@ Pruebas manuales sugeridas:
 6. Editar el rol de la sesión y revisar menú y permisos con cuentas de prueba.
 7. Revisar teclado, foco y presentación móvil.
 
-En `apps/api`, ejecutar `npm run test:cov`, `npm run lint` y `npm run build`;
-después del build, `npm run test:e2e -- --runInBand test/users-update.e2e-spec.ts`.
+En `apps/api`, ejecutar `npm run test:cov`, `npm run lint` y `npm run build`.
 En `apps/web`, ejecutar `npm run test:cov`, `npm run lint` y `npm run build`.
 En PowerShell con scripts deshabilitados, usar `npm.cmd`.
-Las pruebas automatizadas simulan Oracle; la inspección visual en navegador y
+Las pruebas unitarias y HTTP aisladas simulan Oracle sin depender de `dist`;
+la inspección visual en navegador y
 la comprobación con la base real complementan estas verificaciones.
 
 El contador de dirección muestra caracteres con el formato `1/255`, igual que en creación. La validación conserva el límite de 255 bytes de Oracle. Cambiar sucursal reutiliza el catálogo existente y valida su existencia antes de guardar.

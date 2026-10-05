@@ -157,11 +157,11 @@ ni inicia reintentos automáticos.
 8. Comprobar teclado y ventana móvil: controles etiquetados, foco visible y tabla
    con desplazamiento horizontal, sin desbordar la página.
 
-En `apps/api`: `npm run test:cov`, `npm run lint`, `npm run build` y, después del
-build, `npm run test:e2e`. En `apps/web`: `npm run test:cov`, `npm run lint` y
+En `apps/api`: `npm run test:cov`, `npm run lint` y `npm run build`.
+En `apps/web`: `npm run test:cov`, `npm run lint` y
 `npm run build`. En PowerShell con scripts deshabilitados usar `npm.cmd`.
-Las pruebas automatizadas simulan Oracle y SMTP; las pruebas E2E del backend
-ejercitan también los DTO compilados. La comprobación manual en navegador y la
+Las pruebas unitarias y HTTP aisladas simulan Oracle y SMTP, y comprueban
+validación y permisos sin depender de un build previo. La comprobación manual en navegador y la
 verificación de los triggers en Oracle complementan estas pruebas.
 
 ## Usuarios activos
