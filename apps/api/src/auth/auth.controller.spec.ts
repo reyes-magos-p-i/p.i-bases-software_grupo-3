@@ -13,6 +13,7 @@ describe('AuthController', () => {
     confirmEmailVerification: jest.Mock;
     resendEmailVerification: jest.Mock;
     loginEmployee: jest.Mock;
+    loginClient: jest.Mock;
     facebookLogin: jest.Mock;
   };
   let session: { write: jest.Mock; clear: jest.Mock };
@@ -24,6 +25,7 @@ describe('AuthController', () => {
       confirmEmailVerification: jest.fn(),
       resendEmailVerification: jest.fn(),
       loginEmployee: jest.fn(),
+      loginClient: jest.fn(),
       facebookLogin: jest.fn(),
     };
     session = { write: jest.fn(), clear: jest.fn() };
@@ -52,6 +54,23 @@ describe('AuthController', () => {
 
     expect(auth.register).toHaveBeenCalledWith(dto);
     expect(result).toEqual({ id: 1, email: 'a@b.com' });
+  });
+
+  it('returns the client session without writing a staff cookie', async () => {
+    const dto = { email: 'client@example.com', password: ' Exact password ' };
+    const result = { accessToken: 'client-token', client: { id: 7 } };
+    auth.loginClient.mockResolvedValue(result);
+    await expect(controller.loginClient(dto)).resolves.toEqual(result);
+    expect(auth.loginClient).toHaveBeenCalledWith(dto);
+    expect(session.write).not.toHaveBeenCalled();
+  });
+
+  it('propagates client login failures', async () => {
+    const failure = new Error('Invalid credentials');
+    auth.loginClient.mockRejectedValue(failure);
+    await expect(
+      controller.loginClient({ email: 'a@example.com', password: 'wrong' }),
+    ).rejects.toBe(failure);
   });
 
   it('confirms client email and returns the client session', async () => {
