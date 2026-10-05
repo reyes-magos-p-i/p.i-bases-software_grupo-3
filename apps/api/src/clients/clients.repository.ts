@@ -173,4 +173,57 @@ export class ClientsRepository {
 
     return addressId;
   }
+
+  async findPasswordStatus(clientId: number): Promise<{ setAt: Date; expirationDays: number } | null> {
+    const result = await this.db.query<{ PASSWORD_SET_AT: Date; EXPIRATION_DAYS: number }>(
+      `SELECT PASSWORD_SET_AT, EXPIRATION_DAYS FROM CLIENT_LOCAL_CREDENTIALS WHERE CLIENT_ID = :clientId`,
+      { clientId: { val: clientId, type: oracle.NUMBER } },
+      { outFormat: oracle.OUT_FORMAT_OBJECT },
+    );
+    const row = result.rows?.[0];
+    return row ? { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS } : null;
+  }
+
+  async findPasswordHash(clientId: number): Promise<{ passwordHash: string; salt: string } | null> {
+    const result = await this.db.query<{ PASSWORD_HASH: string; SALT: string }>(
+      `SELECT PASSWORD_HASH, SALT FROM CLIENT_LOCAL_CREDENTIALS WHERE CLIENT_ID = :clientId`,
+      { clientId: { val: clientId, type: oracle.NUMBER } },
+      { outFormat: oracle.OUT_FORMAT_OBJECT },
+    );
+    const row = result.rows?.[0];
+    return row ? { passwordHash: row.PASSWORD_HASH, salt: row.SALT } : null;
+  }
+
+  async savePassword(
+    clientId: number,
+    passwordHash: string,
+    salt: string,
+    expirationDays: number,
+  ): Promise<void> {
+    await this.db.transaction(async (connection) => {
+      const result = await connection.execute(
+        `MERGE INTO CLIENT_LOCAL_CREDENTIALS t
+        USING (SELECT :clientId AS client_id FROM dual) s
+        ON (t.client_id = s.client_id)
+        WHEN MATCHED THEN UPDATE SET
+          t.password_hash = :passwordHash, t.salt = :salt,
+          t.password_set_at = SYSTIMESTAMP, t.expiration_days = :expirationDays
+        WHEN NOT MATCHED THEN INSERT (client_id, password_hash, salt, password_set_at, expiration_days)
+        VALUES (:clientId, :passwordHash, :salt, SYSTIMESTAMP, :expirationDays)`,
+        {
+          clientId: { val: clientId, type: oracle.NUMBER },
+          passwordHash: { val: passwordHash, type: oracle.STRING },
+          salt: { val: salt, type: oracle.STRING },
+          expirationDays: { val: expirationDays, type: oracle.NUMBER },
+        },
+        { autoCommit: false },
+      );
+      if (result.rowsAffected !== 1) {
+        throw new Error('Oracle did not upsert exactly one credentials record.');
+      }
+    });
+  }
 }
+
+
+
