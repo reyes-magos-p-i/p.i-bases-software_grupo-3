@@ -30,6 +30,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: El cliente ya está desactivado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
   /users/employees/{id}/deactivate:
@@ -54,7 +60,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: No puedes desactivar tu propia cuenta o debe permanecer al menos un administrador activo.
+          description: El empleado ya está desactivado, no puedes desactivar tu propia cuenta o debe permanecer al menos un administrador activo.
           content:
             application/json:
               schema:
@@ -130,7 +136,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     NotFound:
-      description: El usuario seleccionado no existe o ya está inactivo.
+      description: El usuario seleccionado no existe.
       content:
         application/json:
           schema:

@@ -62,30 +62,80 @@ describe('ClientsRepository', () => {
 
   describe('deactivateClient', () => {
     it('updates only the status and commits exactly one client', async () => {
-      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE' }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
       await repository.deactivateClient(42);
       expect(connection.execute).toHaveBeenCalledWith(
         "UPDATE CLIENTS SET STATUS = 'INACTIVE' WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
         { id: { val: 42, type: oracle.NUMBER } },
         { autoCommit: false },
       );
-      expect(connection.execute).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenNthCalledWith(
+        1,
+        'SELECT STATUS FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
+        { id: { val: 42, type: oracle.NUMBER } },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+      );
+      expect(connection.execute).toHaveBeenCalledTimes(2);
       expect(connection.commit).toHaveBeenCalledTimes(1);
     });
-    it('reports inactive or nonexistent clients without committing', async () => {
-      connection.execute.mockResolvedValueOnce({ rowsAffected: 0 });
+    it('reports nonexistent clients without committing', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [] });
       await expect(repository.deactivateClient(42)).rejects.toMatchObject({
         status: 404,
       });
       expect(connection.commit).not.toHaveBeenCalled();
       expect(connection.rollback).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenCalledTimes(1);
     });
-    it('rolls back unexpected persistence outcomes', async () => {
-      connection.execute.mockResolvedValueOnce({ rowsAffected: 2 });
-      await expect(repository.deactivateClient(42)).rejects.toThrow(
-        'single client',
-      );
+    it('distinguishes an already inactive client without updating it', async () => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ STATUS: 'INACTIVE' }],
+      });
+      await expect(repository.deactivateClient(42)).rejects.toMatchObject({
+        status: 409,
+        message: 'El cliente ya está desactivado.',
+      });
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
       expect(connection.rollback).toHaveBeenCalledTimes(1);
+    });
+    it.each(['UNKNOWN', null, undefined])(
+      'rejects unexpected stored status %p',
+      async (status) => {
+        connection.execute.mockResolvedValueOnce({
+          rows: [{ STATUS: status }],
+        });
+        await expect(repository.deactivateClient(42)).rejects.toThrow(
+          'Invalid client status.',
+        );
+        expect(connection.execute).toHaveBeenCalledTimes(1);
+        expect(connection.commit).not.toHaveBeenCalled();
+      },
+    );
+    it.each([0, 2, undefined])(
+      'rolls back unexpected persistence outcome %p',
+      async (rowsAffected) => {
+        connection.execute
+          .mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE' }] })
+          .mockResolvedValueOnce({ rowsAffected });
+        await expect(repository.deactivateClient(42)).rejects.toThrow(
+          'single client',
+        );
+        expect(connection.rollback).toHaveBeenCalledTimes(1);
+      },
+    );
+    it('keeps an inactive client email reserved', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [{ FOUND: 1 }] });
+      await expect(
+        repository.clientEmailExists('inactive@example.com'),
+      ).resolves.toBe(true);
+      expect(connection.execute).toHaveBeenCalledWith(
+        'SELECT 1 AS FOUND FROM CLIENTS WHERE EMAIL = :email AND ROWNUM = 1',
+        { email: 'inactive@example.com' },
+        expect.anything(),
+      );
     });
   });
   describe('updateClient', () => {

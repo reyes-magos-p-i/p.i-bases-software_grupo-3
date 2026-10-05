@@ -72,8 +72,10 @@ describe('UsersRepository', () => {
       async (role) => {
         connection.execute
           .mockResolvedValueOnce({})
-          .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.ADMINISTRATOR }] })
-          .mockResolvedValueOnce({ rows: [{ ROLE: role }] });
+          .mockResolvedValueOnce({
+            rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.ADMINISTRATOR }],
+          })
+          .mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE', ROLE: role }] });
         if (role === UserRole.ADMINISTRATOR)
           connection.execute.mockResolvedValueOnce({ rows: [{ TOTAL: 2 }] });
         connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
@@ -85,6 +87,19 @@ describe('UsersRepository', () => {
         expect(statements[statements.length - 1]).toBe(
           "UPDATE EMPLOYEES SET STATUS = 'INACTIVE' WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE'",
         );
+        expect(statements[1]).toContain(
+          "EMPLOYEE_ID = :actorId AND STATUS = 'ACTIVE'",
+        );
+        expect(statements[2]).toContain('EMPLOYEE_ID = :id FOR UPDATE');
+        if (role === UserRole.ADMINISTRATOR) {
+          expect(statements[3]).toContain(
+            "COUNT(*) AS TOTAL FROM EMPLOYEES WHERE ROLE = 'ADMINISTRATOR' AND STATUS = 'ACTIVE'",
+          );
+        } else {
+          expect(statements.some((sql) => sql.includes('COUNT(*)'))).toBe(
+            false,
+          );
+        }
         expect(
           statements.some((sql) => /DELETE|CREDENTIALS|ADDRESSES/.test(sql)),
         ).toBe(false);
@@ -92,31 +107,67 @@ describe('UsersRepository', () => {
       },
     );
     it('rejects an actor who lost administrator access before obtaining the lock', async () => {
-      connection.execute
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.EMPLOYEE }] });
+      connection.execute.mockResolvedValueOnce({}).mockResolvedValueOnce({
+        rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.EMPLOYEE }],
+      });
       await expect(repository.deactivateEmployee(42, 21)).rejects.toMatchObject(
         { status: 403 },
       );
       expect(connection.rollback).toHaveBeenCalledTimes(1);
     });
-    it('rejects a missing or inactive selected employee', async () => {
+    it('rejects a missing selected employee', async () => {
       connection.execute
         .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.ADMINISTRATOR }] })
+        .mockResolvedValueOnce({
+          rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.ADMINISTRATOR }],
+        })
         .mockResolvedValueOnce({ rows: [] });
       await expect(repository.deactivateEmployee(42, 21)).rejects.toMatchObject(
         { status: 404 },
       );
       expect(connection.rollback).toHaveBeenCalledTimes(1);
     });
+    it('reports an already inactive employee as a conflict without updating it', async () => {
+      connection.execute
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.ADMINISTRATOR }] })
+        .mockResolvedValueOnce({
+          rows: [{ ROLE: UserRole.EMPLOYEE, STATUS: 'INACTIVE' }],
+        });
+      await expect(repository.deactivateEmployee(42, 21)).rejects.toMatchObject(
+        { status: 409, message: 'El empleado ya está desactivado.' },
+      );
+      expect(connection.execute).toHaveBeenCalledTimes(3);
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+    });
+    it.each(['UNKNOWN', null, undefined])(
+      'rejects unexpected employee status %p',
+      async (status) => {
+        connection.execute
+          .mockResolvedValueOnce({})
+          .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.ADMINISTRATOR }] })
+          .mockResolvedValueOnce({
+            rows: [{ ROLE: UserRole.EMPLOYEE, STATUS: status }],
+          });
+        await expect(repository.deactivateEmployee(42, 21)).rejects.toThrow(
+          'Invalid employee status.',
+        );
+        expect(connection.execute).toHaveBeenCalledTimes(3);
+        expect(connection.commit).not.toHaveBeenCalled();
+      },
+    );
     it.each([0, 1])(
       'protects the last administrator with active count %s',
       async (total) => {
         connection.execute
           .mockResolvedValueOnce({})
-          .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.ADMINISTRATOR }] })
-          .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.ADMINISTRATOR }] })
+          .mockResolvedValueOnce({
+            rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.ADMINISTRATOR }],
+          })
+          .mockResolvedValueOnce({
+            rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.ADMINISTRATOR }],
+          })
           .mockResolvedValueOnce({ rows: [{ TOTAL: total }] });
         await expect(
           repository.deactivateEmployee(42, 21),
@@ -128,8 +179,12 @@ describe('UsersRepository', () => {
     it('rolls back an unexpected result count', async () => {
       connection.execute
         .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.ADMINISTRATOR }] })
-        .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.EMPLOYEE }] })
+        .mockResolvedValueOnce({
+          rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.ADMINISTRATOR }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.EMPLOYEE }],
+        })
         .mockResolvedValueOnce({ rowsAffected: 0 });
       await expect(repository.deactivateEmployee(42, 21)).rejects.toThrow(
         'single employee',
@@ -973,6 +1028,41 @@ describe('UsersRepository', () => {
         .mockResolvedValueOnce(insertedAddress)
         .mockResolvedValueOnce(insertedEmployee)
         .mockResolvedValueOnce({ rowsAffected: 1 });
+    });
+
+    it.each([
+      'ORA-00001: unique constraint (PRODUCTION.UQ_EMPLOYEES_EMAIL) violated',
+      'ORA-00001: unique constraint ("PRODUCTION"."UQ_EMPLOYEES_EMAIL") violated',
+    ])(
+      'rolls back and reports duplicate employee email: %s',
+      async (message) => {
+        connection.execute
+          .mockReset()
+          .mockResolvedValueOnce(insertedAddress)
+          .mockRejectedValueOnce({ errorNum: 1, message });
+        await expect(repository.createEmployee(employee)).rejects.toMatchObject(
+          {
+            status: 409,
+            message:
+              'El correo electrónico ya está registrado para otro empleado.',
+          },
+        );
+        expect(connection.execute).toHaveBeenCalledTimes(2);
+        expect(connection.rollback).toHaveBeenCalledTimes(1);
+        expect(connection.commit).not.toHaveBeenCalled();
+      },
+    );
+    it.each([
+      { errorNum: 1, message: 'OTHER_UQ_EMPLOYEES_EMAIL' },
+      { errorNum: 1, message: 'UQ_EMPLOYEES_EMAIL_OTHER' },
+      { errorNum: 1 },
+      { errorNum: 2291, message: 'UQ_EMPLOYEES_EMAIL' },
+      null,
+    ])('preserves unrelated creation failures: %p', async (failure) => {
+      connection.execute.mockReset().mockRejectedValueOnce(failure);
+      await expect(repository.createEmployee(employee)).rejects.toBe(failure);
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
     });
 
     it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR] as const)(

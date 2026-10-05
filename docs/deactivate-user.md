@@ -46,8 +46,9 @@ ALTER TABLE EMPLOYEES ADD CONSTRAINT CK_EMPLOYEES_STATUS
 ```
 
 La API requiere estas columnas antes de iniciarse. La desactivación actualiza
-solamente el estado dentro de una transacción. Un ID ausente o ya inactivo
-produce `404`, sin cambios. Las desactivaciones de personal y los cambios de
+solamente el estado dentro de una transacción. Se consulta la fila con
+`SELECT ... FOR UPDATE` antes de evaluar su estado: un ID ausente produce `404`
+y una cuenta ya inactiva produce `409`, sin cambios. Las desactivaciones de personal y los cambios de
 rol usan `LOCK TABLE EMPLOYEES IN SHARE ROW EXCLUSIVE MODE` antes del bloqueo
 de fila: serializan estas operaciones para proteger el último administrador.
 Ese bloqueo puede hacer esperar otras escrituras de personal durante la
@@ -69,7 +70,7 @@ compras ni a otros registros históricos.
 - Se requiere autenticación y el origen autorizado de la sesión.
 - Éxito: `204` sin cuerpo.
 - `400`: solicitud inválida; `401`: sesión no vigente; `403`: permiso u
-  origen incorrecto; `404`: inexistente/inactivo; `409`: cuenta protegida;
+  origen incorrecto; `404`: inexistente; `409`: cuenta ya inactiva o protegida;
   `500`: error interno sin detalles de Oracle.
 
 El contrato está en [deactivate-user.openapi.yaml](deactivate-user.openapi.yaml).
@@ -92,11 +93,11 @@ permisos reutilizan el flujo existente del dashboard.
 
 Las pruebas unitarias comprueban transacciones, permisos, cuentas protegidas,
 rechazo social, validación de sesión, confirmación, errores y actualización del
-listado. Las pruebas HTTP usan controladores y DTO compilados, repositorios
-reales y Oracle simulado; no desactivan cuentas de la base configurada.
+listado. Las pruebas HTTP aisladas usan controladores, DTO, guards y servicios
+reales con repositorios simulados; las pruebas de repositorio verifican SQL,
+bloqueos, commit y rollback con Oracle simulado. No desactivan cuentas de la base configurada.
 
 En `apps/api`, ejecutar `npm run test:cov`, `npm run lint` y `npm run build`.
-Después, `npm run test:e2e -- --runInBand --runTestsByPath test/users-deactivation.e2e-spec.ts`.
 En `apps/web`, ejecutar `npm run test:cov`, `npm run lint` y `npm run build`.
 En PowerShell con scripts deshabilitados, usar `npm.cmd`.
 

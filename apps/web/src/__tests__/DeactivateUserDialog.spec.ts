@@ -99,7 +99,7 @@ describe('DeactivateUserDialog', () => {
     const view = await render()
     await button('Confirmar desactivación').trigger('click')
     await flushPromises()
-    expect(page.get('[role="alert"]').text()).toContain('ya está inactivo')
+    expect(page.get('[role="alert"]').text()).toContain('no existe')
     expect(button('Confirmar desactivación').attributes('disabled')).toBeDefined()
     await button('Cancelar').trigger('click')
     await view.setProps({ selection: null })
@@ -138,8 +138,8 @@ describe('DeactivateUserDialog', () => {
   it.each([
     [401, 'La sesión ha expirado.', 'session-expired'],
     [403, 'No tienes permiso', 'forbidden'],
-    [404, 'no existe o ya está inactivo', undefined],
-    [409, 'Debe permanecer al menos un administrador activo.', undefined],
+    [404, 'no existe', undefined],
+    [409, 'No se puede desactivar este usuario.', undefined],
     [500, 'No se pudo confirmar', undefined],
     [undefined, 'No se pudo confirmar', undefined],
   ])('handles %s without exposing backend details or retrying', async (status, text, event) => {
@@ -161,6 +161,8 @@ describe('DeactivateUserDialog', () => {
   it.each([
     'No puedes desactivar tu propia cuenta.',
     'Debe permanecer al menos un administrador activo.',
+    'El cliente ya está desactivado.',
+    'El empleado ya está desactivado.',
   ])('explains protected accounts: %s', async (message) => {
     deactivateUser.mockRejectedValue(failure(409, message))
     await render()

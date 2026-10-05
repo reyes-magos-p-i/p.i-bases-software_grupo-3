@@ -40,16 +40,21 @@ export class UsersRepository {
         throw new ForbiddenException(
           'No tienes permiso para desactivar personal.',
         );
-      const selected = await connection.execute<{ ROLE: string }>(
-        "SELECT ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE' FOR UPDATE",
+      const selected = await connection.execute<{
+        ROLE: string;
+        STATUS: string;
+      }>(
+        'SELECT ROLE, STATUS FROM EMPLOYEES WHERE EMPLOYEE_ID = :id FOR UPDATE',
         { id: { val: id, type: oracle.NUMBER } },
         { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
       );
       const employee = selected.rows?.[0];
       if (!employee)
-        throw new NotFoundException(
-          'El usuario seleccionado no existe o ya está inactivo.',
-        );
+        throw new NotFoundException('El empleado seleccionado no existe.');
+      if (employee.STATUS === 'INACTIVE')
+        throw new ConflictException('El empleado ya está desactivado.');
+      if (employee.STATUS !== 'ACTIVE')
+        throw new Error('Invalid employee status.');
       if (employee.ROLE === UserRole.ADMINISTRATOR)
         await this.requireAnotherAdministrator(connection);
       const result = await connection.execute(
@@ -508,10 +513,11 @@ export class UsersRepository {
   }
 
   async createEmployee(data: CreateEmployeeRecord): Promise<number> {
-    return this.db.transaction(async (connection) => {
-      const addressId = await this.insertAddress(connection, data.address);
-      const result = await connection.execute<{ employeeId?: unknown }>(
-        `INSERT INTO EMPLOYEES (
+    try {
+      return await this.db.transaction(async (connection) => {
+        const addressId = await this.insertAddress(connection, data.address);
+        const result = await connection.execute<{ employeeId?: unknown }>(
+          `INSERT INTO EMPLOYEES (
           FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME,
           BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID, HIRE_DATE
         ) VALUES (
@@ -519,58 +525,70 @@ export class UsersRepository {
           TO_DATE(:birthday, 'FXYYYY-MM-DD'), :phoneNumber, :email, :role,
           :addressId, :branchId, TO_DATE(:hireDate, 'FXYYYY-MM-DD')
         ) RETURNING EMPLOYEE_ID INTO :employeeId`,
-        {
-          firstName: { val: data.firstName, type: oracle.STRING },
-          secondName: { val: data.secondName ?? null, type: oracle.STRING },
-          firstSurname: { val: data.firstSurname, type: oracle.STRING },
-          secondSurname: { val: data.secondSurname, type: oracle.STRING },
-          birthday: { val: data.birthday, type: oracle.STRING },
-          hireDate: { val: data.hireDate, type: oracle.STRING },
-          phoneNumber: { val: data.phoneNumber, type: oracle.STRING },
-          email: { val: data.email, type: oracle.STRING },
-          role: { val: data.role, type: oracle.STRING },
-          addressId: { val: addressId, type: oracle.NUMBER },
-          branchId: { val: data.branchId, type: oracle.NUMBER },
-          employeeId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
-        },
-        { autoCommit: false },
-      );
+          {
+            firstName: { val: data.firstName, type: oracle.STRING },
+            secondName: { val: data.secondName ?? null, type: oracle.STRING },
+            firstSurname: { val: data.firstSurname, type: oracle.STRING },
+            secondSurname: { val: data.secondSurname, type: oracle.STRING },
+            birthday: { val: data.birthday, type: oracle.STRING },
+            hireDate: { val: data.hireDate, type: oracle.STRING },
+            phoneNumber: { val: data.phoneNumber, type: oracle.STRING },
+            email: { val: data.email, type: oracle.STRING },
+            role: { val: data.role, type: oracle.STRING },
+            addressId: { val: addressId, type: oracle.NUMBER },
+            branchId: { val: data.branchId, type: oracle.NUMBER },
+            employeeId: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
+          },
+          { autoCommit: false },
+        );
 
-      const returnedIds = result.outBinds?.employeeId;
-      if (
-        result.rowsAffected !== 1 ||
-        !Array.isArray(returnedIds) ||
-        returnedIds.length !== 1
-      ) {
-        throw new Error('Oracle did not return a single created employee.');
-      }
+        const returnedIds = result.outBinds?.employeeId;
+        if (
+          result.rowsAffected !== 1 ||
+          !Array.isArray(returnedIds) ||
+          returnedIds.length !== 1
+        ) {
+          throw new Error('Oracle did not return a single created employee.');
+        }
 
-      const employeeId: unknown = returnedIds[0];
-      if (
-        typeof employeeId !== 'number' ||
-        !Number.isSafeInteger(employeeId) ||
-        employeeId < 1
-      ) {
-        throw new Error('Oracle returned an invalid employee identifier.');
-      }
+        const employeeId: unknown = returnedIds[0];
+        if (
+          typeof employeeId !== 'number' ||
+          !Number.isSafeInteger(employeeId) ||
+          employeeId < 1
+        ) {
+          throw new Error('Oracle returned an invalid employee identifier.');
+        }
 
-      const credentialsResult = await connection.execute(
-        `INSERT INTO EMPLOYEE_LOCAL_CREDENTIALS (
+        const credentialsResult = await connection.execute(
+          `INSERT INTO EMPLOYEE_LOCAL_CREDENTIALS (
           EMPLOYEE_ID, PASSWORD_HASH, SALT
         ) VALUES (:employeeId, :passwordHash, :salt)`,
-        {
-          employeeId: { val: employeeId, type: oracle.NUMBER },
-          passwordHash: { val: data.passwordHash, type: oracle.STRING },
-          salt: { val: data.salt, type: oracle.STRING },
-        },
-        { autoCommit: false },
-      );
-      if (credentialsResult.rowsAffected !== 1) {
-        throw new Error('Oracle did not create a single credentials record.');
-      }
+          {
+            employeeId: { val: employeeId, type: oracle.NUMBER },
+            passwordHash: { val: data.passwordHash, type: oracle.STRING },
+            salt: { val: data.salt, type: oracle.STRING },
+          },
+          { autoCommit: false },
+        );
+        if (credentialsResult.rowsAffected !== 1) {
+          throw new Error('Oracle did not create a single credentials record.');
+        }
 
-      return employeeId;
-    });
+        return employeeId;
+      });
+    } catch (error) {
+      const failure = error as { errorNum?: number; message?: string } | null;
+      if (
+        failure?.errorNum === 1 &&
+        /\bUQ_EMPLOYEES_EMAIL\b/u.test(failure.message ?? '')
+      ) {
+        throw new ConflictException(
+          'El correo electrónico ya está registrado para otro empleado.',
+        );
+      }
+      throw error;
+    }
   }
 
   private async insertAddress(

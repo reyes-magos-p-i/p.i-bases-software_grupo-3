@@ -47,15 +47,16 @@ async function confirm() {
       error.value = 'No tienes permiso para desactivar este usuario.'
       emit('forbidden')
     } else if (status === 404) {
-      error.value =
-        'El usuario seleccionado no existe o ya está inactivo. Cierra y actualiza el listado.'
+      error.value = 'El usuario seleccionado no existe. Cierra y actualiza el listado.'
     } else if (status === 409) {
       const message: unknown = isAxiosError(failure) ? failure.response?.data?.message : undefined
       error.value =
         message === 'No puedes desactivar tu propia cuenta.' ||
-        message === 'Debe permanecer al menos un administrador activo.'
+        message === 'Debe permanecer al menos un administrador activo.' ||
+        message === 'El cliente ya está desactivado.' ||
+        message === 'El empleado ya está desactivado.'
           ? message
-          : 'No se puede desactivar este usuario. Debe permanecer al menos un administrador activo.'
+          : 'No se puede desactivar este usuario. Cierra y actualiza el listado.'
     } else {
       error.value =
         'No se pudo confirmar la desactivación. Cierra y actualiza el listado antes de intentarlo nuevamente.'

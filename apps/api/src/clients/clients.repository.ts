@@ -26,15 +26,22 @@ export class ClientsRepository {
 
   async deactivateClient(id: number): Promise<void> {
     await this.db.transaction(async (connection) => {
+      const selected = await connection.execute<{ STATUS: string }>(
+        'SELECT STATUS FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
+        { id: { val: id, type: oracle.NUMBER } },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+      );
+      const client = selected.rows?.[0];
+      if (!client)
+        throw new NotFoundException('El cliente seleccionado no existe.');
+      if (client.STATUS === 'INACTIVE')
+        throw new ConflictException('El cliente ya está desactivado.');
+      if (client.STATUS !== 'ACTIVE') throw new Error('Invalid client status.');
       const result = await connection.execute(
         "UPDATE CLIENTS SET STATUS = 'INACTIVE' WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
         { id: { val: id, type: oracle.NUMBER } },
         { autoCommit: false },
       );
-      if (result.rowsAffected === 0)
-        throw new NotFoundException(
-          'El usuario seleccionado no existe o ya está inactivo.',
-        );
       if (result.rowsAffected !== 1)
         throw new Error('Oracle did not deactivate a single client.');
     });
