@@ -197,7 +197,7 @@ describe('DashboardView', () => {
     expect(view.find('.add-user-button').exists()).toBe(false)
   })
 
-  it('creates a theater with the selected options and announces its generated number', async () => {
+  it('creates a theater with the selected options', async () => {
     const view = await renderDashboard()
     await view.get('[aria-label="Salas"]').trigger('click')
     await view.get('.add-user-button').trigger('click')
@@ -205,7 +205,7 @@ describe('DashboardView', () => {
 
     expect(getTheaterCreationOptions).toHaveBeenCalledTimes(1)
     expect(view.get('.theater-dialog h2').text()).toBe('Crear sala')
-    expect(view.text()).toContain('El número de sala se genera automáticamente.')
+    expect(view.text()).not.toContain('El número de sala se genera automáticamente.')
     expect(view.get<HTMLSelectElement>('[name="status"]').element.value).toBe('Disponible')
 
     await view.get('[name="numberOfSeats"]').setValue('250')

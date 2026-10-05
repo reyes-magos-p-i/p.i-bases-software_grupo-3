@@ -128,7 +128,6 @@ defineExpose({ open, complete })
     </header>
     <form novalidate :aria-busy="submitting" @submit.prevent="submit">
       <p class="required-note">Los campos con <span class="required-marker">*</span> son obligatorios.</p>
-      <p class="generated-note"><i class="bi bi-info-circle" aria-hidden="true"></i> El número de sala se genera automáticamente.</p>
       <p v-if="optionsLoading" role="status">Cargando proyectores y sucursales…</p>
       <p v-if="optionsError" class="form-error" role="alert">{{ optionsError }} <button type="button" @click="emit('retryOptions')">Reintentar</button></p>
       <p v-if="submissionErrors.length" ref="feedback" class="form-error" role="alert" tabindex="-1">{{ submissionErrors.join(' ') }}</p>
@@ -185,8 +184,7 @@ defineExpose({ open, complete })
 .dialog-heading h2 { margin: 0; font-size: 1.25rem; }
 .close-button { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: var(--radius-small); color: inherit; background: transparent; }
 form { display: grid; gap: 8px; padding: 24px; overflow-y: auto; }
-.required-note, .generated-note { margin: 0 0 4px; font-size: .9rem; }
-.generated-note { color: var(--color-primary); }
+.required-note { margin: 0 0 4px; font-size: .9rem; }
 .required-marker { color: #b42318; font-weight: 700; }
 input, select { min-height: 42px; padding: 8px 10px; border: 1px solid #a9adb5; border-radius: var(--radius-small); font: inherit; background: var(--color-white); }
 input:focus, select:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
