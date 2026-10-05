@@ -5,6 +5,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { EmployeeSessionService } from './employee-session.service';
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
+import { ClientsService } from '../clients/clients.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -16,6 +17,8 @@ describe('AuthController', () => {
     facebookLogin: jest.Mock;
   };
   let session: { write: jest.Mock; clear: jest.Mock };
+  let clients: { changePassword: jest.Mock };
+
   const response = {} as Response;
 
   beforeEach(async () => {
@@ -27,12 +30,13 @@ describe('AuthController', () => {
       facebookLogin: jest.fn(),
     };
     session = { write: jest.fn(), clear: jest.fn() };
-
+    clients = { changePassword: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
         { provide: AuthService, useValue: auth },
         { provide: EmployeeSessionService, useValue: session },
+        { provide: ClientsService, useValue: clients },
       ],
     })
       .overrideGuard(ThrottlerGuard)

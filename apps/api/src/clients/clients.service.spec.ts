@@ -178,7 +178,7 @@ describe('ClientsService', () => {
         .mockResolvedValueOnce({ rows: [client] });
       await expect(
         service.consumeEmailVerification('token-hash'),
-      ).resolves.toEqual(client);
+      ).resolves.toEqual(client); 
       expect(conn.execute).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM CLIENT_EMAIL_VERIFICATIONS'),
         expect.objectContaining({

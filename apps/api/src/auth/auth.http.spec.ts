@@ -607,11 +607,17 @@ describe('Employee authentication (HTTP integration)', () => {
       gender: null,
       language: 'es',
     };
-    db.query.mockImplementation((sql: string) =>
-      sql.includes('CLIENT_EMAIL_VERIFICATIONS')
-        ? Promise.resolve({ rows: [] })
-        : Promise.resolve({ rows: [client] }),
-    );
+
+    db.query.mockImplementation((sql: string) => {
+      if (sql.includes('CLIENT_EMAIL_VERIFICATIONS')) return Promise.resolve({ rows: [] });
+      if (sql.includes('CLIENT_LOCAL_CREDENTIALS')) {
+        return Promise.resolve({
+          rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 }],
+        });
+      }
+      return Promise.resolve({ rows: [client] });
+    });
+
     const { accessToken } = app.get(AuthService).issueToken(client);
     await request(app.getHttpServer())
       .get('/api/auth/me')
