@@ -189,7 +189,8 @@ Los servicios conservan sus contratos y mensajes; no hay reintentos automáticos
 
 `AuthModule` está registrado en `AppModule`. El registro público existente queda
 accesible, junto con el login del personal, recuperación de sesión y logout.
-El inicio de sesión de clientes y los proveedores externos siguen pendientes.
+El inicio de sesión local de clientes y la integración con los proveedores existentes
+se documentan en [client-login.md](client-login.md).
 
 En `/dashboard`, «Añadir empleado» abre el diálogo y consulta los catálogos.
 Mientras espera, muestra un aviso de carga y permite escribir los datos personales.
