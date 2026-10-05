@@ -12,10 +12,12 @@ export function buildUserSearch(
 ): string {
   const alias = section === 'clients' ? 'c' : 'e';
   const idColumn = section === 'clients' ? 'CLIENT_ID' : 'EMPLOYEE_ID';
-  const terms = search.split(' ').map((term, index) => {
+  const normalized = search.trim().replace(/\s+/gu, ' ');
+  if (!normalized) return '1 = 1';
+  const terms = normalized.split(' ').map((term, index) => {
     binds[`name${index}`] = { val: likePattern(term), type: oracle.STRING };
     return String.raw`LOWER(${name}) LIKE :name${index} ESCAPE '\'`;
   });
-  binds.search = { val: likePattern(search), type: oracle.STRING };
+  binds.search = { val: likePattern(normalized), type: oracle.STRING };
   return String.raw`((${terms.join(' AND ')}) OR LOWER(${alias}.EMAIL) LIKE :search ESCAPE '\' OR ${alias}.PHONE_NUMBER LIKE :search ESCAPE '\' OR TO_CHAR(${alias}.${idColumn}) LIKE :search ESCAPE '\')`;
 }

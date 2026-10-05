@@ -2,6 +2,38 @@ import oracle from 'oracledb';
 import { buildUserSearch } from './user-search.util';
 
 describe('buildUserSearch', () => {
+  it.each(['  Ana  Núñez  ', 'Ana\tNúñez', 'Ana\u00a0\u00a0Núñez'])(
+    'normalizes whitespace without adding empty search terms: %p',
+    (search) => {
+      const binds: oracle.BindParameters = {};
+      const expected: oracle.BindParameters = {};
+      expect(buildUserSearch(search, 'employees', 'FULL_NAME', binds)).toBe(
+        buildUserSearch('Ana Núñez', 'employees', 'FULL_NAME', expected),
+      );
+      expect(binds).toEqual(expected);
+      expect(
+        Object.keys(binds).filter((key) => key.startsWith('name')),
+      ).toHaveLength(2);
+    },
+  );
+  it('trims a single term', () => {
+    const binds: oracle.BindParameters = {};
+    buildUserSearch('  Ana  ', 'clients', 'FULL_NAME', binds);
+    expect(binds).toEqual({
+      name0: { val: '%ana%', type: oracle.STRING },
+      search: { val: '%ana%', type: oracle.STRING },
+    });
+  });
+  it.each(['', '   ', '\t\n'])(
+    'treats an empty search as no additional filter: %p',
+    (search) => {
+      const binds = { existing: { val: 3, type: oracle.NUMBER } };
+      expect(buildUserSearch(search, 'clients', 'FULL_NAME', binds)).toBe(
+        '1 = 1',
+      );
+      expect(binds).toEqual({ existing: { val: 3, type: oracle.NUMBER } });
+    },
+  );
   it.each([
     ['clients', 'c', 'CLIENT_ID'],
     ['employees', 'e', 'EMPLOYEE_ID'],
