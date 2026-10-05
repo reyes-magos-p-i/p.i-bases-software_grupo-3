@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable} from '@nestjs/common';
 import { CreateTheaterDto } from './dto/create-theater.dto';
 import { UpdateTheaterDto } from './dto/update-theater.dto';
 import { TheaterRepository } from './theater.repository/theater.repository';
@@ -6,7 +6,19 @@ import { TheaterRepository } from './theater.repository/theater.repository';
 @Injectable()
 export class TheatersService {
   constructor(private readonly theatersRepository: TheaterRepository) {}
-  create(createTheaterDto: CreateTheaterDto) {
+
+  private validateSeatDimensions(numberOfSeats: number, dimensionX: number, dimensionY: number) {
+    if (numberOfSeats !== dimensionX * dimensionY) {
+      throw new BadRequestException('numberOfSeats must equal dimensionX * dimensionY');
+    }
+  }
+
+  async create(createTheaterDto: CreateTheaterDto) {
+    this.validateSeatDimensions(
+      createTheaterDto.numberOfSeats,
+      createTheaterDto.dimensionX,
+      createTheaterDto.dimensionY,
+    );
     return this.theatersRepository.createTheater(createTheaterDto);
   }
 
@@ -18,7 +30,22 @@ export class TheatersService {
     return this.theatersRepository.getTheaterById(id);
   }
 
-  update(id: number, updateTheaterDto: UpdateTheaterDto) {
+  async update(id: number, updateTheaterDto: UpdateTheaterDto) {
+    if (
+      updateTheaterDto.numberOfSeats !== undefined ||
+      updateTheaterDto.dimensionX !== undefined ||
+      updateTheaterDto.dimensionY !== undefined
+    ) {
+      const theater = await this.theatersRepository.getTheaterById(id);
+      if (theater) {
+        this.validateSeatDimensions(
+          updateTheaterDto.numberOfSeats ?? theater.numberOfSeats,
+          updateTheaterDto.dimensionX ?? theater.dimensionX,
+          updateTheaterDto.dimensionY ?? theater.dimensionY,
+        );
+      }
+    }
+
     return this.theatersRepository.updateTheater(id, updateTheaterDto);
   }
 

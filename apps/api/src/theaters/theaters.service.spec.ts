@@ -54,6 +54,21 @@ describe('TheatersService', () => {
     expect(repository.createTheater).toHaveBeenCalledWith(theaterDto);
   });
 
+  it('rejects a theater whose seat count does not match its dimensions', async () => {
+    const theaterDto = {
+      branchId: 2,
+      numberOfSeats: 121,
+      dimensionX: 10,
+      dimensionY: 12,
+      projectorName: 'IMAX',
+    };
+
+    await expect(service.create(theaterDto)).rejects.toThrow(
+      'numberOfSeats must equal dimensionX * dimensionY',
+    );
+    expect(repository.createTheater).not.toHaveBeenCalled();
+  });
+
   it('returns all theaters from the repository', async () => {
     const theaters = [{ theaterId: 1, projectorName: 'IMAX' }];
     repository.getAllTheaters.mockResolvedValue(theaters);
@@ -71,12 +86,32 @@ describe('TheatersService', () => {
   });
 
   it('updates a theater through the repository', async () => {
-    const updateDto = { numberOfSeats: 150 };
-    const theater = { theaterId: 4, numberOfSeats: 150 };
+    const updateDto = { numberOfSeats: 120 };
+    const theater = { theaterId: 4, numberOfSeats: 120 };
+    repository.getTheaterById.mockResolvedValue({
+      theaterId: 4,
+      numberOfSeats: 120,
+      dimensionX: 10,
+      dimensionY: 12,
+    });
     repository.updateTheater.mockResolvedValue(theater);
 
     await expect(service.update(4, updateDto)).resolves.toEqual(theater);
     expect(repository.updateTheater).toHaveBeenCalledWith(4, updateDto);
+  });
+
+  it('rejects an update that would make the seat count inconsistent', async () => {
+    repository.getTheaterById.mockResolvedValue({
+      theaterId: 4,
+      numberOfSeats: 120,
+      dimensionX: 10,
+      dimensionY: 12,
+    });
+
+    await expect(service.update(4, { dimensionX: 11 })).rejects.toThrow(
+      'numberOfSeats must equal dimensionX * dimensionY',
+    );
+    expect(repository.updateTheater).not.toHaveBeenCalled();
   });
 
   it('deletes a theater through the repository', async () => {
