@@ -148,18 +148,7 @@ export class TheaterRepository {
         binds.dimensionY = updateTheaterDto.dimensionY;
       }
       if (updateTheaterDto.projectorName !== undefined) {
-        const projectorResult = await this.db.query(
-          `SELECT projector_id FROM Projectors WHERE name = :projectorName`,
-          { projectorName: updateTheaterDto.projectorName },
-        );
-        const projectorId = (projectorResult.rows as { PROJECTOR_ID: number }[] | undefined)?.[0]?.PROJECTOR_ID;
-
-        if (projectorId == null) {
-          throw new Error(`Projector not found: ${updateTheaterDto.projectorName}`);
-        }
-
         setClauses.push('projector_id = :projectorId');
-        binds.projectorId = projectorId;
       }
 
       if (setClauses.length === 0) {
@@ -170,10 +159,27 @@ export class TheaterRepository {
         return theater;
       }
 
-      const result = await this.db.query(
-        `UPDATE Theaters SET ${setClauses.join(', ')} WHERE theater_id = :id`,
-        binds,
-      );
+      const result = await this.db.transaction(async (connection) => {
+        if (updateTheaterDto.projectorName !== undefined) {
+          const projectorResult = await connection.execute(
+            `SELECT projector_id FROM Projectors WHERE name = :projectorName`,
+            { projectorName: updateTheaterDto.projectorName },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT },
+          );
+          const projectorId = (projectorResult.rows as { PROJECTOR_ID: number }[] | undefined)?.[0]?.PROJECTOR_ID;
+
+          if (projectorId == null) {
+            throw new Error(`Projector not found: ${updateTheaterDto.projectorName}`);
+          }
+
+          binds.projectorId = projectorId;
+        }
+
+        return connection.execute(
+          `UPDATE Theaters SET ${setClauses.join(', ')} WHERE theater_id = :id`,
+          binds,
+        );
+      });
 
       if (result.rowsAffected === 0) {
         throw new Error(`Theater not found: ${id}`);
@@ -187,6 +193,22 @@ export class TheaterRepository {
       return theater;
     } catch (error) {
       this.logger.error('Error updating theater', error as Error);
+      throw error;
+    }
+  }
+
+  async deleteTheater(id: number): Promise<void> {
+    try {
+      const result = await this.db.query(
+        `DELETE FROM Theaters WHERE theater_id = :id`,
+        { id },
+      );
+
+      if (result.rowsAffected === 0) {
+        throw new Error(`Theater not found: ${id}`);
+      }
+    } catch (error) {
+      this.logger.error('Error deleting theater', error as Error);
       throw error;
     }
   }

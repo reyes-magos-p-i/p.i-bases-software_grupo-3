@@ -9,6 +9,7 @@ describe('TheatersService', () => {
     getAllTheaters: jest.Mock;
     getTheaterById: jest.Mock;
     updateTheater: jest.Mock;
+    deleteTheater: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -17,6 +18,7 @@ describe('TheatersService', () => {
       getAllTheaters: jest.fn(),
       getTheaterById: jest.fn(),
       updateTheater: jest.fn(),
+      deleteTheater: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -77,7 +79,10 @@ describe('TheatersService', () => {
     expect(repository.updateTheater).toHaveBeenCalledWith(4, updateDto);
   });
 
-  it('returns a theater message for remove', () => {
-    expect(service.remove(4)).toBe('This action removes a #4 theater');
+  it('deletes a theater through the repository', async () => {
+    repository.deleteTheater.mockResolvedValue(undefined);
+
+    await expect(service.remove(4)).resolves.toBeUndefined();
+    expect(repository.deleteTheater).toHaveBeenCalledWith(4);
   });
 });

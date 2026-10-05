@@ -23,6 +23,6 @@ export class TheatersService {
   }
 
   remove(id: number) {
-    return `This action removes a #${id} theater`;
+    return this.theatersRepository.deleteTheater(id);
   }
 }
