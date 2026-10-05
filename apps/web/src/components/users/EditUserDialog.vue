@@ -338,9 +338,21 @@ async function save() {
       if (code === 404) {
         error.value = 'El usuario seleccionado ya no existe.'
         blocked.value = true
-      } else if (code === 409)
-        errors.email = 'El correo electrónico ya está registrado para otro usuario.'
-      else if (code === 400 && isAxiosError(failure)) {
+      } else if (code === 409) {
+        const message: unknown = isAxiosError(failure) ? failure.response?.data?.message : undefined
+        if (
+          message === 'El correo electrónico ya está registrado para otro cliente.' ||
+          message === 'El correo electrónico ya está registrado para otro empleado.'
+        ) {
+          errors.email = 'El correo electrónico ya está registrado para otro usuario.'
+          error.value = 'Revisa el correo electrónico antes de guardar.'
+        } else {
+          error.value =
+            message === 'Debe permanecer al menos un administrador activo.'
+              ? message
+              : 'No se pudieron guardar los cambios porque entran en conflicto con el estado actual del usuario.'
+        }
+      } else if (code === 400 && isAxiosError(failure)) {
         const message: unknown = failure.response?.data?.message
         const messages = Array.isArray(message)
           ? message.filter((item): item is string => typeof item === 'string')

@@ -453,6 +453,35 @@ describe('UsersModule (application HTTP integration)', () => {
     expect(operations).toEqual(['insert', 'insert', 'commit']);
   });
 
+  it.each(['EMPLOYEE', 'ADMINISTRATOR'])(
+    'returns 409 without credentials email for duplicate %s email',
+    async (role) => {
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        })
+        .mockResolvedValueOnce({
+          rowsAffected: 1,
+          outBinds: { addressId: [55] },
+        })
+        .mockRejectedValueOnce({
+          errorNum: 1,
+          message: 'ORA-00001: (PRODUCTION.UQ_EMPLOYEES_EMAIL)',
+        });
+      const response = await browser
+        .post('/users')
+        .send({ ...employee, role })
+        .expect(409);
+      expect(response.body.message).toBe(
+        'El correo electrónico ya está registrado para otro empleado.',
+      );
+      expect(response.text).not.toContain('ORA-');
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(sendMail).not.toHaveBeenCalled();
+    },
+  );
+
   it('persists an administrative client address without asserting terms acceptance', async () => {
     await browser
       .post('/users')
