@@ -6,7 +6,7 @@ import type { UserRole } from '@/types/user'
 
 const sections = [
   ['dashboard', 'Tablero'],
-  ['rooms', 'Salas'],
+  ['theaters', 'Salas'],
   ['movies', 'Películas'],
   ['employees', 'Empleados'],
   ['clients', 'Clientes'],
@@ -115,10 +115,10 @@ describe('DashboardLayout', () => {
     })
     const navigation = wrapper.get('nav')
 
-    expect(navigation.findAll('button')).toHaveLength(8)
+    expect(navigation.findAll('button')).toHaveLength(7)
     for (const [id, label] of sections) {
       expect(navigation.find('[aria-label="' + label + '"]').exists()).toBe(
-        id !== 'dashboard' && id !== 'employees',
+        id !== 'dashboard' && id !== 'employees' && id !== 'theaters',
       )
     }
     expect(wrapper.get('header').text()).toContain('Sesión iniciada como Empleado')

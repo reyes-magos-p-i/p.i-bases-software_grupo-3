@@ -175,7 +175,7 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
     expect(view.get('nav').text()).not.toContain('Tablero')
-    expect(view.get('nav').findAll('button')).toHaveLength(8)
+    expect(view.get('nav').findAll('button')).toHaveLength(7)
   })
 
   it('preserves clients as the current section across role changes', async () => {
@@ -194,7 +194,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('nav button:disabled')
 
-    expect(pending).toHaveLength(8)
+    expect(pending).toHaveLength(7)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')
@@ -203,6 +203,7 @@ describe('DashboardView', () => {
     expect(view.get('h1').text()).toBe('Empleados')
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
+
 
   it('ignores navigation outside the available dashboard sections', async () => {
     const view = await renderDashboard()

@@ -16,7 +16,7 @@ import {
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-const activeSection = ref<'employees' | 'clients'>(
+const activeSection = ref<'employees' | 'clients' | 'theaters'>(
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
 const loggingOut = ref(false)
@@ -195,14 +195,21 @@ onBeforeUnmount(() => {
   cancelCatalogRequest()
 })
 const availableSections = computed(() =>
-  role.value === 'ADMINISTRATOR' ? ['employees', 'clients'] : ['clients'],
+  role.value === 'ADMINISTRATOR' ? ['employees', 'clients', 'theaters'] : ['clients'],
 )
 const sectionTitle = computed(() =>
-  activeSection.value === 'employees' ? 'Empleados' : 'Clientes',
+  activeSection.value === 'employees'
+    ? 'Empleados'
+    : activeSection.value === 'theaters'
+      ? 'Salas'
+      : 'Clientes',
 )
 
 watch(role, () => {
-  if (role.value === 'EMPLOYEE' && activeSection.value === 'employees') {
+  if (
+    role.value === 'EMPLOYEE' &&
+    (activeSection.value === 'employees' || activeSection.value === 'theaters')
+  ) {
     activeSection.value = 'clients'
   }
 })
@@ -210,7 +217,7 @@ watch(role, () => {
 function navigate(section: string) {
   if (submitting.value || loggingOut.value) return
   if (
-    (section === 'employees' || section === 'clients') &&
+    (section === 'employees' || section === 'clients' || section === 'theaters') &&
     availableSections.value.includes(section)
   ) {
     activeSection.value = section
@@ -246,7 +253,7 @@ function navigate(section: string) {
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
-          v-if="role === 'ADMINISTRATOR'"
+          v-if="role === 'ADMINISTRATOR' && activeSection !== 'theaters'"
           type="button"
           class="add-user-button"
           :disabled="loggingOut"
@@ -263,7 +270,7 @@ function navigate(section: string) {
       </div>
     </section>
     <CreateUserDialog
-      v-if="role === 'ADMINISTRATOR'"
+      v-if="role === 'ADMINISTRATOR' && activeSection !== 'theaters'"
       :key="activeSection"
       ref="user-dialog"
       :mode="activeSection === 'clients' ? 'client' : 'employee'"
@@ -343,4 +350,5 @@ function navigate(section: string) {
   margin-bottom: 12px;
   font-size: 1.125rem;
 }
+
 </style>

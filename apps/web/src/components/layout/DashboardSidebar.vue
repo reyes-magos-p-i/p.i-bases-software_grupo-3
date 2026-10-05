@@ -24,7 +24,7 @@ const emit = defineEmits<{
 const navigationId = useId()
 const sections = [
   { id: 'dashboard', label: 'Tablero', icon: 'bi-grid', administratorOnly: true },
-  { id: 'rooms', label: 'Salas', icon: 'bi-display' },
+  { id: 'theaters', label: 'Salas', icon: 'bi-display', administratorOnly: true },
   { id: 'movies', label: 'Películas', icon: 'bi-film' },
   { id: 'employees', label: 'Empleados', icon: 'bi-person-circle', administratorOnly: true },
   { id: 'clients', label: 'Clientes', icon: 'bi-people' },
