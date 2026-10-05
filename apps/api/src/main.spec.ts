@@ -16,7 +16,6 @@ describe('function bootstrap', () => {
   const createMockApp = () => ({
     set: jest.fn(),
     setGlobalPrefix: jest.fn(),
-    set: jest.fn(),
     useGlobalPipes: jest.fn(),
     enableCors: jest.fn(),
     enableShutdownHooks: jest.fn(),

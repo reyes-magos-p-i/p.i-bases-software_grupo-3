@@ -4,15 +4,19 @@ import { useRoute, useRouter } from 'vue-router'
 import logo from '@/assets/logos/cinetadel-logo.png'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
 import LoginModal from '@/components/auth/LoginModal.vue'
+import AccountMenu from '@/components/common/AccountMenu.vue'
 import { EmployeeAuthError } from '@/services/authService'
 import {
   authenticateEmployee,
   employeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
+import { clearClientSession, clientSession } from '@/services/client-session.service'
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
+import type { ClientIdentity } from '@/types/client-auth'
 
 const activeModal = ref<'register' | 'login' | null>(null)
+const clientUser = clientSession.user
 const loginMode = ref<'client' | 'employee'>('client')
 const router = useRouter()
 const route = useRoute()
@@ -127,6 +131,19 @@ function openLogin() {
   loginMode.value = 'client'
   activeModal.value = 'login'
 }
+
+function handleClientLogin(identity?: ClientIdentity) {
+  activeModal.value = null
+  if (identity) {
+    clientUser.value = identity
+    loginError.value = ''
+  }
+}
+
+function logoutClient() {
+  clearClientSession()
+  activeModal.value = null
+}
 </script>
 
 <template>
@@ -136,18 +153,23 @@ function openLogin() {
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
       </RouterLink>
       <div class="navbar-actions">
-        <RouterLink v-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
+        <AccountMenu v-if="clientUser" :user="clientUser" @logout="logoutClient" />
+        <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
           >Ir al dashboard</RouterLink
         >
         <button v-else type="button" class="login-button" @click="openLogin">Iniciar sesión</button>
-        <button type="button" class="register-button" @click="activeModal = 'register'">
+        <button
+          v-if="!clientUser"
+          type="button"
+          class="register-button"
+          @click="activeModal = 'register'"
+        >
           Registrarse
         </button>
-        <!-- TODO(any): Handle the registered user and update the UI accordingly, ref -> SCRUM-106, SCRUM-37. -->
         <RegisterModal
           :open="activeModal === 'register'"
           @close="activeModal = null"
-          @registered="activeModal = null"
+          @authenticated="handleClientLogin"
         />
         <LoginModal
           :open="activeModal === 'login'"
@@ -157,6 +179,7 @@ function openLogin() {
           :error-message="loginError"
           :retry-after-seconds="loginMode === 'employee' ? retryAfterSeconds : 0"
           @close="closeLogin"
+          @authenticated="handleClientLogin"
           @switch-mode="changeLoginMode"
           @submit="submitLogin"
         />

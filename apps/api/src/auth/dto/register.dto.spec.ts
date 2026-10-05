@@ -6,12 +6,105 @@ const validRegistration = (password: string) => ({
   email: 'user@example.com',
   firstName: 'User',
   lastName: 'Example',
-  phone: '1234567890',
+  phone: '88881234',
   gender: 'M',
   birthDate: '1990-01-01',
   language: 'es',
   password,
   acceptTerms: true,
+});
+
+function dateWithAgeInCostaRica(
+  age: number,
+  birthDateOffsetDaysFromAnniversary = 0,
+): string {
+  const today = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Costa_Rica',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .formatToParts()
+      .map(({ type, value }) => [type, value]),
+  );
+  const date = new Date(
+    Date.UTC(
+      Number(today.year) - age,
+      Number(today.month) - 1,
+      Number(today.day) + birthDateOffsetDaysFromAnniversary,
+    ),
+  );
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, '0'),
+    String(date.getUTCDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+describe('RegisterDto Costa Rican phone validation', () => {
+  it('normalizes an 8-digit phone number entered with the standard hyphen', async () => {
+    const dto = plainToInstance(RegisterDto, {
+      ...validRegistration('Abcdef1!'),
+      phone: '8888-1234',
+    });
+
+    const errors = await validate(dto);
+
+    expect(dto.phone).toBe('88881234');
+    expect(errors.some((error) => error.property === 'phone')).toBe(false);
+  });
+
+  it.each(['1234567', '123456789', '+5068881234', 'abcd1234'])(
+    'rejects a phone that is not a Costa Rican 8-digit number: %s',
+    async (phone) => {
+      const dto = plainToInstance(RegisterDto, {
+        ...validRegistration('Abcdef1!'),
+        phone,
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors.find((error) => error.property === 'phone')?.constraints)
+        .toHaveProperty('matches');
+    },
+  );
+});
+
+describe('RegisterDto minimum age validation', () => {
+  it('accepts a user on their 18th birthday in Costa Rica', async () => {
+    const dto = plainToInstance(RegisterDto, {
+      ...validRegistration('Abcdef1!'),
+      birthDate: dateWithAgeInCostaRica(18),
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors.some((error) => error.property === 'birthDate')).toBe(false);
+  });
+
+  it('accepts a user one day after their 18th birthday', async () => {
+    const dto = plainToInstance(RegisterDto, {
+      ...validRegistration('Abcdef1!'),
+      birthDate: dateWithAgeInCostaRica(18, -1),
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors.some((error) => error.property === 'birthDate')).toBe(false);
+  });
+
+  it('rejects a user whose 18th birthday is tomorrow', async () => {
+    const dto = plainToInstance(RegisterDto, {
+      ...validRegistration('Abcdef1!'),
+      birthDate: dateWithAgeInCostaRica(18, 1),
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors.find((error) => error.property === 'birthDate')?.constraints)
+      .toHaveProperty('minimumRegistrationAge');
+  });
 });
 
 describe('RegisterDto password validation', () => {

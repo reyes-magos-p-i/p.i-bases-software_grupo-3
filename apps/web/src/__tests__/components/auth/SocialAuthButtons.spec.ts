@@ -2,6 +2,19 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 
+const { loginWithGoogle, facebookLogin } = vi.hoisted(() => ({
+  loginWithGoogle: vi.fn().mockResolvedValue({
+    id: 7,
+    email: 'ana@example.com',
+    firstName: 'Ana',
+    lastName: 'Perez',
+  }),
+  facebookLogin: vi.fn().mockResolvedValue({
+    client: { id: 8, email: 'luis@example.com', firstName: 'Luis', lastName: 'Mora' },
+  }),
+}))
+
+vi.mock('@/services/authService', () => ({ loginWithGoogle, facebookLogin }))
 vi.mock('@/facebook-auth', () => ({
   loginWithFacebook: vi.fn().mockResolvedValue({
     status: 'connected',
@@ -24,25 +37,29 @@ describe('SocialAuthButtons.vue', () => {
       expect(button.element.disabled).toBe(true)
       await button.trigger('click')
     }
-    expect(wrapper.emitted('google')).toBeUndefined()
-    expect(wrapper.emitted('facebook')).toBeUndefined()
+    expect(wrapper.emitted('authenticated')).toBeUndefined()
   })
-  it('emite evento "google" al hacer clic', async () => {
+  it('emits the authenticated Google identity', async () => {
     const wrapper = mount(SocialAuthButtons)
     const buttons = wrapper.findAll('button')
 
     await buttons[0]!.trigger('click')
 
-    expect(wrapper.emitted('google')).toHaveLength(1)
+    expect(loginWithGoogle).toHaveBeenCalledOnce()
+    expect(wrapper.emitted('authenticated')).toEqual([
+      [{ id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Perez' }],
+    ])
   })
 
-  it('emite evento "facebook" al hacer clic', async () => {
+  it('verifies Facebook with the API and emits the authenticated profile', async () => {
     const wrapper = mount(SocialAuthButtons)
     const buttons = wrapper.findAll('button')
 
     await buttons[1]!.trigger('click')
 
-    expect(wrapper.emitted('facebook')).toHaveLength(1)
-    expect(wrapper.emitted('facebook')?.[0]).toEqual(['test-access-token'])
+    expect(facebookLogin).toHaveBeenCalledExactlyOnceWith('test-access-token')
+    expect(wrapper.emitted('authenticated')).toEqual([
+      [{ id: 8, email: 'luis@example.com', firstName: 'Luis', lastName: 'Mora' }],
+    ])
   })
 })

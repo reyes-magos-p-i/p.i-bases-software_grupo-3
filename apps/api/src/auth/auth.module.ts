@@ -20,6 +20,8 @@ import {
   EMPLOYEE_SESSION_TTL_SECONDS,
 } from './employee-session.service';
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
+import { EmailVerificationSender } from './notifications/email-verification-sender';
+import { SmtpEmailVerificationSender } from './notifications/smtp-email-verification-sender';
 
 @Module({
   imports: [
@@ -43,6 +45,10 @@ import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.gua
   controllers: [AuthController],
   providers: [
     AuthService,
+    {
+      provide: EmailVerificationSender,
+      useClass: SmtpEmailVerificationSender,
+    },
     JwtStrategy,
     EmployeeSessionService,
     EmployeeSessionOriginGuard,
