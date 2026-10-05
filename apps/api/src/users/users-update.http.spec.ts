@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AuthModule } from '../auth/auth.module';
+import { EmailVerificationSender } from '../auth/notifications/email-verification-sender';
 import { EMPLOYEE_SESSION_COOKIE } from '../auth/employee-session.service';
 import { ClientsRepository } from '../clients/clients.repository';
 import { ClientsService } from '../clients/clients.service';
@@ -38,7 +39,10 @@ describe('User update and deactivation HTTP contracts', () => {
     updateClient: jest.fn(),
     deactivateClient: jest.fn(),
   };
-  const clients = { findById: jest.fn() };
+  const clients = {
+    findById: jest.fn(),
+    isEmailVerificationPending: jest.fn(),
+  };
   const generator = { generate: jest.fn() };
   const hasher = { hash: jest.fn() };
   const sender = { send: jest.fn() };
@@ -76,6 +80,8 @@ describe('User update and deactivation HTTP contracts', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue({})
+      .overrideProvider(EmailVerificationSender)
+      .useValue({ send: jest.fn() })
       .overrideProvider(UsersRepository)
       .useValue(repository)
       .overrideProvider(ClientsRepository)
@@ -103,6 +109,7 @@ describe('User update and deactivation HTTP contracts', () => {
       firstName: 'Ana',
     });
     clients.findById.mockResolvedValue({ id: 99, firstName: 'Cliente' });
+    clients.isEmailVerificationPending.mockResolvedValue(false);
     clientsRepository.updateClient.mockResolvedValue({
       id: 42,
       email: 'ana@example.com',

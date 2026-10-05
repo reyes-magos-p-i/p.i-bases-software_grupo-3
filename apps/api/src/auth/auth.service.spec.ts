@@ -10,6 +10,7 @@ import { AuthService } from './auth.service';
 import { ClientsService } from '../clients/clients.service';
 import { RegisterDto } from './dto/register.dto';
 import { ConfigService } from '@nestjs/config';
+import { EmailVerificationSender } from './notifications/email-verification-sender';
 
 jest.mock('argon2');
 // mock for google lib
@@ -29,12 +30,18 @@ describe('AuthService', () => {
   let service: AuthService;
   let clients: {
     findByEmail: jest.Mock;
+    deleteExpiredPendingClientByEmail: jest.Mock;
     createWithLocalCredentials: jest.Mock;
+    createPendingWithLocalCredentials: jest.Mock;
+    findPendingLocalClientByEmail: jest.Mock;
+    replaceEmailVerification: jest.Mock;
+    consumeEmailVerification: jest.Mock;
     findOrCreateSocial: jest.Mock; // for google auth
   };
   let jwt: { sign: jest.Mock; signAsync: jest.Mock };
   let users: { findEmployeeWithLocalCredentialsByEmail: jest.Mock };
-  let config: { getOrThrow: jest.Mock };
+  let config: { getOrThrow: jest.Mock; get: jest.Mock };
+  let verificationSender: { send: jest.Mock };
 
   const registerDto: RegisterDto = {
     email: 'user@example.com',
@@ -51,7 +58,12 @@ describe('AuthService', () => {
   beforeEach(async () => {
     clients = {
       findByEmail: jest.fn(),
+      deleteExpiredPendingClientByEmail: jest.fn(),
       createWithLocalCredentials: jest.fn(),
+      createPendingWithLocalCredentials: jest.fn(),
+      findPendingLocalClientByEmail: jest.fn(),
+      replaceEmailVerification: jest.fn(),
+      consumeEmailVerification: jest.fn(),
       findOrCreateSocial: jest.fn(),
     };
     jwt = {
@@ -59,7 +71,13 @@ describe('AuthService', () => {
       signAsync: jest.fn().mockResolvedValue('employee-token'),
     };
     users = { findEmployeeWithLocalCredentialsByEmail: jest.fn() };
-    config = { getOrThrow: jest.fn() };
+    config = {
+      getOrThrow: jest.fn((key: string) =>
+        key === 'FRONTEND_URL' ? 'http://localhost:5173' : `test-${key}`,
+      ),
+      get: jest.fn(),
+    };
+    verificationSender = { send: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -69,6 +87,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwt },
         { provide: ConfigService, useValue: config },
         { provide: UsersRepository, useValue: users },
+        { provide: EmailVerificationSender, useValue: verificationSender },
       ],
     }).compile();
 
@@ -89,12 +108,13 @@ describe('AuthService', () => {
         ConflictException,
       );
       expect(clients.createWithLocalCredentials).not.toHaveBeenCalled();
+      expect(clients.createPendingWithLocalCredentials).not.toHaveBeenCalled();
       expect(hasher.hash).not.toHaveBeenCalled();
     });
 
     it('splits first/last name and creates the client with a hashed password', async () => {
       clients.findByEmail.mockResolvedValue(null);
-      clients.createWithLocalCredentials.mockResolvedValue({
+      clients.createPendingWithLocalCredentials.mockResolvedValue({
         id: 5,
         email: registerDto.email,
       });
@@ -102,7 +122,7 @@ describe('AuthService', () => {
       const result = await service.register(registerDto);
 
       expect(hasher.hash).toHaveBeenCalledWith(registerDto.password);
-      expect(clients.createWithLocalCredentials).toHaveBeenCalledWith(
+      expect(clients.createPendingWithLocalCredentials).toHaveBeenCalledWith(
         expect.objectContaining({
           email: registerDto.email,
           firstName: 'Ana',
@@ -114,8 +134,81 @@ describe('AuthService', () => {
         }),
         'hashed-password',
         'AAECAwQFBgcICQoLDA0ODw==',
+        expect.stringMatching(/^[a-f0-9]{64}$/u),
+        30,
       );
-      expect(result).toEqual({ id: 5, email: registerDto.email });
+      expect(result).toEqual({
+        status: 'pending_verification',
+        email: registerDto.email,
+      });
+      expect(
+        clients.createPendingWithLocalCredentials.mock.calls[0][3],
+      ).toMatch(/^[a-f0-9]{64}$/u);
+      expect(clients.createPendingWithLocalCredentials.mock.calls[0][4]).toBe(
+        30,
+      );
+      expect(verificationSender.send).toHaveBeenCalledWith({
+        email: registerDto.email,
+        confirmationUrl: expect.stringMatching(
+          /^http:\/\/localhost:5173\/verify-email\?token=[a-f0-9]{64}$/u,
+        ),
+        expiresInMinutes: 30,
+      });
+    });
+
+    it('resends confirmation for an existing pending registration instead of reporting a duplicate', async () => {
+      const pendingClient = { id: 5, email: registerDto.email };
+      clients.findByEmail.mockResolvedValue(pendingClient);
+      clients.findPendingLocalClientByEmail.mockResolvedValue(pendingClient);
+
+      await expect(service.register(registerDto)).resolves.toEqual({
+        status: 'pending_verification',
+        email: pendingClient.email,
+      });
+
+      expect(clients.replaceEmailVerification).toHaveBeenCalledWith(
+        pendingClient.id,
+        expect.stringMatching(/^[a-f0-9]{64}$/u),
+        30,
+      );
+      expect(verificationSender.send).toHaveBeenCalledTimes(1);
+      expect(clients.createPendingWithLocalCredentials).not.toHaveBeenCalled();
+      expect(hasher.hash).not.toHaveBeenCalled();
+    });
+
+    it('keeps the account pending and reports email delivery failure for resend', async () => {
+      clients.findByEmail.mockResolvedValue(null);
+      clients.createPendingWithLocalCredentials.mockResolvedValue({
+        id: 5,
+        email: registerDto.email,
+      });
+      verificationSender.send.mockRejectedValue(
+        new Error('SMTP private details'),
+      );
+
+      await expect(service.register(registerDto)).rejects.toMatchObject({
+        response: {
+          code: 'EMAIL_DELIVERY_FAILED',
+          message: expect.stringContaining('reenvíe'),
+        },
+      });
+      expect(clients.createPendingWithLocalCredentials).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+
+    it('persists a pending account before attempting email delivery', async () => {
+      clients.findByEmail.mockResolvedValue(null);
+      clients.createPendingWithLocalCredentials.mockResolvedValue({
+        id: 5,
+        email: registerDto.email,
+      });
+
+      await service.register(registerDto);
+
+      expect(
+        clients.createPendingWithLocalCredentials.mock.invocationCallOrder[0],
+      ).toBeLessThan(verificationSender.send.mock.invocationCallOrder[0]!);
     });
   });
 
@@ -129,14 +222,134 @@ describe('AuthService', () => {
 
   it('propagates a persistence conflict without retrying or issuing a token', async () => {
     clients.findByEmail.mockResolvedValue(null);
-    clients.createWithLocalCredentials.mockRejectedValue(
+    clients.createPendingWithLocalCredentials.mockRejectedValue(
       new ConflictException(),
     );
     await expect(service.register(registerDto)).rejects.toBeInstanceOf(
       ConflictException,
     );
-    expect(clients.createWithLocalCredentials).toHaveBeenCalledTimes(1);
+    expect(clients.createPendingWithLocalCredentials).toHaveBeenCalledTimes(1);
     expect(jwt.sign).not.toHaveBeenCalled();
+  });
+
+  describe('email verification', () => {
+    const client = {
+      status: 'ACTIVE',
+      id: 8,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      firstSurname: 'Perez',
+    };
+
+    it('rotates the one-use token before resending confirmation', async () => {
+      clients.findPendingLocalClientByEmail.mockResolvedValue(client);
+
+      await expect(
+        service.resendEmailVerification(client.email),
+      ).resolves.toMatchObject({
+        message: expect.stringContaining('Si existe'),
+      });
+
+      expect(clients.replaceEmailVerification).toHaveBeenCalledWith(
+        client.id,
+        expect.stringMatching(/^[a-f0-9]{64}$/u),
+        30,
+      );
+      expect(verificationSender.send).toHaveBeenCalledWith({
+        email: client.email,
+        confirmationUrl: expect.stringMatching(
+          /^http:\/\/localhost:5173\/verify-email\?token=[a-f0-9]{64}$/u,
+        ),
+        expiresInMinutes: 30,
+      });
+    });
+
+    it('does not disclose whether a resend email belongs to a pending account', async () => {
+      clients.findPendingLocalClientByEmail.mockResolvedValue(null);
+
+      await expect(
+        service.resendEmailVerification('unknown@example.com'),
+      ).resolves.toEqual({
+        message:
+          'Si existe una cuenta pendiente con ese correo, enviaremos un nuevo enlace.',
+      });
+      expect(clients.replaceEmailVerification).not.toHaveBeenCalled();
+      expect(verificationSender.send).not.toHaveBeenCalled();
+    });
+
+    it('consumes a valid token once and then signs a client session', async () => {
+      clients.consumeEmailVerification.mockResolvedValue(client);
+
+      await expect(
+        service.confirmEmailVerification('a'.repeat(64)),
+      ).resolves.toEqual({
+        accessToken: 'signed-token',
+        client: {
+          id: 8,
+          email: 'ana@example.com',
+          firstName: 'Ana',
+          lastName: 'Perez',
+        },
+      });
+      expect(clients.consumeEmailVerification).toHaveBeenCalledWith(
+        expect.stringMatching(/^[a-f0-9]{64}$/u),
+      );
+      expect(jwt.sign).toHaveBeenCalledWith({
+        sub: 8,
+        email: 'ana@example.com',
+        type: 'client',
+      });
+    });
+
+    it('rejects expired, unknown, or used tokens without issuing a client session', async () => {
+      clients.consumeEmailVerification.mockResolvedValue(null);
+
+      await expect(
+        service.confirmEmailVerification('b'.repeat(64)),
+      ).rejects.toMatchObject({
+        response: {
+          code: 'EMAIL_VERIFICATION_INVALID',
+          message: 'Este enlace ya no es válido',
+        },
+      });
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('does not issue a session if the client was deactivated before confirmation', async () => {
+      clients.consumeEmailVerification.mockResolvedValue({
+        ...client,
+        status: 'INACTIVE',
+      });
+      await expect(
+        service.confirmEmailVerification('c'.repeat(64)),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('does not resend or replace credentials when an inactive email is already registered', async () => {
+      clients.findByEmail.mockResolvedValue({ ...client, status: 'INACTIVE' });
+      clients.findPendingLocalClientByEmail.mockResolvedValue(null);
+      await expect(service.register(registerDto)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      await expect(
+        service.resendEmailVerification(client.email),
+      ).resolves.toMatchObject({ message: expect.any(String) });
+      expect(verificationSender.send).not.toHaveBeenCalled();
+      expect(clients.replaceEmailVerification).not.toHaveBeenCalled();
+      expect(clients.createPendingWithLocalCredentials).not.toHaveBeenCalled();
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid expiration configuration rather than accepting it', async () => {
+      clients.findByEmail.mockResolvedValue(null);
+      config.get.mockReturnValue('0');
+
+      await expect(service.register(registerDto)).rejects.toThrow(
+        'EMAIL_VERIFICATION_TTL_MINUTES',
+      );
+      expect(clients.createPendingWithLocalCredentials).not.toHaveBeenCalled();
+    });
   });
 
   describe('loginEmployee', () => {
@@ -264,7 +477,11 @@ describe('AuthService', () => {
         .fn()
         .mockResolvedValue({ tokens: { id_token: 'provider-token' } }),
       verifyIdToken: jest.fn().mockResolvedValue({
-        getPayload: () => ({ sub: 'google-id', email: 'user@example.com' }),
+        getPayload: () => ({
+          sub: 'google-id',
+          email: 'user@example.com',
+          email_verified: true,
+        }),
       }),
     }));
     clients.findOrCreateSocial.mockRejectedValue(denied);
@@ -361,10 +578,18 @@ describe('AuthService', () => {
         id: 12,
         email: 'facebook@example.com',
         status: 'ACTIVE',
+        firstName: 'Ana',
+        firstSurname: 'Perez',
       });
 
       await expect(service.facebookLogin(accessToken)).resolves.toEqual({
         accessToken: 'signed-token',
+        client: {
+          id: 12,
+          email: 'facebook@example.com',
+          firstName: 'Ana',
+          lastName: 'Perez',
+        },
       });
 
       expect(fetchMock).toHaveBeenCalledTimes(2);

@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AuthModule } from '../auth/auth.module';
+import { EmailVerificationSender } from '../auth/notifications/email-verification-sender';
 import { EMPLOYEE_SESSION_COOKIE } from '../auth/employee-session.service';
 import { DatabaseService } from '../database/database.service';
 import { UsersRepository } from './users.repository';
@@ -31,7 +32,10 @@ describe('User list HTTP permissions and validation', () => {
     getEmployeeListOptions: jest.fn(),
   };
   const repository = { findEmployeeIdentityById: jest.fn() };
-  const clients = { findById: jest.fn() };
+  const clients = {
+    findById: jest.fn(),
+    isEmailVerificationPending: jest.fn(),
+  };
   const empty = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
   const get = (path: string) =>
     request(app.getHttpServer())
@@ -57,6 +61,8 @@ describe('User list HTTP permissions and validation', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue({})
+      .overrideProvider(EmailVerificationSender)
+      .useValue({ send: jest.fn() })
       .overrideProvider(UsersRepository)
       .useValue(repository)
       .overrideProvider(ClientsService)
@@ -94,6 +100,7 @@ describe('User list HTTP permissions and validation', () => {
       firstName: 'José',
     });
     clients.findById.mockResolvedValue({ id: 99, firstName: 'Cliente' });
+    clients.isEmailVerificationPending.mockResolvedValue(false);
   });
   afterAll(async () => {
     await app.close();

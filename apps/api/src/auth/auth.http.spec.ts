@@ -10,6 +10,7 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { AuthModule } from './auth.module';
 import { AuthService } from './auth.service';
 import { EMPLOYEE_SESSION_COOKIE } from './employee-session.service';
+import { EmailVerificationSender } from './notifications/email-verification-sender';
 
 describe('Employee authentication (HTTP integration)', () => {
   let app: INestApplication<App>;
@@ -52,6 +53,8 @@ describe('Employee authentication (HTTP integration)', () => {
         AuthModule,
       ],
     })
+      .overrideProvider(EmailVerificationSender)
+      .useValue({ send: jest.fn() })
       .overrideProvider(ConfigService)
       .useValue({
         getOrThrow: () => 'http-test-jwt-secret',
@@ -386,7 +389,7 @@ describe('Employee authentication (HTTP integration)', () => {
       await request(app.getHttpServer())
         .post('/api/auth/register')
         .send({})
-        .expect(400);
+        .expect(attempt < 5 ? 400 : 429);
     }
     expect(db.query).toHaveBeenCalledTimes(6);
   });
@@ -605,7 +608,11 @@ describe('Employee authentication (HTTP integration)', () => {
       gender: null,
       language: 'es',
     };
-    db.query.mockResolvedValue({ rows: [client] });
+    db.query.mockImplementation((sql: string) =>
+      sql.includes('CLIENT_EMAIL_VERIFICATIONS')
+        ? Promise.resolve({ rows: [] })
+        : Promise.resolve({ rows: [client] }),
+    );
     const { accessToken } = app.get(AuthService).issueToken(client);
     await request(app.getHttpServer())
       .get('/api/auth/me')
