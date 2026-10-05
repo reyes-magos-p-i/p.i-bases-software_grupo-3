@@ -1,3 +1,6 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
 *,
 *::before,
 *::after {
@@ -43,3 +46,4 @@ img {
   width: min(1180px, calc(100% - 32px));
   margin-inline: auto;
 }
+

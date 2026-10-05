@@ -83,6 +83,19 @@ async function renderDialog(props: Partial<InstanceType<typeof CreateUserDialog>
 }
 
 describe('client form', () => {
+  it('shows a character counter while retaining the Oracle storage limit', async () => {
+    const view = await renderDialog({ mode: 'client' })
+    await view.get('.address-toggle input').setValue(true)
+    await view.get('[name="details"]').setValue('á🎬')
+    expect(view.text()).toContain('2/255')
+  })
+  it('rejects non-Costa-Rican mobiles before creating a client', async () => {
+    const view = await filledClient()
+    await view.get('[name="phoneNumber"]').setValue('22222222')
+    await view.get('form').trigger('submit')
+    expect(view.emitted('submit')).toBeUndefined()
+    expect(view.get('[name="phoneNumber"]').attributes('aria-invalid')).toBe('true')
+  })
   async function filledClient(
     props: Partial<InstanceType<typeof CreateUserDialog>['$props']> = {},
   ) {
@@ -156,7 +169,7 @@ describe('client form', () => {
           secondSurname: 'Rojas',
           email: 'ana@example.com',
           birthday: '2000-02-29',
-          phoneNumber: '+506 8888-8888',
+          phoneNumber: '88888888',
           language: 'en',
           address: { districtId: 111, details: 'Casa azul' },
         },
@@ -252,6 +265,22 @@ describe('client form', () => {
 })
 
 describe('CreateUserDialog', () => {
+  it('requires a valid hire date for staff and omits it for clients', async () => {
+    const view = await renderDialog()
+    const field = view.get('[name="hireDate"]')
+    expect(field.attributes('required')).toBeDefined()
+    await field.setValue('2026-10-01')
+    await field.trigger('focusout')
+    expect(field.attributes('aria-invalid')).toBe('false')
+    await field.setValue('0000-01-01')
+    await field.trigger('focusout')
+    expect(field.attributes('aria-invalid')).toBe('true')
+    await field.setValue('')
+    await field.trigger('focusout')
+    expect(field.attributes('aria-invalid')).toBe('true')
+    await view.setProps({ mode: 'client' })
+    expect(view.find('[name="hireDate"]').exists()).toBe(false)
+  })
   it('opens a labelled modal and focuses the first field without opening twice', async () => {
     const view = await renderDialog()
     const dialog = view.get<HTMLDialogElement>('dialog')
@@ -342,6 +371,7 @@ describe('CreateUserDialog', () => {
       'firstSurname',
       'secondSurname',
       'birthday',
+      'hireDate',
       'email',
       'phoneNumber',
       'role',
@@ -351,7 +381,7 @@ describe('CreateUserDialog', () => {
       'branchId',
     ]
 
-    expect(view.findAll('input, select, textarea')).toHaveLength(13)
+    expect(view.findAll('input, select, textarea')).toHaveLength(14)
     for (const name of required) {
       const field = view.get('[name="' + name + '"]')
       expect(field.attributes('required')).toBeDefined()
@@ -534,6 +564,7 @@ describe('CreateUserDialog', () => {
       secondSurname: 'Rojas',
       email: 'ana@example.com',
       birthday: '2000-02-29',
+      hireDate: '2026-10-01',
       phoneNumber: '88888888',
       role: 'ADMINISTRATOR',
       branchId: '1',
@@ -555,6 +586,7 @@ describe('CreateUserDialog', () => {
           secondSurname: 'Rojas',
           email: 'ana@example.com',
           birthday: '2000-02-29',
+          hireDate: '2026-10-01',
           phoneNumber: '88888888',
           role: 'ADMINISTRATOR',
           branchId: 1,
@@ -708,7 +740,6 @@ describe('CreateUserDialog', () => {
     ['secondName', 100],
     ['firstSurname', 100],
     ['secondSurname', 100],
-    ['phoneNumber', 20],
     ['details', 255],
   ] as const)(
     'checks the UTF-8 limit for %s without confusing bytes with characters',
