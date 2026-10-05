@@ -12,16 +12,15 @@ import { UpdateMovieDto } from './dto/createMovie.dto/updateMovie.dto';
  async findAll() {
     const result = await this.db.query(`
       SELECT
-        ID_PELICULA,
-        TITULO,
-        DESCRIPCION,
-        DURACION,
-        FECHA_ESTRENO,
-        CLASIFICACION,
-        DIRECTOR,
-        IMAGEN_URL
-      FROM PELICULA
-      ORDER BY TITULO
+        MOVIE_ID,
+        TITLE,
+        RUNNING_TIME,
+        SYNOPSIS,
+        POSTER_IMAGE,
+        RELEASE_YEAR,
+        CLASIFICATION_ID,
+      FROM MOVIES
+      ORDER BY TITLE
     `);
 
     return result.rows;
@@ -31,16 +30,15 @@ import { UpdateMovieDto } from './dto/createMovie.dto/updateMovie.dto';
     const result = await this.db.query(
       `
       SELECT
-        ID_PELICULA,
-        TITULO,
-        DESCRIPCION,
-        DURACION,
-        FECHA_ESTRENO,
-        CLASIFICACION,
-        DIRECTOR,
-        IMAGEN_URL
-      FROM PELICULA
-      WHERE ID_PELICULA = :id
+        MOVIE_ID,
+        TITLE,
+        RUNNING_TIME,
+        SYNOPSIS,
+        POSTER_IMAGE,
+        RELEASE_YEAR,
+        CLASIFICATION_ID,
+      FROM MOVIES
+      WHERE MOVIE_ID = :id
       `,
       { id },
     );
@@ -52,32 +50,29 @@ import { UpdateMovieDto } from './dto/createMovie.dto/updateMovie.dto';
     await this.db.query(
       `
       INSERT INTO PELICULA (
-        TITULO,
-        DESCRIPCION,
-        DURACION,
-        FECHA_ESTRENO,
-        CLASIFICACION,
-        DIRECTOR,
-        IMAGEN_URL
+        TITLE,
+        RUNNING_TIME,
+        SYNOPSIS,
+        POSTER_IMAGE,
+        RELEASE_YEAR,
+        CLASIFICATION_ID,
       )
       VALUES (
-        :titulo,
-        :descripcion,
-        :duracion,
-        :fechaEstreno,
-        :clasificacion,
-        :director,
-        :imagenUrl
+        :title,
+        :runningTime,
+        :synopsis,
+        :poster_image,
+        :releaseYear,
+        :clasification
       )
       `,
       {
-        titulo: dto.titulo,
-        descripcion: dto.descripcion,
-        duracion: dto.duracion,
-        fechaEstreno: dto.fechaEstreno,
-        clasificacion: dto.clasificacion,
-        director: dto.director,
-        imagenUrl: dto.imagenUrl,
+        title:dto.title,
+        runningTime:dto.runningTime,
+        synopsis:dto.synopsis,
+        poster_image:dto.poster_image,
+        releaseYear:dto.releaseYear,
+        clasification:dto.clasification
       },
     );
   }
