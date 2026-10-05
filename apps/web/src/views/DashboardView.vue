@@ -12,6 +12,7 @@ import {
   invalidateEmployeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
+import { clearClientAuth } from '@/services/client-session.service'
 
 const router = useRouter()
 const identity = employeeSession.user
@@ -55,6 +56,7 @@ async function logout() {
   logoutError.value = ''
   try {
     await closeEmployeeSession()
+    await clearClientAuth()
     if (!disposed) await router.replace('/')
   } catch {
     if (!disposed)
