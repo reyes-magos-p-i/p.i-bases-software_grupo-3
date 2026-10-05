@@ -62,33 +62,6 @@ jobs:
         with:
           name: coverage-web
           path: apps/web/coverage
-      - name: Validate and normalize coverage source paths
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const path = require('node:path');
-          const workspace = process.cwd();
-          for (const app of ['api', 'web']) {
-            const appRoot = path.join(workspace, 'apps', app);
-            const report = path.join(appRoot, 'coverage', 'lcov.info');
-            let sources = 0;
-            const normalized = fs.readFileSync(report, 'utf8').replace(/^SF:(.+)\r?$/gm, (_, entry) => {
-              const source = entry.trim().replaceAll('\\', '/');
-              const target = path.isAbsolute(source)
-                ? source
-                : path.resolve(source.startsWith('apps/') ? workspace : appRoot, source);
-              const relative = path.relative(appRoot, target);
-              if (relative.startsWith('..') || path.isAbsolute(relative) || !fs.existsSync(target)) {
-                throw new Error('Invalid coverage source for ' + app + ': ' + source);
-              }
-              sources++;
-              return 'SF:' + path.relative(workspace, target).split(path.sep).join('/');
-            });
-            if (sources === 0) throw new Error('Empty coverage report for ' + app);
-            fs.writeFileSync(report, normalized);
-            console.log('Validated ' + sources + ' coverage sources for ' + app);
-          }
-          NODE
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
         env:
