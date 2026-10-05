@@ -1,12 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MoviesController } from './movies.controller';
+import { MoviesService } from './movies.service';
 
 describe('MoviesController', () => {
   let controller: MoviesController;
 
   beforeEach(async () => {
+    const serviceMock = {
+      findAll: jest.fn(),
+      findOne: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MoviesController],
+      providers: [
+        {
+          provide: MoviesService,
+          useValue: serviceMock,
+        },
+      ],
     }).compile();
 
     controller = module.get<MoviesController>(MoviesController);
