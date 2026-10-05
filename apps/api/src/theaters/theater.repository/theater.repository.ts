@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
-import { Theater } from '../entities/theater.entity';
+import { Theater, TheaterStatus } from '../entities/theater.entity';
 import { CreateTheaterDto } from '../dto/create-theater.dto';
 import { UpdateTheaterDto } from '../dto/update-theater.dto';
 import oracledb from 'oracledb';
@@ -20,7 +20,8 @@ export class TheaterRepository {
             t.dimension_x,
             t.dimension_y,
             p.name AS projector_name,
-            t.is_active
+            t.is_active,
+            t.status
         FROM Theaters t
         JOIN Projectors p ON p.projector_id = t.projector_id
         ORDER BY t.theater_id
@@ -28,7 +29,7 @@ export class TheaterRepository {
       this.logger.log(`Fetched ${result.rows?.length ?? 0} theaters from the database.`);
       this.logger.debug(`Database query result: ${JSON.stringify(result)}`);
 
-      const rows = (result.rows ?? []) as { THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number }[];
+      const rows = (result.rows ?? []) as { THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number; STATUS: TheaterStatus }[];
 
       return rows.map((row) => ({
         theaterId: row.THEATER_ID,
@@ -38,6 +39,7 @@ export class TheaterRepository {
         dimensionY: row.DIMENSION_Y,
         projectorName: row.PROJECTOR_NAME,
         isActive: row.IS_ACTIVE === 1,
+        status: row.STATUS,
       }));
     } catch (error) {
       this.logger.error('Error fetching theaters', error as Error);
@@ -49,6 +51,7 @@ export class TheaterRepository {
     try {
         const { branchId, numberOfSeats, dimensionX, dimensionY, projectorName } = dto;
         const isActive = dto.isActive ?? true;
+        const status = dto.status ?? 'Disponible';
 
         const theaterId = await this.db.transaction(async (conn) => {
           const projectorResult = await conn.execute(
@@ -64,8 +67,8 @@ export class TheaterRepository {
           }
 
           const theaterResult = await conn.execute(
-            `INSERT INTO Theaters (branch_id, number_seats, dimension_x, dimension_y, projector_id, is_active)
-            VALUES (:branchId, :numberOfSeats, :dimensionX, :dimensionY, :projectorId, :isActive)
+            `INSERT INTO Theaters (branch_id, number_seats, dimension_x, dimension_y, projector_id, is_active, status)
+            VALUES (:branchId, :numberOfSeats, :dimensionX, :dimensionY, :projectorId, :isActive, :status)
             RETURNING theater_id INTO :theaterId`,
             {
                 branchId,
@@ -74,6 +77,7 @@ export class TheaterRepository {
                 dimensionY,
                 projectorId,
                 isActive: isActive ? 1 : 0,
+                status,
                 theaterId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
             },
           );
@@ -87,6 +91,7 @@ export class TheaterRepository {
           dimensionY,
           projectorName,
           isActive,
+          status,
         };
     } catch (error) {
         this.logger.error('Error creating theater', error as Error);
@@ -103,7 +108,8 @@ export class TheaterRepository {
                 t.dimension_x,
                 t.dimension_y,
                 p.name AS projector_name,
-                t.is_active
+                t.is_active,
+                t.status
          FROM Theaters t
          JOIN Projectors p ON p.projector_id = t.projector_id
          WHERE t.theater_id = :id`,
@@ -111,7 +117,7 @@ export class TheaterRepository {
         { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
 
-      const rows = (result.rows ?? []) as { THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number }[];
+      const rows = (result.rows ?? []) as { THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number; STATUS: TheaterStatus }[];
 
       if (rows.length === 0) {
         return null;
@@ -126,6 +132,7 @@ export class TheaterRepository {
         dimensionY: row.DIMENSION_Y,
         projectorName: row.PROJECTOR_NAME,
         isActive: row.IS_ACTIVE === 1,
+        status: row.STATUS,
       };
     } catch (error) {
       this.logger.error('Error fetching theater by ID', error as Error);
@@ -160,6 +167,10 @@ export class TheaterRepository {
       if (updateTheaterDto.isActive !== undefined) {
         setClauses.push('is_active = :isActive');
         binds.isActive = updateTheaterDto.isActive ? 1 : 0;
+      }
+      if (updateTheaterDto.status !== undefined) {
+        setClauses.push('status = :status');
+        binds.status = updateTheaterDto.status;
       }
 
       if (setClauses.length === 0) {

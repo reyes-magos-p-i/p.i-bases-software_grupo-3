@@ -6,4 +6,7 @@ export class Theater {
     dimensionY: number;
     projectorName: string;
     isActive: boolean;
+    status: TheaterStatus;
 }
+
+export type TheaterStatus = 'Disponible' | 'En función';

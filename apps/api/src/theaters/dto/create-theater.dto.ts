@@ -1,4 +1,5 @@
 import { IsBoolean, IsIn, IsInt, IsOptional } from 'class-validator';
+import type { TheaterStatus } from '../entities/theater.entity';
 
 export class CreateTheaterDto {
     @IsInt()
@@ -19,4 +20,8 @@ export class CreateTheaterDto {
     @IsOptional()
     @IsBoolean()
     isActive?: boolean;
+
+    @IsOptional()
+    @IsIn(['Disponible', 'En función'])
+    status?: TheaterStatus;
 }

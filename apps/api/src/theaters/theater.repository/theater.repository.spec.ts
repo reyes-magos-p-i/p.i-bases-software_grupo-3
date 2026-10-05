@@ -114,6 +114,7 @@ describe('TheaterRepository', () => {
       dimensionY: 12,
       projectorName: 'IMAX',
       isActive: true,
+      status: 'Disponible' as const,
     };
 
     it('resolves the projector and returns the created theater', async () => {
@@ -147,8 +148,8 @@ describe('TheaterRepository', () => {
     });
 
       it('defaults isActive to true when it is omitted', async () => {
-        const dtoWithoutActive = { ...theaterDto };
-        delete dtoWithoutActive.isActive;
+        const { isActive: ignoredIsActive, ...dtoWithoutActive } = theaterDto;
+        expect(ignoredIsActive).toBe(true);
 
         connection.execute
           .mockResolvedValueOnce({ rows: [{ PROJECTOR_ID: 42 }] })
@@ -158,6 +159,7 @@ describe('TheaterRepository', () => {
           theaterId: 8,
           ...dtoWithoutActive,
           isActive: true,
+          status: 'Disponible',
         });
         expect(connection.execute).toHaveBeenNthCalledWith(
           2,
