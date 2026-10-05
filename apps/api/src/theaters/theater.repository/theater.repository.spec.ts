@@ -47,6 +47,7 @@ describe('TheaterRepository', () => {
             DIMENSION_X: 10,
             DIMENSION_Y: 12,
             PROJECTOR_NAME: 'IMAX',
+            IS_ACTIVE: 1,
           },
         ],
       });
@@ -59,6 +60,7 @@ describe('TheaterRepository', () => {
           dimensionX: 10,
           dimensionY: 12,
           projectorName: 'IMAX',
+          isActive: true,
         },
       ]);
       expect(databaseService.query).toHaveBeenCalledTimes(1);
@@ -91,6 +93,7 @@ describe('TheaterRepository', () => {
       dimensionX: 10,
       dimensionY: 12,
       projectorName: 'IMAX',
+      isActive: true,
     };
 
     it('resolves the projector and returns the created theater', async () => {
@@ -118,6 +121,7 @@ describe('TheaterRepository', () => {
           dimensionX: theaterDto.dimensionX,
           dimensionY: theaterDto.dimensionY,
           projectorId: 42,
+          isActive: 1,
         }),
       );
     });

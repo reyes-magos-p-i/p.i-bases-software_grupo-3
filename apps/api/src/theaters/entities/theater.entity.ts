@@ -5,4 +5,5 @@ export class Theater {
     dimensionX: number;
     dimensionY: number;
     projectorName: string;
+    isActive: boolean;
 }

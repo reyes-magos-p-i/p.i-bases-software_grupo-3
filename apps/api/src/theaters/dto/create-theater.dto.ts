@@ -1,4 +1,4 @@
-import { IsIn, IsInt } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional } from 'class-validator';
 
 export class CreateTheaterDto {
     @IsInt()
@@ -15,4 +15,8 @@ export class CreateTheaterDto {
 
     @IsIn(['IMAX', '70mm'])
     projectorName: string;
+
+    @IsOptional()
+    @IsBoolean()
+    isActive?: boolean;
 }

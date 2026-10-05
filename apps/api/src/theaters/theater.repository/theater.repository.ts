@@ -19,7 +19,8 @@ export class TheaterRepository {
             t.number_seats,
             t.dimension_x,
             t.dimension_y,
-            p.name AS projector_name
+            p.name AS projector_name,
+            t.is_active
         FROM Theaters t
         JOIN Projectors p ON p.projector_id = t.projector_id
         ORDER BY t.theater_id
@@ -27,7 +28,7 @@ export class TheaterRepository {
       this.logger.log(`Fetched ${result.rows?.length ?? 0} theaters from the database.`);
       this.logger.debug(`Database query result: ${JSON.stringify(result)}`);
 
-      const rows = (result.rows ?? []) as {THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string}[];
+      const rows = (result.rows ?? []) as { THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number }[];
 
       return rows.map((row) => ({
         theaterId: row.THEATER_ID,
@@ -36,6 +37,7 @@ export class TheaterRepository {
         dimensionX: row.DIMENSION_X,
         dimensionY: row.DIMENSION_Y,
         projectorName: row.PROJECTOR_NAME,
+        isActive: row.IS_ACTIVE === 1,
       }));
     } catch (error) {
       this.logger.error('Error fetching theaters', error as Error);
@@ -46,6 +48,7 @@ export class TheaterRepository {
   async createTheater(dto: CreateTheaterDto): Promise<Theater> {
     try {
         const { branchId, numberOfSeats, dimensionX, dimensionY, projectorName } = dto;
+        const isActive = dto.isActive ?? true;
 
         const theaterId = await this.db.transaction(async (conn) => {
           const projectorResult = await conn.execute(
@@ -61,8 +64,8 @@ export class TheaterRepository {
           }
 
           const theaterResult = await conn.execute(
-            `INSERT INTO Theaters (branch_id, number_seats, dimension_x, dimension_y, projector_id)
-            VALUES (:branchId, :numberOfSeats, :dimensionX, :dimensionY, :projectorId)
+            `INSERT INTO Theaters (branch_id, number_seats, dimension_x, dimension_y, projector_id, is_active)
+            VALUES (:branchId, :numberOfSeats, :dimensionX, :dimensionY, :projectorId, :isActive)
             RETURNING theater_id INTO :theaterId`,
             {
                 branchId,
@@ -70,6 +73,7 @@ export class TheaterRepository {
                 dimensionX,
                 dimensionY,
                 projectorId,
+                isActive: isActive ? 1 : 0,
                 theaterId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
             },
           );
@@ -82,6 +86,7 @@ export class TheaterRepository {
           dimensionX,
           dimensionY,
           projectorName,
+          isActive,
         };
     } catch (error) {
         this.logger.error('Error creating theater', error as Error);
@@ -97,7 +102,8 @@ export class TheaterRepository {
                 t.number_seats,
                 t.dimension_x,
                 t.dimension_y,
-                p.name AS projector_name
+                p.name AS projector_name,
+                t.is_active
          FROM Theaters t
          JOIN Projectors p ON p.projector_id = t.projector_id
          WHERE t.theater_id = :id`,
@@ -105,7 +111,7 @@ export class TheaterRepository {
         { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
 
-      const rows = (result.rows ?? []) as { THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string }[];
+      const rows = (result.rows ?? []) as { THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number }[];
 
       if (rows.length === 0) {
         return null;
@@ -119,6 +125,7 @@ export class TheaterRepository {
         dimensionX: row.DIMENSION_X,
         dimensionY: row.DIMENSION_Y,
         projectorName: row.PROJECTOR_NAME,
+        isActive: row.IS_ACTIVE === 1,
       };
     } catch (error) {
       this.logger.error('Error fetching theater by ID', error as Error);
@@ -149,6 +156,10 @@ export class TheaterRepository {
       }
       if (updateTheaterDto.projectorName !== undefined) {
         setClauses.push('projector_id = :projectorId');
+      }
+      if (updateTheaterDto.isActive !== undefined) {
+        setClauses.push('is_active = :isActive');
+        binds.isActive = updateTheaterDto.isActive ? 1 : 0;
       }
 
       if (setClauses.length === 0) {
@@ -200,7 +211,7 @@ export class TheaterRepository {
   async deleteTheater(id: number): Promise<void> {
     try {
       const result = await this.db.query(
-        `DELETE FROM Theaters WHERE theater_id = :id`,
+        `UPDATE Theaters SET is_active = 0 WHERE theater_id = :id`,
         { id },
       );
 
