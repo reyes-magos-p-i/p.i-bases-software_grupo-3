@@ -178,7 +178,7 @@ async function loadCatalogs() {
 }
 
 function openUserDialog() {
-  if (loggingOut.value || role.value !== 'ADMINISTRATOR') return
+  if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters') return
   userDialog.value?.open()
   void loadCatalogs()
 }
@@ -253,15 +253,26 @@ function navigate(section: string) {
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
-          v-if="role === 'ADMINISTRATOR' && activeSection !== 'theaters'"
+          v-if="
+            role === 'ADMINISTRATOR' &&
+            (activeSection === 'employees' ||
+              activeSection === 'clients' ||
+              activeSection === 'theaters')
+          "
           type="button"
           class="add-user-button"
           :disabled="loggingOut"
-          aria-haspopup="dialog"
+          :aria-haspopup="activeSection === 'employees' ? 'dialog' : undefined"
           @click="openUserDialog"
         >
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
-          {{ activeSection === 'clients' ? 'Añadir cliente' : 'Añadir empleado' }}
+          {{
+            activeSection === 'theaters'
+              ? 'Crear sala'
+              : activeSection === 'clients'
+                ? 'Añadir cliente'
+                : 'Añadir empleado'
+          }}
         </button>
       </div>
       <div class="preview-placeholder">

@@ -165,6 +165,16 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
   })
 
+  it('shows the sala creation action only to administrators', async () => {
+    const view = await renderDashboard()
+
+    await view.get('[aria-label="Salas"]').trigger('click')
+    expect(view.get('.add-user-button').text()).toContain('Crear sala')
+
+    await setRole('EMPLOYEE')
+    expect(view.find('.add-user-button').exists()).toBe(false)
+  })
+
   it('moves to clients and hides administrator options when the server reports an employee role', async () => {
     const view = await renderDashboard()
 
