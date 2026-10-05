@@ -1,7 +1,5 @@
 import { Controller, Get, UseGuards} from '@nestjs/common';
 import { CinemasService } from './cinemas.service';
-import { CreateCinemaDto } from './dto/create-cinema.dto';
-import { UpdateCinemaDto } from './dto/update-cinema.dto';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { AuthGuard } from '@nestjs/passport';
 
