@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { Theater } from '../entities/theater.entity';
 import { CreateTheaterDto } from '../dto/create-theater.dto';
+import { UpdateTheaterDto } from '../dto/update-theater.dto';
 import oracledb from 'oracledb';
 
 @Injectable()
@@ -42,7 +43,7 @@ export class TheaterRepository {
     }
   }
 
-    async createTheater(dto: CreateTheaterDto): Promise<Theater> {
+  async createTheater(dto: CreateTheaterDto): Promise<Theater> {
     try {
         const { branchId, numberOfSeats, dimensionX, dimensionY, projectorName } = dto;
 
@@ -121,6 +122,71 @@ export class TheaterRepository {
       };
     } catch (error) {
       this.logger.error('Error fetching theater by ID', error as Error);
+      throw error;
+    }
+  }
+
+  async updateTheater(id: number, updateTheaterDto: UpdateTheaterDto): Promise<Theater> {
+    try {
+      const setClauses: string[] = [];
+      const binds: oracledb.BindParameters = { id };
+
+      if (updateTheaterDto.branchId !== undefined) {
+        setClauses.push('branch_id = :branchId');
+        binds.branchId = updateTheaterDto.branchId;
+      }
+      if (updateTheaterDto.numberOfSeats !== undefined) {
+        setClauses.push('number_seats = :numberOfSeats');
+        binds.numberOfSeats = updateTheaterDto.numberOfSeats;
+      }
+      if (updateTheaterDto.dimensionX !== undefined) {
+        setClauses.push('dimension_x = :dimensionX');
+        binds.dimensionX = updateTheaterDto.dimensionX;
+      }
+      if (updateTheaterDto.dimensionY !== undefined) {
+        setClauses.push('dimension_y = :dimensionY');
+        binds.dimensionY = updateTheaterDto.dimensionY;
+      }
+      if (updateTheaterDto.projectorName !== undefined) {
+        const projectorResult = await this.db.query(
+          `SELECT projector_id FROM Projectors WHERE name = :projectorName`,
+          { projectorName: updateTheaterDto.projectorName },
+        );
+        const projectorId = (projectorResult.rows as { PROJECTOR_ID: number }[] | undefined)?.[0]?.PROJECTOR_ID;
+
+        if (projectorId == null) {
+          throw new Error(`Projector not found: ${updateTheaterDto.projectorName}`);
+        }
+
+        setClauses.push('projector_id = :projectorId');
+        binds.projectorId = projectorId;
+      }
+
+      if (setClauses.length === 0) {
+        const theater = await this.getTheaterById(id);
+        if (!theater) {
+          throw new Error(`Theater not found: ${id}`);
+        }
+        return theater;
+      }
+
+      const result = await this.db.query(
+        `UPDATE Theaters SET ${setClauses.join(', ')} WHERE theater_id = :id`,
+        binds,
+      );
+
+      if (result.rowsAffected === 0) {
+        throw new Error(`Theater not found: ${id}`);
+      }
+
+      const theater = await this.getTheaterById(id);
+      if (!theater) {
+        throw new Error(`Theater not found: ${id}`);
+      }
+
+      return theater;
+    } catch (error) {
+      this.logger.error('Error updating theater', error as Error);
       throw error;
     }
   }

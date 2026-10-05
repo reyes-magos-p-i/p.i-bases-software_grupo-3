@@ -19,7 +19,7 @@ export class TheatersService {
   }
 
   update(id: number, updateTheaterDto: UpdateTheaterDto) {
-    return `This action updates a #${id} theater`;
+    return this.theatersRepository.updateTheater(id, updateTheaterDto);
   }
 
   remove(id: number) {

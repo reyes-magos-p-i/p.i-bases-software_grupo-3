@@ -7,12 +7,16 @@ describe('TheatersService', () => {
   let repository: {
     createTheater: jest.Mock;
     getAllTheaters: jest.Mock;
+    getTheaterById: jest.Mock;
+    updateTheater: jest.Mock;
   };
 
   beforeEach(async () => {
     repository = {
       createTheater: jest.fn(),
       getAllTheaters: jest.fn(),
+      getTheaterById: jest.fn(),
+      updateTheater: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -56,12 +60,21 @@ describe('TheatersService', () => {
     expect(repository.getAllTheaters).toHaveBeenCalledTimes(1);
   });
 
-  it('returns a theater message for findOne', () => {
-    expect(service.findOne(4)).toBe('This action returns a #4 theater');
+  it('returns a theater from the repository', async () => {
+    const theater = { theaterId: 4, projectorName: 'IMAX' };
+    repository.getTheaterById.mockResolvedValue(theater);
+
+    await expect(service.findOne(4)).resolves.toEqual(theater);
+    expect(repository.getTheaterById).toHaveBeenCalledWith(4);
   });
 
-  it('returns a theater message for update', () => {
-    expect(service.update(4, {})).toBe('This action updates a #4 theater');
+  it('updates a theater through the repository', async () => {
+    const updateDto = { numberOfSeats: 150 };
+    const theater = { theaterId: 4, numberOfSeats: 150 };
+    repository.updateTheater.mockResolvedValue(theater);
+
+    await expect(service.update(4, updateDto)).resolves.toEqual(theater);
+    expect(repository.updateTheater).toHaveBeenCalledWith(4, updateDto);
   });
 
   it('returns a theater message for remove', () => {
