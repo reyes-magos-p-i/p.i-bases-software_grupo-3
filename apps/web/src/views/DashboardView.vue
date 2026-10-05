@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
+import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
 import { createUser, getUserCreationOptions } from '@/services/user.service'
@@ -27,6 +28,7 @@ const catalogsLoading = ref(false)
 const catalogsError = ref('')
 let catalogRequest: AbortController | undefined
 const submitting = ref(false)
+const theaterBusy = ref(false)
 const submissionErrors = ref<string[]>([])
 const submissionBlocked = ref(false)
 const creationResult = ref('')
@@ -232,7 +234,7 @@ function navigate(section: string) {
     :user-name="identity.firstName"
     :active-section="activeSection"
     :available-sections="availableSections"
-    :can-logout="!submitting && !loggingOut"
+    :can-logout="!submitting && !theaterBusy && !loggingOut"
     @navigate="navigate"
     @logout="logout"
   >
@@ -240,7 +242,7 @@ function navigate(section: string) {
     <p v-if="logoutError" role="alert">{{ logoutError }}</p>
 
     <p
-      v-if="creationResult"
+      v-if="creationResult && activeSection !== 'theaters'"
       ref="result-notice"
       class="creation-result"
       :role="resultIsWarning ? 'alert' : 'status'"
@@ -249,30 +251,24 @@ function navigate(section: string) {
       {{ creationResult }}
     </p>
 
-    <section class="preview-content" aria-live="polite" aria-atomic="true">
+    <TheatersSection
+      v-if="activeSection === 'theaters'"
+      :disabled="loggingOut"
+      @busy="theaterBusy = $event"
+    />
+    <section v-else class="preview-content" aria-live="polite" aria-atomic="true">
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
-          v-if="
-            role === 'ADMINISTRATOR' &&
-            (activeSection === 'employees' ||
-              activeSection === 'clients' ||
-              activeSection === 'theaters')
-          "
+          v-if="role === 'ADMINISTRATOR'"
           type="button"
           class="add-user-button"
           :disabled="loggingOut"
-          :aria-haspopup="activeSection === 'employees' ? 'dialog' : undefined"
+          aria-haspopup="dialog"
           @click="openUserDialog"
         >
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
-          {{
-            activeSection === 'theaters'
-              ? 'Crear sala'
-              : activeSection === 'clients'
-                ? 'Añadir cliente'
-                : 'Añadir empleado'
-          }}
+          {{ activeSection === 'clients' ? 'Añadir cliente' : 'Añadir empleado' }}
         </button>
       </div>
       <div class="preview-placeholder">
@@ -281,7 +277,7 @@ function navigate(section: string) {
       </div>
     </section>
     <CreateUserDialog
-      v-if="role === 'ADMINISTRATOR' && activeSection !== 'theaters'"
+      v-if="role === 'ADMINISTRATOR'"
       :key="activeSection"
       ref="user-dialog"
       :mode="activeSection === 'clients' ? 'client' : 'employee'"
