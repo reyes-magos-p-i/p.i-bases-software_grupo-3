@@ -34,7 +34,7 @@ describe('CinemasRepository', () => {
       databaseService.query.mockResolvedValue({
         rows: [
           { BRANCH_ID: 2, NAME: 'Mall San Pedro', COMPANY_ID: 1 },
-          { BRANCH_ID: 5, NAME: 'Multiplaza Escazú', COMPANY_ID: 1 },
+          { BRANCH_ID: 5, NAME: 'Multiplaza Escazú', COMPANY_ID: 10 },
         ],
       });
 
