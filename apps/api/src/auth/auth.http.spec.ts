@@ -615,5 +615,15 @@ describe('Employee authentication (HTTP integration)', () => {
       expect.stringContaining('FROM Clients'),
       { id: 21 },
     );
+    db.query.mockResolvedValue({ rows: [] });
+    const revoked = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .auth(accessToken, { type: 'bearer' })
+      .expect(401);
+    expect(revoked.body.statusCode).toBe(401);
+    expect(db.query).toHaveBeenLastCalledWith(
+      expect.stringContaining("c.status = 'ACTIVE'"),
+      { id: 21 },
+    );
   });
 });

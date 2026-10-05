@@ -162,6 +162,14 @@ export class AuthService {
   }
 
   issueToken(client: Client) {
+    if (client.status !== 'ACTIVE' && client.status !== 'INACTIVE') {
+      throw new Error('Invalid client status.');
+    }
+    if (client.status === 'INACTIVE') {
+      throw new UnauthorizedException(
+        'No se pudo iniciar sesión con esta cuenta.',
+      );
+    }
     return {
       accessToken: this.jwt.sign({
         sub: client.id,

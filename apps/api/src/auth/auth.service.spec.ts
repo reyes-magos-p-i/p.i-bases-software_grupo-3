@@ -292,7 +292,11 @@ describe('AuthService', () => {
   });
   describe('issueToken', () => {
     it('signs a payload with type: client', () => {
-      const result = service.issueToken({ id: 9, email: 'x@y.com' } as never);
+      const result = service.issueToken({
+        id: 9,
+        email: 'x@y.com',
+        status: 'ACTIVE',
+      } as never);
 
       expect(jwt.sign).toHaveBeenCalledWith({
         sub: 9,
@@ -301,6 +305,21 @@ describe('AuthService', () => {
       });
       expect(result).toEqual({ accessToken: 'signed-token' });
     });
+    it('rejects inactive clients before signing a token', () => {
+      expect(() =>
+        service.issueToken({ id: 9, status: 'INACTIVE' } as never),
+      ).toThrow(UnauthorizedException);
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+    it.each(['UNKNOWN', '', null, undefined, 1])(
+      'rejects invalid client status %p without exposing its value',
+      (status) => {
+        expect(() => service.issueToken({ id: 9, status } as never)).toThrow(
+          'Invalid client status.',
+        );
+        expect(jwt.sign).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('facebookLogin', () => {
@@ -341,6 +360,7 @@ describe('AuthService', () => {
       clients.findOrCreateSocial.mockResolvedValue({
         id: 12,
         email: 'facebook@example.com',
+        status: 'ACTIVE',
       });
 
       await expect(service.facebookLogin(accessToken)).resolves.toEqual({
