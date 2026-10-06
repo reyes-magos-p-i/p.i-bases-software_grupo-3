@@ -11,6 +11,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { MaxUtf8Bytes } from '../../common/validation/max-utf8-bytes.decorator';
+import { CostaRicaMobile } from '../../common/validation/costa-rica-mobile.decorator';
 import { UserRole } from '../enums/user-role.enum';
 import { CreateUserBaseDto } from './create-user-base.dto';
 import { CreateAddressDto } from './create-address.dto';
@@ -21,20 +22,19 @@ export class CreateClientDto extends CreateUserBaseDto {
   })
   declare role: UserRole.CLIENT;
 
-  @Transform(
-    ({ value }: { value: unknown }) =>
-      typeof value === 'string' ? value.toLowerCase() : value,
-    { toClassOnly: true },
-  )
-  declare email: string;
-
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() || null : value,
+  )
   @IsString({ message: 'El primer apellido debe ser texto.' })
   @MaxUtf8Bytes(100)
   firstSurname?: string | null;
 
   @IsOptional()
   @IsString({ message: 'El segundo apellido debe ser texto.' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() || null : value,
+  )
   @MaxUtf8Bytes(100)
   secondSurname?: string | null;
 
@@ -53,7 +53,7 @@ export class CreateClientDto extends CreateUserBaseDto {
 
   @IsOptional()
   @IsString({ message: 'El teléfono debe ser texto.' })
-  @MaxUtf8Bytes(20)
+  @CostaRicaMobile()
   phoneNumber?: string | null;
 
   @IsOptional()

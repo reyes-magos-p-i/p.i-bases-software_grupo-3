@@ -4,6 +4,18 @@ import { validate } from 'class-validator';
 import { CreateUserBaseDto } from './create-user-base.dto';
 
 describe('CreateUserBaseDto', () => {
+  it('trims names and normalizes email before validating their limits', async () => {
+    const dto = plainToInstance(CreateUserBaseDto, {
+      role: 'CLIENT',
+      email: ' Ana@Example.com ',
+      firstName: ' Ana ',
+      secondName: '   ',
+    });
+    expect(await validate(dto)).toEqual([]);
+    expect(dto.email).toBe('ana@example.com');
+    expect(dto.firstName).toBe('Ana');
+    expect(dto.secondName).toBeNull();
+  });
   const validPayload = {
     role: 'CLIENT',
     email: 'cliente@example.com',

@@ -65,8 +65,9 @@ describe('RegisterDto Costa Rican phone validation', () => {
 
       const errors = await validate(dto);
 
-      expect(errors.find((error) => error.property === 'phone')?.constraints)
-        .toHaveProperty('matches');
+      expect(
+        errors.find((error) => error.property === 'phone')?.constraints,
+      ).toHaveProperty('matches');
     },
   );
 });
@@ -102,12 +103,37 @@ describe('RegisterDto minimum age validation', () => {
 
     const errors = await validate(dto);
 
-    expect(errors.find((error) => error.property === 'birthDate')?.constraints)
-      .toHaveProperty('minimumRegistrationAge');
+    expect(
+      errors.find((error) => error.property === 'birthDate')?.constraints,
+    ).toHaveProperty('minimumRegistrationAge');
   });
 });
 
 describe('RegisterDto password validation', () => {
+  it('normalizes the public registration phone, name and email', async () => {
+    const dto = plainToInstance(RegisterDto, {
+      ...validRegistration('Abcdef1!'),
+      phone: ' 7777-7777 ',
+      email: ' User@Example.com ',
+      firstName: ' Ana ',
+    });
+    expect(await validate(dto)).toEqual([]);
+    expect(dto.phone).toBe('77777777');
+    expect(dto.email).toBe('user@example.com');
+    expect(dto.firstName).toBe('Ana');
+  });
+  it.each(['2222222', '+1 88888888', '888888888'])(
+    'rejects invalid registration phone %s',
+    async (phone) => {
+      const errors = await validate(
+        plainToInstance(RegisterDto, {
+          ...validRegistration('Abcdef1!'),
+          phone,
+        }),
+      );
+      expect(errors.map((error) => error.property)).toEqual(['phone']);
+    },
+  );
   it('accepts a password that follows the registration policy', async () => {
     const dto = plainToInstance(RegisterDto, validRegistration('Abcdef1!'));
 
@@ -116,7 +142,13 @@ describe('RegisterDto password validation', () => {
     expect(errors.some((error) => error.property === 'password')).toBe(false);
   });
 
-  it.each(['abcdef1!', 'Abcdefgh!', 'Abcdefg1', 'Ab1!', `Abcdef1!${'x'.repeat(121)}`])(
+  it.each([
+    'abcdef1!',
+    'Abcdefgh!',
+    'Abcdefg1',
+    'Ab1!',
+    `Abcdef1!${'x'.repeat(121)}`,
+  ])(
     'rejects a password outside the registration policy: %s',
     async (password) => {
       const dto = plainToInstance(RegisterDto, validRegistration(password));
@@ -136,20 +168,27 @@ describe('RegisterDto password validation', () => {
 
     const errors = await validate(dto);
 
-    expect(errors.find((error) => error.property === 'password')?.constraints)
-      .toHaveProperty('passwordNotPersonalInfo');
+    expect(
+      errors.find((error) => error.property === 'password')?.constraints,
+    ).toHaveProperty('passwordNotPersonalInfo');
   });
 });
 
 describe('RegisterDto transform edge cases', () => {
   it('trimLower passes a non-string email through unchanged', () => {
-    const dto = plainToInstance(RegisterDto, { ...validRegistration('Abcdef1!'), email: 99 });
+    const dto = plainToInstance(RegisterDto, {
+      ...validRegistration('Abcdef1!'),
+      email: 99,
+    });
 
     expect(dto.email).toBe(99);
   });
 
   it('trim passes a non-string firstName through unchanged', () => {
-    const dto = plainToInstance(RegisterDto, { ...validRegistration('Abcdef1!'), firstName: 42 });
+    const dto = plainToInstance(RegisterDto, {
+      ...validRegistration('Abcdef1!'),
+      firstName: 42,
+    });
 
     expect(dto.firstName).toBe(42);
   });

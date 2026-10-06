@@ -58,6 +58,7 @@ describe('UsersModule (application HTTP integration)', () => {
     firstName: 'Ana',
     firstSurname: 'Solano',
     secondSurname: 'Rojas',
+    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
     branchId: 1,
@@ -159,7 +160,66 @@ describe('UsersModule (application HTTP integration)', () => {
     await app.close();
   });
 
+  it('mounts partial update routes with the real service and repositories', async () => {
+    connection.execute
+      .mockResolvedValueOnce({
+        rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+      })
+      .mockResolvedValueOnce({ rows: [{ EMAIL: 'old@example.com' }] })
+      .mockResolvedValueOnce({ rowsAffected: 1 });
+    await browser
+      .patch('/users/clients/42')
+      .send({ phoneNumber: null })
+      .expect(200, { id: 42, email: 'old@example.com', role: 'CLIENT' });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
   describe('GET /users/creation-options', () => {
+    it('mounts detail routes with actual repositories and reports missing users', async () => {
+      for (const section of ['clients', 'employees']) {
+        connection.execute
+          .mockResolvedValueOnce({
+            rows: [
+              { EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' },
+            ],
+          })
+          .mockResolvedValueOnce({ rows: [] });
+        const response = await browser.get(`/users/${section}/42`).expect(404);
+        expect(response.body).toMatchObject({
+          statusCode: 404,
+          message: 'El usuario seleccionado no existe.',
+        });
+      }
+    });
+    it('mounts client and employee listing routes with the actual repositories', async () => {
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        })
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] });
+      await browser.get('/users/clients').expect(200, {
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        })
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] });
+      await browser.get('/users/employees').expect(200, {
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+      expect(sendMail).not.toHaveBeenCalled();
+      expect(connection.commit).not.toHaveBeenCalled();
+    });
     it('reads Oracle catalogs through the registered route without creating users or sending credentials', async () => {
       const generate = jest.spyOn(app.get(PasswordGenerator), 'generate');
       const hash = jest.spyOn(app.get(PasswordHasher), 'hash');
@@ -307,7 +367,7 @@ describe('UsersModule (application HTTP integration)', () => {
       expect(response.body).toEqual({
         id: body.role === 'CLIENT' ? 43 : 42,
         role: body.role,
-        email: body.role === 'CLIENT' ? body.email.toLowerCase() : body.email,
+        email: body.email.toLowerCase(),
       });
       expect(operations).toEqual(
         body.role === 'CLIENT'
@@ -392,6 +452,35 @@ describe('UsersModule (application HTTP integration)', () => {
     expect(sendMail).toHaveBeenCalledTimes(1);
     expect(operations).toEqual(['insert', 'insert', 'commit']);
   });
+
+  it.each(['EMPLOYEE', 'ADMINISTRATOR'])(
+    'returns 409 without credentials email for duplicate %s email',
+    async (role) => {
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        })
+        .mockResolvedValueOnce({
+          rowsAffected: 1,
+          outBinds: { addressId: [55] },
+        })
+        .mockRejectedValueOnce({
+          errorNum: 1,
+          message: 'ORA-00001: (PRODUCTION.UQ_EMPLOYEES_EMAIL)',
+        });
+      const response = await browser
+        .post('/users')
+        .send({ ...employee, role })
+        .expect(409);
+      expect(response.body.message).toBe(
+        'El correo electrónico ya está registrado para otro empleado.',
+      );
+      expect(response.text).not.toContain('ORA-');
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(sendMail).not.toHaveBeenCalled();
+    },
+  );
 
   it('persists an administrative client address without asserting terms acceptance', async () => {
     await browser
