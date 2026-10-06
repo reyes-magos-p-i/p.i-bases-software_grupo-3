@@ -10,7 +10,10 @@ describe('AuthController', () => {
   let controller: AuthController;
   let auth: {
     register: jest.Mock;
+    confirmEmailVerification: jest.Mock;
+    resendEmailVerification: jest.Mock;
     loginEmployee: jest.Mock;
+    loginClient: jest.Mock;
     facebookLogin: jest.Mock;
   };
   let session: { write: jest.Mock; clear: jest.Mock };
@@ -19,7 +22,10 @@ describe('AuthController', () => {
   beforeEach(async () => {
     auth = {
       register: jest.fn(),
+      confirmEmailVerification: jest.fn(),
+      resendEmailVerification: jest.fn(),
       loginEmployee: jest.fn(),
+      loginClient: jest.fn(),
       facebookLogin: jest.fn(),
     };
     session = { write: jest.fn(), clear: jest.fn() };
@@ -48,6 +54,43 @@ describe('AuthController', () => {
 
     expect(auth.register).toHaveBeenCalledWith(dto);
     expect(result).toEqual({ id: 1, email: 'a@b.com' });
+  });
+
+  it('returns the client session without writing a staff cookie', async () => {
+    const dto = { email: 'client@example.com', password: ' Exact password ' };
+    const result = { accessToken: 'client-token', client: { id: 7 } };
+    auth.loginClient.mockResolvedValue(result);
+    await expect(controller.loginClient(dto)).resolves.toEqual(result);
+    expect(auth.loginClient).toHaveBeenCalledWith(dto);
+    expect(session.write).not.toHaveBeenCalled();
+  });
+
+  it('propagates client login failures', async () => {
+    const failure = new Error('Invalid credentials');
+    auth.loginClient.mockRejectedValue(failure);
+    await expect(
+      controller.loginClient({ email: 'a@example.com', password: 'wrong' }),
+    ).rejects.toBe(failure);
+  });
+
+  it('confirms client email and returns the client session', async () => {
+    const result = { accessToken: 'client-token', client: { id: 1 } };
+    auth.confirmEmailVerification.mockResolvedValue(result);
+
+    await expect(
+      controller.confirmEmail({ token: 'a'.repeat(64) }),
+    ).resolves.toEqual(result);
+    expect(auth.confirmEmailVerification).toHaveBeenCalledWith('a'.repeat(64));
+  });
+
+  it('resends client email verification', async () => {
+    const dto = { email: 'client@example.com' };
+    auth.resendEmailVerification.mockResolvedValue({ message: 'sent' });
+
+    await expect(controller.resendEmailVerification(dto)).resolves.toEqual({
+      message: 'sent',
+    });
+    expect(auth.resendEmailVerification).toHaveBeenCalledWith(dto.email);
   });
 
   it('facebookLogin() delegates the access token and returns the service result', async () => {

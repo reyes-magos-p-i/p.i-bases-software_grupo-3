@@ -1,11 +1,109 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RegisterPayload } from '@/types/client'
 
-const { create, post, get } = vi.hoisted(() => ({ create: vi.fn(), post: vi.fn(), get: vi.fn() }))
+const { create, post, get, googleAuthCodeLogin } = vi.hoisted(() => ({
+  create: vi.fn(),
+  post: vi.fn(),
+  get: vi.fn(),
+  googleAuthCodeLogin: vi.fn(),
+}))
 vi.mock('axios', () => ({
   default: { create },
   isAxiosError: (error: { isAxiosError?: boolean }) => error?.isAxiosError === true,
 }))
+vi.mock('vue3-google-login', () => ({ googleAuthCodeLogin }))
+
+describe('Client local authentication', () => {
+  const identity = { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' }
+  const credentials = { email: identity.email, password: ' Exact password ' }
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.resetAllMocks()
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    localStorage.clear()
+    create.mockImplementation((defaults) => ({ defaults, post, get }))
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    localStorage.clear()
+  })
+
+  it('establishes the existing client session after a successful local login', async () => {
+    const { loginClient } = await import('@/services/authService')
+    const { clientSession } = await import('@/services/client-session.service')
+    post.mockResolvedValue({ data: { client: identity, accessToken: 'client-token' } })
+    await expect(loginClient(credentials)).resolves.toEqual(identity)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/auth/clients/login', credentials, {
+      timeout: 15000,
+    })
+    expect(clientSession.user.value).toEqual(identity)
+    expect(localStorage.getItem('accessToken')).toBe('client-token')
+  })
+
+  it.each([
+    [400, undefined, 'Revisa'],
+    [401, undefined, 'incorrectos'],
+    [403, 'EMAIL_VERIFICATION_REQUIRED', 'Confirma'],
+    [403, undefined, 'autorizar'],
+    [500, undefined, 'conectar'],
+  ])('reports HTTP %s (%s) without leaking server details', async (status, code, message) => {
+    const { loginClient } = await import('@/services/authService')
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { status, data: { code, message: 'private details' } },
+    })
+    await expect(loginClient(credentials)).rejects.toThrow(message as string)
+    expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+
+  it('preserves the rate-limit delay in a typed error', async () => {
+    const { loginClient } = await import('@/services/authService')
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 429, headers: { 'retry-after': '12' } },
+    })
+    await expect(loginClient(credentials)).rejects.toMatchObject({
+      name: 'ClientAuthError',
+      status: 429,
+      retryAfterSeconds: 12,
+    })
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    {},
+    { client: identity },
+    { client: { ...identity, role: 'EMPLOYEE' }, accessToken: 'token' },
+  ])('does not store malformed authentication responses: %p', async (data) => {
+    const { loginClient } = await import('@/services/authService')
+    post.mockResolvedValue({ data })
+    await expect(loginClient(credentials)).rejects.toThrow()
+    expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+
+  it('verifies client Bearer credentials without sending the employee cookie', async () => {
+    const { getClientSession } = await import('@/services/authService')
+    get.mockResolvedValue({
+      data: { id: 7, email: identity.email, firstName: 'Ana', firstSurname: 'Rojas' },
+    })
+    await expect(getClientSession('saved-token')).resolves.toEqual(identity)
+    expect(get).toHaveBeenCalledExactlyOnceWith('/auth/me', {
+      timeout: 10000,
+      headers: { Authorization: 'Bearer saved-token' },
+      adapter: 'fetch',
+      withCredentials: false,
+    })
+  })
+
+  it('distinguishes expired sessions from transport failures', async () => {
+    const { getClientSession } = await import('@/services/authService')
+    get.mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } })
+    await expect(getClientSession('expired')).resolves.toBeNull()
+    get.mockRejectedValueOnce(new Error('Private network failure'))
+    await expect(getClientSession('saved')).rejects.toThrow('conectar')
+  })
+})
 
 describe('registerUser', () => {
   const payload: RegisterPayload = {
@@ -75,12 +173,104 @@ describe('registerUser', () => {
   })
 })
 
+describe('email verification API', () => {
+  const client = {
+    id: 7,
+    email: 'ana@example.com',
+    firstName: 'Ana',
+    lastName: 'Perez',
+  }
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.resetAllMocks()
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    localStorage.clear()
+    get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
+    create.mockImplementation((defaults) => ({ defaults, post, get }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    localStorage.clear()
+  })
+
+  it('reports the specific registration email-delivery failure', async () => {
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { data: { code: 'EMAIL_DELIVERY_FAILED' } },
+    })
+    const { EmailDeliveryError, registerUser } = await import('@/services/authService')
+
+    await expect(
+      registerUser({
+        email: client.email,
+        firstName: 'Ana',
+        lastName: 'Perez',
+        phone: '12345678',
+        gender: 'F',
+        birthDate: '1990-01-01',
+        language: 'es',
+        password: 'Password123!',
+        acceptTerms: true,
+      }),
+    ).rejects.toBeInstanceOf(EmailDeliveryError)
+  })
+
+  it('resends a verification email and maps any request failure to a safe message', async () => {
+    const { resendEmailVerification } = await import('@/services/authService')
+    post.mockResolvedValueOnce({ status: 204 })
+    await expect(resendEmailVerification(client.email)).resolves.toBeUndefined()
+    expect(post).toHaveBeenNthCalledWith(1, '/auth/resend-email-verification', {
+      email: client.email,
+    })
+
+    post.mockRejectedValueOnce(new Error('private transport detail'))
+    await expect(resendEmailVerification(client.email)).rejects.toThrow(
+      'No se pudo reenviar el correo de confirmación. Inténtalo nuevamente.',
+    )
+    expect(post).toHaveBeenCalledTimes(2)
+  })
+
+  it('confirms email, establishes a client session and returns the identity', async () => {
+    post.mockResolvedValue({
+      data: { accessToken: 'verified-token', client },
+    })
+    const { confirmEmailVerification } = await import('@/services/authService')
+
+    await expect(confirmEmailVerification('one-time-token')).resolves.toEqual(client)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/auth/confirm-email', {
+      token: 'one-time-token',
+    })
+    expect(localStorage.getItem('accessToken')).toBe('verified-token')
+  })
+
+  it('distinguishes invalid verification links from other confirmation failures', async () => {
+    const { confirmEmailVerification, InvalidEmailVerificationError } =
+      await import('@/services/authService')
+    post.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { data: { code: 'EMAIL_VERIFICATION_INVALID' } },
+    })
+    await expect(confirmEmailVerification('expired-token')).rejects.toBeInstanceOf(
+      InvalidEmailVerificationError,
+    )
+
+    post.mockRejectedValueOnce(new Error('private transport detail'))
+    await expect(confirmEmailVerification('token')).rejects.toThrow(
+      'No se pudo confirmar el correo. Inténtalo nuevamente.',
+    )
+    expect(post).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('facebook authentication API', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
+    get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     create.mockImplementation((defaults) => ({ defaults, post, get }))
   })
 
@@ -93,7 +283,7 @@ describe('facebook authentication API', () => {
     const { facebookLogin } = await import('@/services/authService')
     const responseData = {
       accessToken: 'server-access-token',
-      user: { id: 7, firstName: 'Ana' },
+      client: { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Perez' },
     }
     post.mockResolvedValue({ data: responseData })
 
@@ -104,6 +294,35 @@ describe('facebook authentication API', () => {
     })
     expect(localStorage.getItem('accessToken')).toBe('server-access-token')
   })
+
+  it('blocks Facebook login when an employee session exists', async () => {
+    get.mockResolvedValueOnce({ data: { id: 21, role: 'EMPLOYEE', firstName: 'Ana' } })
+    const { facebookLogin } = await import('@/services/authService')
+
+    await expect(facebookLogin('facebook-access-token')).rejects.toThrow('sesión del personal')
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('logs in with Google, stores its token, and returns the client profile', async () => {
+    googleAuthCodeLogin.mockResolvedValue({ code: 'google-auth-code' })
+    post.mockResolvedValue({
+      data: {
+        accessToken: 'google-server-token',
+        client: { id: 8, email: 'ana@example.com', firstName: 'Ana', lastName: 'Perez' },
+      },
+    })
+    const { loginWithGoogle } = await import('@/services/authService')
+
+    await expect(loginWithGoogle()).resolves.toEqual({
+      id: 8,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Perez',
+    })
+
+    expect(post).toHaveBeenCalledExactlyOnceWith('/auth/google', { code: 'google-auth-code' })
+    expect(localStorage.getItem('accessToken')).toBe('google-server-token')
+  })
 })
 
 describe('employee authentication API', () => {
@@ -111,9 +330,13 @@ describe('employee authentication API', () => {
     vi.resetModules()
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
+    localStorage.clear()
     create.mockImplementation((defaults) => ({ defaults, post, get }))
   })
-  afterEach(() => vi.unstubAllEnvs())
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    localStorage.clear()
+  })
 
   it('logs in through the shared proxy without changing the password or retaining a token', async () => {
     const { loginEmployee } = await import('@/services/authService')
@@ -127,6 +350,16 @@ describe('employee authentication API', () => {
     expect(post).toHaveBeenCalledExactlyOnceWith('/auth/employees/login', credentials, {
       timeout: 15000,
     })
+  })
+
+  it('blocks employee login while a client session is stored', async () => {
+    localStorage.setItem('accessToken', 'client-token')
+    const { loginEmployee } = await import('@/services/authService')
+
+    await expect(
+      loginEmployee({ email: 'staff@example.com', password: 'Password' }),
+    ).rejects.toThrow('sesión de cliente')
+    expect(post).not.toHaveBeenCalled()
   })
 
   it('recovers only staff identities and treats 401 as no session', async () => {

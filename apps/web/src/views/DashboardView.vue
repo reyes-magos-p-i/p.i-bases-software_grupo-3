@@ -16,6 +16,7 @@ import {
 } from '@/services/employee-session.service'
 import MovieCrud from '@/components/Movies/MovieCrud.vue'
 
+import { clearClientAuth } from '@/services/client-session.service'
 
 const router = useRouter()
 const identity = employeeSession.user
@@ -66,6 +67,7 @@ async function logout() {
   logoutError.value = ''
   try {
     await closeEmployeeSession()
+    await clearClientAuth()
     if (!disposed) await router.replace('/')
   } catch {
     if (!disposed)
@@ -304,6 +306,7 @@ function navigate(section: string) { //AGREGADO MOVIES
         ref="user-list"
         :section="activeSection"
         :role="role"
+        :current-user-id="identity?.id"
         @session-expired="sessionExpired"
         @forbidden="refreshPermissions"
         @user-updated="userUpdated"

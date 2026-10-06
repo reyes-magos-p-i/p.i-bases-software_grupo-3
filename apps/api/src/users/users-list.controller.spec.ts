@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AuthModule } from '../auth/auth.module';
+import { EmailVerificationSender } from '../auth/notifications/email-verification-sender';
 import { EMPLOYEE_SESSION_COOKIE } from '../auth/employee-session.service';
 import { DatabaseService } from '../database/database.service';
 import { UsersRepository } from './users.repository';
@@ -31,7 +32,10 @@ describe('User list HTTP permissions and validation', () => {
     getEmployeeListOptions: jest.fn(),
   };
   const repository = { findEmployeeIdentityById: jest.fn() };
-  const clients = { findById: jest.fn() };
+  const clients = {
+    findById: jest.fn(),
+    isEmailVerificationPending: jest.fn(),
+  };
   const empty = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
   const get = (path: string) =>
     request(app.getHttpServer())
@@ -57,6 +61,8 @@ describe('User list HTTP permissions and validation', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue({})
+      .overrideProvider(EmailVerificationSender)
+      .useValue({ send: jest.fn() })
       .overrideProvider(UsersRepository)
       .useValue(repository)
       .overrideProvider(ClientsService)
@@ -94,6 +100,7 @@ describe('User list HTTP permissions and validation', () => {
       firstName: 'José',
     });
     clients.findById.mockResolvedValue({ id: 99, firstName: 'Cliente' });
+    clients.isEmailVerificationPending.mockResolvedValue(false);
   });
   afterAll(async () => {
     await app.close();
@@ -147,6 +154,21 @@ describe('User list HTTP permissions and validation', () => {
     );
     const response = await get('/users/clients/42').expect(404);
     expect(response.body.message).toBe('El usuario seleccionado no existe.');
+  });
+  it.each(['/users/clients/42', '/users/employees/42'])(
+    'does not expose details without a session on %s',
+    async (path) => {
+      const response = await request(app.getHttpServer()).get(path).expect(401);
+      expect(response.body.statusCode).toBe(401);
+      expect(service.getClientDetail).not.toHaveBeenCalled();
+      expect(service.getEmployeeDetail).not.toHaveBeenCalled();
+    },
+  );
+  it('normalizes repeated search whitespace before querying', async () => {
+    await get('/users/clients').query({ search: '  Ana  Núñez  ' }).expect(200);
+    expect(service.listClients).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'Ana Núñez' }),
+    );
   });
   it('keeps infrastructure errors private on detail endpoints', async () => {
     service.getEmployeeDetail.mockRejectedValue(
@@ -247,9 +269,13 @@ describe('User list HTTP permissions and validation', () => {
     expect(service.listEmployees).not.toHaveBeenCalled();
   });
   it('reports zero matches as a successful result with a count', async () => {
-    await get('/users/clients')
+    const response = await get('/users/clients')
       .query({ search: 'Sin coincidencias' })
       .expect(200, empty);
+    expect(response.body).toEqual(empty);
+    expect(service.listClients).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'Sin coincidencias' }),
+    );
   });
   it('rejects identities deleted since login', async () => {
     repository.findEmployeeIdentityById.mockResolvedValue(null);

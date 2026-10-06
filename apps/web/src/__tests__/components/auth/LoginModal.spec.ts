@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import LoginModal from '@/components/auth/LoginModal.vue'
+import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 import { nextTick } from 'vue'
 
 describe('LoginModal', () => {
@@ -46,6 +47,63 @@ describe('LoginModal', () => {
       }
       expect(wrapper.get('[name="password"]').attributes('autocomplete')).toBe('current-password')
       expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    },
+  )
+
+  it('offers client social sign-in and forwards the authenticated identity', async () => {
+    const wrapper = render({ mode: 'client' })
+    const identity = {
+      id: 7,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Perez',
+    }
+    const socialButtons = wrapper.getComponent(SocialAuthButtons)
+
+    expect(socialButtons.props('disabled')).toBe(false)
+    socialButtons.vm.$emit('authenticated', identity)
+
+    expect(wrapper.emitted('authenticated')).toEqual([[identity]])
+  })
+
+  it('prevents local submission, mode changes and closing while social login is pending', async () => {
+    const wrapper = render({ enabled: true })
+    await wrapper.get('[name="email"]').setValue('ana@example.com')
+    await wrapper.get('[name="password"]').setValue('password')
+    wrapper.getComponent(SocialAuthButtons).vm.$emit('busy', true)
+    await nextTick()
+    await wrapper.get('form').trigger('submit')
+    await wrapper.get('.close').trigger('click')
+    await wrapper.get('.switch-mode').trigger('click')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(wrapper.emitted('switchMode')).toBeUndefined()
+    expect(wrapper.get<HTMLInputElement>('[name="email"]').element.disabled).toBe(true)
+    wrapper.getComponent(SocialAuthButtons).vm.$emit('busy', false)
+    await nextTick()
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toEqual([
+      [{ email: 'ana@example.com', password: 'password' }],
+    ])
+  })
+
+  it('applies the retry delay to client login and both social buttons', async () => {
+    const wrapper = render({ enabled: true, retryAfterSeconds: 12 })
+    expect(wrapper.text()).toContain('12 segundos')
+    expect(wrapper.getComponent(SocialAuthButtons).props('disabled')).toBe(true)
+    await wrapper.setProps({ retryAfterSeconds: 0 })
+    expect(wrapper.getComponent(SocialAuthButtons).props('disabled')).toBe(false)
+  })
+
+  it.each(['a..b@example.com', 'ana@example.c', 'ana@localhost'])(
+    'uses shared email validation for %s',
+    async (email) => {
+      const wrapper = render({ enabled: true })
+      await wrapper.get('[name="email"]').setValue(email)
+      await wrapper.get('[name="password"]').setValue('password')
+      await wrapper.get('form').trigger('submit')
+      expect(wrapper.emitted('submit')).toBeUndefined()
+      expect(wrapper.get('[name="email"]').attributes('aria-invalid')).toBe('true')
     },
   )
 

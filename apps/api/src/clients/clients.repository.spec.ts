@@ -60,7 +60,90 @@ describe('ClientsRepository', () => {
     await module.close();
   });
 
+  describe('deactivateClient', () => {
+    it('updates only the status and commits exactly one client', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE' }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+      await repository.deactivateClient(42);
+      expect(connection.execute).toHaveBeenCalledWith(
+        "UPDATE CLIENTS SET STATUS = 'INACTIVE' WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
+        { id: { val: 42, type: oracle.NUMBER } },
+        { autoCommit: false },
+      );
+      expect(connection.execute).toHaveBeenNthCalledWith(
+        1,
+        'SELECT STATUS FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
+        { id: { val: 42, type: oracle.NUMBER } },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+      );
+      expect(connection.execute).toHaveBeenCalledTimes(2);
+      expect(connection.commit).toHaveBeenCalledTimes(1);
+    });
+    it('reports nonexistent clients without committing', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [] });
+      await expect(repository.deactivateClient(42)).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+    });
+    it('distinguishes an already inactive client without updating it', async () => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ STATUS: 'INACTIVE' }],
+      });
+      await expect(repository.deactivateClient(42)).rejects.toMatchObject({
+        status: 409,
+        message: 'El cliente ya está desactivado.',
+      });
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+    });
+    it.each(['UNKNOWN', null, undefined])(
+      'rejects unexpected stored status %p',
+      async (status) => {
+        connection.execute.mockResolvedValueOnce({
+          rows: [{ STATUS: status }],
+        });
+        await expect(repository.deactivateClient(42)).rejects.toThrow(
+          'Invalid client status.',
+        );
+        expect(connection.execute).toHaveBeenCalledTimes(1);
+        expect(connection.commit).not.toHaveBeenCalled();
+      },
+    );
+    it.each([0, 2, undefined])(
+      'rolls back unexpected persistence outcome %p',
+      async (rowsAffected) => {
+        connection.execute
+          .mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE' }] })
+          .mockResolvedValueOnce({ rowsAffected });
+        await expect(repository.deactivateClient(42)).rejects.toThrow(
+          'single client',
+        );
+        expect(connection.rollback).toHaveBeenCalledTimes(1);
+      },
+    );
+    it('keeps an inactive client email reserved', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [{ FOUND: 1 }] });
+      await expect(
+        repository.clientEmailExists('inactive@example.com'),
+      ).resolves.toBe(true);
+      expect(connection.execute).toHaveBeenCalledWith(
+        'SELECT 1 AS FOUND FROM CLIENTS WHERE EMAIL = :email AND ROWNUM = 1',
+        { email: 'inactive@example.com' },
+        expect.anything(),
+      );
+    });
+  });
   describe('updateClient', () => {
+    beforeEach(() => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ EMAIL: 'old@example.com' }],
+      });
+    });
     it('updates selected name fields without changing other columns', async () => {
       connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
       await repository.updateClient(42, {
@@ -71,7 +154,7 @@ describe('ClientsRepository', () => {
       });
       const [sql, binds] = connection.execute.mock.calls[1];
       expect(sql).toBe(
-        'UPDATE CLIENTS SET FIRST_NAME = :firstName, SECOND_NAME = :secondName, FIRST_SURNAME = :firstSurname, SECOND_SURNAME = :secondSurname WHERE CLIENT_ID = :id',
+        "UPDATE CLIENTS SET FIRST_NAME = :firstName, SECOND_NAME = :secondName, FIRST_SURNAME = :firstSurname, SECOND_SURNAME = :secondSurname WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
       );
       expect(binds.firstName.val).toBe('María');
       expect(binds.secondName.val).toBeNull();
@@ -79,11 +162,6 @@ describe('ClientsRepository', () => {
       expect(binds.firstSurname.val).toBe('Núñez');
       expect(binds).not.toHaveProperty('phoneNumber');
       expect(connection.commit).toHaveBeenCalledTimes(1);
-    });
-    beforeEach(() => {
-      connection.execute.mockResolvedValueOnce({
-        rows: [{ EMAIL: 'old@example.com' }],
-      });
     });
     it('creates a private replacement address and updates only selected client fields', async () => {
       connection.execute.mockResolvedValueOnce({
@@ -99,7 +177,7 @@ describe('ClientsRepository', () => {
       ).toEqual({ id: 42, email: 'old@example.com', role: 'CLIENT' });
       const [sql, binds, options] = connection.execute.mock.calls[2];
       expect(sql).toBe(
-        'UPDATE CLIENTS SET PHONE_NUMBER = :phoneNumber, ID_ADDRESS = :addressId WHERE CLIENT_ID = :id',
+        "UPDATE CLIENTS SET PHONE_NUMBER = :phoneNumber, ID_ADDRESS = :addressId WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
       );
       expect(binds.id.val).toBe(42);
       expect(binds.addressId.val).toBe(55);
@@ -328,7 +406,19 @@ describe('ClientsRepository', () => {
       expect(sql).toContain('DESC NULLS LAST, c.CLIENT_ID ASC');
       expect(sql).not.toContain("O'Connor");
       expect(binds.search.val).toBe("%o'connor\\%\\_\\\\%");
+      expect(binds.name0.val).toBe(binds.search.val);
+      expect(sql).toContain(String.raw`LIKE :search ESCAPE '\'`);
+      expect(sql).toContain(String.raw`LIKE :name0 ESCAPE '\'`);
       expect(binds.offset.val).toBe(10);
+      expect(connection.execute.mock.calls[0][1]).toEqual({
+        search: binds.search,
+        name0: binds.name0,
+      });
+      for (const statement of [connection.execute.mock.calls[0][0], sql]) {
+        expect(statement).toContain("WHERE c.STATUS = 'ACTIVE' AND ((");
+        expect(statement).toContain(String.raw`LIKE :name0 ESCAPE '\'`);
+        expect(statement).toContain(String.raw`LIKE :search ESCAPE '\'`);
+      }
     });
     it.each([{ rows: [{ TOTAL: 0 }] }, {}])(
       'returns an empty successful result: %p',

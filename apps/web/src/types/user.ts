@@ -162,3 +162,8 @@ export interface UpdateEmployeeRequest {
 export type UpdateUserRequest = UpdateClientRequest | UpdateEmployeeRequest
 export type UpdatedUser = CreatedUser
 export type UserEditOptions = Omit<UserCreationOptions, 'branches'>
+
+export interface UserDeactivationSelection extends UserDetailSelection {
+  name: string
+  displayId: string
+}

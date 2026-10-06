@@ -51,6 +51,25 @@ describe('createUser', () => {
     vi.unstubAllEnvs()
   })
 
+  it.each(['clients', 'employees'] as const)(
+    'deactivates selected %s with an empty body',
+    async (section) => {
+      const { deactivateUser } = await import('@/services/user.service')
+      patch.mockResolvedValue({ status: 204 })
+      await deactivateUser({ section, id: 42 })
+      expect(patch).toHaveBeenCalledWith(
+        '/users/' + section + '/42/deactivate',
+        {},
+        { timeout: 10000 },
+      )
+    },
+  )
+  it('does not retry a failed deactivation automatically', async () => {
+    const { deactivateUser } = await import('@/services/user.service')
+    patch.mockRejectedValue(new Error('network'))
+    await expect(deactivateUser({ section: 'clients', id: 42 })).rejects.toThrow('network')
+    expect(patch).toHaveBeenCalledTimes(1)
+  })
   it('loads address-only edit catalogs with cancellation and timeout', async () => {
     const { getUserEditOptions } = await import('@/services/user.service')
     const signal = new AbortController().signal

@@ -20,18 +20,35 @@ import { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
 import { EmployeeSessionService } from './employee-session.service';
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
+import { ConfirmEmailVerificationDto } from './dto/confirm-email-verification.dto';
+import { ResendEmailVerificationDto } from './dto/resend-email-verification.dto';
 
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
-  constructor(private readonly auth: AuthService,
+  constructor(
+    private readonly auth: AuthService,
     private readonly session: EmployeeSessionService,
   ) {}
 
   @Post('register')
+  @UseGuards(ThrottlerGuard)
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
+  }
+
+  @Post('confirm-email')
+  @UseGuards(ThrottlerGuard)
+  @Header('Cache-Control', 'no-store')
+  confirmEmail(@Body() dto: ConfirmEmailVerificationDto) {
+    return this.auth.confirmEmailVerification(dto.token);
+  }
+
+  @Post('resend-email-verification')
+  @UseGuards(ThrottlerGuard)
+  resendEmailVerification(@Body() dto: ResendEmailVerificationDto) {
+    return this.auth.resendEmailVerification(dto.email);
   }
 
   @Post('employees/login')
@@ -45,6 +62,14 @@ export class AuthController {
     const result = await this.auth.loginEmployee(dto);
     this.session.write(response, result.accessToken);
     return { user: result.user };
+  }
+
+  @Post('clients/login')
+  @UseGuards(ThrottlerGuard, EmployeeSessionOriginGuard)
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(HttpStatus.OK)
+  async loginClient(@Body() dto: LoginDto) {
+    return this.auth.loginClient(dto);
   }
 
   @Get('me')
@@ -67,7 +92,7 @@ export class AuthController {
   google(@Body('code') code: string) {
     //console.log(code)
 
-    return this.auth.googleLogin(code)
+    return this.auth.googleLogin(code);
   }
 
   // TODO(Diego): Facebook routes should be here.

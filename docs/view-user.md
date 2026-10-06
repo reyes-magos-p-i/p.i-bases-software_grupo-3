@@ -36,7 +36,8 @@ Rica. Los campos ausentes muestran «Sin registrar» y las fechas desconocidas,
 
 Los campos nuevos de «Otra identidad» quedan pospuestos. Se usa el nombre
 Administrador para el rol técnico `ADMINISTRATOR`, igual que en creación y listado.
-No se añade un estado activo/inactivo porque ese dato no existe en el modelo vigente.
+Las consultas de detalle excluyen cuentas inactivas según la historia de
+[desactivación](deactivate-user.md); su consulta produce 404.
 El historial de compras no forma parte de esta historia.
 
 `UserDetailDialog` reutiliza `BaseModal` y adopta la estética del diálogo de creación:
@@ -44,7 +45,7 @@ encabezado vino, grupos de campos y dos columnas, con una columna en móvil. Los
 colores proceden de `variables.css`. Los datos se presentan como texto seleccionable,
 sin recuadros ni controles de edición. El modal permite cerrar con la X, el botón Cerrar, Escape
 o el fondo; bloquea el desplazamiento de la página y devuelve el foco al botón que
-lo abrió. Modificar abre el formulario de edición; Desactivar permanece desactivado.
+lo abrió. Modificar abre el formulario de edición; Desactivar abre su diálogo de confirmación.
 
 ## Estados y errores
 
@@ -55,7 +56,7 @@ No se inicia ningún reintento automático ni ninguna operación de escritura.
 - `400`: ID inválido, rechazado antes de consultar el usuario.
 - `401`: sesión ausente o expirada; se reutiliza el flujo de sesión del dashboard.
 - `403`: falta de permiso; se reutiliza la actualización de permisos del dashboard.
-- `404`: el usuario ya no existe, por ejemplo si fue eliminado después del listado.
+- `404`: el usuario ya no existe, o fue desactivado después del listado.
 - `500`: falla interna, sin información de infraestructura en la respuesta.
 
 Cerrar, cambiar de sección, cambiar de permisos o desmontar el diálogo cancela la
@@ -74,8 +75,6 @@ los nuevos. Las respuestas tardías de solicitudes canceladas no se muestran.
 5. Comprobar X, Cerrar, Escape, foco, texto seleccionable y ventana móvil.
 
 Ejecutar `npm run test:cov`, `npm run lint` y `npm run build` en ambos proyectos.
-Después del build de la API, ejecutar
-`npm run test:e2e -- --runInBand --runTestsByPath test/user-detail.e2e-spec.ts`.
 En PowerShell con scripts deshabilitados, usar `npm.cmd`.
-Las pruebas automatizadas simulan Oracle y ejercitan HTTP con DTO compilados;
+Las pruebas unitarias y HTTP aisladas simulan Oracle y comprueban los DTO y permisos;
 la comprobación visual en navegador complementa estas pruebas.

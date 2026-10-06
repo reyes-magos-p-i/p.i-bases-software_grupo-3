@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import oracle from 'oracledb';
+import { buildUserSearch } from '../users/user-search.util';
 import { DatabaseService } from '../database/database.service';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { ClientDetailDto } from '../users/dto/user-detail.dto';
@@ -23,6 +24,29 @@ import type {
 export class ClientsRepository {
   constructor(private readonly db: DatabaseService) {}
 
+  async deactivateClient(id: number): Promise<void> {
+    await this.db.transaction(async (connection) => {
+      const selected = await connection.execute<{ STATUS: string }>(
+        'SELECT STATUS FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
+        { id: { val: id, type: oracle.NUMBER } },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+      );
+      const client = selected.rows?.[0];
+      if (!client)
+        throw new NotFoundException('El cliente seleccionado no existe.');
+      if (client.STATUS === 'INACTIVE')
+        throw new ConflictException('El cliente ya está desactivado.');
+      if (client.STATUS !== 'ACTIVE') throw new Error('Invalid client status.');
+      const result = await connection.execute(
+        "UPDATE CLIENTS SET STATUS = 'INACTIVE' WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
+        { id: { val: id, type: oracle.NUMBER } },
+        { autoCommit: false },
+      );
+      if (result.rowsAffected !== 1)
+        throw new Error('Oracle did not deactivate a single client.');
+    });
+  }
+
   async updateClient(
     id: number,
     data: UpdateClientDto,
@@ -30,7 +54,7 @@ export class ClientsRepository {
     try {
       return await this.db.transaction(async (connection) => {
         const current = await connection.execute<{ EMAIL: string }>(
-          'SELECT EMAIL FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
+          "SELECT EMAIL FROM CLIENTS WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE' FOR UPDATE",
           { id: { val: id, type: oracle.NUMBER } },
           { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
         );
@@ -74,7 +98,7 @@ export class ClientsRepository {
           binds.addressId = { val: addressId, type: oracle.NUMBER };
         }
         const result = await connection.execute(
-          `UPDATE CLIENTS SET ${changes.join(', ')} WHERE CLIENT_ID = :id`,
+          `UPDATE CLIENTS SET ${changes.join(', ')} WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'`,
           binds,
           { autoCommit: false },
         );
@@ -133,7 +157,7 @@ export class ClientsRepository {
        LEFT JOIN DISTRICTS d ON d.ID_DISTRICT = a.ID_DISTRICT
        LEFT JOIN CANTONS k ON k.ID_CANTON = d.ID_CANTON
        LEFT JOIN PROVINCES p ON p.ID_PROVINCE = k.ID_PROVINCE
-       WHERE c.CLIENT_ID = :id`,
+       WHERE c.CLIENT_ID = :id AND c.STATUS = 'ACTIVE'`,
       { id: { val: id, type: oracle.NUMBER } },
     );
     const row = result.rows?.[0];
@@ -173,20 +197,9 @@ export class ClientsRepository {
     const name =
       "REGEXP_REPLACE(TRIM(c.FIRST_NAME || ' ' || c.SECOND_NAME || ' ' || c.FIRST_SURNAME || ' ' || c.SECOND_SURNAME), '[[:space:]]+', ' ')";
     const binds: oracle.BindParameters = {};
-    let where = '';
+    let where = "WHERE c.STATUS = 'ACTIVE'";
     if (query.search) {
-      const terms = query.search.split(' ').map((term, index) => {
-        binds[`name${index}`] = {
-          val: `%${term.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
-          type: oracle.STRING,
-        };
-        return `LOWER(${name}) LIKE :name${index} ESCAPE '\\'`;
-      });
-      binds.search = {
-        val: `%${query.search.toLowerCase().replace(/[\\%_]/gu, '\\$&')}%`,
-        type: oracle.STRING,
-      };
-      where = `WHERE ((${terms.join(' AND ')}) OR LOWER(c.EMAIL) LIKE :search ESCAPE '\\' OR c.PHONE_NUMBER LIKE :search ESCAPE '\\' OR TO_CHAR(c.CLIENT_ID) LIKE :search ESCAPE '\\')`;
+      where += ` AND ${buildUserSearch(query.search, 'clients', name, binds)}`;
     }
     const count = await this.db.query<{ TOTAL: number }>(
       `SELECT COUNT(*) AS TOTAL FROM CLIENTS c ${where}`,
@@ -246,7 +259,10 @@ export class ClientsRepository {
     return !!result.rows?.length;
   }
 
-  async createClient(data: NewClientWithLocalCredentials): Promise<number> {
+  async createClient(
+    data: NewClientWithLocalCredentials,
+    emailVerification?: { tokenHash: string; expiresInMinutes: number },
+  ): Promise<number> {
     try {
       return await this.db.transaction(async (connection) => {
         const clientId = await this.insertClient(connection, data);
@@ -263,6 +279,29 @@ export class ClientsRepository {
         );
         if (credentialsResult.rowsAffected !== 1) {
           throw new Error('Oracle did not create a single credentials record.');
+        }
+
+        if (emailVerification) {
+          const verificationResult = await connection.execute(
+            `INSERT INTO CLIENT_EMAIL_VERIFICATIONS (
+               CLIENT_ID, TOKEN_HASH, EXPIRES_AT
+             ) VALUES (
+               :clientId, :tokenHash,
+               SYSTIMESTAMP + NUMTODSINTERVAL(:expiresInMinutes, 'MINUTE')
+             )`,
+            {
+              clientId: { val: clientId, type: oracle.NUMBER },
+              tokenHash: { val: emailVerification.tokenHash, type: oracle.STRING },
+              expiresInMinutes: {
+                val: emailVerification.expiresInMinutes,
+                type: oracle.NUMBER,
+              },
+            },
+            { autoCommit: false },
+          );
+          if (verificationResult.rowsAffected !== 1) {
+            throw new Error('Oracle did not create a single email verification.');
+          }
         }
 
         return clientId;

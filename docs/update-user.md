@@ -2,7 +2,7 @@
 
 El ícono Modificar abre el usuario seleccionado en un diálogo con la estética de
 creación y detalle. Reutiliza `BaseModal`, los íconos Bootstrap y exclusivamente
-colores de `variables.css`. Desactivar continúa deshabilitado.
+colores de `variables.css`. Desactivar abre el diálogo de confirmación de su propia historia.
 
 ## Alcance aprobado
 
@@ -80,8 +80,8 @@ los permisos consultados por la autenticación en solicitudes posteriores.
 ## Errores y verificación
 
 `400`: entrada inválida, campos no admitidos o ningún cambio; `401`: sesión no
-vigente; `403`: permiso u origen incorrecto; `404`: usuario inexistente; `409`:
-correo duplicado; `500`: fallo inesperado sin detalles internos en la respuesta.
+vigente; `403`: permiso u origen incorrecto; `404`: usuario inexistente o inactivo; `409`:
+correo duplicado o último administrador activo; `500`: fallo inesperado sin detalles internos en la respuesta.
 
 Los errores conocidos conservan el borrador y muestran avisos generales o por
 campo. Ante un fallo de red o respuesta inesperada no se repite automáticamente
@@ -98,11 +98,11 @@ Pruebas manuales sugeridas:
 6. Editar el rol de la sesión y revisar menú y permisos con cuentas de prueba.
 7. Revisar teclado, foco y presentación móvil.
 
-En `apps/api`, ejecutar `npm run test:cov`, `npm run lint` y `npm run build`;
-después del build, `npm run test:e2e -- --runInBand test/users-update.e2e-spec.ts`.
+En `apps/api`, ejecutar `npm run test:cov`, `npm run lint` y `npm run build`.
 En `apps/web`, ejecutar `npm run test:cov`, `npm run lint` y `npm run build`.
 En PowerShell con scripts deshabilitados, usar `npm.cmd`.
-Las pruebas automatizadas simulan Oracle; la inspección visual en navegador y
+Las pruebas unitarias y HTTP aisladas simulan Oracle sin depender de `dist`;
+la inspección visual en navegador y
 la comprobación con la base real complementan estas verificaciones.
 
 El contador de dirección muestra caracteres con el formato `1/255`, igual que en creación. La validación conserva el límite de 255 bytes de Oracle. Cambiar sucursal reutiliza el catálogo existente y valida su existencia antes de guardar.
@@ -113,3 +113,11 @@ nombres con límite de 100 bytes y correo con límite de 150 bytes. Los nombres
 se recortan y el correo se recorta y convierte a minúsculas. Cada flujo conserva
 sus campos obligatorios; edición valida los valores modificados para preservar
 datos históricos que no se están cambiando. La API aplica las mismas reglas.
+
+## Cuentas activas y último administrador
+
+Las modificaciones excluyen cuentas inactivas (404). Los cambios de rol se
+serializan con las desactivaciones de personal mediante un bloqueo Oracle de
+tabla antes del bloqueo de fila. No se permite convertir al último administrador
+activo en empleado (409); debe existir otro administrador activo. Los correos de
+cuentas inactivas siguen reservados. Ver [Desactivar un usuario](deactivate-user.md).

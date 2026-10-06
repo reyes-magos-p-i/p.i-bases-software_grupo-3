@@ -14,12 +14,18 @@ import {
 
 describe('JwtStrategy', () => {
   let strategy: JwtStrategy;
-  let clients: { findById: jest.Mock };
+  let clients: {
+    findById: jest.Mock;
+    isEmailVerificationPending: jest.Mock;
+  };
   let users: { findEmployeeIdentityById: jest.Mock };
   const request = { headers: {} } as Request;
 
   beforeEach(async () => {
-    clients = { findById: jest.fn() };
+    clients = {
+      findById: jest.fn(),
+      isEmailVerificationPending: jest.fn().mockResolvedValue(false),
+    };
     users = { findEmployeeIdentityById: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -74,6 +80,26 @@ describe('JwtStrategy', () => {
     },
   );
 
+  it.each(['client', 'employee'] as const)(
+    'revokes an existing %s token on the next request',
+    async (type) => {
+      const lookup =
+        type === 'client' ? clients.findById : users.findEmployeeIdentityById;
+      lookup
+        .mockResolvedValueOnce({
+          id: 21,
+          role: UserRole.EMPLOYEE,
+          firstName: 'Ana',
+        })
+        .mockResolvedValueOnce(null);
+      const payload = { sub: 21, type };
+      await expect(strategy.validate(request, payload)).resolves.toBeDefined();
+      await expect(strategy.validate(request, payload)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(lookup).toHaveBeenCalledTimes(2);
+    },
+  );
   it('rejects when the client no longer exists', async () => {
     clients.findById.mockResolvedValue(null);
 
@@ -90,7 +116,17 @@ describe('JwtStrategy', () => {
       strategy.validate(request, { sub: 1, type: 'client' }),
     ).resolves.toEqual(client);
     expect(clients.findById).toHaveBeenCalledWith(1);
+    expect(clients.isEmailVerificationPending).toHaveBeenCalledWith(1);
     expect(users.findEmployeeIdentityById).not.toHaveBeenCalled();
+  });
+
+  it('rejects an otherwise valid client token while email confirmation is pending', async () => {
+    clients.findById.mockResolvedValue({ id: 1, email: 'ana@example.com' });
+    clients.isEmailVerificationPending.mockResolvedValue(true);
+
+    await expect(
+      strategy.validate(request, { sub: 1, type: 'client' }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(

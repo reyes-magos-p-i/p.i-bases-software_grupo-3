@@ -19,11 +19,17 @@ export function validMobile(value: string): boolean {
 
 export function validEmail(value: string): boolean {
   const email = value.trim().toLowerCase()
-  const local = email.split('@')[0] ?? ''
+  const separator = email.indexOf('@')
+  const local = email.slice(0, separator)
+  const domain = email.slice(separator + 1)
+  const lastDot = domain.lastIndexOf('.')
   return (
     validText(email, 150) &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) &&
-    /^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/iu.test(email.split('.').pop() ?? '') &&
+    separator > 0 &&
+    separator === email.lastIndexOf('@') &&
+    lastDot > 0 &&
+    !/\s/u.test(email) &&
+    /^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/iu.test(domain.slice(lastDot + 1)) &&
     !local.startsWith('.') &&
     !local.endsWith('.') &&
     !local.includes('..') &&

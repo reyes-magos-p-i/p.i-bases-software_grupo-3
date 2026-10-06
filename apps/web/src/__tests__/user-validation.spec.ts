@@ -28,6 +28,38 @@ describe('shared user validation', () => {
     expect(validEmail(value)).toBe(true)
   })
   it.each([
+    'ana+ventas@cinema.co.cr',
+    'ana@cinema.xn--p1ai',
+    'ana@sub.cinema.com',
+    'josé@cinema.com',
+    'a'.repeat(64) + '@example.com',
+    'a@' + 'b'.repeat(144) + '.com',
+    'a@example..com',
+  ])('preserves accepted email formats: %s', (value) => {
+    expect(validEmail(value)).toBe(true)
+  })
+  it.each([
+    '',
+    '@example.com',
+    'ana@',
+    'ana@@example.com',
+    'ana@example@cinema.com',
+    'ana@.com',
+    'ana@example.',
+    'ana@example',
+    'ana @example.com',
+    'ana@exam ple.com',
+    'ana@exam\tple.com',
+    'ana@exam\nple.com',
+    'a@' + 'b'.repeat(145) + '.com',
+    'é'.repeat(33) + '@example.com',
+  ])('rejects malformed or oversized email: %s', (value) => {
+    expect(validEmail(value)).toBe(false)
+  })
+  it('rejects oversized input with repeated domain separators', () => {
+    expect(validEmail('a@' + '.'.repeat(100000))).toBe(false)
+  })
+  it.each([
     'bad',
     'a..b@example.com',
     '.a@example.com',
