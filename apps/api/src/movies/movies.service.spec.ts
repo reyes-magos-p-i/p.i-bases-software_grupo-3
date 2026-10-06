@@ -22,6 +22,51 @@ describe('MoviesService', () => {
     },
   ];
 
+    const movieAll = [
+    {
+    id: 24,
+    title: 'Interstellar',
+    runningTime: 169,
+    releaseYear: 2014,
+    classification: 'TP',
+      },
+    ];
+
+  const movieDetail = {
+    id: 24,
+    title: 'Interstellar',
+    synopsis: 'A team travels through space searching for a new home.',
+    runningTime: 169,
+    releaseYear: 2014,
+
+    classification: {
+      id: 1,
+      name: 'TP',
+    },
+
+    languages: [
+      {
+        id: 1,
+        name: 'afar',
+      },
+      {
+        id: 2,
+        name: 'abjasio',
+      },
+    ],
+
+    genres: [
+      {
+        id: 3,
+        name: 'Aventura',
+      },
+      {
+        id: 4,
+        name: 'Ciencia Ficción',
+      },
+    ],
+  }
+
   beforeEach(async () => {
     const repositoryMock = {
       create: jest.fn(),
@@ -47,7 +92,7 @@ describe('MoviesService', () => {
 
   describe('findAll', () => {
     it('should return all movies', async () => {
-      repository.findAll.mockResolvedValue(movie);
+      repository.findAll.mockResolvedValue(movieAll);
 
       const result = await service.findAll();
 
@@ -58,7 +103,7 @@ describe('MoviesService', () => {
 
   describe('findOne', () => {
     it('should return a movie', async () => {
-      repository.findOne.mockResolvedValue(movie);
+      repository.findOne.mockResolvedValue(movieDetail);
 
       const result = await service.findOne(1);
 
@@ -67,7 +112,7 @@ describe('MoviesService', () => {
     });
 
     it('should throw NotFoundException when movie does not exist', async () => {
-      repository.findOne.mockResolvedValue([]);
+      repository.findOne.mockResolvedValue(movieDetail);
 
       await expect(service.findOne(999)).rejects.toThrow(
         NotFoundException,
@@ -106,7 +151,7 @@ describe('MoviesService', () => {
       };
 
       repository.findOne
-        .mockResolvedValueOnce(movie)
+        .mockResolvedValueOnce(movieDetail)
         .mockResolvedValueOnce([
           {
             ...movie[0],
@@ -142,7 +187,7 @@ describe('MoviesService', () => {
 
   describe('remove', () => {
     it('should remove an existing movie', async () => {
-      repository.findOne.mockResolvedValue(movie);
+      repository.findOne.mockResolvedValue(movieDetail);
       repository.remove.mockResolvedValue(undefined);
 
       const result = await service.remove(1);
@@ -156,7 +201,7 @@ describe('MoviesService', () => {
     });
 
     it('should throw NotFoundException when deleting missing movie', async () => {
-      repository.findOne.mockResolvedValue([]);
+      repository.findOne.mockResolvedValue(movieDetail);
 
       await expect(service.remove(999)).rejects.toThrow(
         NotFoundException,

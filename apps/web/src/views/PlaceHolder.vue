@@ -10,7 +10,6 @@ import MovieCrud from '@/components/Movies/MovieCrud.vue';
     <div class="landing-container home-content">
         <h1>Oops, no hay nada aqui. Estamos trabajando en ello.</h1>
     </div>
-    <MovieCrud></MovieCrud>
   </main>
   <AppFooter />
 </template>
