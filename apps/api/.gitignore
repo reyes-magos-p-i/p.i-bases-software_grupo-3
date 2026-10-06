@@ -3,6 +3,7 @@ wallet/
 *.svg
 *.jpg
 *.jpeg
+!src/assets/cinetadel-logo.png
 # compiled output
 /dist
 /node_modules
