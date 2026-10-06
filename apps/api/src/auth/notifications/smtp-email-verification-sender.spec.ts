@@ -49,6 +49,7 @@ describe('SmtpEmailVerificationSender', () => {
       attachments: [
         {
           filename: 'cinetadel-logo.png',
+          content: expect.any(Buffer),
           cid: 'cinetadel-logo',
         },
       ],
