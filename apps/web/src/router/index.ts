@@ -5,8 +5,8 @@ import PlaceHolder from '@/views/PlaceHolder.vue'
 import TermsConditions from '@/views/TermsConditions.vue'
 import RefundPolicy from '@/views/RefundPolicy.vue'
 import PrivacyPolicy from '@/views/PrivacyPolicy.vue'
-import { requireClientSession } from './client-session.guard'
 import { requireEmployeeSession } from './employee-session.guard'
+import { requireClientSession } from './client-session.guard'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
