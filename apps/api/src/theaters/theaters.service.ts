@@ -8,8 +8,17 @@ export class TheatersService {
   constructor(private readonly theatersRepository: TheaterRepository) {}
 
   private validateSeatDimensions(numberOfSeats: number, dimensionX: number, dimensionY: number) {
-    if (numberOfSeats !== dimensionX * dimensionY) {
-      throw new BadRequestException('numberOfSeats must equal dimensionX * dimensionY');
+    if (
+      !Number.isInteger(numberOfSeats) ||
+      numberOfSeats < 1 ||
+      numberOfSeats >= 5000 ||
+      !Number.isInteger(dimensionX) ||
+      dimensionX < 1 ||
+      !Number.isInteger(dimensionY) ||
+      dimensionY < 1 ||
+      numberOfSeats !== dimensionX * dimensionY
+    ) {
+      throw new BadRequestException('Invalid theater seat dimensions');
     }
   }
 
