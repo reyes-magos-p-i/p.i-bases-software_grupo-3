@@ -13,6 +13,7 @@ import {
 } from '@/services/authService'
 import {
   authenticateEmployee,
+  closeEmployeeSession,
   employeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
@@ -29,6 +30,7 @@ vi.mock('@/services/employee-session.service', async () => {
   return {
     employeeSession: { user: ref(null), status: ref('unknown'), error: ref('') },
     authenticateEmployee: vi.fn(),
+    closeEmployeeSession: vi.fn().mockResolvedValue(undefined),
     restoreEmployeeSession: vi.fn(),
   }
 })
@@ -51,6 +53,7 @@ describe('AppHeader authentication navigation', () => {
       .mockReset()
       .mockResolvedValue({ id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' })
     vi.mocked(getClientSession).mockReset().mockResolvedValue(null)
+    vi.mocked(closeEmployeeSession).mockResolvedValue(null)
     Object.assign(employeeSession.user, { value: null })
     Object.assign(employeeSession.status, { value: 'unknown' })
     vi.mocked(authenticateEmployee)
@@ -177,7 +180,9 @@ describe('AppHeader authentication navigation', () => {
     expect(wrapper.findAll('.account-actions button:disabled')).toHaveLength(3)
 
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
+    await flushPromises()
     expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(closeEmployeeSession).toHaveBeenCalledExactlyOnceWith()
     expect(wrapper.find('.account-avatar').exists()).toBe(false)
     expect(wrapper.find('.register-button').exists()).toBe(true)
   })

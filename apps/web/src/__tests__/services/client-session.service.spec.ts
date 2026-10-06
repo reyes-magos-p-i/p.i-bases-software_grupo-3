@@ -1,17 +1,63 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   clearClientSession,
+  clearClientAuth,
   clientIdentityFromResponse,
   clientSession,
   establishClientSession,
+  hasClientSession,
   restoreClientSession,
 } from '@/services/client-session.service'
+import { fbAuth, logoutFromFacebook } from '@/facebook-auth'
+
+vi.mock('@/facebook-auth', () => ({
+  fbAuth: { status: 'unknown' },
+  logoutFromFacebook: vi.fn(),
+}))
 
 const identity = { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' }
 
 describe('Client session lifecycle', () => {
   beforeEach(() => {
+    fbAuth.status = 'unknown'
+    vi.mocked(logoutFromFacebook).mockReset().mockResolvedValue(undefined)
     clearClientSession()
+  })
+
+  it('detects local and Facebook sessions without requiring a restored profile', () => {
+    expect(hasClientSession()).toBe(false)
+    localStorage.setItem('accessToken', 'saved-token')
+    expect(hasClientSession()).toBe(true)
+    clearClientSession()
+    fbAuth.status = 'connected'
+    expect(hasClientSession()).toBe(true)
+  })
+
+  it('clears a local session without calling Facebook when disconnected', async () => {
+    establishClientSession(identity, 'local-token')
+    await clearClientAuth()
+    expect(logoutFromFacebook).not.toHaveBeenCalled()
+    expect(clientSession.status.value).toBe('anonymous')
+    expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+
+  it('logs out of Facebook and prevents a late restoration from restoring the client', async () => {
+    establishClientSession(identity, 'social-token')
+    fbAuth.status = 'connected'
+    let resolve!: (value: typeof identity) => void
+    const pending = restoreClientSession(
+      () =>
+        new Promise((done) => {
+          resolve = done
+        }),
+    )
+    await Promise.resolve()
+    await clearClientAuth()
+    resolve(identity)
+    await expect(pending).resolves.toBeNull()
+    expect(logoutFromFacebook).toHaveBeenCalledExactlyOnceWith()
+    expect(clientSession.status.value).toBe('anonymous')
+    expect(localStorage.getItem('accessToken')).toBeNull()
   })
 
   it('restores a saved token through the server and shares concurrent lookups', async () => {

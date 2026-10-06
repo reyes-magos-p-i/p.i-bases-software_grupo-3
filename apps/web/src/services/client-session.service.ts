@@ -1,5 +1,8 @@
 import { readonly, ref, shallowRef } from 'vue'
+import { fbAuth, logoutFromFacebook } from '@/facebook-auth'
 import type { ClientIdentity, ClientSessionStatus } from '@/types/client-auth'
+
+export const CLIENT_ACCESS_TOKEN_KEY = 'accessToken'
 
 const user = shallowRef<ClientIdentity | null>(null)
 const status = ref<ClientSessionStatus>('unknown')
@@ -31,11 +34,15 @@ export function clientIdentityFromResponse(value: unknown): ClientIdentity {
   return { id: value.id, email: value.email, firstName: value.firstName, lastName: lastName ?? '' }
 }
 
+export function hasClientSession(): boolean {
+  return Boolean(localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)) || fbAuth.status === 'connected'
+}
+
 export function establishClientSession(identity: ClientIdentity, accessToken: string): void {
   const verifiedIdentity = clientIdentityFromResponse(identity)
   if (typeof accessToken !== 'string' || !accessToken.trim())
     throw new Error('No se pudo verificar la sesión del cliente.')
-  localStorage.setItem('accessToken', accessToken)
+  localStorage.setItem(CLIENT_ACCESS_TOKEN_KEY, accessToken)
   revision++
   restoration = undefined
   user.value = verifiedIdentity
@@ -43,7 +50,7 @@ export function establishClientSession(identity: ClientIdentity, accessToken: st
 }
 
 export function clearClientSession(): void {
-  localStorage.removeItem('accessToken')
+  localStorage.removeItem(CLIENT_ACCESS_TOKEN_KEY)
   revision++
   restoration = undefined
   user.value = null
@@ -58,7 +65,7 @@ export function restoreClientSession(
   const pending = Promise.resolve()
     .then(async () => {
       if (current !== revision) return user.value
-      const token = localStorage.getItem('accessToken')
+      const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
       if (!token) {
         clearClientSession()
         return null
@@ -86,4 +93,9 @@ export function restoreClientSession(
     })
   restoration = pending
   return pending
+}
+
+export async function clearClientAuth(): Promise<void> {
+  if (fbAuth.status === 'connected') await logoutFromFacebook()
+  clearClientSession()
 }
