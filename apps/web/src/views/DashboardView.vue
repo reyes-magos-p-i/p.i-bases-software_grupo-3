@@ -229,7 +229,7 @@ watch(role, () => {
 })
 
 function navigate(section: string) {
-  if (submitting.value || loggingOut.value) return
+  if (submitting.value || theaterBusy.value || loggingOut.value) return
   if (
     (section === 'employees' || section === 'clients' || section === 'theaters') &&
     availableSections.value.includes(section)
