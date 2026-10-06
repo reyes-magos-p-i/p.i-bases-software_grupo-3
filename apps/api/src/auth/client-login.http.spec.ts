@@ -2,32 +2,16 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
-// Exercise production decorator metadata using the compiled application.
-const runtime = process
-  .getBuiltinModule('node:module')
-  .createRequire(__filename);
-const { Test } = runtime('@nestjs/testing') as typeof import('@nestjs/testing');
-const { ValidationPipe } = runtime(
-  '@nestjs/common',
-) as typeof import('@nestjs/common');
-const { ConfigModule, ConfigService } = runtime(
-  '@nestjs/config',
-) as typeof import('@nestjs/config');
-const { JwtService } = runtime('@nestjs/jwt') as typeof import('@nestjs/jwt');
-const { AuthModule } = runtime(
-  '../dist/auth/auth.module.js',
-) as typeof import('../src/auth/auth.module');
-const { DatabaseService } = runtime(
-  '../dist/database/database.service.js',
-) as typeof import('../src/database/database.service');
-const { PasswordHasher } = runtime(
-  '../dist/common/security/password-hasher.js',
-) as typeof import('../src/common/security/password-hasher');
-const { EmailVerificationSender } = runtime(
-  '../dist/auth/notifications/email-verification-sender.js',
-) as typeof import('../src/auth/notifications/email-verification-sender');
+import { Test } from '@nestjs/testing';
+import { ValidationPipe } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { AuthModule } from './auth.module';
+import { DatabaseService } from '../database/database.service';
+import { PasswordHasher } from '../common/security/password-hasher';
+import { EmailVerificationSender } from './notifications/email-verification-sender';
 
-describe('Compiled client login', () => {
+describe('Client login HTTP contracts', () => {
   let app: INestApplication<App>;
   let jwt: InstanceType<typeof JwtService>;
   let passwordHash: string;
@@ -198,7 +182,10 @@ describe('Compiled client login', () => {
   });
 
   it('blocks excessive attempts before password verification and returns a retry delay', async () => {
-    for (let attempt = 0; attempt < 5; attempt++) await login({}).expect(400);
+    await Array.from({ length: 5 }).reduce<Promise<void>>(async (previous) => {
+      await previous;
+      await login({}).expect(400);
+    }, Promise.resolve());
     const response = await login().expect(429);
     expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
     expect(database.query).not.toHaveBeenCalled();

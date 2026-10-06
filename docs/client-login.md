@@ -80,8 +80,10 @@ ni las credenciales privadas.
 ## Pruebas automatizadas
 
 Las pruebas nuevas siguen Jest/Vitest y contienen aserciones explícitas en cada
-caso. Los hooks preceden a los casos; los E2E cargan la aplicación compilada para
-ejercitar la validación real de DTO, como `users-validation.e2e-spec.ts`.
+caso. Los hooks preceden a los casos. `src/auth/client-login.http.spec.ts` usa los
+módulos fuente y participa en `test:cov`, como las demás pruebas HTTP aisladas.
+La regresión anterior `users-validation.e2e-spec.ts` conserva la comprobación de
+metadatos de los DTO en la aplicación compilada.
 
 La suite HTTP comprueba login, normalización, rechazo de entradas inválidas,
 credenciales incorrectas, cuenta inactiva, confirmación pendiente, expiración,
@@ -98,7 +100,7 @@ Comandos desde `apps/api`:
 ```sh
 npm run build
 npm run test:cov -- --runInBand
-npm run test:e2e -- --runInBand --runTestsByPath test/client-login.e2e-spec.ts
+npm run test -- --runInBand src/auth/client-login.http.spec.ts
 npm run lint
 ```
 
