@@ -10,66 +10,125 @@ import * as oracledb from 'oracledb';
 
     ){}
 
- async findAll() {
-    const result = await this.db.query(`
+  async findAll() {
+    const result = await this.db.query<any>(
+      `
       SELECT
-          m.MOVIE_ID,
-          m.TITLE,
-          m.RUNNING_TIME,
-          m.SYNOPSIS,
-          m.POSTER_IMAGE,
-          m.RELEASE_YEAR,
-          c.CLASSIFICATION_NAME,
-          l.NAME AS LANGUAGE_NAME,
-          g.NAME AS GENRE_NAME
-      FROM
-          MOVIES m
-      LEFT JOIN
-          CLASSIFICATIONS c ON m.CLASSIFICATION_ID = c.CLASSIFICATION_ID
-      LEFT JOIN
-          MOVIE_LANGUAGES ml ON m.MOVIE_ID = ml.MOVIE_ID
-      LEFT JOIN
-          LANGUAGES l ON ml.LANGUAGE_ID = l.LANGUAGE_ID
-      LEFT JOIN
-          MOVIE_GENRES mg ON m.MOVIE_ID = mg.MOVIE_ID
-      LEFT JOIN
-          GENRES g ON mg.GENRE_ID = g.GENRE_ID
-    `);
+        m.MOVIE_ID,
+        m.TITLE,
+        m.RUNNING_TIME,
+        m.RELEASE_YEAR,
+        c.CLASSIFICATION_NAME AS CLASSIFICATION
 
-    return result.rows;
+      FROM MOVIES m
+
+      JOIN CLASSIFICATIONS c
+        ON m.CLASSIFICATION_ID = c.CLASSIFICATION_ID
+
+      ORDER BY m.TITLE
+      `,
+    );
+
+    const rows = result.rows ?? [];
+
+    return rows.map((row: any) => ({
+      id: row.MOVIE_ID,
+      title: row.TITLE,
+      runningTime: row.RUNNING_TIME,
+      releaseYear: row.RELEASE_YEAR,
+      classification: row.CLASSIFICATION,
+    }));
   }
 
   async findOne(id: number) {
-    const result = await this.db.query(
-      `
-      SELECT
-          m.MOVIE_ID,
-          m.TITLE,
-          m.RUNNING_TIME,
-          m.SYNOPSIS,
-          m.POSTER_IMAGE,
-          m.RELEASE_YEAR,
-          c.CLASSIFICATION_NAME,
-          l.NAME AS LANGUAGE_NAME,
-          g.NAME AS GENRE_NAME
-      FROM
-          MOVIES m
-      LEFT JOIN
-          CLASSIFICATIONS c ON m.CLASSIFICATION_ID = c.CLASSIFICATION_ID
-      LEFT JOIN
-          MOVIE_LANGUAGES ml ON m.MOVIE_ID = ml.MOVIE_ID
-      LEFT JOIN
-          LANGUAGES l ON ml.LANGUAGE_ID = l.LANGUAGE_ID
-      LEFT JOIN
-          MOVIE_GENRES mg ON m.MOVIE_ID = mg.MOVIE_ID
-      LEFT JOIN
-          GENRES g ON mg.GENRE_ID = g.GENRE_ID
-      WHERE MOVIE_ID = :id
-      `,
-      { id },
+  const result = await this.db.query<any>(
+    `
+    SELECT
+      m.MOVIE_ID,
+      m.TITLE,
+      m.SYNOPSIS,
+      m.RUNNING_TIME,
+      m.RELEASE_YEAR,
+
+      c.CLASSIFICATION_ID,
+      c.CLASSIFICATION_NAME AS CLASSIFICATION,
+
+      l.LANGUAGE_ID,
+      l.NAME AS LANGUAGE,
+
+      g.GENRE_ID,
+      g.NAME AS GENRE
+
+    FROM MOVIES m
+
+    JOIN CLASSIFICATIONS c
+      ON m.CLASSIFICATION_ID = c.CLASSIFICATION_ID
+
+    LEFT JOIN MOVIE_LANGUAGES ml
+      ON m.MOVIE_ID = ml.MOVIE_ID
+
+    LEFT JOIN LANGUAGES l
+      ON ml.LANGUAGE_ID = l.LANGUAGE_ID
+
+    LEFT JOIN MOVIE_GENRES mg
+      ON m.MOVIE_ID = mg.MOVIE_ID
+
+    LEFT JOIN GENRES g
+      ON mg.GENRE_ID = g.GENRE_ID
+
+    WHERE m.MOVIE_ID = :id
+    `,
+    { id },
     );
 
-    return result.rows ?? [];
+    const rows = result.rows ?? [];
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const first = rows[0];
+
+    return {
+      id: first.MOVIE_ID,
+      title: first.TITLE,
+      synopsis: first.SYNOPSIS,
+      runningTime: first.RUNNING_TIME,
+      releaseYear: first.RELEASE_YEAR,
+
+      classification: {
+        id: first.CLASIFICATION_ID,
+        name: first.CLASSIFICATION,
+      },
+
+      languages: [
+        ...new Map(
+          rows
+            .filter((row: any) => row.LANGUAGE_ID)
+            .map((row: any) => [
+              row.LANGUAGE_ID,
+              {
+                id: row.LANGUAGE_ID,
+                name: row.LANGUAGE,
+              },
+            ]),
+        ).values(),
+      ],
+
+      genres: [
+        ...new Map(
+          rows
+            .filter((row: any) => row.GENRE_ID)
+            .map((row: any) => [
+              row.GENRE_ID,
+              {
+                id: row.GENRE_ID,
+                name: row.GENRE,
+              },
+            ]),
+        ).values(),
+      ],
+    };
   }
 
   async create(dto: CreateMovieDto) {

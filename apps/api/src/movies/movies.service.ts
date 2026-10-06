@@ -24,7 +24,7 @@ export class MoviesService {
   async findOne(id: number) {
     const movie = await this.moviesRepository.findOne(id);
 
-    if (!movie || movie.length === 0) {
+    if (!movie ) {
       throw new NotFoundException(
         `Movie with ID ${id} was not found`,
       );
@@ -36,7 +36,7 @@ export class MoviesService {
   async update(id: number, dto: UpdateMovieDto) {
     const movie = await this.moviesRepository.findOne(id);
 
-    if (!movie || movie.length === 0) {
+    if (!movie ) {
       throw new NotFoundException(
         `Movie with ID ${id} was not found`,
       );
@@ -50,7 +50,7 @@ export class MoviesService {
   async remove(id: number) {
     const movie = await this.moviesRepository.findOne(id);
 
-    if (!movie || movie.length === 0) {
+    if (!movie ) {
       throw new NotFoundException(
         `Movie with ID ${id} was not found`,
       );

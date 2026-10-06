@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { isAxiosError } from 'axios'
+import MovieCrudView from './MovieCrudView.vue'
 
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import { deleteMovie, getMovies } from '@/services/movie.service'
@@ -9,25 +10,25 @@ import type { Movie } from '@/types/movie'
 const movies = ref<Movie[]>([])
 const loading = ref(false)
 const listError = ref('')
+const selectedMovieId = ref<number | null>(null)
 
 let request: AbortController | undefined
 let disposed = false
 
 const columns = [
-  { key: 'MOVIE_ID', label: 'ID' },
-  { key: 'TITLE', label: 'Título' },
-  { key: 'RUNNING_TIME', label: 'Duración' },
-  { key: 'RELEASE_YEAR', label: 'Año' },
-  { key: 'CLASSIFICATION_NAME', label: 'Clasificación' },
-  { key: 'LANGUAGE_NAME', label: 'Idioma' },
-  { key: 'GENRE_NAME', label: 'Género' },
+  { key: 'id', label: 'ID' },
+  { key: 'title', label: 'Título' },
+  { key: 'runningTime', label: 'Duración' },
+  { key: 'releaseYear', label: 'Año' },
+  { key: 'classification', label: 'Clasificación' },
 ]
 
 const rows = computed(() =>
   movies.value.map((movie) => ({
     ...movie,
-
-    RUNNING_TIME: `${movie.RUNNING_TIME} min`,
+    runningTime: `${movie.runningTime} min`,
+    releaseYear: movie.releaseYear ?? 'Sin registrar',
+    classification: movie.classification ?? 'Sin registrar',
   })),
 )
 
@@ -44,6 +45,8 @@ async function load() {
     const data = await getMovies(currentRequest.signal)
 
     if (currentRequest.signal.aborted || disposed) return
+
+    console.log(data)
 
     movies.value = data
   } catch (error) {
@@ -64,29 +67,26 @@ async function load() {
 }
 
 function viewMovie(row: Record<string, unknown>) {
-  if (typeof row.MOVIE_ID !== 'number') return
+  console.log('View:', row)
 
-  console.log('View movie:', row.MOVIE_ID)
+  const id = Number(row.id)
 
-  // Later:
-  // selectedMovieId.value = row.MOVIE_ID
+  if (Number.isNaN(id)) return
+
+  selectedMovieId.value = id
 }
 
 function editMovie(row: Record<string, unknown>) {
-  if (typeof row.MOVIE_ID !== 'number') return
-
-  console.log('Edit movie:', row.MOVIE_ID)
-
-  // Later:
-  // editedMovieId.value = row.MOVIE_ID
+  console.log('Edit:', row)
 }
 
 async function removeMovie(row: Record<string, unknown>) {
-  if (typeof row.MOVIE_ID !== 'number') return
+  const id = Number(row.id)
+
+  if (Number.isNaN(id)) return
 
   try {
-    await deleteMovie(row.MOVIE_ID)
-
+    await deleteMovie(id)
     await load()
   } catch (error) {
     console.error('Error deleting movie:', error)
@@ -97,13 +97,9 @@ function refresh() {
   void load()
 }
 
-watch(
-  () => true,
-  () => {
-    void load()
-  },
-  { immediate: true },
-)
+onMounted(() => {
+  void load()
+})
 
 onBeforeUnmount(() => {
   disposed = true
@@ -114,9 +110,6 @@ defineExpose({ refresh })
 </script>
 
 <template>
-   <!--<div style="display: block; padding: 20px; background: yellow; color: black;">
-    MOVIE CRUD IS RENDERING
-  </div>-->
   <div class="movie-list-panel">
     <p v-if="loading" role="status">
       Cargando películas…
@@ -135,38 +128,16 @@ defineExpose({ refresh })
       :columns="columns"
       :rows="rows"
       caption="Películas"
-    >
-      <template #actions="{ row }">
-        <div class="movie-actions">
-          <button
-            type="button"
-            aria-label="Ver"
-            @click="viewMovie(row)"
-          >
-            <i class="bi bi-eye" aria-hidden="true"></i>
-          </button>
+      @view="viewMovie"
+      @edit="editMovie"
+      @delete="removeMovie"
+    />
 
-          <button
-            type="button"
-            aria-label="Modificar"
-            @click="editMovie(row)"
-          >
-            <i
-              class="bi bi-pencil-square"
-              aria-hidden="true"
-            ></i>
-          </button>
 
-          <button
-            type="button"
-            aria-label="Eliminar"
-            @click="removeMovie(row)"
-          >
-            <i class="bi bi-trash" aria-hidden="true"></i>
-          </button>
-        </div>
-      </template>
-    </CrudTable>
+    <MovieCrudView
+      :movie-id="selectedMovieId"
+      @close="selectedMovieId = null"
+    />
   </div>
 </template>
 
@@ -176,52 +147,7 @@ defineExpose({ refresh })
     gap: 20px;
   }
 
-  button {
-    padding: 10px 16px;
-    border: 1px solid var(--color-primary);
-    cursor: pointer;
-  }
 
-  .primary-button {
-    background: var(--color-primary);
-    color: var(--color-white);
-  }
-  .secondary-button {
-    background: var(--color-white);
-    color: var(--color-primary);
-  }
-  button:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
-  .movie-actions {
-    display: flex;
-    gap: 4px;
-  }
-  .movie-actions button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px;
-    text-decoration: none;
-    justify-content: center;
-    width: 36px;
-    min-height: 36px;
-    background: transparent;
-    border: 0;
-    color: var(--color-primary);
-    font-size: 1.125rem;
-  }
-  .movie-actions button:disabled {
-    pointer-events: none;
-  }
-  .movie-actions button:not(:disabled):hover {
-    background: var(--color-light_gray);
-  }
-  .action-hint {
-    display: inline-flex;
-  }
 
 
 </style>
