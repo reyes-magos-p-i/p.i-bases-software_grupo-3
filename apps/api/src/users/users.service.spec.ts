@@ -2,7 +2,6 @@ import {
   BadGatewayException,
   BadRequestException,
   ConflictException,
-  NotFoundException,
 } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PasswordGenerator } from '../common/security/password-generator';
@@ -20,19 +19,10 @@ describe('UsersService', () => {
   let module: TestingModule;
   let service: UsersService;
   const repository = {
-    deactivateEmployee: jest.fn(),
-    updateEmployee: jest.fn(),
-    findEmployeeDetailById: jest.fn(),
-    listEmployees: jest.fn(),
-    getEmployeeListOptions: jest.fn(),
     getCreationOptions: jest.fn(),
     createEmployee: jest.fn(),
   };
   const clientsRepository = {
-    deactivateClient: jest.fn(),
-    updateClient: jest.fn(),
-    findClientDetailById: jest.fn(),
-    listClients: jest.fn(),
     clientEmailExists: jest.fn(),
     createClient: jest.fn(),
   };
@@ -60,7 +50,6 @@ describe('UsersService', () => {
     secondName: null,
     firstSurname: 'Núñez',
     secondSurname: 'Solano',
-    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
     address: { districtId: 7, details: 'Casa azul' },
@@ -96,141 +85,6 @@ describe('UsersService', () => {
 
   afterEach(async () => {
     await module.close();
-  });
-
-  it('delegates client deactivation without generating or sending credentials', async () => {
-    await service.deactivateClient(42);
-    expect(clientsRepository.deactivateClient).toHaveBeenCalledWith(42);
-    expect(generator.generate).not.toHaveBeenCalled();
-    expect(sender.send).not.toHaveBeenCalled();
-  });
-  it('delegates staff deactivation with the authenticated actor', async () => {
-    await service.deactivateEmployee(42, 21);
-    expect(repository.deactivateEmployee).toHaveBeenCalledWith(42, 21);
-  });
-  it('preserves the repository conflict instead of reporting success', async () => {
-    repository.deactivateEmployee.mockRejectedValue(
-      new ConflictException('protected'),
-    );
-    await expect(service.deactivateEmployee(42, 21)).rejects.toThrow(
-      ConflictException,
-    );
-  });
-  it('returns only address catalogs for staff editing', async () => {
-    const catalogs = {
-      provinces: [{ id: 1 }],
-      cantons: [],
-      districts: [],
-      branches: [{ id: 9 }],
-    };
-    repository.getCreationOptions.mockResolvedValue(catalogs);
-    expect(await service.getEditOptions()).toEqual({
-      provinces: catalogs.provinces,
-      cantons: [],
-      districts: [],
-    });
-  });
-
-  it('updates clients and employees without generating or sending passwords', async () => {
-    const clientChanges = { phoneNumber: null };
-    const staffChanges = { role: UserRole.ADMINISTRATOR as const };
-    clientsRepository.updateClient.mockResolvedValue({
-      id: 42,
-      role: UserRole.CLIENT,
-    });
-    repository.updateEmployee.mockResolvedValue({
-      id: 42,
-      role: UserRole.ADMINISTRATOR,
-    });
-    await service.updateClient(42, clientChanges);
-    await service.updateEmployee(42, staffChanges);
-    expect(clientsRepository.updateClient).toHaveBeenCalledWith(
-      42,
-      clientChanges,
-    );
-    expect(repository.updateEmployee).toHaveBeenCalledWith(42, staffChanges);
-    expect(generator.generate).not.toHaveBeenCalled();
-    expect(hasher.hash).not.toHaveBeenCalled();
-    expect(sender.send).not.toHaveBeenCalled();
-  });
-
-  it('rejects empty partial updates before persistence', () => {
-    expect(() => service.updateClient(42, {})).toThrow(BadRequestException);
-    expect(() => service.updateEmployee(42, { role: undefined })).toThrow(
-      BadRequestException,
-    );
-    expect(repository.updateEmployee).not.toHaveBeenCalled();
-    expect(clientsRepository.updateClient).not.toHaveBeenCalled();
-  });
-
-  describe.each(['client', 'employee'])('%s details', (section) => {
-    it('delegates the selected ID without invoking credential operations', async () => {
-      const detail = { id: 42, firstName: 'Ana' };
-      const read =
-        section === 'client'
-          ? clientsRepository.findClientDetailById
-          : repository.findEmployeeDetailById;
-      read.mockResolvedValue(detail);
-      expect(
-        await (section === 'client'
-          ? service.getClientDetail(42)
-          : service.getEmployeeDetail(42)),
-      ).toBe(detail);
-      expect(read).toHaveBeenCalledWith(42);
-      expect(generator.generate).not.toHaveBeenCalled();
-      expect(hasher.hash).not.toHaveBeenCalled();
-      expect(sender.send).not.toHaveBeenCalled();
-    });
-    it('reports missing records with a 404', async () => {
-      const read =
-        section === 'client'
-          ? clientsRepository.findClientDetailById
-          : repository.findEmployeeDetailById;
-      read.mockResolvedValue(null);
-      await expect(
-        section === 'client'
-          ? service.getClientDetail(42)
-          : service.getEmployeeDetail(42),
-      ).rejects.toThrow(NotFoundException);
-    });
-    it('does not convert database failures into missing users', async () => {
-      const read =
-        section === 'client'
-          ? clientsRepository.findClientDetailById
-          : repository.findEmployeeDetailById;
-      read.mockRejectedValue(new Error('Unavailable'));
-      await expect(
-        section === 'client'
-          ? service.getClientDetail(42)
-          : service.getEmployeeDetail(42),
-      ).rejects.toThrow('Unavailable');
-    });
-  });
-
-  it('delegates list queries and options without credential operations', async () => {
-    const query = {
-      page: 1,
-      pageSize: 10,
-      sortBy: 'id',
-      sortDirection: 'asc' as const,
-    };
-    const result = {
-      items: [],
-      total: 0,
-      page: 1,
-      pageSize: 10,
-      totalPages: 0,
-    };
-    clientsRepository.listClients.mockResolvedValue(result);
-    repository.listEmployees.mockResolvedValue(result);
-    repository.getEmployeeListOptions.mockResolvedValue({ branches: [] });
-    expect(await service.listClients(query)).toEqual(result);
-    expect(await service.listEmployees(query)).toEqual(result);
-    expect(await service.getEmployeeListOptions()).toEqual({ branches: [] });
-    expect(clientsRepository.listClients).toHaveBeenCalledWith(query);
-    expect(repository.listEmployees).toHaveBeenCalledWith(query);
-    expect(generator.generate).not.toHaveBeenCalled();
-    expect(sender.send).not.toHaveBeenCalled();
   });
 
   describe('getCreationOptions', () => {

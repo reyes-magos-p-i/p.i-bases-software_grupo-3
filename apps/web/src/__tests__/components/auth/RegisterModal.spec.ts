@@ -97,7 +97,11 @@ describe('RegisterModal.vue', () => {
         .map(({ type, value }) => [type, value]),
     )
     const date = new Date(
-      Date.UTC(Number(today.year) - 18, Number(today.month) - 1, Number(today.day) + 1),
+      Date.UTC(
+        Number(today.year) - 18,
+        Number(today.month) - 1,
+        Number(today.day) + 1,
+      ),
     )
     return [
       date.getUTCFullYear(),
@@ -111,7 +115,9 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#phone').setValue('1234567')
     await wrapper.find('form').trigger('submit.prevent')
 
-    expect(wrapper.text()).toContain('Ingresa un teléfono costarricense válido de 8 dígitos')
+    expect(wrapper.text()).toContain(
+      'Ingresa un teléfono costarricense válido de 8 dígitos',
+    )
     expect(registerUser).not.toHaveBeenCalled()
   })
 
@@ -132,15 +138,6 @@ describe('RegisterModal.vue', () => {
     expect(wrapper.text()).toContain('Ingresa un correo válido')
     expect(wrapper.text()).toContain('Requerido')
     expect(wrapper.text()).toContain('Debes aceptar los términos')
-  })
-  it('accepts a landline while rejecting names exceeding the database byte limit', async () => {
-    const wrapper = createWrapper()
-    await wrapper.find('#phone').setValue('22222222')
-    await wrapper.find('#firstName').setValue('é'.repeat(51))
-    await wrapper.find('form').trigger('submit.prevent')
-    expect(wrapper.get('#phone').classes()).not.toContain('is-invalid')
-    expect(wrapper.text()).toContain('100 bytes')
-    expect(registerUser).not.toHaveBeenCalled()
   })
 
   it('valida formato de contraseña insegura', async () => {

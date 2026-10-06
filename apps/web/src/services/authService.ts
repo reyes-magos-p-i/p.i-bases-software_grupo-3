@@ -2,7 +2,7 @@ import { isAxiosError } from 'axios'
 import { getApi } from '@/services/api'
 import type { RegisterPayload } from '@/types/client'
 import type { ClientIdentity } from '@/types/client-auth'
-import { establishClientSession, hasClientSession } from '@/services/client-session.service'
+import { establishClientSession } from '@/services/client-session.service'
 import { googleAuthCodeLogin } from 'vue3-google-login'
 import type { EmployeeIdentity, EmployeeLoginRequest } from '@/types/employee-auth'
 
@@ -12,10 +12,6 @@ interface ClientAuthResponse {
 }
 
 export async function facebookLogin(accessToken: string): Promise<ClientAuthResponse> {
-  const employee = await getEmployeeSession()
-  if (employee) {
-    throw new Error('Cierra la sesión del personal antes de iniciar sesión con Facebook.')
-  }
   const api = getApi()
   const response = await api.post<ClientAuthResponse>('/auth/facebook', {
     accessToken,
@@ -163,11 +159,6 @@ function employeeAuthError(error: unknown): EmployeeAuthError {
 }
 
 export async function loginEmployee(payload: EmployeeLoginRequest): Promise<EmployeeIdentity> {
-  if (hasClientSession()) {
-    throw new EmployeeAuthError(
-      'Cierra la sesión de cliente antes de iniciar sesión como personal.',
-    )
-  }
   try {
     const response = await getApi().post<{ user: unknown }>('/auth/employees/login', payload, {
       timeout: 15000,

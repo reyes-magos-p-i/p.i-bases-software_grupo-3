@@ -23,8 +23,5 @@ describe('AdministratorGuard', () => {
     { role: 'CLIENT' },
   ])('rejects an unauthorized identity: %p', (user) => {
     expect(() => guard.canActivate(context(user))).toThrow(ForbiddenException);
-    expect(() => guard.canActivate(context(user))).toThrow(
-      'No tiene permiso para realizar esta acción.',
-    );
   });
 });

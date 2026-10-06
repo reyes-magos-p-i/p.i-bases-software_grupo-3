@@ -1,4 +1,3 @@
-import { Transform } from 'class-transformer';
 import {
   IsDefined,
   isEmail,
@@ -19,9 +18,6 @@ export class CreateUserBaseDto {
   role: UserRole;
 
   @IsDefined({ message: 'El correo electrónico es obligatorio.' })
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toLowerCase() : value,
-  )
   @IsString({ message: 'El correo electrónico debe ser texto.' })
   @ValidateBy(
     {
@@ -40,9 +36,6 @@ export class CreateUserBaseDto {
   email: string;
 
   @IsDefined({ message: 'El primer nombre es obligatorio.' })
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim() : value,
-  )
   @IsString({ message: 'El primer nombre debe ser texto.' })
   @Matches(/\S/u, {
     message: 'El primer nombre no puede estar vacío ni contener solo espacios.',
@@ -51,9 +44,6 @@ export class CreateUserBaseDto {
   firstName: string;
 
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim() || null : value,
-  )
   @IsString({ message: 'El segundo nombre debe ser texto.' })
   @MaxUtf8Bytes(100)
   secondName?: string | null;

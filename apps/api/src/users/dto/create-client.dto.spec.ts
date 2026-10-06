@@ -4,24 +4,6 @@ import { validate } from 'class-validator';
 import { CreateClientDto } from './create-client.dto';
 
 describe('CreateClientDto', () => {
-  it.each(['22222222', '+1 88888888', '888888888', '', 'abc'])(
-    'rejects an invalid client mobile %p',
-    async (phoneNumber) => {
-      expect(
-        (await validatePayload({ ...validPayload, phoneNumber })).map(
-          (error) => error.property,
-        ),
-      ).toEqual(['phoneNumber']);
-    },
-  );
-  it('normalizes a formatted client mobile', async () => {
-    const dto = plainToInstance(CreateClientDto, {
-      ...validPayload,
-      phoneNumber: ' +506 7777-7777 ',
-    });
-    expect(await validate(dto)).toEqual([]);
-    expect(dto.phoneNumber).toBe('77777777');
-  });
   const validPayload = {
     role: 'CLIENT',
     email: 'cliente@example.com',
@@ -132,7 +114,7 @@ describe('CreateClientDto', () => {
     },
   );
 
-  it.each(['firstSurname', 'secondSurname'])(
+  it.each(['firstSurname', 'secondSurname', 'phoneNumber'])(
     'allows an empty string for the optional %s',
     async (field) => {
       await expect(
@@ -179,7 +161,7 @@ describe('CreateClientDto', () => {
     },
   );
 
-  it.each([1, Number.MAX_SAFE_INTEGER])(
+  it.each([Number.MIN_SAFE_INTEGER, 0, Number.MAX_SAFE_INTEGER])(
     'accepts the safe integer district ID %p',
     async (districtId) => {
       await expect(
@@ -213,6 +195,7 @@ describe('CreateClientDto', () => {
   it.each([
     ['firstSurname', 100],
     ['secondSurname', 100],
+    ['phoneNumber', 20],
   ] as const)('enforces the byte limit for %s', async (field, limit) => {
     for (const value of [
       'a'.repeat(limit),

@@ -10,13 +10,6 @@ import {
   watch,
 } from 'vue'
 import type { BranchOption, CreateEmployeeRequest, CreateUserRequest } from '@/types/user'
-import {
-  characterCount,
-  validText,
-  validEmail,
-  validMobile,
-  normalizeMobile,
-} from '@/utils/user-validation'
 import type { CantonOption, DistrictOption, ProvinceOption } from '@/types/address'
 
 const props = withDefaults(
@@ -99,7 +92,6 @@ const draft = reactive<
   firstSurname: '',
   secondSurname: '',
   birthday: '',
-  hireDate: '',
   email: '',
   phoneNumber: '',
   role: 'EMPLOYEE',
@@ -155,24 +147,10 @@ const groups = computed<{ label: string; fields: TextFieldDefinition[] }[]>(() =
         label: 'Teléfono',
         type: 'tel',
         required: !isClient.value,
+        maxBytes: 20,
       },
     ],
   },
-  ...(!isClient.value
-    ? [
-        {
-          label: 'Datos laborales',
-          fields: [
-            {
-              name: 'hireDate' as const,
-              label: 'Fecha de contratación',
-              type: 'date' as const,
-              required: true,
-            },
-          ],
-        },
-      ]
-    : []),
 ])
 const textFields = computed<TextFieldDefinition[]>(() => [
   ...groups.value.flatMap((group) => group.fields),
@@ -181,6 +159,7 @@ const textFields = computed<TextFieldDefinition[]>(() => [
 const dirty = reactive<Partial<Record<FieldName, boolean>>>({})
 const touched = reactive<Partial<Record<FieldName, boolean>>>({})
 const errors = reactive<Partial<Record<FieldName, string>>>({})
+const encoder = new TextEncoder()
 const title = computed(() =>
   isClient.value
     ? 'Crear cliente'
@@ -252,22 +231,30 @@ function validateField(
   if (control.disabled && !includeDisabled) return ''
   const definition = textFields.value.find((item) => item.name === field)
   if (definition) {
-    const raw = draft[definition.name]
-    const value = field === 'details' ? raw : raw.trim()
+    const value = draft[definition.name]
     if (definition.type === 'date' && control.validity.badInput)
       return 'Introduce una fecha válida.'
     if (definition.required && !value.trim()) return 'Este campo es obligatorio.'
     if (!definition.required && !value) return ''
     if (/[\uD800-\uDFFF]/u.test(value)) return 'El texto contiene un carácter no válido.'
-    if (definition.maxBytes && !validText(value, definition.maxBytes)) {
+    if (definition.maxBytes && encoder.encode(value).length > definition.maxBytes) {
       return 'El texto es demasiado largo. Reduce su longitud.'
     }
-    if (definition.type === 'email' && !validEmail(value))
-      return 'Introduce un correo electrónico válido, por ejemplo: nombre@ejemplo.com.'
-    if (definition.type === 'tel' && !validMobile(value))
-      return 'Ingresa un celular de Costa Rica de ocho dígitos que comience con 6, 7 u 8.'
+    if (definition.type === 'email') {
+      const localPart = value.split('@')[0] ?? ''
+      const topLevelDomain = value.split('.').pop() ?? ''
+      if (
+        control.validity.typeMismatch ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value) ||
+        !/^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/iu.test(topLevelDomain) ||
+        localPart.startsWith('.') ||
+        localPart.endsWith('.') ||
+        localPart.includes('..') ||
+        encoder.encode(localPart).length > 64
+      )
+        return 'Introduce un correo electrónico válido, por ejemplo: nombre@ejemplo.com.'
+    }
     if (definition.type === 'date') {
-      if (field === 'hireDate' && value.startsWith('0000-')) return 'Introduce una fecha válida.'
       const date = new Date(value + 'T00:00:00Z')
       if (
         !/^\d{4}-\d{2}-\d{2}$/u.test(value) ||
@@ -339,9 +326,9 @@ async function submit() {
   }
   if (needsAddress.value && draft.districtId === '') return
   const base = {
-    email: draft.email.trim().toLowerCase(),
-    firstName: draft.firstName.trim(),
-    ...(draft.secondName.trim() ? { secondName: draft.secondName.trim() } : {}),
+    email: draft.email,
+    firstName: draft.firstName,
+    ...(draft.secondName ? { secondName: draft.secondName } : {}),
   }
   const address =
     draft.districtId === ''
@@ -355,10 +342,10 @@ async function submit() {
     emit('submit', {
       ...base,
       role: 'CLIENT',
-      ...(draft.firstSurname.trim() ? { firstSurname: draft.firstSurname.trim() } : {}),
-      ...(draft.secondSurname.trim() ? { secondSurname: draft.secondSurname.trim() } : {}),
+      ...(draft.firstSurname ? { firstSurname: draft.firstSurname } : {}),
+      ...(draft.secondSurname ? { secondSurname: draft.secondSurname } : {}),
       ...(draft.birthday ? { birthday: draft.birthday } : {}),
-      ...(draft.phoneNumber.trim() ? { phoneNumber: normalizeMobile(draft.phoneNumber) } : {}),
+      ...(draft.phoneNumber ? { phoneNumber: draft.phoneNumber } : {}),
       ...(addressEnabled.value ? { address } : {}),
       language: draft.language,
     })
@@ -369,11 +356,10 @@ async function submit() {
   emit('submit', {
     ...base,
     role: draft.role,
-    firstSurname: draft.firstSurname.trim(),
-    secondSurname: draft.secondSurname.trim(),
+    firstSurname: draft.firstSurname,
+    secondSurname: draft.secondSurname,
     birthday: draft.birthday,
-    hireDate: draft.hireDate,
-    phoneNumber: normalizeMobile(draft.phoneNumber),
+    phoneNumber: draft.phoneNumber,
     branchId: draft.branchId,
     address,
   })
@@ -388,7 +374,6 @@ function complete() {
     firstSurname: '',
     secondSurname: '',
     birthday: '',
-    hireDate: '',
     email: '',
     phoneNumber: '',
     role: 'EMPLOYEE',
@@ -815,7 +800,7 @@ defineExpose({ open, complete })
               :aria-describedby="description('details', true)"
             ></textarea>
             <p :id="id + '-details-help'" class="field-help">
-              {{ characterCount(draft.details) }}/255
+              Escribe las señas u otras referencias de la dirección.
             </p>
             <p
               v-if="errors.details"

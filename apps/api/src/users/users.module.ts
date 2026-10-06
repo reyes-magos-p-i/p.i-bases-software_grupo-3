@@ -5,14 +5,11 @@ import { PasswordGenerator } from '../common/security/password-generator';
 import { PasswordHashingModule } from '../common/security/password-hashing.module';
 import { RandomPasswordGenerator } from '../common/security/random-password-generator.service';
 import { AdministratorGuard } from './guards/administrator.guard';
-import { EmployeeGuard } from './guards/employee.guard';
 import { AuthModule } from '../auth/auth.module';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { SmtpInitialCredentialsSender } from './notifications/smtp-initial-credentials-sender';
 import { CreateUserValidationPipe } from './pipes/create-user-validation.pipe';
 import { UsersController } from './users.controller';
-import { UsersListController } from './users-list.controller';
-import { UsersUpdateController } from './users-update.controller';
 import { UsersPersistenceModule } from './users-persistence.module';
 import { UsersService } from './users.service';
 
@@ -24,11 +21,10 @@ import { UsersService } from './users.service';
     PasswordHashingModule,
     ClientsModule,
   ],
-  controllers: [UsersController, UsersListController, UsersUpdateController],
+  controllers: [UsersController],
   providers: [
     UsersService,
     AdministratorGuard,
-    EmployeeGuard,
     CreateUserValidationPipe,
     { provide: PasswordGenerator, useClass: RandomPasswordGenerator },
     {

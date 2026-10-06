@@ -1,19 +1,7 @@
 import { Transform } from 'class-transformer';
-import { MaxUtf8Bytes } from '../../common/validation/max-utf8-bytes.decorator';
 import {
-  Equals,
-  isEmail,
-  IsIn,
-  IsISO8601,
-  IsNotEmpty,
-  IsString,
-  Matches,
-  MaxLength,
-  Validate,
-  ValidateBy,
-  ValidationArguments,
-  ValidatorConstraint,
-  ValidatorConstraintInterface,
+  Equals, IsEmail, IsIn, IsISO8601, IsNotEmpty, IsString, Matches, MaxLength,
+  Validate, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface,
 } from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) =>
@@ -79,13 +67,9 @@ class PasswordNotPersonalInfo implements ValidatorConstraintInterface {
 
     // CAST for convenience (TypeScript...), class-validator cannot 'type' a generic object
     const user = args.object as Record<string, unknown>;
-
+    
     // TODO(rga): this is a basic constraint, this can be hardened.
-    return (
-      password !== user.email &&
-      password !== user.firstName &&
-      password !== user.lastName
-    );
+    return password !== user.email && password !== user.firstName && password !== user.lastName;
   }
 
   defaultMessage(): string {
@@ -95,31 +79,14 @@ class PasswordNotPersonalInfo implements ValidatorConstraintInterface {
 
 export class RegisterDto {
   @Transform(trimLower)
-  @ValidateBy(
-    {
-      name: 'isEmail',
-      validator: {
-        validate: (value: unknown) =>
-          typeof value === 'string' &&
-          !/[\uD800-\uDFFF]/u.test(value) &&
-          isEmail(value),
-      },
-    },
-    { message: 'Correo inválido' },
-  )
-  @MaxUtf8Bytes(150)
+  @IsEmail({}, { message: 'Correo inválido' })
+  @MaxLength(150)
   email: string;
 
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxUtf8Bytes(100)
+  @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(80)
   firstName: string;
 
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxUtf8Bytes(100)
+  @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(80)
   lastName: string;
 
   @Transform(normalizeCostaRicaPhone)
@@ -132,17 +99,16 @@ export class RegisterDto {
   @IsIn(['M', 'F', 'O', 'N'])
   gender: string;
 
-  @IsISO8601({ strict: true }) // Real Calendary Date
-  @Matches(/^\d{4}-\d{2}-\d{2}$/) // without 'Hour' so TO_DATE in the DB do not fail
+  @IsISO8601({ strict: true })  // Real Calendary Date
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)  // without 'Hour' so TO_DATE in the DB do not fail
   @Validate(MinimumRegistrationAge)
   birthDate: string;
 
   @IsIn(['es', 'en'])
   language: string;
-
+  
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*_-]).{8,}$/, {
-    message:
-      'Mínimo 8 caracteres con mayúscula, minúscula, número y un carácter especial (!@#$%^&*_-).',
+    message: 'Mínimo 8 caracteres con mayúscula, minúscula, número y un carácter especial (!@#$%^&*_-).',
   })
   @MaxLength(128)
   @Validate(PasswordNotPersonalInfo)

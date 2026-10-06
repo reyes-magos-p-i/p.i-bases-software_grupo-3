@@ -6,11 +6,10 @@ import type {
   UserApiError,
 } from '@/types/user'
 
-const { create, post, get, patch } = vi.hoisted(() => ({
+const { create, post, get } = vi.hoisted(() => ({
   create: vi.fn(),
   post: vi.fn(),
   get: vi.fn(),
-  patch: vi.fn(),
 }))
 
 vi.mock('axios', () => ({ default: { create } }))
@@ -28,7 +27,6 @@ describe('createUser', () => {
     secondName: null,
     firstSurname: 'Núñez',
     secondSurname: 'Solano',
-    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '+506 8888-8888',
     address: { districtId: 7, details: 'Casa azul' },
@@ -43,74 +41,11 @@ describe('createUser', () => {
       defaults: config,
       post,
       get,
-      patch,
     }))
   })
 
   afterEach(() => {
     vi.unstubAllEnvs()
-  })
-
-  it.each(['clients', 'employees'] as const)(
-    'deactivates selected %s with an empty body',
-    async (section) => {
-      const { deactivateUser } = await import('@/services/user.service')
-      patch.mockResolvedValue({ status: 204 })
-      await deactivateUser({ section, id: 42 })
-      expect(patch).toHaveBeenCalledWith(
-        '/users/' + section + '/42/deactivate',
-        {},
-        { timeout: 10000 },
-      )
-    },
-  )
-  it('does not retry a failed deactivation automatically', async () => {
-    const { deactivateUser } = await import('@/services/user.service')
-    patch.mockRejectedValue(new Error('network'))
-    await expect(deactivateUser({ section: 'clients', id: 42 })).rejects.toThrow('network')
-    expect(patch).toHaveBeenCalledTimes(1)
-  })
-  it('loads address-only edit catalogs with cancellation and timeout', async () => {
-    const { getUserEditOptions } = await import('@/services/user.service')
-    const signal = new AbortController().signal
-    const catalogs = { provinces: [], cantons: [], districts: [] }
-    get.mockResolvedValue({ data: catalogs })
-    expect(await getUserEditOptions(signal)).toEqual(catalogs)
-    expect(get).toHaveBeenCalledWith('/users/edit-options', { signal, timeout: 10000 })
-  })
-
-  it.each(['clients', 'employees'] as const)(
-    'patches the selected %s user without immutable fields',
-    async (section) => {
-      const { updateUser } = await import('@/services/user.service')
-      const changes = {
-        email: 'new@example.com',
-        firstName: 'Alicia',
-        secondName: null,
-        ...(section === 'employees' ? { branchId: 6 } : {}),
-      }
-      const result = {
-        id: 42,
-        role: section === 'clients' ? 'CLIENT' : 'EMPLOYEE',
-        email: changes.email,
-      }
-      patch.mockResolvedValue({ data: result })
-      expect(await updateUser({ section, id: 42 }, changes)).toEqual(result)
-      expect(patch).toHaveBeenCalledExactlyOnceWith(`/users/${section}/42`, changes, {
-        timeout: 10000,
-      })
-      expect(post).not.toHaveBeenCalled()
-    },
-  )
-
-  it('propagates failed writes without retrying', async () => {
-    const { updateUser } = await import('@/services/user.service')
-    const error = new Error('Connection lost')
-    patch.mockRejectedValue(error)
-    await expect(updateUser({ section: 'clients', id: 42 }, { phoneNumber: null })).rejects.toBe(
-      error,
-    )
-    expect(patch).toHaveBeenCalledTimes(1)
   })
 
   it.each([client, employee, { ...employee, role: 'ADMINISTRATOR' as const }])(
@@ -221,95 +156,6 @@ describe('createUser', () => {
   })
 
   describe('getUserCreationOptions', () => {
-    it.each(['clients', 'employees'] as const)(
-      'requests the selected %s detail with timeout and cancellation',
-      async (section) => {
-        const { getUserDetail } = await import('@/services/user.service')
-        const data = { id: 42, firstName: 'Ana' }
-        const signal = new AbortController().signal
-        get.mockResolvedValue({ data })
-        expect(await getUserDetail({ id: 42, section }, signal)).toEqual(data)
-        expect(get).toHaveBeenCalledWith(`/users/${section}/42`, { signal, timeout: 10000 })
-      },
-    )
-    it.each([401, 403, 404, 500])('propagates detail HTTP %s without retrying', async (status) => {
-      const { getUserDetail } = await import('@/services/user.service')
-      const failure = Object.assign(new Error('HTTP failure'), { response: { status } })
-      get.mockRejectedValue(failure)
-      await expect(getUserDetail({ id: 42, section: 'clients' })).rejects.toBe(failure)
-      expect(get).toHaveBeenCalledTimes(1)
-    })
-    it('serializes selected roles and branches as comma-separated query values', async () => {
-      const { getUsers } = await import('@/services/user.service')
-      get.mockResolvedValue({ data: { items: [], total: 0 } })
-      await getUsers('employees', {
-        page: 1,
-        pageSize: 10,
-        sortBy: 'id',
-        sortDirection: 'asc',
-        role: ['EMPLOYEE', 'ADMINISTRATOR'],
-        branchId: [3, 5],
-      })
-      expect(get).toHaveBeenCalledWith(
-        '/users/employees',
-        expect.objectContaining({
-          params: {
-            page: 1,
-            pageSize: 10,
-            sortBy: 'id',
-            sortDirection: 'asc',
-            role: 'EMPLOYEE,ADMINISTRATOR',
-            branchId: '3,5',
-          },
-        }),
-      )
-    })
-    it('omits empty filter arrays instead of sending invalid empty values', async () => {
-      const { getUsers } = await import('@/services/user.service')
-      get.mockResolvedValue({ data: { items: [], total: 0 } })
-      await getUsers('employees', {
-        page: 1,
-        pageSize: 10,
-        sortBy: 'id',
-        sortDirection: 'asc',
-        role: [],
-        branchId: [],
-      })
-      expect(get.mock.calls[0]?.[1].params).toMatchObject({ role: undefined, branchId: undefined })
-    })
-    it.each(['clients', 'employees'] as const)(
-      'requests the %s page with filters, timeout and cancellation',
-      async (section) => {
-        const { getUsers } = await import('@/services/user.service')
-        const query = {
-          page: 2,
-          pageSize: 25,
-          search: 'Ana Núñez',
-          sortBy: 'name',
-          sortDirection: 'asc' as const,
-        }
-        const signal = new AbortController().signal
-        const data = { items: [], total: 0, page: 1, pageSize: 25, totalPages: 0 }
-        get.mockResolvedValue({ data })
-        expect(await getUsers(section, query, signal)).toEqual(data)
-        expect(get).toHaveBeenCalledExactlyOnceWith('/users/' + section, {
-          params: query,
-          signal,
-          timeout: 10000,
-        })
-      },
-    )
-    it('loads only the branch options needed by employee filtering', async () => {
-      const { getEmployeeListOptions } = await import('@/services/user.service')
-      const data = { branches: [{ id: 3, label: 'Centro' }] }
-      const signal = new AbortController().signal
-      get.mockResolvedValue({ data })
-      expect(await getEmployeeListOptions(signal)).toEqual(data)
-      expect(get).toHaveBeenCalledExactlyOnceWith('/users/employees/options', {
-        signal,
-        timeout: 10000,
-      })
-    })
     it('loads catalog data through the same Axios instance with a timeout and signal', async () => {
       vi.stubEnv('VITE_API_BASE_URL', '/api')
       const { getUserCreationOptions } = await import('@/services/user.service')

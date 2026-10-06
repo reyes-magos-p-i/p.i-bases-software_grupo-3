@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import oracle from 'oracledb';
 import { ClientsRepository } from './clients.repository';
 import { DatabaseService } from '../database/database.service';
@@ -17,7 +13,6 @@ import { splitFirstWord } from './name.util';
 
 // "C" alias
 const CLIENT_COLUMNS = `
-  c.status AS "status",
   c.client_id AS "id",
   c.email AS "email",
   c.first_name AS "firstName",
@@ -41,7 +36,7 @@ export class ClientsService {
   // ---------- QUERYS ----------
   async findById(id: number): Promise<Client | null> {
     const r = await this.db.query<Client>(
-      `SELECT ${CLIENT_COLUMNS} FROM Clients c WHERE c.client_id = :id AND c.status = 'ACTIVE'`,
+      `SELECT ${CLIENT_COLUMNS} FROM Clients c WHERE c.client_id = :id`,
       { id },
     );
     return r.rows?.[0] ?? null;
@@ -77,7 +72,7 @@ export class ClientsService {
       `SELECT ${CLIENT_COLUMNS}, l.password_hash AS "passwordHash"
          FROM Clients c
          JOIN Client_local_credentials l ON l.client_id = c.client_id
-        WHERE c.email = :email AND c.status = 'ACTIVE'`,
+        WHERE c.email = :email`,
       { email },
     );
     return r.rows?.[0] ?? null;
@@ -123,7 +118,7 @@ export class ClientsService {
          FROM CLIENTS c
          JOIN CLIENT_LOCAL_CREDENTIALS l ON l.CLIENT_ID = c.CLIENT_ID
          JOIN CLIENT_EMAIL_VERIFICATIONS v ON v.CLIENT_ID = c.CLIENT_ID
-        WHERE c.EMAIL = :email AND c.STATUS = 'ACTIVE'`,
+        WHERE c.EMAIL = :email`,
       { email },
     );
     return result.rows?.[0] ?? null;
@@ -143,11 +138,10 @@ export class ClientsService {
         `SELECT v.CLIENT_ID AS "clientId"
            FROM CLIENT_EMAIL_VERIFICATIONS v
            JOIN CLIENT_LOCAL_CREDENTIALS l ON l.CLIENT_ID = v.CLIENT_ID
-           JOIN CLIENTS c ON c.CLIENT_ID = v.CLIENT_ID
-          WHERE c.STATUS = 'ACTIVE' AND v.CREATED_AT <=
+          WHERE v.CREATED_AT <=
                 SYSTIMESTAMP - NUMTODSINTERVAL(:retentionDays, 'DAY')
             ${email === undefined ? '' : 'AND EXISTS (SELECT 1 FROM CLIENTS c WHERE c.CLIENT_ID = v.CLIENT_ID AND c.EMAIL = :email)'}
-          FOR UPDATE OF v.CLIENT_ID, c.STATUS SKIP LOCKED`,
+          FOR UPDATE OF v.CLIENT_ID SKIP LOCKED`,
         email === undefined
           ? { retentionDays: PENDING_CLIENT_RETENTION_DAYS }
           : { retentionDays: PENDING_CLIENT_RETENTION_DAYS, email },
@@ -190,7 +184,6 @@ export class ClientsService {
     const client = await connection.execute(
       `DELETE FROM CLIENTS
         WHERE CLIENT_ID = :clientId
-          AND STATUS = 'ACTIVE'
           AND EXISTS (
             SELECT 1 FROM CLIENT_EMAIL_VERIFICATIONS
              WHERE CLIENT_ID = :clientId
@@ -210,8 +203,7 @@ export class ClientsService {
   ): Promise<void> {
     const result = await this.db.query(
       `MERGE INTO CLIENT_EMAIL_VERIFICATIONS target
-       USING (SELECT CLIENT_ID FROM CLIENTS
-               WHERE CLIENT_ID = :clientId AND STATUS = 'ACTIVE') source
+       USING (SELECT :clientId AS client_id FROM dual) source
           ON (target.CLIENT_ID = source.client_id)
        WHEN MATCHED THEN UPDATE SET
          target.TOKEN_HASH = :tokenHash,
@@ -237,11 +229,6 @@ export class ClientsService {
         `DELETE FROM CLIENT_EMAIL_VERIFICATIONS
           WHERE TOKEN_HASH = :tokenHash
             AND EXPIRES_AT > SYSTIMESTAMP
-            AND EXISTS (
-              SELECT 1 FROM CLIENTS c
-               WHERE c.CLIENT_ID = CLIENT_EMAIL_VERIFICATIONS.CLIENT_ID
-                 AND c.STATUS = 'ACTIVE'
-            )
         RETURNING CLIENT_ID INTO :clientId`,
         {
           tokenHash: { val: tokenHash, type: oracle.STRING },
@@ -260,7 +247,7 @@ export class ClientsService {
         return null;
       }
       const clientResult = await connection.execute<Client>(
-        `SELECT ${CLIENT_COLUMNS} FROM CLIENTS c WHERE c.CLIENT_ID = :clientId AND c.STATUS = 'ACTIVE'`,
+        `SELECT ${CLIENT_COLUMNS} FROM CLIENTS c WHERE c.CLIENT_ID = :clientId`,
         { clientId },
         { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
       );
@@ -290,7 +277,6 @@ export class ClientsService {
     // 1. the user is already registered?
     const linked = await this.findByExternal(p.provider, p.providerUserId);
     if (linked) {
-      this.requireActive(linked);
       await this.clearPendingEmailVerification(linked.id);
       return linked;
     }
@@ -298,7 +284,6 @@ export class ClientsService {
     // 2. Exists a local account linked with the email? If so,
     const existing = await this.findByEmail(p.email);
     if (existing) {
-      this.requireActive(existing);
       try {
         await this.db.query(
           `INSERT INTO Client_external_credentials
@@ -326,13 +311,6 @@ export class ClientsService {
 
     // otherwise creates a Social account in Client_external_credentials
     return this.createSocial(p);
-  }
-
-  private requireActive(client: Client) {
-    if (client.status !== 'ACTIVE')
-      throw new UnauthorizedException(
-        'No se pudo iniciar sesión con esta cuenta.',
-      );
   }
 
   private async createSocial(p: SocialProfile): Promise<Client> {

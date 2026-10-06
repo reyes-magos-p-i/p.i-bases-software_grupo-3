@@ -6,26 +6,17 @@ const mocks = vi.hoisted(() => ({
   use: vi.fn(),
   load: vi.fn(),
   apply: vi.fn(),
-  facebookLogin: vi.fn(),
-  getEmployeeSession: vi.fn(),
-  clearClientAuth: vi.fn(),
 }))
 vi.mock('vue', () => ({ createApp: () => ({ use: mocks.use, mount: mocks.mount }) }))
 vi.mock('../App.vue', () => ({ default: {} }))
 vi.mock('../router', () => ({ default: {} }))
 vi.mock('../loadFBSDK.js', () => ({ loadFacebookSdk: mocks.load }))
 vi.mock('../facebook-auth', () => ({ applyLoginStatus: mocks.apply }))
-vi.mock('../services/authService', () => ({
-  facebookLogin: mocks.facebookLogin,
-  getEmployeeSession: mocks.getEmployeeSession,
-}))
-vi.mock('../services/client-session.service', () => ({ clearClientAuth: mocks.clearClientAuth }))
 
 describe('Application startup with Facebook', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.resetAllMocks()
-    mocks.getEmployeeSession.mockResolvedValue(null)
   })
 
   afterEach(() => vi.restoreAllMocks())

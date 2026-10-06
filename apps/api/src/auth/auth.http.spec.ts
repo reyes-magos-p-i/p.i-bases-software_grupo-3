@@ -596,7 +596,6 @@ describe('Employee authentication (HTTP integration)', () => {
 
   it('preserves client token validation and the existing client profile', async () => {
     const client = {
-      status: 'ACTIVE' as const,
       id: 21,
       email: 'client@example.com',
       firstName: 'Ana',
@@ -620,16 +619,6 @@ describe('Employee authentication (HTTP integration)', () => {
       .expect(200, client);
     expect(db.query).toHaveBeenCalledWith(
       expect.stringContaining('FROM Clients'),
-      { id: 21 },
-    );
-    db.query.mockResolvedValue({ rows: [] });
-    const revoked = await request(app.getHttpServer())
-      .get('/api/auth/me')
-      .auth(accessToken, { type: 'bearer' })
-      .expect(401);
-    expect(revoked.body.statusCode).toBe(401);
-    expect(db.query).toHaveBeenLastCalledWith(
-      expect.stringContaining("c.status = 'ACTIVE'"),
       { id: 21 },
     );
   });

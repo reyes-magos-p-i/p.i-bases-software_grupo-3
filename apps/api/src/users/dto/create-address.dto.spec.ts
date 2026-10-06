@@ -49,8 +49,6 @@ describe('CreateAddressDto', () => {
     NaN,
     Infinity,
     -Infinity,
-    0,
-    -1,
     Number.MIN_SAFE_INTEGER - 1,
     Number.MAX_SAFE_INTEGER + 1,
   ])(
@@ -64,7 +62,7 @@ describe('CreateAddressDto', () => {
     },
   );
 
-  it.each([1, Number.MAX_SAFE_INTEGER])(
+  it.each([Number.MIN_SAFE_INTEGER, 0, Number.MAX_SAFE_INTEGER])(
     'accepts a safe integer district ID %p without checking database existence',
     async (districtId) => {
       await expect(validatePayload({ districtId })).resolves.toEqual([]);

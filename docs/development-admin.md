@@ -5,14 +5,6 @@
 iniciar sesión con una cuenta real cuyo rol vigente sea `ADMINISTRATOR`.
 La preparación de sesión y su prueba manual se describen en [Inicio de sesión del personal](employee-login.md).
 
-Antes de utilizar esta versión, aplicar una sola vez
-[`database/add-user-dates.sql`](../database/add-user-dates.sql) al esquema Oracle
-actual, siguiendo [la preparación del listado](list-users.md). Las cuentas nuevas
-reciben una fecha de registro automática. Crear empleados o administradores ahora
-requiere `hireDate`, una fecha de contratación real en formato `YYYY-MM-DD`, también
-presente en el formulario. Las fechas históricas desconocidas permanecen en `NULL`.
-Las solicitudes antiguas de creación de personal sin `hireDate` reciben `400`.
-
 ## Estado de integración
 
 ### Runtime y política de contraseñas
@@ -86,11 +78,6 @@ comprobación al mismo tiempo, `UQ_CLIENTS_EMAIL` resuelve la carrera: se revier
 transacción perdedora y se devuelve `409`, sin enviar credenciales ni revelar el
 mensaje privado de Oracle. Otros errores de integridad no se convierten en un
 conflicto de correo.
-
-Las altas de personal traducen `UQ_EMPLOYEES_EMAIL` a `409` con rollback,
-sin enviar credenciales. Tanto clientes como empleados conservan reservado su
-correo al desactivarse. Las restricciones únicas protegen también las altas
-concurrentes; otros fallos de Oracle mantienen su tratamiento de error interno.
 
 ### Flujos disponibles
 

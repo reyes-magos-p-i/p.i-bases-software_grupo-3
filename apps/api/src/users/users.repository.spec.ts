@@ -10,7 +10,6 @@ import { ConfigService } from '@nestjs/config';
 import { UserRole } from './enums/user-role.enum';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import { UsersRepository } from './users.repository';
-import { ListEmployeesQueryDto } from './dto/list-users-query.dto';
 
 describe('UsersRepository', () => {
   let module: TestingModule;
@@ -58,546 +57,6 @@ describe('UsersRepository', () => {
 
   afterEach(async () => {
     await module.close();
-  });
-
-  describe('deactivateEmployee', () => {
-    it('rejects self deactivation before acquiring a connection', async () => {
-      await expect(repository.deactivateEmployee(21, 21)).rejects.toMatchObject(
-        { status: 409 },
-      );
-      expect(connection.execute).not.toHaveBeenCalled();
-    });
-    it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(
-      'deactivates %s while retaining related records',
-      async (role) => {
-        connection.execute
-          .mockResolvedValueOnce({})
-          .mockResolvedValueOnce({
-            rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.ADMINISTRATOR }],
-          })
-          .mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE', ROLE: role }] });
-        if (role === UserRole.ADMINISTRATOR)
-          connection.execute.mockResolvedValueOnce({ rows: [{ TOTAL: 2 }] });
-        connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
-        await repository.deactivateEmployee(42, 21);
-        const statements = connection.execute.mock.calls.map(([sql]) => sql);
-        expect(statements[0]).toContain(
-          'LOCK TABLE EMPLOYEES IN SHARE ROW EXCLUSIVE MODE',
-        );
-        expect(statements[statements.length - 1]).toBe(
-          "UPDATE EMPLOYEES SET STATUS = 'INACTIVE' WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE'",
-        );
-        expect(statements[1]).toContain(
-          "EMPLOYEE_ID = :actorId AND STATUS = 'ACTIVE'",
-        );
-        expect(statements[2]).toContain('EMPLOYEE_ID = :id FOR UPDATE');
-        if (role === UserRole.ADMINISTRATOR) {
-          expect(statements[3]).toContain(
-            "COUNT(*) AS TOTAL FROM EMPLOYEES WHERE ROLE = 'ADMINISTRATOR' AND STATUS = 'ACTIVE'",
-          );
-        } else {
-          expect(statements.some((sql) => sql.includes('COUNT(*)'))).toBe(
-            false,
-          );
-        }
-        expect(
-          statements.some((sql) => /DELETE|CREDENTIALS|ADDRESSES/.test(sql)),
-        ).toBe(false);
-        expect(connection.commit).toHaveBeenCalledTimes(1);
-      },
-    );
-    it('rejects an actor who lost administrator access before obtaining the lock', async () => {
-      connection.execute.mockResolvedValueOnce({}).mockResolvedValueOnce({
-        rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.EMPLOYEE }],
-      });
-      await expect(repository.deactivateEmployee(42, 21)).rejects.toMatchObject(
-        { status: 403 },
-      );
-      expect(connection.rollback).toHaveBeenCalledTimes(1);
-    });
-    it('rejects a missing selected employee', async () => {
-      connection.execute
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({
-          rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.ADMINISTRATOR }],
-        })
-        .mockResolvedValueOnce({ rows: [] });
-      await expect(repository.deactivateEmployee(42, 21)).rejects.toMatchObject(
-        { status: 404 },
-      );
-      expect(connection.rollback).toHaveBeenCalledTimes(1);
-    });
-    it('reports an already inactive employee as a conflict without updating it', async () => {
-      connection.execute
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.ADMINISTRATOR }] })
-        .mockResolvedValueOnce({
-          rows: [{ ROLE: UserRole.EMPLOYEE, STATUS: 'INACTIVE' }],
-        });
-      await expect(repository.deactivateEmployee(42, 21)).rejects.toMatchObject(
-        { status: 409, message: 'El empleado ya está desactivado.' },
-      );
-      expect(connection.execute).toHaveBeenCalledTimes(3);
-      expect(connection.commit).not.toHaveBeenCalled();
-      expect(connection.rollback).toHaveBeenCalledTimes(1);
-    });
-    it.each(['UNKNOWN', null, undefined])(
-      'rejects unexpected employee status %p',
-      async (status) => {
-        connection.execute
-          .mockResolvedValueOnce({})
-          .mockResolvedValueOnce({ rows: [{ ROLE: UserRole.ADMINISTRATOR }] })
-          .mockResolvedValueOnce({
-            rows: [{ ROLE: UserRole.EMPLOYEE, STATUS: status }],
-          });
-        await expect(repository.deactivateEmployee(42, 21)).rejects.toThrow(
-          'Invalid employee status.',
-        );
-        expect(connection.execute).toHaveBeenCalledTimes(3);
-        expect(connection.commit).not.toHaveBeenCalled();
-      },
-    );
-    it.each([0, 1])(
-      'protects the last administrator with active count %s',
-      async (total) => {
-        connection.execute
-          .mockResolvedValueOnce({})
-          .mockResolvedValueOnce({
-            rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.ADMINISTRATOR }],
-          })
-          .mockResolvedValueOnce({
-            rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.ADMINISTRATOR }],
-          })
-          .mockResolvedValueOnce({ rows: [{ TOTAL: total }] });
-        await expect(
-          repository.deactivateEmployee(42, 21),
-        ).rejects.toMatchObject({ status: 409 });
-        expect(connection.rollback).toHaveBeenCalledTimes(1);
-        expect(connection.commit).not.toHaveBeenCalled();
-      },
-    );
-    it('rolls back an unexpected result count', async () => {
-      connection.execute
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({
-          rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.ADMINISTRATOR }],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ STATUS: 'ACTIVE', ROLE: UserRole.EMPLOYEE }],
-        })
-        .mockResolvedValueOnce({ rowsAffected: 0 });
-      await expect(repository.deactivateEmployee(42, 21)).rejects.toThrow(
-        'single employee',
-      );
-      expect(connection.rollback).toHaveBeenCalledTimes(1);
-    });
-  });
-  describe('updateEmployee', () => {
-    beforeEach(() => {
-      connection.execute.mockResolvedValueOnce({
-        rows: [{ EMAIL: 'old@example.com', ROLE: UserRole.EMPLOYEE }],
-      });
-    });
-    it('prevents removing the last active administrator role', async () => {
-      connection.execute
-        .mockReset()
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({
-          rows: [{ EMAIL: 'admin@example.com', ROLE: UserRole.ADMINISTRATOR }],
-        })
-        .mockResolvedValueOnce({ rows: [{ TOTAL: 1 }] });
-      await expect(
-        repository.updateEmployee(42, { role: UserRole.EMPLOYEE }),
-      ).rejects.toMatchObject({ status: 409 });
-      expect(connection.execute.mock.calls[0][0]).toContain(
-        'LOCK TABLE EMPLOYEES',
-      );
-      expect(connection.rollback).toHaveBeenCalledTimes(1);
-      expect(connection.commit).not.toHaveBeenCalled();
-    });
-    it('allows demotion while another active administrator remains', async () => {
-      connection.execute
-        .mockReset()
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({
-          rows: [{ EMAIL: 'admin@example.com', ROLE: UserRole.ADMINISTRATOR }],
-        })
-        .mockResolvedValueOnce({ rows: [{ TOTAL: 2 }] })
-        .mockResolvedValueOnce({ rowsAffected: 1 });
-      await expect(
-        repository.updateEmployee(42, { role: UserRole.EMPLOYEE }),
-      ).resolves.toMatchObject({ role: UserRole.EMPLOYEE });
-      expect(connection.commit).toHaveBeenCalledTimes(1);
-    });
-    it('updates a verified branch using a numeric bind in the transaction', async () => {
-      connection.execute
-        .mockResolvedValueOnce({ rows: [{}] })
-        .mockResolvedValueOnce({ rowsAffected: 1 });
-      await repository.updateEmployee(42, { branchId: 6 });
-      expect(connection.execute.mock.calls[1][0]).toBe(
-        'SELECT 1 FROM CINEMAS WHERE BRANCH_ID = :branchId FOR UPDATE',
-      );
-      expect(connection.execute.mock.calls[2][0]).toBe(
-        "UPDATE EMPLOYEES SET BRANCH_ID = :branchId WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE'",
-      );
-      expect(connection.execute.mock.calls[2][1].branchId).toEqual({
-        val: 6,
-        type: oracle.NUMBER,
-      });
-      expect(connection.commit).toHaveBeenCalledTimes(1);
-    });
-    it('rolls back when the selected branch no longer exists', async () => {
-      connection.execute.mockResolvedValueOnce({ rows: [] });
-      await expect(
-        repository.updateEmployee(42, { branchId: 6 }),
-      ).rejects.toThrow('La sucursal seleccionada no existe.');
-      expect(connection.rollback).toHaveBeenCalledTimes(1);
-      expect(connection.commit).not.toHaveBeenCalled();
-      expect(connection.execute).toHaveBeenCalledTimes(2);
-    });
-    it('updates selected staff names while retaining role and historical fields', async () => {
-      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
-      await repository.updateEmployee(42, {
-        firstName: 'María',
-        secondName: null,
-        firstSurname: 'Núñez',
-        secondSurname: 'Rojas',
-      });
-      const [sql, binds] = connection.execute.mock.calls[1];
-      expect(sql).toBe(
-        "UPDATE EMPLOYEES SET FIRST_NAME = :firstName, SECOND_NAME = :secondName, FIRST_SURNAME = :firstSurname, SECOND_SURNAME = :secondSurname WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE'",
-      );
-      expect(binds.firstName.val).toBe('María');
-      expect(binds.secondName.val).toBeNull();
-      expect(binds.firstSurname.val).toBe('Núñez');
-      expect(binds.secondSurname.val).toBe('Rojas');
-      expect(binds).not.toHaveProperty('role');
-      expect(connection.commit).toHaveBeenCalledTimes(1);
-    });
-    it('updates only editable fields and creates an independent address atomically', async () => {
-      connection.execute
-        .mockReset()
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({
-          rows: [{ EMAIL: 'old@example.com', ROLE: UserRole.EMPLOYEE }],
-        });
-      connection.execute.mockResolvedValueOnce({
-        rowsAffected: 1,
-        outBinds: { addressId: [55] },
-      });
-      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
-      expect(
-        await repository.updateEmployee(42, {
-          phoneNumber: '88888888',
-          role: UserRole.ADMINISTRATOR,
-          address: { districtId: 7, details: 'Casa' },
-        }),
-      ).toEqual({
-        id: 42,
-        email: 'old@example.com',
-        role: UserRole.ADMINISTRATOR,
-      });
-      const [sql, binds, options] = connection.execute.mock.calls[3];
-      expect(sql).toBe(
-        "UPDATE EMPLOYEES SET PHONE_NUMBER = :phoneNumber, ROLE = :role, ID_ADDRESS = :addressId WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE'",
-      );
-      expect(binds.id.val).toBe(42);
-      expect(binds.addressId.val).toBe(55);
-      expect(options.autoCommit).toBe(false);
-      expect(connection.execute.mock.calls[1][0]).toContain('FOR UPDATE');
-      expect(
-        connection.execute.mock.calls.some(([statement]: [string]) =>
-          /UPDATE ADDRESSES|HIRE_DATE|PASSWORD|FIRST_NAME/u.test(statement),
-        ),
-      ).toBe(false);
-      expect(connection.commit).toHaveBeenCalledTimes(1);
-      expect(connection.rollback).not.toHaveBeenCalled();
-    });
-    it('checks normalized email uniqueness while excluding the selected employee', async () => {
-      connection.execute
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rowsAffected: 1 });
-      expect(
-        await repository.updateEmployee(42, { email: 'new@example.com' }),
-      ).toEqual({ id: 42, email: 'new@example.com', role: UserRole.EMPLOYEE });
-      expect(connection.execute.mock.calls[1][0]).toContain(
-        'LOWER(TRIM(EMAIL))',
-      );
-      expect(connection.execute.mock.calls[1][1]).toEqual({
-        email: 'new@example.com',
-        id: 42,
-      });
-      expect(connection.execute.mock.calls[2][0]).not.toContain('PHONE_NUMBER');
-    });
-    it('rolls back when the employee no longer exists', async () => {
-      connection.execute.mockReset().mockResolvedValue({ rows: [] });
-      await expect(
-        repository.updateEmployee(42, { email: 'new@example.com' }),
-      ).rejects.toMatchObject({ status: 404 });
-      expect(connection.execute).toHaveBeenCalledTimes(1);
-      expect(connection.rollback).toHaveBeenCalledTimes(1);
-      expect(connection.commit).not.toHaveBeenCalled();
-    });
-    it('reports an already-used email before writing', async () => {
-      connection.execute.mockResolvedValueOnce({ rows: [{ FOUND: 1 }] });
-      await expect(
-        repository.updateEmployee(42, { email: 'other@example.com' }),
-      ).rejects.toMatchObject({ status: 409 });
-      expect(connection.execute).toHaveBeenCalledTimes(2);
-      expect(connection.rollback).toHaveBeenCalledTimes(1);
-    });
-    it.each([
-      [
-        { errorNum: 1, message: 'ORA-00001: (PRODUCTION.UQ_EMPLOYEES_EMAIL)' },
-        409,
-      ],
-      [{ errorNum: 2291 }, 400],
-    ])(
-      'translates known Oracle errors without leaking database details',
-      async (failure, expected) => {
-        connection.execute.mockRejectedValueOnce(failure);
-        await expect(
-          repository.updateEmployee(42, { role: UserRole.ADMINISTRATOR }),
-        ).rejects.toMatchObject({ status: expected });
-        expect(connection.commit).not.toHaveBeenCalled();
-      },
-    );
-    it('rolls back an unexpected row count', async () => {
-      connection.execute
-        .mockReset()
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({
-          rows: [{ EMAIL: 'old@example.com', ROLE: UserRole.EMPLOYEE }],
-        })
-        .mockResolvedValueOnce({ rowsAffected: 0 });
-      await expect(
-        repository.updateEmployee(42, { role: UserRole.ADMINISTRATOR }),
-      ).rejects.toThrow('single employee');
-      expect(connection.rollback).toHaveBeenCalledTimes(1);
-    });
-    it('preserves unknown persistence failures', async () => {
-      const failure = { errorNum: 1, message: 'another constraint' };
-      connection.execute.mockRejectedValueOnce(failure);
-      await expect(
-        repository.updateEmployee(42, { role: UserRole.ADMINISTRATOR }),
-      ).rejects.toBe(failure);
-    });
-  });
-
-  describe('findEmployeeDetailById', () => {
-    const row = {
-      ID: 42,
-      FIRST_NAME: 'Ana',
-      SECOND_NAME: null,
-      FIRST_SURNAME: 'Núñez',
-      SECOND_SURNAME: 'Solano',
-      BIRTHDAY: '2000-02-29',
-      PHONE_NUMBER: '88888888',
-      EMAIL: 'ana@example.com',
-      ROLE: 'ADMINISTRATOR',
-      BRANCH_ID: 5,
-      BRANCH_NAME: 'Centro',
-      CREATED_AT: null,
-      HIRE_DATE: null,
-      ADDRESS_ID: 7,
-      ADDRESS_DETAILS: null,
-      DISTRICT_ID: 3,
-      DISTRICT_NAME: 'Carmen',
-      CANTON_ID: 2,
-      CANTON_NAME: 'San José',
-      PROVINCE_ID: 1,
-      PROVINCE_NAME: 'San José',
-      PASSWORD_HASH: 'private',
-      SALT: 'private',
-    };
-    it('returns staff data, branch and address without credentials', async () => {
-      connection.execute.mockResolvedValue({ rows: [row] });
-      expect(await repository.findEmployeeDetailById(42)).toEqual({
-        id: 42,
-        role: 'ADMINISTRATOR',
-        firstName: 'Ana',
-        secondName: null,
-        firstSurname: 'Núñez',
-        secondSurname: 'Solano',
-        birthday: '2000-02-29',
-        phoneNumber: '88888888',
-        email: 'ana@example.com',
-        branchId: 5,
-        branchName: 'Centro',
-        createdAt: null,
-        hireDate: null,
-        address: {
-          id: 7,
-          details: null,
-          districtId: 3,
-          districtName: 'Carmen',
-          cantonId: 2,
-          cantonName: 'San José',
-          provinceId: 1,
-          provinceName: 'San José',
-        },
-      });
-      const [sql, binds] = connection.execute.mock.calls[0] as [
-        string,
-        oracle.BindParameters,
-      ];
-      expect(sql).toContain('WHERE e.EMPLOYEE_ID = :id');
-      expect(sql).toContain("TO_CHAR(e.HIRE_DATE, 'YYYY-MM-DD')");
-      expect(sql).toContain('JOIN CINEMAS');
-      expect(sql).not.toMatch(/PASSWORD|CREDENTIALS|SALT/u);
-      expect(binds).toEqual({ id: { val: 42, type: oracle.NUMBER } });
-    });
-    it('handles an absent address without hiding an existing employee', async () => {
-      connection.execute.mockResolvedValue({
-        rows: [{ ...row, ADDRESS_ID: null, ROLE: 'EMPLOYEE' }],
-      });
-      expect(await repository.findEmployeeDetailById(42)).toMatchObject({
-        address: null,
-        role: 'EMPLOYEE',
-      });
-    });
-    it.each([{ rows: [] }, {}])(
-      'returns null for missing staff: %p',
-      async (result) => {
-        connection.execute.mockResolvedValue(result);
-        expect(await repository.findEmployeeDetailById(42)).toBeNull();
-      },
-    );
-    it('propagates read failures and releases the connection', async () => {
-      connection.execute.mockRejectedValue(new Error('Unavailable'));
-      await expect(repository.findEmployeeDetailById(42)).rejects.toThrow(
-        'Unavailable',
-      );
-      expect(connection.close).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('listEmployees', () => {
-    it('combines bound filters, escapes wildcards and returns a complete paginated profile', async () => {
-      connection.execute
-        .mockResolvedValueOnce({ rows: [{ TOTAL: 21 }] })
-        .mockResolvedValueOnce({
-          rows: [
-            {
-              ID: 42,
-              NAME: 'Ana Núñez',
-              EMAIL: 'ana@example.com',
-              PHONE_NUMBER: '88888888',
-              ROLE: UserRole.EMPLOYEE,
-              BRANCH_ID: 3,
-              BRANCH_NAME: 'Centro',
-              CREATED_AT: null,
-              HIRE_DATE: '2026-10-01',
-              PASSWORD_HASH: 'private',
-            },
-          ],
-        });
-      const query = Object.assign(new ListEmployeesQueryDto(), {
-        search: 'Núñez%_\\',
-        role: [UserRole.EMPLOYEE, UserRole.ADMINISTRATOR],
-        branchId: [3, 5],
-        page: 99,
-        sortBy: 'hireDate',
-        sortDirection: 'desc',
-      });
-      const result = await repository.listEmployees(query);
-      expect(result).toMatchObject({
-        total: 21,
-        page: 3,
-        totalPages: 3,
-        pageSize: 10,
-      });
-      expect(result.items[0]).toEqual({
-        id: 42,
-        name: 'Ana Núñez',
-        email: 'ana@example.com',
-        phoneNumber: '88888888',
-        role: UserRole.EMPLOYEE,
-        branchId: 3,
-        branchName: 'Centro',
-        createdAt: null,
-        hireDate: '2026-10-01',
-      });
-      const [sql, binds] = connection.execute.mock.calls[1] as [
-        string,
-        Record<string, oracle.BindParameter>,
-      ];
-      expect(sql).toContain(
-        'ORDER BY e.HIRE_DATE DESC NULLS LAST, e.EMPLOYEE_ID ASC',
-      );
-      expect(sql).toContain(
-        'e.ROLE IN (:role0, :role1) AND e.BRANCH_ID IN (:branchId0, :branchId1)',
-      );
-      expect(sql).not.toContain(query.search);
-      expect(binds.search.val).toBe('%núñez\\%\\_\\\\%');
-      expect(binds.name0.val).toBe(binds.search.val);
-      expect(sql).toContain(String.raw`LIKE :search ESCAPE '\'`);
-      expect(sql).toContain(String.raw`LIKE :name0 ESCAPE '\'`);
-      expect(binds.offset.val).toBe(20);
-      expect(binds.role0.val).toBe(UserRole.EMPLOYEE);
-      expect(binds.role1.val).toBe(UserRole.ADMINISTRATOR);
-      expect(binds.branchId0.val).toBe(3);
-      expect(binds.branchId1.val).toBe(5);
-      expect(connection.execute.mock.calls[0][0]).toContain(
-        'e.ROLE IN (:role0, :role1) AND e.BRANCH_ID IN (:branchId0, :branchId1)',
-      );
-      expect(connection.execute.mock.calls[0][1]).toEqual(
-        expect.objectContaining({
-          role0: binds.role0,
-          role1: binds.role1,
-          branchId0: binds.branchId0,
-          branchId1: binds.branchId1,
-          search: binds.search,
-          name0: binds.name0,
-        }),
-      );
-      for (const statement of [connection.execute.mock.calls[0][0], sql]) {
-        expect(statement).toContain("WHERE e.STATUS = 'ACTIVE' AND ((");
-        expect(statement).toContain(String.raw`LIKE :name0 ESCAPE '\'`);
-        expect(statement).toContain(String.raw`LIKE :search ESCAPE '\'`);
-      }
-    });
-    it('returns zero results without a page query', async () => {
-      connection.execute.mockResolvedValue({ rows: [{ TOTAL: 0 }] });
-      expect(
-        await repository.listEmployees(new ListEmployeesQueryDto()),
-      ).toEqual({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 });
-      expect(connection.execute).toHaveBeenCalledTimes(1);
-    });
-    it.each(['id', 'name', 'email', 'createdAt', 'role', 'branch'])(
-      'supports safe ordering by %s and unknown historical dates',
-      async (sortBy) => {
-        connection.execute
-          .mockResolvedValueOnce({ rows: [{ TOTAL: 1 }] })
-          .mockResolvedValueOnce({ rows: [] });
-        const result = await repository.listEmployees(
-          Object.assign(new ListEmployeesQueryDto(), { sortBy }),
-        );
-        expect(result.total).toBe(1);
-        expect(connection.execute.mock.calls[1][0]).toContain(
-          'NULLS LAST, e.EMPLOYEE_ID ASC',
-        );
-      },
-    );
-    it('propagates a database failure and closes the connection', async () => {
-      connection.execute.mockRejectedValue(new Error('Query unavailable'));
-      await expect(
-        repository.listEmployees(new ListEmployeesQueryDto()),
-      ).rejects.toThrow('Query unavailable');
-      expect(connection.close).toHaveBeenCalledTimes(1);
-    });
-    it('returns real branch options independently of creation catalogs', async () => {
-      connection.execute.mockResolvedValue({
-        rows: [{ BRANCH_ID: 3, NAME: 'Centro' }],
-      });
-      expect(await repository.getEmployeeListOptions()).toEqual({
-        branches: [{ id: 3, label: 'Centro' }],
-      });
-      connection.execute.mockResolvedValue({});
-      expect(await repository.getEmployeeListOptions()).toEqual({
-        branches: [],
-      });
-    });
   });
 
   describe('findEmployeeWithLocalCredentialsByEmail', () => {
@@ -904,7 +363,7 @@ describe('UsersRepository', () => {
         });
         expect(connection.execute).toHaveBeenCalledTimes(1);
         expect(connection.execute).toHaveBeenCalledWith(
-          "SELECT EMPLOYEE_ID, ROLE, FIRST_NAME FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId AND STATUS = 'ACTIVE'",
+          'SELECT EMPLOYEE_ID, ROLE, FIRST_NAME FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId',
           { employeeId: { val: 21, type: oracle.NUMBER } },
           { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: true },
         );
@@ -1010,7 +469,6 @@ describe('UsersRepository', () => {
       firstName: 'Ana',
       firstSurname: 'Núñez',
       secondSurname: 'Solano',
-      hireDate: '2026-10-01',
       birthday: '2000-02-29',
       phoneNumber: '+506 8888-8888',
       address: { districtId: 71, details: 'Casa azul' },
@@ -1030,41 +488,6 @@ describe('UsersRepository', () => {
         .mockResolvedValueOnce({ rowsAffected: 1 });
     });
 
-    it.each([
-      'ORA-00001: unique constraint (PRODUCTION.UQ_EMPLOYEES_EMAIL) violated',
-      'ORA-00001: unique constraint ("PRODUCTION"."UQ_EMPLOYEES_EMAIL") violated',
-    ])(
-      'rolls back and reports duplicate employee email: %s',
-      async (message) => {
-        connection.execute
-          .mockReset()
-          .mockResolvedValueOnce(insertedAddress)
-          .mockRejectedValueOnce({ errorNum: 1, message });
-        await expect(repository.createEmployee(employee)).rejects.toMatchObject(
-          {
-            status: 409,
-            message:
-              'El correo electrónico ya está registrado para otro empleado.',
-          },
-        );
-        expect(connection.execute).toHaveBeenCalledTimes(2);
-        expect(connection.rollback).toHaveBeenCalledTimes(1);
-        expect(connection.commit).not.toHaveBeenCalled();
-      },
-    );
-    it.each([
-      { errorNum: 1, message: 'OTHER_UQ_EMPLOYEES_EMAIL' },
-      { errorNum: 1, message: 'UQ_EMPLOYEES_EMAIL_OTHER' },
-      { errorNum: 1 },
-      { errorNum: 2291, message: 'UQ_EMPLOYEES_EMAIL' },
-      null,
-    ])('preserves unrelated creation failures: %p', async (failure) => {
-      connection.execute.mockReset().mockRejectedValueOnce(failure);
-      await expect(repository.createEmployee(employee)).rejects.toBe(failure);
-      expect(connection.rollback).toHaveBeenCalledTimes(1);
-      expect(connection.commit).not.toHaveBeenCalled();
-    });
-
     it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR] as const)(
       'inserts a %s and its credentials on the same connection before committing',
       async (role) => {
@@ -1076,7 +499,7 @@ describe('UsersRepository', () => {
         expect(connection.execute).toHaveBeenCalledTimes(3);
         const profileSql: string = connection.execute.mock.calls[1][0];
         expect(profileSql.replace(/\s+/gu, ' ').trim()).toBe(
-          "INSERT INTO EMPLOYEES ( FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME, BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID, HIRE_DATE ) VALUES ( :firstName, :secondName, :firstSurname, :secondSurname, TO_DATE(:birthday, 'FXYYYY-MM-DD'), :phoneNumber, :email, :role, :addressId, :branchId, TO_DATE(:hireDate, 'FXYYYY-MM-DD') ) RETURNING EMPLOYEE_ID INTO :employeeId",
+          "INSERT INTO EMPLOYEES ( FIRST_NAME, SECOND_NAME, FIRST_SURNAME, SECOND_SURNAME, BIRTHDAY, PHONE_NUMBER, EMAIL, ROLE, ID_ADDRESS, BRANCH_ID ) VALUES ( :firstName, :secondName, :firstSurname, :secondSurname, TO_DATE(:birthday, 'FXYYYY-MM-DD'), :phoneNumber, :email, :role, :addressId, :branchId ) RETURNING EMPLOYEE_ID INTO :employeeId",
         );
         expect(connection.execute).toHaveBeenNthCalledWith(
           2,
@@ -1087,7 +510,6 @@ describe('UsersRepository', () => {
             firstSurname: { val: data.firstSurname, type: oracle.STRING },
             secondSurname: { val: data.secondSurname, type: oracle.STRING },
             birthday: { val: data.birthday, type: oracle.STRING },
-            hireDate: { val: data.hireDate, type: oracle.STRING },
             phoneNumber: { val: data.phoneNumber, type: oracle.STRING },
             email: { val: data.email, type: oracle.STRING },
             role: { val: role, type: oracle.STRING },
@@ -1344,7 +766,6 @@ describe('UsersRepository', () => {
           firstName: 'Ana',
           firstSurname: 'Núñez',
           secondSurname: 'Solano',
-          hireDate: '2026-10-01',
           birthday: '2000-02-29',
           phoneNumber: '88888888',
           address: { districtId: 999 },
@@ -1375,7 +796,6 @@ describe('UsersRepository', () => {
       firstName: 'Ana',
       firstSurname: 'Núñez',
       secondSurname: 'Solano',
-      hireDate: '2026-10-01',
       birthday: '2000-02-29',
       phoneNumber: '88888888',
       branchId: 3,

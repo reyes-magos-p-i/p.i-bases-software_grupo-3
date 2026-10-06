@@ -94,7 +94,6 @@ describe('email verification API', () => {
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
-    get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     create.mockImplementation((defaults) => ({ defaults, post, get }))
   })
 
@@ -178,7 +177,6 @@ describe('facebook authentication API', () => {
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
-    get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     create.mockImplementation((defaults) => ({ defaults, post, get }))
   })
 
@@ -201,14 +199,6 @@ describe('facebook authentication API', () => {
       accessToken: 'facebook-access-token',
     })
     expect(localStorage.getItem('accessToken')).toBe('server-access-token')
-  })
-
-  it('blocks Facebook login when an employee session exists', async () => {
-    get.mockResolvedValueOnce({ data: { id: 21, role: 'EMPLOYEE', firstName: 'Ana' } })
-    const { facebookLogin } = await import('@/services/authService')
-
-    await expect(facebookLogin('facebook-access-token')).rejects.toThrow('sesión del personal')
-    expect(post).not.toHaveBeenCalled()
   })
 
   it('logs in with Google, stores its token, and returns the client profile', async () => {
@@ -238,13 +228,9 @@ describe('employee authentication API', () => {
     vi.resetModules()
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
-    localStorage.clear()
     create.mockImplementation((defaults) => ({ defaults, post, get }))
   })
-  afterEach(() => {
-    vi.unstubAllEnvs()
-    localStorage.clear()
-  })
+  afterEach(() => vi.unstubAllEnvs())
 
   it('logs in through the shared proxy without changing the password or retaining a token', async () => {
     const { loginEmployee } = await import('@/services/authService')
@@ -258,16 +244,6 @@ describe('employee authentication API', () => {
     expect(post).toHaveBeenCalledExactlyOnceWith('/auth/employees/login', credentials, {
       timeout: 15000,
     })
-  })
-
-  it('blocks employee login while a client session is stored', async () => {
-    localStorage.setItem('accessToken', 'client-token')
-    const { loginEmployee } = await import('@/services/authService')
-
-    await expect(
-      loginEmployee({ email: 'staff@example.com', password: 'Password' }),
-    ).rejects.toThrow('sesión de cliente')
-    expect(post).not.toHaveBeenCalled()
   })
 
   it('recovers only staff identities and treats 401 as no session', async () => {

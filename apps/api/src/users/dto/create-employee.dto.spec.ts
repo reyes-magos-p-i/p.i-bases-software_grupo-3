@@ -4,23 +4,6 @@ import { validate } from 'class-validator';
 import { CreateEmployeeDto } from './create-employee.dto';
 
 describe('CreateEmployeeDto', () => {
-  it.each(['22222222', '+1 88888888', '', '888888888'])(
-    'rejects an invalid staff mobile %p',
-    async (phoneNumber) => {
-      expect(
-        (await validatePayload({ ...validPayload, phoneNumber })).map(
-          (error) => error.property,
-        ),
-      ).toEqual(['phoneNumber']);
-    },
-  );
-  it.each([0, -1])('rejects a nonpositive branch %p', async (branchId) => {
-    expect(
-      (await validatePayload({ ...validPayload, branchId })).map(
-        (error) => error.property,
-      ),
-    ).toEqual(['branchId']);
-  });
   const validPayload = {
     role: 'EMPLOYEE',
     email: 'empleado@example.com',
@@ -28,7 +11,6 @@ describe('CreateEmployeeDto', () => {
     firstSurname: 'Núñez',
     secondSurname: 'Solano',
     birthday: '2000-02-29',
-    hireDate: '2026-10-01',
     phoneNumber: '+506 8888-8888',
     address: { districtId: 1 },
     branchId: 2,
@@ -36,19 +18,6 @@ describe('CreateEmployeeDto', () => {
 
   const validatePayload = (payload: Record<string, unknown>) =>
     validate(plainToInstance(CreateEmployeeDto, payload));
-
-  it.each([
-    undefined,
-    null,
-    '',
-    '2026-02-30',
-    '0000-01-01',
-    '2026-10-01T00:00:00Z',
-    '01/10/2026',
-  ])('rejects a missing or invalid hire date %p', async (hireDate) => {
-    const errors = await validatePayload({ ...validPayload, hireDate });
-    expect(errors.map((error) => error.property)).toContain('hireDate');
-  });
 
   it.each([
     {},
@@ -212,7 +181,7 @@ describe('CreateEmployeeDto', () => {
   it.each(['branchId'])(
     'accepts safe integer boundaries for %s',
     async (field) => {
-      for (const value of [1, Number.MAX_SAFE_INTEGER]) {
+      for (const value of [Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]) {
         await expect(
           validatePayload({ ...validPayload, [field]: value }),
         ).resolves.toEqual([]);
@@ -223,6 +192,7 @@ describe('CreateEmployeeDto', () => {
   it.each([
     ['firstSurname', 100],
     ['secondSurname', 100],
+    ['phoneNumber', 20],
   ] as const)('enforces the byte limit for %s', async (field, limit) => {
     for (const value of [
       'a'.repeat(limit),
@@ -245,13 +215,13 @@ describe('CreateEmployeeDto', () => {
     }
   });
 
-  it('normalizes employee email addresses', async () => {
+  it('preserves the casing of employee email addresses', async () => {
     const employee = plainToInstance(CreateEmployeeDto, {
       ...validPayload,
       email: 'Persona@Example.com',
     });
     await expect(validate(employee)).resolves.toEqual([]);
-    expect(employee.email).toBe('persona@example.com');
+    expect(employee.email).toBe('Persona@Example.com');
   });
 
   it.each([

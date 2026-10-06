@@ -8,11 +8,10 @@ import AccountMenu from '@/components/common/AccountMenu.vue'
 import { EmployeeAuthError } from '@/services/authService'
 import {
   authenticateEmployee,
-  closeEmployeeSession,
   employeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
-import { clearClientAuth, clientSession } from '@/services/client-session.service'
+import { clearClientSession, clientSession } from '@/services/client-session.service'
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
@@ -141,9 +140,8 @@ function handleClientLogin(identity?: ClientIdentity) {
   }
 }
 
-async function logoutClient() {
-  await closeEmployeeSession()
-  await clearClientAuth()
+function logoutClient() {
+  clearClientSession()
   activeModal.value = null
 }
 </script>
