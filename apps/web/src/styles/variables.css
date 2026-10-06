@@ -59,6 +59,14 @@
     var(--primary-color) 85%,
     var(--page-background)
   );
+  --button-social-background: var(--content-background);
+  --button-social-text: var(--text-primary);
+  --button-social-border: var(--border-strong);
+  --button-social-hover-background: color-mix(
+    in srgb,
+    var(--surface-background) 5%,
+    var(--content-background)
+  );
   --focus-color: var(--primary-color);
   --focus-on-dark: var(--accent-color);
   --focus-shadow: color-mix(in srgb, var(--primary-color) 20%, transparent);

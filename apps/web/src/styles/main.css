@@ -94,20 +94,21 @@ img {
   box-shadow: 0 0 0 0.25rem var(--focus-shadow);
 }
 
-.btn-primary,
 .btn-light {
-  --bs-btn-color: var(--button-text);
-  --bs-btn-bg: var(--button-background);
-  --bs-btn-border-color: var(--button-background);
-  --bs-btn-hover-color: var(--button-text);
-  --bs-btn-hover-bg: var(--button-hover-background);
-  --bs-btn-hover-border-color: var(--button-hover-background);
-  --bs-btn-active-color: var(--button-text);
-  --bs-btn-active-bg: var(--button-hover-background);
-  --bs-btn-active-border-color: var(--button-hover-background);
-  --bs-btn-disabled-color: var(--button-text);
-  --bs-btn-disabled-bg: var(--button-background);
-  --bs-btn-disabled-border-color: var(--button-background);
+  --bs-btn-color: var(--button-social-text);
+  --bs-btn-bg: var(--button-social-background);
+  --bs-btn-border-color: var(--button-social-border);
+  --bs-btn-hover-color: var(--button-social-text);
+  --bs-btn-hover-bg: var(--button-social-hover-background);
+  --bs-btn-hover-border-color: var(--button-social-border);
+  --bs-btn-active-color: var(--button-social-text);
+  --bs-btn-active-bg: var(--button-social-hover-background);
+  --bs-btn-active-border-color: var(--button-social-border);
+  --bs-btn-disabled-color: var(--button-social-text);
+  --bs-btn-disabled-bg: var(--button-social-background);
+  --bs-btn-disabled-border-color: var(--button-social-border);
+  --bs-border-color: var(--button-social-border);
+  box-shadow: 0 1px 3px var(--shadow-color);
 }
 
 .btn:focus-visible {
