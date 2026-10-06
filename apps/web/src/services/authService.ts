@@ -278,29 +278,53 @@ export interface ChangeClientPasswordPayload {
   expirationDays: 30 | 60 | 90 | 120
 }
 
+type ChangePasswordErrorResponse = {
+  code?: string
+  message?: string
+  violations?: string[]
+}
+
+const passwordChangeErrorMappers = new Map<
+  string,
+  (body: ChangePasswordErrorResponse) => ChangePasswordError
+>([
+  [
+    'CURRENT_PASSWORD_INCORRECT',
+    (body) => new ChangePasswordError('La contraseña actual no es correcta.', body.code),
+  ],
+  [
+    'PASSWORDS_DO_NOT_MATCH',
+    (body) => new ChangePasswordError('Las contraseñas no coinciden.', body.code),
+  ],
+  [
+    'NEW_PASSWORD_SAME_AS_CURRENT',
+    (body) =>
+      new ChangePasswordError('La nueva contraseña no puede ser igual a la actual.', body.code),
+  ],
+  [
+    'PASSWORD_POLICY_VIOLATION',
+    (body) =>
+      new ChangePasswordError(
+        'La contraseña no cumple con la política de seguridad.',
+        body.code,
+        body.violations,
+      ),
+  ],
+])
+
+function mapPasswordChangeError(error: unknown): ChangePasswordError {
+  if (isAxiosError(error) && error.response) {
+    const body = error.response.data as ChangePasswordErrorResponse
+    const mapper = body?.code ? passwordChangeErrorMappers.get(body.code) : undefined
+    if (mapper) return mapper(body)
+  }
+  return new ChangePasswordError('No se pudo actualizar la contraseña, intenta de nuevo.')
+}
+
 export async function changeClientPassword(payload: ChangeClientPasswordPayload): Promise<void> {
   try {
     await getApi().patch('/auth/clients/password', payload, { headers: clientAuthHeader() })
   } catch (error) {
-    if (isAxiosError(error) && error.response) {
-      const body = error.response.data as { code?: string; message?: string; violations?: string[] }
-      if (body?.code === 'CURRENT_PASSWORD_INCORRECT') {
-        throw new ChangePasswordError('La contraseña actual no es correcta.', body.code)
-      }
-      if (body?.code === 'PASSWORDS_DO_NOT_MATCH') {
-        throw new ChangePasswordError('Las contraseñas no coinciden.', body.code)
-      }
-      if (body?.code === 'NEW_PASSWORD_SAME_AS_CURRENT') {
-        throw new ChangePasswordError('La nueva contraseña no puede ser igual a la actual.', body.code)
-      }
-      if (body?.code === 'PASSWORD_POLICY_VIOLATION') {
-        throw new ChangePasswordError(
-          'La contraseña no cumple con la política de seguridad.',
-          body.code,
-          body.violations,
-        )
-      }
-    }
-    throw new ChangePasswordError('No se pudo actualizar la contraseña, intenta de nuevo.')
+    throw mapPasswordChangeError(error)
   }
 }

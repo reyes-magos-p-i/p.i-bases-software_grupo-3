@@ -17,7 +17,7 @@ const SPECIAL_CHARACTERS = /[!@#$%^&*_-]/;
 
 
 /**
- * TODO(Raul): See line 55 on RegisterModal.vue. We should check from a maintained
+ * Note: See line 55 on RegisterModal.vue. We should check from a maintained
  *  list of common passwords instead of hardcoding them here. This list should be
  *  updated periodically.
  */
@@ -33,7 +33,7 @@ export function validatePasswordPolicy(
   if (password.length < 8) violations.push('min_length');
   if (!/[A-Z]/.test(password)) violations.push('missing_uppercase');
   if (!/[a-z]/.test(password)) violations.push('missing_lowercase');
-  if (!/[0-9]/.test(password)) violations.push('missing_number');
+  if (!/\d/.test(password)) violations.push('missing_number');
   if (!SPECIAL_CHARACTERS.test(password)) violations.push('missing_special_character');
 
   const lowerPassword = password.toLowerCase();

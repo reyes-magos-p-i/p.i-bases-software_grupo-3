@@ -17,7 +17,7 @@ import {
 import { splitFirstWord } from './name.util';
 import { validatePasswordPolicy } from './password-policy';
 import argon2 from 'argon2';
-import { randomBytes } from 'crypto';
+import { randomBytes } from 'node:crypto';
 
 // "C" alias
 const CLIENT_COLUMNS = `

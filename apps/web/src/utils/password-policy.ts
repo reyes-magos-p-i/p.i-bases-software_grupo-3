@@ -28,7 +28,7 @@ export function checkPasswordPolicy(
     { code: 'min_length', label: 'Al menos 8 caracteres', satisfied: password.length >= 8 },
     { code: 'missing_uppercase', label: 'Una letra mayúscula', satisfied: /[A-Z]/.test(password) },
     { code: 'missing_lowercase', label: 'Una letra minúscula', satisfied: /[a-z]/.test(password) },
-    { code: 'missing_number', label: 'Un número', satisfied: /[0-9]/.test(password) },
+    { code: 'missing_number', label: 'Un número', satisfied: /\d/.test(password) },
     {
       code: 'missing_special_character',
       label: 'Un carácter especial (!@#$...)',
