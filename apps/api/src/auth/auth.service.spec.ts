@@ -41,7 +41,11 @@ describe('AuthService', () => {
     findOrCreateSocial: jest.Mock; // for google auth
   };
   let jwt: { sign: jest.Mock; signAsync: jest.Mock };
-  let users: { findEmployeeWithLocalCredentialsByEmail: jest.Mock };
+  let users: {
+    findEmployeeWithLocalCredentialsByEmail: jest.Mock;
+    findEmployeePasswordCredentials: jest.Mock;
+    saveEmployeePassword: jest.Mock;
+  };
   let config: { getOrThrow: jest.Mock; get: jest.Mock };
   let verificationSender: { send: jest.Mock };
 
@@ -74,7 +78,11 @@ describe('AuthService', () => {
       sign: jest.fn().mockReturnValue('signed-token'),
       signAsync: jest.fn().mockResolvedValue('employee-token'),
     };
-    users = { findEmployeeWithLocalCredentialsByEmail: jest.fn() };
+    users = {
+      findEmployeeWithLocalCredentialsByEmail: jest.fn(),
+      findEmployeePasswordCredentials: jest.fn(),
+      saveEmployeePassword: jest.fn(),
+    };
     config = {
       getOrThrow: jest.fn((key: string) =>
         key === 'FRONTEND_URL' ? 'http://localhost:5173' : `test-${key}`,
@@ -182,6 +190,102 @@ describe('AuthService', () => {
       clients.findWithLocalCredentials.mockRejectedValue(failure);
       await expect(service.loginClient(credentials)).rejects.toBe(failure);
       expect(jwt.sign).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changeEmployeePassword', () => {
+    const employee = {
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      passwordHash: 'current-hash',
+    };
+    const input = {
+      currentPassword: 'Current!Password9',
+      newPassword: 'Cr0wn!River77',
+      confirmNewPassword: 'Cr0wn!River77',
+      expirationDays: 90,
+    };
+
+    beforeEach(() => {
+      users.findEmployeePasswordCredentials.mockResolvedValue(employee);
+      hasher.verify.mockResolvedValue(false);
+    });
+
+    it('validates the current password and policy, then saves the new hash and expiration', async () => {
+      hasher.verify.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+      await expect(
+        service.changeEmployeePassword(21, input),
+      ).resolves.toBeUndefined();
+
+      expect(hasher.verify).toHaveBeenNthCalledWith(
+        1,
+        input.currentPassword,
+        employee.passwordHash,
+      );
+      expect(hasher.verify).toHaveBeenNthCalledWith(
+        2,
+        input.newPassword,
+        employee.passwordHash,
+      );
+      expect(hasher.hash).toHaveBeenCalledWith(input.newPassword);
+      expect(users.saveEmployeePassword).toHaveBeenCalledWith(
+        21,
+        'hashed-password',
+        salt,
+        90,
+      );
+    });
+
+    it('rejects an incorrect current password without hashing or saving', async () => {
+      hasher.verify.mockResolvedValue(false);
+      await expect(
+        service.changeEmployeePassword(21, input),
+      ).rejects.toMatchObject({
+        response: { code: 'CURRENT_PASSWORD_INCORRECT' },
+      });
+      expect(hasher.hash).not.toHaveBeenCalled();
+      expect(users.saveEmployeePassword).not.toHaveBeenCalled();
+    });
+
+    it('rejects new passwords that do not match', async () => {
+      hasher.verify.mockResolvedValueOnce(true);
+      await expect(
+        service.changeEmployeePassword(21, {
+          ...input,
+          confirmNewPassword: 'Different!Password9',
+        }),
+      ).rejects.toMatchObject({ response: { code: 'PASSWORDS_DO_NOT_MATCH' } });
+      expect(hasher.hash).not.toHaveBeenCalled();
+    });
+
+    it('rejects reusing the current password', async () => {
+      hasher.verify.mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+      await expect(
+        service.changeEmployeePassword(21, {
+          ...input,
+          newPassword: input.currentPassword,
+          confirmNewPassword: input.currentPassword,
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'NEW_PASSWORD_SAME_AS_CURRENT' },
+      });
+      expect(hasher.hash).not.toHaveBeenCalled();
+    });
+
+    it('rejects passwords that violate the policy and passes employee identity context', async () => {
+      hasher.verify.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+      await expect(
+        service.changeEmployeePassword(21, {
+          ...input,
+          newPassword: 'password',
+          confirmNewPassword: 'password',
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'PASSWORD_POLICY_VIOLATION' },
+      });
+      expect(hasher.hash).not.toHaveBeenCalled();
+      expect(users.saveEmployeePassword).not.toHaveBeenCalled();
     });
   });
 

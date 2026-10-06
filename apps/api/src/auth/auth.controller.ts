@@ -30,6 +30,8 @@ import { ChangeClientPasswordDto } from './dto/change-client-password.dto';
 import { PasswordStatus } from './password/password-status';
 import { Client } from '../clients/client.model';
 import { ClientsService } from '../clients/clients.service';
+import { ChangeEmployeePasswordDto } from './dto/change-employee-password.dto';
+import { UserRole } from '../users/enums/user-role.enum';
 
 @Controller('auth')
 export class AuthController {
@@ -102,7 +104,7 @@ export class AuthController {
 
     return this.auth.googleLogin(code);
   }
-  
+
   @Post('facebook')
   async facebookLogin(@Body() dto: { accessToken: string }) {
     this.logger.log(`Facebook login attempt`);
@@ -114,7 +116,9 @@ export class AuthController {
   @Get('password-status')
   passwordStatus(@Req() req: Request): { status: PasswordStatus } {
     if (req.passwordStatus === undefined) {
-      throw new InternalServerErrorException('Password status was not computed.');
+      throw new InternalServerErrorException(
+        'Password status was not computed.',
+      );
     }
     return { status: req.passwordStatus };
   }
@@ -127,10 +131,38 @@ export class AuthController {
     @Body() dto: ChangeClientPasswordDto,
   ): Promise<{ message: string }> {
     if (req.accountType !== 'client') {
-      throw new ForbiddenException('This endpoint is only for client accounts.');
+      throw new ForbiddenException(
+        'This endpoint is only for client accounts.',
+      );
     }
     const client = req.user as Client;
-    await this.clientService.changePassword(client.id, client.email, client.firstName, dto);
+    await this.clientService.changePassword(
+      client.id,
+      client.email,
+      client.firstName,
+      dto,
+    );
     return { message: 'Contraseña actualizada correctamente.' };
+  }
+
+  @UseGuards(AuthGuard('jwt'), ThrottlerGuard)
+  @Patch('employees/password')
+  async changeEmployeePassword(
+    @Req() req: Request,
+    @Body() dto: ChangeEmployeePasswordDto,
+  ): Promise<{ message: string }> {
+    if (req.accountType !== 'employee') {
+      throw new ForbiddenException(
+        'This endpoint is only for employee accounts.',
+      );
+    }
+    const employee = req.user as { id: number; role: UserRole };
+    if (employee.role !== UserRole.ADMINISTRATOR) {
+      throw new ForbiddenException(
+        'This endpoint is only for administrator accounts.',
+      );
+    }
+    await this.auth.changeEmployeePassword(employee.id, dto);
+    return { message: 'Contraseña actualizada correctamente' };
   }
 }

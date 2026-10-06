@@ -67,7 +67,9 @@ describe('UsersRepository', () => {
         rows: [{ PASSWORD_SET_AT: setAt, EXPIRATION_DAYS: 120 }],
       });
 
-      await expect(repository.findEmployeeCredentialsStatus(42)).resolves.toEqual({
+      await expect(
+        repository.findEmployeeCredentialsStatus(42),
+      ).resolves.toEqual({
         setAt,
         expirationDays: 120,
       });
@@ -81,9 +83,9 @@ describe('UsersRepository', () => {
     it('reports missing employee credentials instead of returning a valid status', async () => {
       connection.execute.mockResolvedValueOnce({ rows: [] });
 
-      await expect(repository.findEmployeeCredentialsStatus(42)).rejects.toThrow(
-        'Employee 42 is missing local credentials.',
-      );
+      await expect(
+        repository.findEmployeeCredentialsStatus(42),
+      ).rejects.toThrow('Employee 42 is missing local credentials.');
     });
   });
 
@@ -922,16 +924,24 @@ describe('UsersRepository', () => {
       'reads a minimal employee identity with role %s using a bound ID',
       async (role) => {
         connection.execute.mockResolvedValue({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: role, FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: role,
+              FIRST_NAME: 'Ana',
+              EMAIL: 'ana@example.com',
+            },
+          ],
         });
         await expect(repository.findEmployeeIdentityById(21)).resolves.toEqual({
           id: 21,
           role,
           firstName: 'Ana',
+          email: 'ana@example.com',
         });
         expect(connection.execute).toHaveBeenCalledTimes(1);
         expect(connection.execute).toHaveBeenCalledWith(
-          "SELECT EMPLOYEE_ID, ROLE, FIRST_NAME FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId AND STATUS = 'ACTIVE'",
+          "SELECT EMPLOYEE_ID, ROLE, FIRST_NAME, EMAIL FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId AND STATUS = 'ACTIVE'",
           { employeeId: { val: 21, type: oracle.NUMBER } },
           { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: true },
         );
@@ -946,8 +956,18 @@ describe('UsersRepository', () => {
       { rows: [] },
       {
         rows: [
-          { EMPLOYEE_ID: 21, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
-          { EMPLOYEE_ID: 21, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: UserRole.ADMINISTRATOR,
+            FIRST_NAME: 'Ana',
+            EMAIL: 'ana@example.com',
+          },
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: UserRole.ADMINISTRATOR,
+            FIRST_NAME: 'Ana',
+            EMAIL: 'ana@example.com',
+          },
         ],
       },
       {
@@ -956,26 +976,60 @@ describe('UsersRepository', () => {
             EMPLOYEE_ID: '21',
             ROLE: UserRole.ADMINISTRATOR,
             FIRST_NAME: 'Ana',
+            EMAIL: 'ana@example.com',
           },
         ],
       },
       {
         rows: [
-          { EMPLOYEE_ID: 1.5, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
+          {
+            EMPLOYEE_ID: 1.5,
+            ROLE: UserRole.ADMINISTRATOR,
+            FIRST_NAME: 'Ana',
+            EMAIL: 'ana@example.com',
+          },
         ],
       },
       {
         rows: [
-          { EMPLOYEE_ID: 0, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
+          {
+            EMPLOYEE_ID: 0,
+            ROLE: UserRole.ADMINISTRATOR,
+            FIRST_NAME: 'Ana',
+            EMAIL: 'ana@example.com',
+          },
         ],
       },
       {
         rows: [
-          { EMPLOYEE_ID: 42, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
+          {
+            EMPLOYEE_ID: 42,
+            ROLE: UserRole.ADMINISTRATOR,
+            FIRST_NAME: 'Ana',
+            EMAIL: 'ana@example.com',
+          },
         ],
       },
-      { rows: [{ EMPLOYEE_ID: 21, ROLE: UserRole.CLIENT, FIRST_NAME: 'Ana' }] },
-      { rows: [{ EMPLOYEE_ID: 21, ROLE: 'UNKNOWN', FIRST_NAME: 'Ana' }] },
+      {
+        rows: [
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: UserRole.CLIENT,
+            FIRST_NAME: 'Ana',
+            EMAIL: 'ana@example.com',
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: 'UNKNOWN',
+            FIRST_NAME: 'Ana',
+            EMAIL: 'ana@example.com',
+          },
+        ],
+      },
     ])(
       'returns no identity for an absent or invalid result %p',
       async (result) => {
@@ -992,7 +1046,12 @@ describe('UsersRepository', () => {
       async (firstName) => {
         connection.execute.mockResolvedValue({
           rows: [
-            { EMPLOYEE_ID: 21, ROLE: UserRole.EMPLOYEE, FIRST_NAME: firstName },
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: UserRole.EMPLOYEE,
+              FIRST_NAME: firstName,
+              EMAIL: 'ana@example.com',
+            },
           ],
         });
         await expect(
@@ -1020,11 +1079,89 @@ describe('UsersRepository', () => {
       const error = new Error('Connection close failed');
       connection.execute.mockResolvedValue({
         rows: [
-          { EMPLOYEE_ID: 21, ROLE: UserRole.ADMINISTRATOR, FIRST_NAME: 'Ana' },
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: UserRole.ADMINISTRATOR,
+            FIRST_NAME: 'Ana',
+            EMAIL: 'ana@example.com',
+          },
         ],
       });
       connection.close.mockRejectedValue(error);
       await expect(repository.findEmployeeIdentityById(21)).rejects.toBe(error);
+    });
+  });
+
+  describe('employee password credentials', () => {
+    it('returns only active employee identity and local password hash', async () => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [
+          {
+            EMAIL: 'ana@example.com',
+            FIRST_NAME: 'Ana',
+            PASSWORD_HASH: 'argon2-hash',
+          },
+        ],
+      });
+      await expect(
+        repository.findEmployeePasswordCredentials(21),
+      ).resolves.toEqual({
+        email: 'ana@example.com',
+        firstName: 'Ana',
+        passwordHash: 'argon2-hash',
+      });
+      expect(connection.execute).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "WHERE e.EMPLOYEE_ID = :employeeId AND e.STATUS = 'ACTIVE'",
+        ),
+        { employeeId: { val: 21, type: oracle.NUMBER } },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: true },
+      );
+      expect(connection.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns null when the active employee credentials do not exist', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [] });
+      await expect(
+        repository.findEmployeePasswordCredentials(21),
+      ).resolves.toBeNull();
+    });
+
+    it('rejects malformed employee credential rows', async () => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [
+          { EMAIL: 'ana@example.com', FIRST_NAME: 'Ana', PASSWORD_HASH: '' },
+        ],
+      });
+      await expect(
+        repository.findEmployeePasswordCredentials(21),
+      ).rejects.toThrow(
+        'Oracle returned invalid employee password credentials.',
+      );
+    });
+
+    it('updates password hash, salt, change date, and expiration for active employee', async () => {
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
+      await expect(
+        repository.saveEmployeePassword(21, 'new-hash', 'new-salt', 60),
+      ).resolves.toBeUndefined();
+      expect(connection.execute).toHaveBeenCalledWith(
+        expect.stringContaining('PASSWORD_SET_AT = SYSTIMESTAMP'),
+        {
+          employeeId: { val: 21, type: oracle.NUMBER },
+          passwordHash: { val: 'new-hash', type: oracle.STRING },
+          salt: { val: 'new-salt', type: oracle.STRING },
+          expirationDays: { val: 60, type: oracle.NUMBER },
+        },
+        { autoCommit: true, outFormat: oracle.OUT_FORMAT_OBJECT },
+      );
+    });
+
+    it('reports when the employee password was not updated', async () => {
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 0 });
+      await expect(
+        repository.saveEmployeePassword(21, 'new-hash', 'new-salt', 60),
+      ).rejects.toThrow('Oracle did not update a single employee password.');
     });
   });
 

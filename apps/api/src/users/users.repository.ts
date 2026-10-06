@@ -482,14 +482,15 @@ export class UsersRepository {
     employeeId: number,
   ): Promise<Pick<
     EmployeeWithLocalCredentials,
-    'id' | 'role' | 'firstName'
+    'id' | 'role' | 'firstName' | 'email'
   > | null> {
     const result = await this.db.query<{
       EMPLOYEE_ID: unknown;
       ROLE: unknown;
       FIRST_NAME: unknown;
+      EMAIL: unknown;
     }>(
-      "SELECT EMPLOYEE_ID, ROLE, FIRST_NAME FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId AND STATUS = 'ACTIVE'",
+      "SELECT EMPLOYEE_ID, ROLE, FIRST_NAME, EMAIL FROM EMPLOYEES WHERE EMPLOYEE_ID = :employeeId AND STATUS = 'ACTIVE'",
       { employeeId: { val: employeeId, type: oracle.NUMBER } },
       { outFormat: oracle.OUT_FORMAT_OBJECT },
     );
@@ -505,11 +506,18 @@ export class UsersRepository {
       row.EMPLOYEE_ID !== employeeId ||
       (row.ROLE !== UserRole.ADMINISTRATOR && row.ROLE !== UserRole.EMPLOYEE) ||
       typeof row.FIRST_NAME !== 'string' ||
-      !row.FIRST_NAME.trim()
+      !row.FIRST_NAME.trim() ||
+      typeof row.EMAIL !== 'string' ||
+      !row.EMAIL.trim()
     ) {
       return null;
     }
-    return { id: row.EMPLOYEE_ID, role: row.ROLE, firstName: row.FIRST_NAME };
+    return {
+      id: row.EMPLOYEE_ID,
+      role: row.ROLE,
+      firstName: row.FIRST_NAME,
+      email: row.EMAIL,
+    };
   }
 
   async createEmployee(data: CreateEmployeeRecord): Promise<number> {
@@ -631,7 +639,10 @@ export class UsersRepository {
   async findEmployeeCredentialsStatus(
     employeeId: number,
   ): Promise<{ setAt: Date; expirationDays: number } | null> {
-    const result = await this.db.query<{ PASSWORD_SET_AT: Date; EXPIRATION_DAYS: number }>(
+    const result = await this.db.query<{
+      PASSWORD_SET_AT: Date;
+      EXPIRATION_DAYS: number;
+    }>(
       `SELECT PASSWORD_SET_AT, EXPIRATION_DAYS FROM EMPLOYEE_LOCAL_CREDENTIALS WHERE EMPLOYEE_ID = :employeeId`,
       { employeeId: { val: employeeId, type: oracle.NUMBER } },
       { outFormat: oracle.OUT_FORMAT_OBJECT },
@@ -642,5 +653,72 @@ export class UsersRepository {
       throw new Error(`Employee ${employeeId} is missing local credentials.`);
     }
     return { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS };
+  }
+
+  async findEmployeePasswordCredentials(
+    employeeId: number,
+  ): Promise<{
+    email: string;
+    firstName: string;
+    passwordHash: string;
+  } | null> {
+    const result = await this.db.query<{
+      EMAIL: unknown;
+      FIRST_NAME: unknown;
+      PASSWORD_HASH: unknown;
+    }>(
+      `SELECT e.EMAIL, e.FIRST_NAME, c.PASSWORD_HASH
+         FROM EMPLOYEES e
+         JOIN EMPLOYEE_LOCAL_CREDENTIALS c ON c.EMPLOYEE_ID = e.EMPLOYEE_ID
+        WHERE e.EMPLOYEE_ID = :employeeId AND e.STATUS = 'ACTIVE'`,
+      { employeeId: { val: employeeId, type: oracle.NUMBER } },
+      { outFormat: oracle.OUT_FORMAT_OBJECT },
+    );
+    const row = result.rows?.[0];
+    if (!row) return null;
+    if (
+      typeof row.EMAIL !== 'string' ||
+      !row.EMAIL.trim() ||
+      typeof row.FIRST_NAME !== 'string' ||
+      !row.FIRST_NAME.trim() ||
+      typeof row.PASSWORD_HASH !== 'string' ||
+      !row.PASSWORD_HASH.trim()
+    ) {
+      throw new Error('Oracle returned invalid employee password credentials.');
+    }
+    return {
+      email: row.EMAIL,
+      firstName: row.FIRST_NAME,
+      passwordHash: row.PASSWORD_HASH,
+    };
+  }
+
+  async saveEmployeePassword(
+    employeeId: number,
+    passwordHash: string,
+    salt: string,
+    expirationDays: number,
+  ): Promise<void> {
+    const result = await this.db.query(
+      `UPDATE EMPLOYEE_LOCAL_CREDENTIALS
+          SET PASSWORD_HASH = :passwordHash,
+              SALT = :salt,
+              PASSWORD_SET_AT = SYSTIMESTAMP,
+              EXPIRATION_DAYS = :expirationDays
+        WHERE EMPLOYEE_ID = :employeeId
+          AND EXISTS (
+            SELECT 1 FROM EMPLOYEES
+             WHERE EMPLOYEE_ID = :employeeId AND STATUS = 'ACTIVE'
+          )`,
+      {
+        employeeId: { val: employeeId, type: oracle.NUMBER },
+        passwordHash: { val: passwordHash, type: oracle.STRING },
+        salt: { val: salt, type: oracle.STRING },
+        expirationDays: { val: expirationDays, type: oracle.NUMBER },
+      },
+    );
+    if (result.rowsAffected !== 1) {
+      throw new Error('Oracle did not update a single employee password.');
+    }
   }
 }
