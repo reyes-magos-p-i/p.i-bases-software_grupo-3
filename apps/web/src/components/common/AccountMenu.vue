@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import type { ClientIdentity } from '@/types/client-auth'
 
 const props = defineProps<{ user: ClientIdentity }>()
-const emit = defineEmits<{ (event: 'logout'): void }>()
+const emit = defineEmits<{ (event: 'logout'): void; (event: 'change-password'): void }>()
 const menuOpen = ref(false)
 const root = ref<HTMLElement | null>(null)
 const dropdownId = useId()
@@ -72,7 +72,7 @@ onBeforeUnmount(() => {
           <i class="bi bi-gear" aria-hidden="true"></i>
           Ajustes de Cuenta
         </button>
-        <button type="button" disabled title="Próximamente">
+        <button type="button" @click="emit('change-password')">
           <i class="bi bi-key" aria-hidden="true"></i>
           Cambiar Contraseña
         </button>

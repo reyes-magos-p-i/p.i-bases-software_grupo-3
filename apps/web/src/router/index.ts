@@ -22,6 +22,12 @@ const router = createRouter({
       name: 'verify-email',
       component: () => import('@/views/EmailVerificationView.vue'),
     },
+    {
+      path: '/account/password',
+      name: 'account-password',
+      component: () => import('@/views/ChangePasswordView.vue'),
+      meta: { requiresClient: true },
+    },
     { path: '/dev/dashboard', redirect: '/dashboard' },
     {
       path: '/',
@@ -50,7 +56,7 @@ const router = createRouter({
     },
   ],
 })
-
+router.beforeEach(requireClientSession)
 router.beforeEach(requireEmployeeSession)
 
 export default router

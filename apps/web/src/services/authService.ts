@@ -5,6 +5,7 @@ import type { ClientIdentity } from '@/types/client-auth'
 import { establishClientSession, hasClientSession } from '@/services/client-session.service'
 import { googleAuthCodeLogin } from 'vue3-google-login'
 import type { EmployeeIdentity, EmployeeLoginRequest } from '@/types/employee-auth'
+import { CLIENT_ACCESS_TOKEN_KEY } from './client-session.service'
 
 interface ClientAuthResponse {
   accessToken: string
@@ -193,5 +194,70 @@ export async function logoutEmployee(): Promise<void> {
     await getApi().post('/auth/employees/logout', undefined, { timeout: 10000 })
   } catch (error) {
     throw employeeAuthError(error)
+  }
+}
+
+
+function clientAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+export type ClientPasswordStatus = 'valid' | 'expired' | 'must_set'
+
+export class ChangePasswordError extends Error {
+  code?: string
+  violations?: string[]
+
+  constructor(message: string, code?: string, violations?: string[]) {
+    super(message)
+    this.name = 'ChangePasswordError'
+    this.code = code
+    this.violations = violations
+  }
+}
+
+export async function getClientPasswordStatus(): Promise<ClientPasswordStatus> {
+  try {
+    const { data } = await getApi().get<{ status: ClientPasswordStatus }>('/auth/password-status', {
+      headers: clientAuthHeader(),
+    })
+    return data.status
+  } catch {
+    throw new ChangePasswordError('No se pudo comprobar el estado de la contraseña.')
+  }
+}
+
+export interface ChangeClientPasswordPayload {
+  currentPassword?: string
+  newPassword: string
+  confirmNewPassword: string
+  expirationDays: 30 | 60 | 90 | 120
+}
+
+export async function changeClientPassword(payload: ChangeClientPasswordPayload): Promise<void> {
+  try {
+    await getApi().patch('/auth/clients/password', payload, { headers: clientAuthHeader() })
+  } catch (error) {
+    if (isAxiosError(error) && error.response) {
+      const body = error.response.data as { code?: string; message?: string; violations?: string[] }
+      if (body?.code === 'CURRENT_PASSWORD_INCORRECT') {
+        throw new ChangePasswordError('La contraseña actual no es correcta.', body.code)
+      }
+      if (body?.code === 'PASSWORDS_DO_NOT_MATCH') {
+        throw new ChangePasswordError('Las contraseñas no coinciden.', body.code)
+      }
+      if (body?.code === 'NEW_PASSWORD_SAME_AS_CURRENT') {
+        throw new ChangePasswordError('La nueva contraseña no puede ser igual a la actual.', body.code)
+      }
+      if (body?.code === 'PASSWORD_POLICY_VIOLATION') {
+        throw new ChangePasswordError(
+          'La contraseña no cumple con la política de seguridad.',
+          body.code,
+          body.violations,
+        )
+      }
+    }
+    throw new ChangePasswordError('No se pudo actualizar la contraseña, intenta de nuevo.')
   }
 }

@@ -146,6 +146,10 @@ async function logoutClient() {
   await clearClientAuth()
   activeModal.value = null
 }
+
+function goToChangePassword() {
+  void router.push('/account/password')
+}
 </script>
 
 <template>
@@ -155,7 +159,7 @@ async function logoutClient() {
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
       </RouterLink>
       <div class="navbar-actions">
-        <AccountMenu v-if="clientUser" :user="clientUser" @logout="logoutClient" />
+        <AccountMenu v-if="clientUser" :user="clientUser" @logout="logoutClient" @change-password="goToChangePassword" />
         <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
           >Ir al dashboard</RouterLink
         >
