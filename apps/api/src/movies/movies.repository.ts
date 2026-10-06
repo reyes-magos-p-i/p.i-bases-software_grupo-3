@@ -76,12 +76,16 @@ import * as oracledb from 'oracledb';
         TITLE,
         RUNNING_TIME,
         RELEASE_YEAR,
+        SYNOPSIS,
+        POSTER_IMAGE,
         CLASIFICATION_ID
       )
       VALUES (
         :title,
         :runningTime,
         :releaseYear,
+        :synopsis,
+        :posterImage,
         :classificationId
       )
       RETURNING MOVIE_ID INTO :movieId
@@ -90,6 +94,8 @@ import * as oracledb from 'oracledb';
         title: dto.title,
         runningTime: dto.runningTime,
         releaseYear: dto.releaseYear,
+        synopsis: dto.synopsis,
+        posterImage: dto.posterImage,
         classificationId: dto.classificationId,
 
         movieId: {
@@ -108,7 +114,7 @@ import * as oracledb from 'oracledb';
     for (const languageId of dto.languageIds) {
       await conn.execute(
         `
-        INSERT INTO MOVIE_LANGUAGE (
+        INSERT INTO MOVIE_LANGUAGES (
           MOVIE_ID,
           LANGUAGE_ID
         )
@@ -127,7 +133,7 @@ import * as oracledb from 'oracledb';
     for (const genreId of dto.genreIds) {
       await conn.execute(
         `
-        INSERT INTO MOVIE_GENRE (
+        INSERT INTO MOVIE_GENRES (
           MOVIE_ID,
           GENRE_ID
         )

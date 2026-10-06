@@ -15,6 +15,14 @@ export class CreateMovieDto {
   @Min(1)
   runningTime: number;
 
+  @IsString()
+  @IsNotEmpty()
+  synopsis: string;
+
+  @IsString()
+  @IsNotEmpty()
+  posterImage: string;
+
   @IsInt()
   releaseYear: number;
 
