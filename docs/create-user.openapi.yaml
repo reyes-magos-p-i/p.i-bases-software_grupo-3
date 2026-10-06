@@ -203,7 +203,7 @@ paths:
                 error: Forbidden
                 message: No tiene permiso para crear usuarios.
         "409":
-          description: La comprobación previa detectó un cliente con el mismo correo.
+          description: Correo duplicado dentro del tipo de usuario, detectado previamente o por la restricción única de Oracle. Incluye cuentas inactivas y no envía credenciales.
           content:
             application/json:
               schema:
@@ -216,8 +216,8 @@ paths:
           description: |
             Error interno con detalles ocultos. Actualmente incluye errores de
             persistencia sin traducción específica, como rechazos de claves
-            foráneas o un correo duplicado detectado por Oracle tras la
-            comprobación previa. No presupone que sea seguro repetir la creación.
+            foráneas o restricciones únicas distintas de UQ_CLIENTS_EMAIL y
+            UQ_EMPLOYEES_EMAIL. No presupone que sea seguro repetir la creación.
           content:
             application/json:
               schema:

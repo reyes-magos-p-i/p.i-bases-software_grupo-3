@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { AxiosError, type AxiosResponse } from 'axios'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
+import DeactivateUserDialog from '@/components/users/DeactivateUserDialog.vue'
 import EditUserDialog from '@/components/users/EditUserDialog.vue'
 import type { UserListResult } from '@/types/user'
 
@@ -39,7 +40,7 @@ async function render(
 ) {
   wrapper = mount(UserListPanel, {
     props: { section, role },
-    global: { stubs: { UserDetailDialog: true, EditUserDialog: true } },
+    global: { stubs: { UserDetailDialog: true, EditUserDialog: true, DeactivateUserDialog: true } },
   })
   await flushPromises()
   return wrapper
@@ -59,6 +60,42 @@ afterEach(() => {
 })
 
 describe('UserListPanel', () => {
+  it('selects a client for deactivation, cancels without reloading, and refreshes after success', async () => {
+    const view = await render('clients', 'EMPLOYEE')
+    await view.setProps({ currentUserId: 42 })
+    await view.get('button[aria-label="Desactivar"]').trigger('click')
+    const dialog = view.getComponent(DeactivateUserDialog)
+    expect(dialog.props('selection')).toEqual({
+      section: 'clients',
+      id: 42,
+      name: clients.items[0]?.name,
+      displayId: 'CL42',
+    })
+    dialog.vm.$emit('close')
+    await flushPromises()
+    expect(dialog.props('selection')).toBeNull()
+    expect(getUsers).toHaveBeenCalledTimes(1)
+    await view.get('button[aria-label="Desactivar"]').trigger('click')
+    dialog.vm.$emit('deactivated')
+    await flushPromises()
+    expect(dialog.props('selection')).toBeNull()
+    expect(view.text()).toContain('El usuario fue desactivado exitosamente.')
+    expect(getUsers).toHaveBeenCalledTimes(2)
+  })
+  it('prevents selecting the current employee and clears selection when permissions change', async () => {
+    const view = await render('employees')
+    await view.setProps({ currentUserId: 42 })
+    expect(view.get('button[aria-label="Desactivar"]').attributes('disabled')).toBeDefined()
+    await view.setProps({ currentUserId: 21 })
+    await view.get('button[aria-label="Desactivar"]').trigger('click')
+    const dialog = view.getComponent(DeactivateUserDialog)
+    dialog.vm.$emit('session-expired')
+    dialog.vm.$emit('forbidden')
+    expect(view.emitted('session-expired')).toHaveLength(1)
+    expect(view.emitted('forbidden')).toHaveLength(1)
+    await view.setProps({ role: 'EMPLOYEE' })
+    expect(dialog.props('selection')).toBeNull()
+  })
   it('selects a user for editing, refreshes after success, and shows feedback', async () => {
     const view = await render('clients', 'EMPLOYEE')
     await view.get('button[aria-label="Modificar"]').trigger('click')
@@ -104,7 +141,7 @@ describe('UserListPanel', () => {
     ).toEqual(['Ver', 'Modificar', 'Desactivar'])
     expect(view.get('button[aria-label="Ver"]').attributes('disabled')).toBeUndefined()
     expect(view.get('button[aria-label="Modificar"]').attributes('disabled')).toBeUndefined()
-    expect(view.get('button[aria-label="Desactivar"]').attributes('disabled')).toBeDefined()
+    expect(view.get('button[aria-label="Desactivar"]').attributes('disabled')).toBeUndefined()
     for (const button of view.findAll('.actions button')) {
       expect(button.find('i.bi').exists()).toBe(true)
       expect(button.text()).toBe('')

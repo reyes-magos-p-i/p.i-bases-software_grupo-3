@@ -17,6 +17,11 @@ const router = createRouter({
       component: () => import('@/views/DashboardView.vue'),
       meta: { requiresEmployee: true },
     },
+    {
+      path: '/verify-email',
+      name: 'verify-email',
+      component: () => import('@/views/EmailVerificationView.vue'),
+    },
     { path: '/dev/dashboard', redirect: '/dashboard' },
     {
       path: '/',

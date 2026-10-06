@@ -44,6 +44,14 @@ export class UsersService {
     return { provinces, cantons, districts };
   }
 
+  deactivateClient(id: number) {
+    return this.clientsRepository.deactivateClient(id);
+  }
+
+  deactivateEmployee(id: number, actorId: number) {
+    return this.usersRepository.deactivateEmployee(id, actorId);
+  }
+
   updateClient(id: number, data: UpdateClientDto) {
     this.requireChanges(data);
     return this.clientsRepository.updateClient(id, data);

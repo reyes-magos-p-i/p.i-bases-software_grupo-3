@@ -4,11 +4,17 @@ import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
 import EditUserDialog from '@/components/users/EditUserDialog.vue'
+import DeactivateUserDialog from '@/components/users/DeactivateUserDialog.vue'
 import { getEmployeeListOptions, getUsers } from '@/services/user.service'
 import type { BranchOption, UserListQuery, UserListResult, UserRole } from '@/types/user'
 import type { UserDetailSelection, UpdatedUser } from '@/types/user'
+import type { UserDeactivationSelection } from '@/types/user'
 
-const props = defineProps<{ section: 'clients' | 'employees'; role: UserRole }>()
+const props = defineProps<{
+  section: 'clients' | 'employees'
+  role: UserRole
+  currentUserId?: number
+}>()
 const emit = defineEmits<{
   'session-expired': []
   forbidden: []
@@ -18,6 +24,7 @@ const id = useId()
 const filterContainer = ref<HTMLElement | null>(null)
 const selectedUser = ref<UserDetailSelection | null>(null)
 const editedUser = ref<UserDetailSelection | null>(null)
+const deactivatedUser = ref<UserDeactivationSelection | null>(null)
 const updateNotice = ref('')
 const updateFeedback = ref<HTMLElement | null>(null)
 const searchDraft = ref('')
@@ -237,11 +244,37 @@ function userUpdated(selection: UserDetailSelection, user: UpdatedUser) {
   refresh()
   void nextTick(() => updateFeedback.value?.focus())
 }
+function canDeactivate(row: { [key: string]: unknown }) {
+  return canRead.value && !(props.section === 'employees' && row.id === props.currentUserId)
+}
+function deactivateSelection(row: { [key: string]: unknown }) {
+  if (
+    !canDeactivate(row) ||
+    typeof row.id !== 'number' ||
+    typeof row.name !== 'string' ||
+    typeof row.displayId !== 'string'
+  )
+    return
+  updateNotice.value = ''
+  deactivatedUser.value = {
+    section: props.section,
+    id: row.id,
+    name: row.name,
+    displayId: row.displayId,
+  }
+}
+function userDeactivated() {
+  deactivatedUser.value = null
+  updateNotice.value = 'El usuario fue desactivado exitosamente.'
+  refresh()
+  void nextTick(() => updateFeedback.value?.focus())
+}
 watch(
   () => [props.section, props.role],
   () => {
     selectedUser.value = null
     editedUser.value = null
+    deactivatedUser.value = null
     searchDraft.value = ''
     appliedSearch.value = ''
     validationError.value = ''
@@ -408,8 +441,16 @@ defineExpose({ refresh })
                   <i class="bi bi-pencil-square" aria-hidden="true"></i>
                 </button>
               </span>
-              <span title="Desactivar" class="action-hint">
-                <button type="button" disabled aria-label="Desactivar">
+              <span
+                :title="canDeactivate(row) ? 'Desactivar' : 'No puedes desactivar tu propia cuenta'"
+                class="action-hint"
+              >
+                <button
+                  type="button"
+                  :disabled="!canDeactivate(row)"
+                  aria-label="Desactivar"
+                  @click="deactivateSelection(row)"
+                >
                   <i class="bi bi-person-slash" aria-hidden="true"></i>
                 </button>
               </span>
@@ -463,6 +504,13 @@ defineExpose({ refresh })
       :selection="editedUser"
       @close="editedUser = null"
       @updated="userUpdated"
+      @session-expired="emit('session-expired')"
+      @forbidden="emit('forbidden')"
+    />
+    <DeactivateUserDialog
+      :selection="deactivatedUser"
+      @close="deactivatedUser = null"
+      @deactivated="userDeactivated"
       @session-expired="emit('session-expired')"
       @forbidden="emit('forbidden')"
     />

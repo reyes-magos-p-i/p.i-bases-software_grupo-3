@@ -7,6 +7,9 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MoviesModule } from './movies/movies.module';
+import { TheatersModule } from './theaters/theaters.module';
+import { CinemasModule } from './cinemas/cinemas.module';
+import { ProjectorsModule } from './projectors/projectors.module';
 
 
 @Module({
@@ -21,6 +24,9 @@ import { MoviesModule } from './movies/movies.module';
     AuthModule,
     UsersModule,
     MoviesModule,
+    TheatersModule,
+    CinemasModule,
+    ProjectorsModule,
   ],
   controllers: [ImageController],
 })

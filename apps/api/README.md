@@ -128,10 +128,39 @@ siendo `/auth/...`; el navegador usa `/api/auth/...` porque la cookie tiene
 Las pruebas HTTP sí simulan ese prefijo externo para verificar el recorrido con
 un navegador simulado que conserva y envía la cookie según su ruta.
 
-No hay endpoint de logout, renovación ni revocación anticipada en este incremento.
-Eliminar la cookie no invalida una copia del JWT: un cierre de sesión efectivo
-con revocación requiere un diseño posterior. No se habilita todavía el botón de
-cierre de sesión. Tampoco se modifica el esquema de Oracle.
+### Verificación del correo de clientes
+
+El registro con correo y contraseña crea la cuenta como pendiente y guarda un
+hash SHA-256 de un token aleatorio de un solo uso. El enlace vence en
+`EMAIL_VERIFICATION_TTL_MINUTES` (15 minutos por defecto; se permiten valores
+enteros de 1 a 1440). Al confirmarlo, el token se consume en una transacción,
+se activa la cuenta y se devuelve la sesión de cliente. Los tokens de clientes
+no pueden autenticar mientras exista una verificación pendiente.
+
+La tabla `CLIENT_EMAIL_VERIFICATIONS` es necesaria antes de probar el registro.
+En una base existente, ejecuta una vez
+[`database/migrations/20261003_client_email_verifications.sql`](../../database/migrations/20261003_client_email_verifications.sql)
+en el esquema configurado para la API. Para una instalación nueva, la tabla
+también está definida en `database/script.sql`. Las cuentas existentes y el
+registro social no requieren filas en esta tabla. Google y Facebook mantienen
+su flujo social independiente.
+
+El correo usa la configuración SMTP existente (`SMTP_HOST`, `SMTP_PORT`,
+`SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`) y `FRONTEND_URL` para
+construir `/verify-email?token=...`. Si la entrega falla después de crear la
+cuenta, el API devuelve `EMAIL_DELIVERY_FAILED`; el formulario conserva el
+correo y permite llamar a `/auth/resend-email-verification`. El endpoint de
+reenvío responde de forma genérica para no revelar si una dirección tiene una
+cuenta pendiente.
+
+Si se vuelve a enviar el formulario con un correo que ya tiene una cuenta
+pendiente, se reenvía el enlace desde el mismo flujo en lugar de rechazarlo como
+duplicado. La antigüedad de la cuenta no se reinicia al reenviar: después de
+siete días desde el registro inicial, el API elimina la cuenta pendiente y sus
+credenciales en una transacción. Una limpieza periódica corre cada hora; al
+intentar registrarse o reenviar para ese correo, también se elimina de inmediato
+si el plazo ya venció. Los siete días de retención son independientes de los
+minutos de validez de cada enlace.
 
 ## Project setup
 

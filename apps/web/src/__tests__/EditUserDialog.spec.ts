@@ -428,7 +428,7 @@ describe('EditUserDialog', () => {
       )
       expect(view.emitted('session-expired')?.length ?? 0).toBe(code === 401 ? 1 : 0)
       expect(view.emitted('forbidden')?.length ?? 0).toBe(code === 403 ? 1 : 0)
-      expect(page.get('input[name="email"]').attributes('aria-invalid')).toBe(String(code === 409))
+      expect(page.get('input[name="email"]').attributes('aria-invalid')).toBe('false')
       expect(page.get('select[name="districtId"]').attributes('aria-invalid')).toBe(
         String(code === 400),
       )
@@ -437,6 +437,44 @@ describe('EditUserDialog', () => {
       )
     },
   )
+  it.each([
+    'El correo electrónico ya está registrado para otro cliente.',
+    'El correo electrónico ya está registrado para otro empleado.',
+  ])('marks the email only for a known duplicate conflict: %s', async (message) => {
+    updateUser.mockRejectedValueOnce(failure(409, message))
+    await render()
+    await prepareEmail()
+    await confirm()
+    expect(page.get('input[name="email"]').attributes('aria-invalid')).toBe('true')
+    expect(page.text()).toContain('El correo electrónico ya está registrado para otro usuario.')
+    expect(updateUser).toHaveBeenCalledTimes(1)
+  })
+  it('explains the last-administrator conflict without marking the email', async () => {
+    getUserDetail.mockResolvedValueOnce(employee)
+    updateUser.mockRejectedValueOnce(
+      failure(409, 'Debe permanecer al menos un administrador activo.'),
+    )
+    await render({ section: 'employees', id: 42 })
+    await page.get('select[name="role"]').setValue('EMPLOYEE')
+    await page.get('form').trigger('submit')
+    await confirm()
+    expect(page.get('[role="alert"]').text()).toContain(
+      'Debe permanecer al menos un administrador activo.',
+    )
+    expect(page.get('input[name="email"]').attributes('aria-invalid')).toBe('false')
+    expect(page.get<HTMLSelectElement>('select[name="role"]').element.value).toBe('EMPLOYEE')
+    expect(wrapper?.emitted('updated')).toBeUndefined()
+    expect(updateUser).toHaveBeenCalledTimes(1)
+  })
+  it('shows a generic conflict without exposing unknown backend messages', async () => {
+    updateUser.mockRejectedValueOnce(failure(409, 'private database detail'))
+    await render()
+    await prepareEmail()
+    await confirm()
+    expect(page.get('[role="alert"]').text()).toContain('entran en conflicto con el estado actual')
+    expect(page.text()).not.toContain('private database detail')
+    expect(page.get('input[name="email"]').attributes('aria-invalid')).toBe('false')
+  })
   it('blocks duplicate writes and closing while saving', async () => {
     let resolve!: (result: { id: number; role: 'CLIENT'; email: string }) => void
     updateUser.mockReturnValueOnce(

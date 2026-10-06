@@ -4,15 +4,24 @@ import { useRoute, useRouter } from 'vue-router'
 import logo from '@/assets/logos/cinetadel-logo.png'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
 import LoginModal from '@/components/auth/LoginModal.vue'
-import { EmployeeAuthError } from '@/services/authService'
+import AccountMenu from '@/components/common/AccountMenu.vue'
+import { EmployeeAuthError, getClientSession, loginClient } from '@/services/authService'
 import {
   authenticateEmployee,
+  closeEmployeeSession,
   employeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
+import {
+  clearClientAuth,
+  clientSession,
+  restoreClientSession,
+} from '@/services/client-session.service'
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
+import type { ClientIdentity } from '@/types/client-auth'
 
 const activeModal = ref<'register' | 'login' | null>(null)
+const clientUser = clientSession.user
 const loginMode = ref<'client' | 'employee'>('client')
 const router = useRouter()
 const route = useRoute()
@@ -41,7 +50,12 @@ async function recoverSession() {
   recovering.value = true
   recoveryError.value = ''
   try {
-    await restoreEmployeeSession(true)
+    const results = await Promise.allSettled([
+      restoreEmployeeSession(true),
+      restoreClientSession(getClientSession),
+    ])
+    if (results.some((result) => result.status === 'rejected'))
+      throw new Error('Session recovery failed')
   } catch {
     if (!disposed)
       recoveryError.value = 'No se pudo comprobar tu sesión. Puedes volver a intentarlo.'
@@ -52,14 +66,15 @@ async function recoverSession() {
 
 async function submitLogin(credentials: EmployeeLoginRequest) {
   updateRetryDelay()
-  if (submitting.value || loginMode.value !== 'employee' || retryAfterSeconds.value > 0) return
+  if (submitting.value || retryAfterSeconds.value > 0) return
   submitting.value = true
   loginError.value = ''
   try {
-    const identity = await authenticateEmployee(credentials)
+    const client = loginMode.value === 'client'
+    const identity = await (client ? loginClient(credentials) : authenticateEmployee(credentials))
     if (!disposed && identity) {
       activeModal.value = null
-      await router.push('/dashboard')
+      await router.push(client ? '/' : '/dashboard')
     }
   } catch (error) {
     if (disposed) return
@@ -127,6 +142,22 @@ function openLogin() {
   loginMode.value = 'client'
   activeModal.value = 'login'
 }
+
+async function handleClientLogin(identity?: ClientIdentity) {
+  if (disposed) return
+  activeModal.value = null
+  if (identity) {
+    clientUser.value = identity
+    loginError.value = ''
+    await router.push('/')
+  }
+}
+
+async function logoutClient() {
+  await closeEmployeeSession()
+  await clearClientAuth()
+  activeModal.value = null
+}
 </script>
 
 <template>
@@ -136,27 +167,33 @@ function openLogin() {
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
       </RouterLink>
       <div class="navbar-actions">
-        <RouterLink v-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
+        <AccountMenu v-if="clientUser" :user="clientUser" @logout="logoutClient" />
+        <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
           >Ir al dashboard</RouterLink
         >
         <button v-else type="button" class="login-button" @click="openLogin">Iniciar sesión</button>
-        <button type="button" class="register-button" @click="activeModal = 'register'">
+        <button
+          v-if="!clientUser"
+          type="button"
+          class="register-button"
+          @click="activeModal = 'register'"
+        >
           Registrarse
         </button>
-        <!-- TODO(any): Handle the registered user and update the UI accordingly, ref -> SCRUM-106, SCRUM-37. -->
         <RegisterModal
           :open="activeModal === 'register'"
           @close="activeModal = null"
-          @registered="activeModal = null"
+          @authenticated="handleClientLogin"
         />
         <LoginModal
           :open="activeModal === 'login'"
           :mode="loginMode"
-          :enabled="loginMode === 'employee'"
+          enabled
           :submitting="submitting"
           :error-message="loginError"
-          :retry-after-seconds="loginMode === 'employee' ? retryAfterSeconds : 0"
+          :retry-after-seconds="retryAfterSeconds"
           @close="closeLogin"
+          @authenticated="handleClientLogin"
           @switch-mode="changeLoginMode"
           @submit="submitLogin"
         />

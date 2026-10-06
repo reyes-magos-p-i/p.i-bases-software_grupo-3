@@ -1,17 +1,45 @@
 import { isAxiosError } from 'axios'
 import { getApi } from '@/services/api'
 import type { RegisterPayload } from '@/types/client'
-//for login with google
+import type { ClientIdentity, ClientLoginRequest } from '@/types/client-auth'
+import {
+  clientIdentityFromResponse,
+  establishClientSession,
+  hasClientSession,
+} from '@/services/client-session.service'
 import { googleAuthCodeLogin } from 'vue3-google-login'
 import type { EmployeeIdentity, EmployeeLoginRequest } from '@/types/employee-auth'
 
-export async function facebookLogin(accessToken: string) {
+interface ClientAuthResponse {
+  accessToken: string
+  client: ClientIdentity
+}
+
+export async function facebookLogin(accessToken: string): Promise<ClientAuthResponse> {
+  const employee = await getEmployeeSession()
+  if (employee) {
+    throw new Error('Cierra la sesión del personal antes de iniciar sesión con Facebook.')
+  }
   const api = getApi()
-  const response = await api.post('/auth/facebook', {
+  const response = await api.post<ClientAuthResponse>('/auth/facebook', {
     accessToken,
   })
-  localStorage.setItem('accessToken', response.data.accessToken)
+  establishClientSession(response.data.client, response.data.accessToken)
   return response.data
+}
+
+export class EmailDeliveryError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'EmailDeliveryError'
+  }
+}
+
+export class InvalidEmailVerificationError extends Error {
+  constructor() {
+    super('Este enlace ya no es válido')
+    this.name = 'InvalidEmailVerificationError'
+  }
 }
 
 export async function registerUser(payload: RegisterPayload): Promise<void> {
@@ -20,6 +48,12 @@ export async function registerUser(payload: RegisterPayload): Promise<void> {
     await api.post('/auth/register', payload, { timeout: 60000 })
   } catch (error) {
     if (isAxiosError(error)) {
+      const code: unknown = error.response?.data?.code
+      if (code === 'EMAIL_DELIVERY_FAILED') {
+        throw new EmailDeliveryError(
+          'No se pudo enviar el correo de confirmación. Puedes solicitar que se reenvíe.',
+        )
+      }
       const message: unknown = error.response?.data?.message
       if (typeof message === 'string' && message.trim()) {
         throw new Error(message)
@@ -36,15 +70,38 @@ export async function registerUser(payload: RegisterPayload): Promise<void> {
   }
 }
 
-// reusable google login function
-export async function loginWithGoogle(): Promise<void> {
-  // waiting for auth code from google
+export async function resendEmailVerification(email: string): Promise<void> {
+  const api = getApi()
+  try {
+    await api.post('/auth/resend-email-verification', { email })
+  } catch {
+    throw new Error('No se pudo reenviar el correo de confirmación. Inténtalo nuevamente.')
+  }
+}
+
+export async function confirmEmailVerification(token: string): Promise<ClientIdentity> {
+  const api = getApi()
+  try {
+    const response = await api.post<ClientAuthResponse>('/auth/confirm-email', { token })
+    establishClientSession(response.data.client, response.data.accessToken)
+    return response.data.client
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.data?.code === 'EMAIL_VERIFICATION_INVALID') {
+      throw new InvalidEmailVerificationError()
+    }
+    throw new Error('No se pudo confirmar el correo. Inténtalo nuevamente.')
+  }
+}
+
+export async function loginWithGoogle(): Promise<ClientIdentity> {
   const api = getApi()
   const googleResponse = await googleAuthCodeLogin()
 
-  await api.post('/auth/google', {
+  const response = await api.post<ClientAuthResponse>('/auth/google', {
     code: googleResponse.code,
   })
+  establishClientSession(response.data.client, response.data.accessToken)
+  return response.data.client
 }
 
 export class EmployeeAuthError extends Error {
@@ -79,14 +136,30 @@ function identityFromResponse(value: unknown): EmployeeIdentity {
   return { id: value.id, role: value.role, firstName: value.firstName }
 }
 
-function employeeAuthError(error: unknown): EmployeeAuthError {
+export class ClientAuthError extends EmployeeAuthError {
+  constructor(message: string, status?: number, retryAfterSeconds?: number) {
+    super(message, status, retryAfterSeconds)
+    this.name = 'ClientAuthError'
+  }
+}
+
+function employeeAuthError(error: unknown, client = false): EmployeeAuthError {
   if (error instanceof EmployeeAuthError) return error
+  const ErrorType = client ? ClientAuthError : EmployeeAuthError
   const status = isAxiosError(error) ? error.response?.status : undefined
+  if (
+    client &&
+    status === 403 &&
+    isAxiosError(error) &&
+    error.response?.data?.code === 'EMAIL_VERIFICATION_REQUIRED'
+  ) {
+    return new ClientAuthError('Confirma tu correo electrónico antes de iniciar sesión.', status)
+  }
   if (status === 429) {
     const header = isAxiosError(error) ? error.response?.headers?.['retry-after'] : undefined
     const seconds = Number(header)
     const delay = Number.isFinite(seconds) && seconds > 0 ? Math.min(60, Math.ceil(seconds)) : 60
-    return new EmployeeAuthError(
+    return new ErrorType(
       'Se alcanzó el límite de intentos. Espera antes de volver a intentarlo.',
       status,
       delay,
@@ -97,14 +170,47 @@ function employeeAuthError(error: unknown): EmployeeAuthError {
     401: 'Correo o contraseña incorrectos.',
     403: 'No se pudo autorizar la solicitud. Si el problema persiste, contacta con asistencia.',
   }
-  return new EmployeeAuthError(
+  return new ErrorType(
     (status && messages[status]) ||
       'No se pudo conectar con el servicio de autenticación. Inténtalo nuevamente.',
     status,
   )
 }
 
+export async function loginClient(payload: ClientLoginRequest): Promise<ClientIdentity> {
+  try {
+    const response = await getApi().post<ClientAuthResponse>('/auth/clients/login', payload, {
+      timeout: 15000,
+    })
+    establishClientSession(response.data?.client, response.data?.accessToken)
+    return response.data.client
+  } catch (error) {
+    throw employeeAuthError(error, true)
+  }
+}
+
+export async function getClientSession(token: string): Promise<ClientIdentity | null> {
+  try {
+    const response = await getApi().get<unknown>('/auth/me', {
+      timeout: 10000,
+      headers: { Authorization: `Bearer ${token}` },
+      // Fetch can omit same-origin cookies, keeping client Bearer and staff sessions separate.
+      adapter: 'fetch',
+      withCredentials: false,
+    })
+    return clientIdentityFromResponse(response.data)
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.status === 401) return null
+    throw employeeAuthError(error, true)
+  }
+}
+
 export async function loginEmployee(payload: EmployeeLoginRequest): Promise<EmployeeIdentity> {
+  if (hasClientSession()) {
+    throw new EmployeeAuthError(
+      'Cierra la sesión de cliente antes de iniciar sesión como personal.',
+    )
+  }
   try {
     const response = await getApi().post<{ user: unknown }>('/auth/employees/login', payload, {
       timeout: 15000,

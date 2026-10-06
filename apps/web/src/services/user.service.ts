@@ -1,8 +1,17 @@
 import { getApi } from '@/services/api'
-import type { CreatedUser, CreateUserRequest, UserCreationOptions } from '@/types/user'
-import type { BranchOption, UserListQuery, UserListResult } from '@/types/user'
-import type { UserDetail, UserDetailSelection } from '@/types/user'
-import type { UpdatedUser, UpdateUserRequest, UserEditOptions } from '@/types/user'
+import type {
+  BranchOption,
+  CreatedUser,
+  CreateUserRequest,
+  UpdatedUser,
+  UpdateUserRequest,
+  UserCreationOptions,
+  UserDetail,
+  UserDetailSelection,
+  UserEditOptions,
+  UserListQuery,
+  UserListResult,
+} from '@/types/user'
 
 export async function getUserCreationOptions(signal?: AbortSignal): Promise<UserCreationOptions> {
   const response = await getApi().get<UserCreationOptions>('/users/creation-options', {
@@ -75,4 +84,14 @@ export async function updateUser(
     { timeout: 10000 },
   )
   return response.data
+}
+
+export async function deactivateUser(selection: UserDetailSelection): Promise<void> {
+  await getApi().patch<void>(
+    `/users/${selection.section}/${selection.id}/deactivate`,
+    {},
+    {
+      timeout: 10000,
+    },
+  )
 }

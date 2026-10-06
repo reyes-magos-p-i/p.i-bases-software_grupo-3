@@ -24,7 +24,7 @@ export class ListClientsQueryDto {
   })
   @MaxUtf8Bytes(400)
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' && !/[\p{Cc}]/u.test(value)
+    typeof value === 'string' && !/\p{Cc}/u.test(value)
       ? value.trim().replace(/\s+/gu, ' ')
       : value,
   )
