@@ -68,7 +68,7 @@ export class AuthController {
   @UseGuards(ThrottlerGuard, EmployeeSessionOriginGuard)
   @Header('Cache-Control', 'no-store')
   @HttpCode(HttpStatus.OK)
-  loginClient(@Body() dto: LoginDto) {
+  async loginClient(@Body() dto: LoginDto) {
     return this.auth.loginClient(dto);
   }
 
