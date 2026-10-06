@@ -14,15 +14,29 @@ import {
 } from '@/services/employee-session.service'
 import type { UserCreationOptions } from '@/types/user'
 
-const { getUserCreationOptions, createUser, getTheaterCreationOptions, createTheater } = vi.hoisted(
+const {
+  getUsers,
+  getEmployeeListOptions,
+  getUserCreationOptions,
+  createUser,
+  getTheaterCreationOptions,
+  createTheater,
+} = vi.hoisted(
   () => ({
-  getUserCreationOptions: vi.fn(),
-  createUser: vi.fn(),
+    getUsers: vi.fn(),
+    getEmployeeListOptions: vi.fn(),
+    getUserCreationOptions: vi.fn(),
+    createUser: vi.fn(),
     getTheaterCreationOptions: vi.fn(),
     createTheater: vi.fn(),
   }),
 )
-vi.mock('@/services/user.service', () => ({ getUserCreationOptions, createUser }))
+vi.mock('@/services/user.service', () => ({
+  getUsers,
+  getEmployeeListOptions,
+  getUserCreationOptions,
+  createUser,
+}))
 vi.mock('@/services/theater.service', () => ({ getTheaterCreationOptions, createTheater }))
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')

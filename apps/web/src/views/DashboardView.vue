@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
+import UserListPanel from '@/components/users/UserListPanel.vue'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
