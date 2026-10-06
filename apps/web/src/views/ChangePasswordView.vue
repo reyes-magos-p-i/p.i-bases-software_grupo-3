@@ -5,21 +5,37 @@ import AppFooter from '@/components/layout/AppFooter.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import {
   ChangePasswordError,
+  changeEmployeePassword,
   changeClientPassword,
+  type ChangeEmployeePasswordPayload,
   getClientPasswordStatus,
   type ChangeClientPasswordPayload,
   type ClientPasswordStatus,
 } from '@/services/authService'
 import { clientSession } from '@/services/client-session.service'
+import { employeeSession } from '@/services/employee-session.service'
+import type { EmployeeIdentity } from '@/types/employee-auth'
 import { checkPasswordPolicy, isPasswordPolicySatisfied } from '@/utils/password-policy'
 
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean
+    accountType?: 'client' | 'employee'
+  }>(),
+  { embedded: false, accountType: 'client' },
+)
+const emit = defineEmits<{ 'return-to-dashboard': [] }>()
 const router = useRouter()
-const user = clientSession.user
+const user = computed(() =>
+  props.accountType === 'employee'
+    ? (employeeSession.user.value as EmployeeIdentity | null)
+    : clientSession.user.value,
+)
 
 const EXPIRATION_OPTIONS = [30, 60, 90, 120] as const
 
 const status = ref<ClientPasswordStatus>('valid')
-const statusLoading = ref(true)
+const statusLoading = ref(props.accountType !== 'employee')
 const statusError = ref('')
 const showCurrentPassword = ref(false)
 const showNewPassword = ref(false)
@@ -46,8 +62,14 @@ const policyChecks = computed(() =>
   }),
 )
 const policySatisfied = computed(() => isPasswordPolicySatisfied(policyChecks.value))
+const isEmployee = computed(() => props.accountType === 'employee')
 
 async function loadStatus() {
+  if (isEmployee.value) {
+    status.value = 'valid'
+    statusLoading.value = false
+    return
+  }
   statusLoading.value = true
   statusError.value = ''
   try {
@@ -89,19 +111,35 @@ async function submit() {
       expirationDays: form.expirationDays,
     }
     if (!isMustSet.value) payload.currentPassword = form.currentPassword
-    await changeClientPassword(payload)
+    if (isEmployee.value) {
+      const employeePayload: ChangeEmployeePasswordPayload = {
+        ...payload,
+        currentPassword: form.currentPassword,
+      }
+      await changeEmployeePassword(employeePayload)
+    } else await changeClientPassword(payload)
     success.value = true
     status.value = 'valid'
   } catch (error) {
     if (error instanceof ChangePasswordError) {
-      if (error.code === 'CURRENT_PASSWORD_INCORRECT') errors.currentPassword = error.message
-      else if (error.code === 'PASSWORDS_DO_NOT_MATCH') errors.confirm = error.message
+      if (error.code === 'CURRENT_PASSWORD_INCORRECT')
+        errors.currentPassword = isEmployee.value ? 'Contraseña actual incorrecta' : error.message
+      else if (error.code === 'PASSWORDS_DO_NOT_MATCH')
+        errors.confirm = isEmployee.value ? 'Las contraseñas no coinciden' : error.message
+      else if (error.code === 'NEW_PASSWORD_SAME_AS_CURRENT')
+        errors.form = isEmployee.value
+          ? 'La nueva contraseña no puede ser igual a la actual'
+          : error.message
       else if (error.code === 'PASSWORD_POLICY_VIOLATION') {
-        errors.form = error.message
+        errors.form = isEmployee.value
+          ? 'La contraseña no cumple con la política de seguridad'
+          : error.message
         violationCodes.value = error.violations ?? []
-      } else errors.form = error.message
+      } else errors.form = isEmployee.value ? error.message.replace(/\.$/u, '') : error.message
     } else {
-      errors.form = 'No se pudo actualizar la contraseña, intenta de nuevo.'
+      errors.form = isEmployee.value
+        ? 'No se pudo actualizar la contraseña, intenta de nuevo'
+        : 'No se pudo actualizar la contraseña, intenta de nuevo.'
     }
   } finally {
     loading.value = false
@@ -109,14 +147,18 @@ async function submit() {
 }
 
 function goHome() {
-  void router.push('/')
+  if (isEmployee.value && props.embedded) {
+    emit('return-to-dashboard')
+    return
+  }
+  void router.push(isEmployee.value ? '/dashboard' : '/')
 }
 </script>
 
 <template>
-  <AppHeader />
+  <AppHeader v-if="!props.embedded" />
 
-  <main class="change-password-page">
+  <main class="change-password-page" :class="{ 'is-embedded': props.embedded }">
     <div class="change-password-container">
       <header class="page-heading">
         <p class="page-eyebrow">SEGURIDAD DE LA CUENTA</p>
@@ -145,9 +187,15 @@ function goHome() {
             <div class="success-state" role="status">
               <span class="success-icon"><i class="bi bi-check-lg" aria-hidden="true"></i></span>
               <h2 id="password-form-title">Contraseña actualizada</h2>
-              <p>Tu contraseña se actualizó correctamente.</p>
+              <p>
+                {{
+                  isEmployee
+                    ? 'Contraseña actualizada correctamente'
+                    : 'Tu contraseña se actualizó correctamente.'
+                }}
+              </p>
               <button type="button" class="primary-button continue-button" @click="goHome">
-                Continuar
+                {{ isEmployee ? 'Volver al tablero' : 'Continuar' }}
               </button>
             </div>
           </template>
@@ -176,7 +224,9 @@ function goHome() {
                     :type="showCurrentPassword ? 'text' : 'password'"
                     autocomplete="current-password"
                     :aria-invalid="!!errors.currentPassword"
-                    :aria-describedby="errors.currentPassword ? 'current-password-error' : undefined"
+                    :aria-describedby="
+                      errors.currentPassword ? 'current-password-error' : undefined
+                    "
                   />
                   <button
                     type="button"
@@ -243,9 +293,7 @@ function goHome() {
                     type="button"
                     class="password-toggle"
                     :aria-controls="'confirmNewPassword'"
-                    :aria-label="
-                      showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'
-                    "
+                    :aria-label="showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
                     :aria-pressed="showConfirmPassword"
                     @click="showConfirmPassword = !showConfirmPassword"
                   >
@@ -283,12 +331,7 @@ function goHome() {
                   <i class="bi bi-shield-lock" aria-hidden="true"></i>
                   {{ loading ? 'Guardando…' : 'Guardar contraseña' }}
                 </button>
-                <button
-                  v-if="!isForced"
-                  type="button"
-                  class="secondary-button"
-                  @click="goHome"
-                >
+                <button v-if="!isForced" type="button" class="secondary-button" @click="goHome">
                   Cancelar
                 </button>
               </div>
@@ -298,7 +341,9 @@ function goHome() {
 
         <aside class="policy-card" aria-labelledby="password-policy-title">
           <div class="policy-heading">
-            <span class="policy-icon"><i class="bi bi-shield-lock-fill" aria-hidden="true"></i></span>
+            <span class="policy-icon"
+              ><i class="bi bi-shield-lock-fill" aria-hidden="true"></i
+            ></span>
             <div>
               <p class="policy-eyebrow">PROTEGE TU CUENTA</p>
               <h2 id="password-policy-title">Contraseña segura</h2>
@@ -335,7 +380,7 @@ function goHome() {
     </div>
   </main>
 
-  <AppFooter />
+  <AppFooter v-if="!props.embedded" />
 </template>
 
 <style scoped>
@@ -344,8 +389,13 @@ function goHome() {
   padding: clamp(36px, 6vw, 72px) 16px clamp(48px, 7vw, 88px);
   font-family: inherit;
   background:
-    radial-gradient(ellipse at 78% 18%, rgb(54 8 12 / 5%), transparent 38%),
-    var(--color-background);
+    radial-gradient(ellipse at 78% 18%, rgb(54 8 12 / 5%), transparent 38%), var(--color-background);
+}
+
+.change-password-page.is-embedded {
+  min-height: 0;
+  padding: 0;
+  background: transparent;
 }
 
 .change-password-container {
@@ -356,6 +406,11 @@ function goHome() {
 .page-heading {
   margin-bottom: 30px;
   text-align: center;
+}
+
+.is-embedded .page-heading {
+  margin-bottom: 20px;
+  text-align: left;
 }
 
 .page-eyebrow,
@@ -386,12 +441,21 @@ function goHome() {
   gap: clamp(20px, 4vw, 40px);
 }
 
+.is-embedded .password-layout {
+  gap: clamp(16px, 2.5vw, 28px);
+}
+
 .form-card,
 .policy-card {
   border: 1px solid #e4e1e1;
   border-radius: var(--radius-medium);
   background: var(--color-white);
   box-shadow: 0 8px 28px rgb(13 13 13 / 8%);
+}
+
+.is-embedded .form-card,
+.is-embedded .policy-card {
+  box-shadow: 0 2px 10px rgb(13 13 13 / 5%);
 }
 
 .form-card {
@@ -544,9 +608,7 @@ function goHome() {
   flex-direction: column;
   padding: clamp(24px, 4vw, 40px);
   border-color: #e0d8d8;
-  background:
-    linear-gradient(145deg, rgb(54 8 12 / 3%), transparent 55%),
-    var(--color-white);
+  background: linear-gradient(145deg, rgb(54 8 12 / 3%), transparent 55%), var(--color-white);
 }
 
 .policy-heading {

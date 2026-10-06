@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
+import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
 import type { UserDetailSelection } from '@/types/user'
 import { createUser, getUserCreationOptions } from '@/services/user.service'
@@ -19,7 +20,7 @@ import { clearClientAuth } from '@/services/client-session.service'
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-const activeSection = ref<'employees' | 'clients'>(
+const activeSection = ref<'employees' | 'clients' | 'password'>(
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
 const loggingOut = ref(false)
@@ -207,14 +208,21 @@ onBeforeUnmount(() => {
   cancelCatalogRequest()
 })
 const availableSections = computed(() =>
-  role.value === 'ADMINISTRATOR' ? ['employees', 'clients'] : ['clients'],
+  role.value === 'ADMINISTRATOR' ? ['employees', 'clients', 'password'] : ['clients'],
 )
 const sectionTitle = computed(() =>
-  activeSection.value === 'employees' ? 'Empleados' : 'Clientes',
+  activeSection.value === 'employees'
+    ? 'Empleados'
+    : activeSection.value === 'clients'
+      ? 'Clientes'
+      : 'Cambiar contraseña',
 )
 
 watch(role, () => {
-  if (role.value === 'EMPLOYEE' && activeSection.value === 'employees') {
+  if (
+    role.value === 'EMPLOYEE' &&
+    (activeSection.value === 'employees' || activeSection.value === 'password')
+  ) {
     activeSection.value = 'clients'
   }
 })
@@ -222,11 +230,15 @@ watch(role, () => {
 function navigate(section: string) {
   if (submitting.value || loggingOut.value) return
   if (
-    (section === 'employees' || section === 'clients') &&
+    (section === 'employees' || section === 'clients' || section === 'password') &&
     availableSections.value.includes(section)
   ) {
     activeSection.value = section
   }
+}
+
+function returnToDashboard() {
+  activeSection.value = 'employees'
 }
 </script>
 
@@ -254,7 +266,7 @@ function navigate(section: string) {
       {{ creationResult }}
     </p>
 
-    <section class="preview-content">
+    <section v-if="activeSection !== 'password'" class="preview-content">
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
@@ -280,8 +292,14 @@ function navigate(section: string) {
         @user-updated="userUpdated"
       />
     </section>
+    <ChangePasswordView
+      v-else
+      embedded
+      account-type="employee"
+      @return-to-dashboard="returnToDashboard"
+    />
     <CreateUserDialog
-      v-if="role === 'ADMINISTRATOR'"
+      v-if="role === 'ADMINISTRATOR' && activeSection !== 'password'"
       :key="activeSection"
       ref="user-dialog"
       :mode="activeSection === 'clients' ? 'client' : 'employee'"

@@ -134,7 +134,8 @@ function identityFromResponse(value: unknown): EmployeeIdentity {
       'No se pudo verificar la sesión del personal. Inténtalo nuevamente.',
     )
   }
-  return { id: value.id, role: value.role, firstName: value.firstName }
+  const email = 'email' in value && typeof value.email === 'string' ? value.email : undefined
+  return { id: value.id, role: value.role, firstName: value.firstName, email }
 }
 
 export class ClientAuthError extends EmployeeAuthError {
@@ -240,7 +241,6 @@ export async function logoutEmployee(): Promise<void> {
   }
 }
 
-
 function clientAuthHeader(): Record<string, string> {
   const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
   return token ? { Authorization: `Bearer ${token}` } : {}
@@ -276,6 +276,10 @@ export interface ChangeClientPasswordPayload {
   newPassword: string
   confirmNewPassword: string
   expirationDays: 30 | 60 | 90 | 120
+}
+
+export interface ChangeEmployeePasswordPayload extends ChangeClientPasswordPayload {
+  currentPassword: string
 }
 
 type ChangePasswordErrorResponse = {
@@ -322,8 +326,22 @@ function mapPasswordChangeError(error: unknown): ChangePasswordError {
 }
 
 export async function changeClientPassword(payload: ChangeClientPasswordPayload): Promise<void> {
+  await changePassword('/auth/clients/password', payload, clientAuthHeader())
+}
+
+export async function changeEmployeePassword(
+  payload: ChangeEmployeePasswordPayload,
+): Promise<void> {
+  await changePassword('/auth/employees/password', payload)
+}
+
+async function changePassword(
+  endpoint: string,
+  payload: ChangeClientPasswordPayload,
+  headers?: Record<string, string>,
+): Promise<void> {
   try {
-    await getApi().patch('/auth/clients/password', payload, { headers: clientAuthHeader() })
+    await getApi().patch(endpoint, payload, { headers })
   } catch (error) {
     throw mapPasswordChangeError(error)
   }

@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import DashboardView from '@/views/DashboardView.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
+import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import { nextTick } from 'vue'
@@ -30,10 +31,11 @@ vi.mock('@/services/user.service', () => ({
 }))
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')
-  const user = ref<{ id: number; role: string; firstName: string } | null>({
+  const user = ref<{ id: number; role: string; firstName: string; email?: string } | null>({
     id: 21,
     role: 'ADMINISTRATOR',
     firstName: 'Ana',
+    email: 'ana@example.com',
   })
   return {
     employeeSession: { user },
@@ -45,7 +47,9 @@ vi.mock('@/services/employee-session.service', async () => {
   }
 })
 async function setRole(role: 'ADMINISTRATOR' | 'EMPLOYEE') {
-  Object.assign(employeeSession.user, { value: { id: 21, role, firstName: 'Ana' } })
+  Object.assign(employeeSession.user, {
+    value: { id: 21, role, firstName: 'Ana', email: 'ana@example.com' },
+  })
   await nextTick()
 }
 const catalogs: UserCreationOptions = {
@@ -88,13 +92,16 @@ beforeEach(() => {
     .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 })
   getEmployeeListOptions.mockReset().mockResolvedValue({ branches: [] })
   Object.assign(employeeSession.user, {
-    value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' },
+    value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana', email: 'ana@example.com' },
   })
   vi.mocked(closeEmployeeSession).mockReset().mockResolvedValue(null)
   vi.mocked(invalidateEmployeeSession).mockClear()
-  vi.mocked(restoreEmployeeSession)
-    .mockReset()
-    .mockResolvedValue({ id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' })
+  vi.mocked(restoreEmployeeSession).mockReset().mockResolvedValue({
+    id: 21,
+    role: 'ADMINISTRATOR',
+    firstName: 'Ana',
+    email: 'ana@example.com',
+  })
   createUser.mockReset().mockResolvedValue({ id: 42, role: 'EMPLOYEE', email: 'ana@example.com' })
   getUserCreationOptions.mockReset().mockResolvedValue(catalogs)
   // jsdom does not implement the native dialog methods.
@@ -156,6 +163,32 @@ async function renderDashboard() {
 }
 
 describe('DashboardView', () => {
+  it('shows the password section to administrators and returns from its embedded view', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    await view.get('[aria-label="Cambiar contraseña"]').trigger('click')
+    await flushPromises()
+
+    expect(view.getComponent(DashboardLayout).props('availableSections')).toContain('password')
+    expect(view.findComponent(ChangePasswordView).props()).toMatchObject({
+      embedded: true,
+      accountType: 'employee',
+    })
+    expect(view.findAllComponents(UserListPanel)).toHaveLength(0)
+    await view.findComponent(ChangePasswordView).vm.$emit('return-to-dashboard')
+    await flushPromises()
+    expect(view.findAllComponents(UserListPanel)).toHaveLength(1)
+  })
+
+  it('does not expose the password section to employees', async () => {
+    await setRole('EMPLOYEE')
+    const view = await renderDashboard()
+    await flushPromises()
+
+    expect(view.find('[aria-label="Cambiar contraseña"]').exists()).toBe(false)
+    expect(view.getComponent(DashboardLayout).props('availableSections')).not.toContain('password')
+  })
+
   it('provides the current staff ID to protect self deactivation', async () => {
     const view = await renderDashboard()
     await flushPromises()
@@ -264,7 +297,7 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
     expect(view.get('nav').text()).not.toContain('Tablero')
-    expect(view.get('nav').findAll('button')).toHaveLength(8)
+    expect(view.get('nav').findAll('button')).toHaveLength(7)
   })
 
   it('preserves clients as the current section across role changes', async () => {
@@ -283,7 +316,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(8)
+    expect(pending).toHaveLength(7)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')

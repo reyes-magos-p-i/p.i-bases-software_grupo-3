@@ -108,17 +108,17 @@ describe('DashboardLayout', () => {
     expect(wrapper.find('.bi-bell').exists()).toBe(false)
   })
 
-  it('hides only dashboard and employees for an employee, even if the parent enables them', () => {
+  it('hides administrator-only sections for an employee, even if the parent enables them', () => {
     const wrapper = renderLayout({
       role: 'EMPLOYEE',
       availableSections: sections.map(([id]) => id),
     })
     const navigation = wrapper.get('nav')
 
-    expect(navigation.findAll('button')).toHaveLength(8)
+    expect(navigation.findAll('button')).toHaveLength(7)
     for (const [id, label] of sections) {
       expect(navigation.find('[aria-label="' + label + '"]').exists()).toBe(
-        id !== 'dashboard' && id !== 'employees',
+        id !== 'dashboard' && id !== 'employees' && id !== 'password',
       )
     }
     expect(wrapper.get('header').text()).toContain('Sesión iniciada como Empleado')
