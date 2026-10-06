@@ -159,7 +159,7 @@ function handleImageError(): void {
 
   border-radius: var(--radius-large);
 
-  background-color: var(--color-dark);
+  background-color: var(--surface-background);
 }
 
 .hero-image {
@@ -177,8 +177,8 @@ function handleImageError(): void {
 
   background: linear-gradient(
     90deg,
-    rgba(13, 13, 13, 0.85) 0%,
-    rgba(13, 13, 13, 0.3) 60%,
+    var(--hero-overlay-start) 0%,
+    var(--hero-overlay-end) 60%,
     transparent 100%
   );
 }
@@ -191,7 +191,7 @@ function handleImageError(): void {
 
   max-width: 620px;
 
-  color: var(--color-white);
+  color: var(--content-background);
 }
 
 .hero-content h1 {
@@ -210,18 +210,18 @@ function handleImageError(): void {
 .purchase-button {
   padding: 10px 20px;
 
-  color: var(--color-white);
+  color: var(--button-text);
 
   border: 0;
   border-radius: var(--radius-small);
 
-  background-color: var(--color-primary);
+  background-color: var(--button-background);
 
   transition: background-color var(--transition-fast);
 }
 
 .purchase-button:hover {
-  background-color: var(--color-secondary);
+  background-color: var(--button-hover-background);
 }
 
 .carousel-control {
@@ -237,9 +237,9 @@ function handleImageError(): void {
   border: 0;
   border-radius: 50%;
 
-  color: var(--color-white);
+  color: var(--content-background);
 
-  background-color: rgba(13, 13, 13, 0.65);
+  background-color: var(--carousel-control-background);
 
   transform: translateY(-50%);
 }
@@ -270,14 +270,14 @@ function handleImageError(): void {
 
   padding: 0;
 
-  border: 1px solid var(--color-white);
+  border: 1px solid var(--content-background);
   border-radius: 50%;
 
   background: transparent;
 }
 
 .indicator.active {
-  background-color: var(--color-primary);
+  background-color: var(--accent-color);
 }
 
 .carousel-slide {

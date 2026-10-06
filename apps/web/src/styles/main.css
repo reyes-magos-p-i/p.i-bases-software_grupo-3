@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 @plugin "daisyui";
 
 *,
@@ -9,6 +9,8 @@
 
 html {
   scroll-behavior: smooth;
+  background-color: var(--page-background);
+  color-scheme: dark;
 }
 
 body {
@@ -23,14 +25,25 @@ body {
     'Segoe UI',
     sans-serif;
 
-  color: var(--color-dark);
-  background-color: var(--color-white);
+  color: var(--text-on-dark);
+  background-color: var(--page-background);
 }
 
 button,
 input,
 select {
   font: inherit;
+}
+
+input,
+select,
+textarea {
+  color-scheme: light;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-secondary);
 }
 
 a {
@@ -47,3 +60,79 @@ img {
   margin-inline: auto;
 }
 
+.form-control,
+.form-select {
+  color: var(--text-primary);
+  background-color: var(--input-background);
+  border-color: var(--border-color);
+}
+
+.form-control::placeholder {
+  color: var(--text-secondary);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  background-color: var(--input-disabled-background);
+}
+
+.form-control:focus,
+.form-select:focus {
+  color: var(--text-primary);
+  background-color: var(--input-background);
+  border-color: var(--focus-color);
+  box-shadow: 0 0 0 0.25rem var(--focus-shadow);
+}
+
+.form-check-input:checked {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.form-check-input:focus {
+  border-color: var(--focus-color);
+  box-shadow: 0 0 0 0.25rem var(--focus-shadow);
+}
+
+.btn-primary,
+.btn-light {
+  --bs-btn-color: var(--button-text);
+  --bs-btn-bg: var(--button-background);
+  --bs-btn-border-color: var(--button-background);
+  --bs-btn-hover-color: var(--button-text);
+  --bs-btn-hover-bg: var(--button-hover-background);
+  --bs-btn-hover-border-color: var(--button-hover-background);
+  --bs-btn-active-color: var(--button-text);
+  --bs-btn-active-bg: var(--button-hover-background);
+  --bs-btn-active-border-color: var(--button-hover-background);
+  --bs-btn-disabled-color: var(--button-text);
+  --bs-btn-disabled-bg: var(--button-background);
+  --bs-btn-disabled-border-color: var(--button-background);
+}
+
+.btn:focus-visible {
+  box-shadow: 0 0 0 0.25rem var(--focus-shadow);
+}
+
+.btn-primary {
+  --bs-btn-color: var(--button-confirm-text);
+  --bs-btn-bg: var(--button-confirm-background);
+  --bs-btn-border-color: var(--button-confirm-background);
+  --bs-btn-hover-color: var(--button-confirm-text);
+  --bs-btn-hover-bg: var(--button-confirm-hover-background);
+  --bs-btn-hover-border-color: var(--button-confirm-hover-background);
+  --bs-btn-active-color: var(--button-confirm-text);
+  --bs-btn-active-bg: var(--button-confirm-hover-background);
+  --bs-btn-active-border-color: var(--button-confirm-hover-background);
+  --bs-btn-disabled-color: var(--button-confirm-text);
+  --bs-btn-disabled-bg: var(--button-confirm-background);
+  --bs-btn-disabled-border-color: var(--button-confirm-background);
+}
+
+.text-dark {
+  color: var(--text-primary) !important;
+}
+
+.text-muted {
+  color: var(--text-secondary) !important;
+}

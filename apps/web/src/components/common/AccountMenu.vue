@@ -109,16 +109,16 @@ onBeforeUnmount(() => {
   height: 48px;
   flex: 0 0 48px;
   padding: 0;
-  border: 1px solid #d2d2d2;
+  border: 1px solid var(--accent-color);
   border-radius: 50%;
-  background: #f5f5f5;
+  background: var(--primary-color);
   cursor: pointer;
 }
 
 .account-avatar:hover,
 .account-avatar:focus-visible {
-  border-color: var(--color-primary);
-  outline: 2px solid var(--color-primary);
+  border-color: var(--accent-color);
+  outline: 2px solid var(--focus-on-dark);
   outline-offset: 2px;
 }
 
@@ -129,10 +129,11 @@ onBeforeUnmount(() => {
   right: 64px;
   width: min(280px, calc(100vw - 32px));
   padding: 16px;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: var(--color-white);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+  background: var(--content-background);
+  box-shadow: 0 8px 24px var(--shadow-color);
+  color: var(--text-primary);
 }
 
 .account-detail {
@@ -148,14 +149,14 @@ onBeforeUnmount(() => {
 
 .account-detail span {
   overflow-wrap: anywhere;
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.875rem;
 }
 
 .account-detail i {
   width: 18px;
   flex: 0 0 18px;
-  color: var(--color-dark);
+  color: var(--text-primary);
   text-align: center;
 }
 
@@ -164,7 +165,7 @@ onBeforeUnmount(() => {
   gap: 2px;
   margin-top: 12px;
   padding-top: 8px;
-  border-top: 1px solid #e8e8e8;
+  border-top: 1px solid var(--border-color);
 }
 
 .account-actions button {
@@ -175,12 +176,12 @@ onBeforeUnmount(() => {
   padding: 8px 0;
   border: 0;
   background: transparent;
-  color: #555;
+  color: var(--text-primary);
   text-align: left;
 }
 
 .account-actions button:disabled {
-  color: #777;
+  color: var(--text-disabled);
 }
 
 .account-logout {
@@ -193,17 +194,18 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--color-dark);
+  color: var(--text-on-dark);
   cursor: pointer;
   font-size: 1.25rem;
 }
 
 .account-logout:hover {
-  background: rgb(0 0 0 / 6%);
+  background: var(--surface-on-dark-hover);
+  color: var(--accent-color);
 }
 
 .account-logout:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--focus-on-dark);
   outline-offset: 2px;
 }
 

@@ -211,7 +211,8 @@ async function logoutClient() {
 <style scoped>
 .site-header {
   width: 100%;
-  background-color: var(--color-light_gray);
+  background-color: var(--navbar-background);
+  color: var(--text-on-dark);
 }
 
 .dashboard-link {
@@ -227,6 +228,8 @@ async function logoutClient() {
 .session-feedback button {
   min-height: 44px;
   margin-left: 8px;
+  color: var(--button-text);
+  background: var(--button-background);
 }
 
 .navbar-content {
@@ -258,23 +261,38 @@ async function logoutClient() {
 
 .register-button,
 .login-button {
-  color: inherit;
-  background-color: transparent;
+  color: var(--navbar-button-text);
+  background-color: var(--navbar-button-background);
   border: none;
   box-sizing: border-box;
-  padding: 30px;
+  padding: 24px 30px;
   font-weight: 700;
 }
 
 .register-button:hover,
 .login-button:hover {
-  color: var(--color-white);
-  background-color: var(--color-primary);
+  color: var(--navbar-button-text);
+  background-color: var(--navbar-button-hover-background);
+}
+
+.navbar-actions > .register-button {
+  position: relative;
+}
+
+.navbar-actions > .register-button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 1px;
+  height: 22px;
+  background-color: var(--navbar-separator-color);
+  transform: translateY(-50%);
 }
 
 .register-button:focus-visible,
 .login-button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--focus-on-dark);
   outline-offset: -4px;
 }
 

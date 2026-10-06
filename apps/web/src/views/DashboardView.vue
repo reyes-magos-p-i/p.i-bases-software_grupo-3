@@ -307,12 +307,13 @@ function navigate(section: string) {
 <style scoped>
 .creation-result {
   padding: 16px;
-  border-left: 4px solid var(--color-primary);
-  background: var(--color-white);
+  border-left: 4px solid var(--primary-color);
+  background: var(--content-background);
   overflow-wrap: anywhere;
+  color: var(--text-primary);
 }
 .creation-result:focus {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
 }
 
 .section-heading {
@@ -336,18 +337,18 @@ function navigate(section: string) {
   gap: 8px;
   min-height: 44px;
   padding: 10px 20px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--button-background);
   border-radius: var(--radius-small);
-  color: var(--color-white);
-  background: var(--color-primary);
+  color: var(--button-text);
+  background: var(--button-background);
 }
 
 .add-user-button:hover {
-  background: var(--color-dark);
+  background: var(--button-hover-background);
 }
 
 .add-user-button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--focus-on-dark);
   outline-offset: 2px;
 }
 </style>

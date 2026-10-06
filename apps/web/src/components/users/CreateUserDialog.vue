@@ -859,8 +859,8 @@ defineExpose({ open, complete })
   padding: 0;
   border: 0;
   border-radius: var(--radius-medium);
-  color: var(--color-dark);
-  background: var(--color-background);
+  color: var(--text-primary);
+  background: var(--dialog-background);
   overflow: hidden;
 }
 
@@ -870,7 +870,7 @@ defineExpose({ open, complete })
 }
 
 .user-dialog::backdrop {
-  background: color-mix(in srgb, var(--color-black) 55%, transparent);
+  background: var(--overlay-background);
 }
 
 .dialog-heading {
@@ -880,8 +880,8 @@ defineExpose({ open, complete })
   justify-content: space-between;
   gap: 16px;
   padding: 16px 24px;
-  color: var(--color-white);
-  background: var(--color-primary);
+  color: var(--dialog-heading-text);
+  background: var(--dialog-heading-background);
 }
 
 .dialog-heading h2 {
@@ -900,11 +900,11 @@ defineExpose({ open, complete })
 }
 
 .close-button:hover {
-  background: color-mix(in srgb, var(--color-white) 15%, transparent);
+  background: var(--surface-on-dark-hover);
 }
 
 .close-button:focus-visible {
-  outline: 2px solid var(--color-cream);
+  outline: 2px solid var(--focus-on-dark);
   outline-offset: 2px;
 }
 
@@ -964,7 +964,7 @@ label {
 .address-toggle input {
   width: 20px;
   height: 20px;
-  accent-color: var(--color-primary);
+  accent-color: var(--primary-color);
 }
 
 .form-control,
@@ -980,18 +980,18 @@ label {
 }
 
 .required-marker {
-  color: var(--color-error);
+  color: var(--error-color);
   font-weight: 700;
 }
 
 .field-error {
-  color: var(--color-error);
+  color: var(--error-color);
   font-size: 0.875rem;
 }
 
 .form-control[aria-invalid='true'],
 .form-select[aria-invalid='true'] {
-  border-color: var(--color-error);
+  border-color: var(--error-color);
 }
 
 textarea {
@@ -1000,8 +1000,8 @@ textarea {
 
 .form-control:focus,
 .form-select:focus {
-  border-color: var(--color-primary);
-  outline: 2px solid var(--color-primary);
+  border-color: var(--primary-color);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
   box-shadow: none;
 }
@@ -1009,8 +1009,8 @@ textarea {
 .preview-note,
 .catalog-notice {
   padding: 12px;
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-white);
+  border-left: 3px solid var(--primary-color);
+  background: var(--content-background);
 }
 
 .form-actions {
@@ -1024,28 +1024,39 @@ textarea {
 .create-button {
   min-height: 44px;
   padding: 10px 20px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--primary-color);
   border-radius: var(--radius-small);
 }
 
 .cancel-button {
-  color: var(--color-primary);
-  background: var(--color-white);
+  color: var(--button-secondary-text);
+  background: var(--content-background);
 }
 
 .cancel-button:hover {
-  background: var(--color-light_gray);
+  background: var(--surface-hover);
 }
 
 .cancel-button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 
+.create-button {
+  background: var(--button-confirm-background);
+  color: var(--button-confirm-text);
+  border-color: var(--button-confirm-background);
+}
+
+.create-button:not(:disabled):hover {
+  background: var(--button-confirm-hover-background);
+  border-color: var(--button-confirm-hover-background);
+}
+
 .create-button:disabled {
-  border-color: var(--color-light_gray);
-  color: var(--color-dark);
-  background: var(--color-light_gray);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  background: var(--input-disabled-background);
   cursor: not-allowed;
 }
 

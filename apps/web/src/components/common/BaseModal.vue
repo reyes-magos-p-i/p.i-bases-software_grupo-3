@@ -124,12 +124,12 @@ onBeforeUnmount(() => {
   overscroll-behavior: contain;
 }
 .app-modal-backdrop::backdrop {
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--overlay-background);
 }
 .app-modal-card {
   position: relative;
-  background: var(--color-white);
-  color: var(--color-black);
+  background: var(--dialog-background);
+  color: var(--text-primary);
   width: 100%;
   max-width: 480px;
   padding: 2rem 1.75rem;
@@ -147,9 +147,10 @@ onBeforeUnmount(() => {
   font-size: 1.25rem;
   width: 44px;
   height: 44px;
+  color: var(--text-primary);
 }
 .app-modal-close:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 .app-modal-title {
@@ -158,5 +159,6 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-size: 1.5rem;
   margin-bottom: 1.25rem;
+  color: var(--text-primary);
 }
 </style>

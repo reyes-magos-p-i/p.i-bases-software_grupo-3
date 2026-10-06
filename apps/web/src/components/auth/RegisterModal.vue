@@ -365,11 +365,14 @@ async function resendVerificationEmail() {
 
 <style scoped>
 .btn-brand {
-  background: var(--color-brand, #3d0a0a);
-  color: #fff;
+  background: var(--button-confirm-background);
+  color: var(--button-confirm-text);
   border: 0;
   border-radius: 6px;
   padding: 0.6rem 3rem;
+}
+.btn-brand:not(:disabled):hover {
+  background: var(--button-confirm-hover-background);
 }
 .btn-brand:disabled {
   opacity: 0.6;

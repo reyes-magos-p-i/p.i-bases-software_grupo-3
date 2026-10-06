@@ -50,8 +50,9 @@ const roleLabel = computed(
   gap: 12px 24px;
   min-height: 92px;
   padding: 16px 32px;
-  border-bottom: 1px solid var(--color-light_gray);
-  background: var(--color-white);
+  border-bottom: 1px solid var(--border-on-dark);
+  background: var(--surface-background);
+  color: var(--text-on-dark);
 }
 
 .header-context,
@@ -72,7 +73,7 @@ const roleLabel = computed(
 }
 
 .user-profile > .bi {
-  color: var(--color-primary);
+  color: var(--accent-color);
   font-size: 1.75rem;
 }
 
@@ -85,19 +86,19 @@ const roleLabel = computed(
   flex-shrink: 0;
   width: 44px;
   height: 44px;
-  border: 1px solid var(--color-light_gray);
+  border: 1px solid var(--button-background);
   border-radius: var(--radius-small);
-  color: var(--color-primary);
-  background: var(--color-white);
+  color: var(--button-text);
+  background: var(--button-background);
   font-size: 1.5rem;
 }
 
 .menu-button:hover {
-  background: var(--color-background);
+  background: var(--button-hover-background);
 }
 
 .menu-button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--focus-on-dark);
   outline-offset: 2px;
 }
 

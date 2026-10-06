@@ -126,8 +126,8 @@ watch(selectedProvince, () => {
 }
 
 .form-select:focus {
-  border-color: var(--color-secondary);
+  border-color: var(--focus-color);
 
-  box-shadow: 0 0 0 0.25rem rgba(115, 47, 59, 0.2);
+  box-shadow: 0 0 0 0.25rem var(--focus-shadow);
 }
 </style>

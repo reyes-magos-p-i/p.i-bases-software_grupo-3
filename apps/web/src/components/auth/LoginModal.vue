@@ -249,12 +249,12 @@ function submit() {
 
 <style scoped>
 .login-content {
-  color: var(--color-black);
+  color: var(--page-background);
 }
 .login-intro,
 .required-note,
 .availability-note {
-  color: var(--color-dark);
+  color: var(--text-primary);
   font-size: 0.85rem;
 }
 .login-intro {
@@ -266,14 +266,14 @@ function submit() {
 }
 .required-mark,
 .field-error {
-  color: var(--color-error);
+  color: var(--error-color);
 }
 .availability-note {
   margin: 0.5rem 0;
   line-height: 1.5;
 }
 .login-divider {
-  border-top: 1px solid var(--color-light_gray);
+  border-top: 1px solid var(--border-color);
   margin: 1.25rem 0;
 }
 .login-field {
@@ -287,18 +287,18 @@ label {
 input {
   width: 100%;
   min-height: 44px;
-  border: 1px solid var(--color-gray);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-small);
-  background: var(--color-light_gray);
-  color: var(--color-black);
+  background: var(--input-background);
+  color: var(--page-background);
   padding: 0.6rem 0.75rem;
 }
 input[aria-invalid='true'] {
-  border-color: var(--color-error);
+  border-color: var(--error-color);
 }
 input:focus-visible,
 button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 3px;
 }
 .field-error {
@@ -324,7 +324,7 @@ button:focus-visible {
   width: 44px;
   border: 0;
   background: transparent;
-  color: var(--color-dark);
+  color: var(--text-primary);
   border-radius: var(--radius-small);
 }
 .text-button {
@@ -334,7 +334,7 @@ button:focus-visible {
   min-height: 44px;
   text-align: left;
   text-decoration: underline;
-  color: var(--color-primary);
+  color: var(--text-primary);
   font-size: 0.875rem;
 }
 .recovery-option {
@@ -345,7 +345,7 @@ button:focus-visible {
   margin-top: -0.5rem;
 }
 .text-button:disabled {
-  color: var(--color-dark);
+  color: var(--text-primary);
   cursor: not-allowed;
   text-decoration: none;
 }
@@ -355,9 +355,12 @@ button:focus-visible {
   padding: 0.65rem 1rem;
   border: 0;
   border-radius: var(--radius-small);
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--button-confirm-background);
+  color: var(--button-confirm-text);
   font-weight: 600;
+}
+.login-submit:not(:disabled):hover {
+  background: var(--button-confirm-hover-background);
 }
 .login-submit:disabled {
   opacity: 0.65;
@@ -369,9 +372,9 @@ button:focus-visible {
 }
 .server-error {
   padding: 0.75rem;
-  border: 1px solid var(--color-error);
+  border: 1px solid var(--error-color);
   border-radius: var(--radius-small);
-  color: var(--color-error);
+  color: var(--error-color);
   overflow-wrap: anywhere;
 }
 </style>

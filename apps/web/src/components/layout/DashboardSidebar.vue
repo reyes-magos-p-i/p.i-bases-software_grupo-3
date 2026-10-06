@@ -127,8 +127,8 @@ const isAvailable = (section: string) => props.availableSections.includes(sectio
   height: 100%;
   min-height: 0;
   padding: 16px 12px;
-  color: var(--color-white);
-  background: var(--color-primary);
+  color: var(--sidebar-text);
+  background: var(--sidebar-background);
 }
 
 .sidebar-heading {
@@ -204,27 +204,28 @@ const isAvailable = (section: string) => props.availableSections.includes(sectio
 }
 
 .navigation-item:disabled {
-  color: var(--color-light_gray);
+  color: var(--sidebar-disabled-text);
   cursor: not-allowed;
 }
 
 .sidebar-control:hover,
 .navigation-item:not(:disabled):hover {
-  background: color-mix(in srgb, var(--color-white) 12%, transparent);
+  background: var(--sidebar-hover-background);
 }
 
 .navigation-item.is-active {
-  background: var(--bs-primary);
+  background: var(--sidebar-active-background);
+  color: var(--sidebar-active-text);
 }
 
 .sidebar-control:focus-visible,
 .navigation-item:focus-visible {
-  outline: 2px solid var(--color-cream);
+  outline: 2px solid var(--focus-on-dark);
   outline-offset: 2px;
 }
 
 .logout-button {
-  border-color: var(--color-light_gray);
+  border-color: var(--sidebar-disabled-text);
 }
 
 .is-compact .sidebar-heading,
