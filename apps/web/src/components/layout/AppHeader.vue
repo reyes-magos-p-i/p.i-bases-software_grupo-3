@@ -5,14 +5,18 @@ import logo from '@/assets/logos/cinetadel-logo.png'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
 import LoginModal from '@/components/auth/LoginModal.vue'
 import AccountMenu from '@/components/common/AccountMenu.vue'
-import { EmployeeAuthError } from '@/services/authService'
+import { EmployeeAuthError, getClientSession, loginClient } from '@/services/authService'
 import {
   authenticateEmployee,
   closeEmployeeSession,
   employeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
-import { clearClientAuth, clientSession } from '@/services/client-session.service'
+import {
+  clearClientAuth,
+  clientSession,
+  restoreClientSession,
+} from '@/services/client-session.service'
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
@@ -46,7 +50,12 @@ async function recoverSession() {
   recovering.value = true
   recoveryError.value = ''
   try {
-    await restoreEmployeeSession(true)
+    const results = await Promise.allSettled([
+      restoreEmployeeSession(true),
+      restoreClientSession(getClientSession),
+    ])
+    if (results.some((result) => result.status === 'rejected'))
+      throw new Error('Session recovery failed')
   } catch {
     if (!disposed)
       recoveryError.value = 'No se pudo comprobar tu sesión. Puedes volver a intentarlo.'
@@ -57,14 +66,15 @@ async function recoverSession() {
 
 async function submitLogin(credentials: EmployeeLoginRequest) {
   updateRetryDelay()
-  if (submitting.value || loginMode.value !== 'employee' || retryAfterSeconds.value > 0) return
+  if (submitting.value || retryAfterSeconds.value > 0) return
   submitting.value = true
   loginError.value = ''
   try {
-    const identity = await authenticateEmployee(credentials)
+    const client = loginMode.value === 'client'
+    const identity = await (client ? loginClient(credentials) : authenticateEmployee(credentials))
     if (!disposed && identity) {
       activeModal.value = null
-      await router.push('/dashboard')
+      await router.push(client ? '/' : '/dashboard')
     }
   } catch (error) {
     if (disposed) return
@@ -133,11 +143,13 @@ function openLogin() {
   activeModal.value = 'login'
 }
 
-function handleClientLogin(identity?: ClientIdentity) {
+async function handleClientLogin(identity?: ClientIdentity) {
+  if (disposed) return
   activeModal.value = null
   if (identity) {
     clientUser.value = identity
     loginError.value = ''
+    await router.push('/')
   }
 }
 
@@ -180,10 +192,10 @@ function goToChangePassword() {
         <LoginModal
           :open="activeModal === 'login'"
           :mode="loginMode"
-          :enabled="loginMode === 'employee'"
+          enabled
           :submitting="submitting"
           :error-message="loginError"
-          :retry-after-seconds="loginMode === 'employee' ? retryAfterSeconds : 0"
+          :retry-after-seconds="retryAfterSeconds"
           @close="closeLogin"
           @authenticated="handleClientLogin"
           @switch-mode="changeLoginMode"

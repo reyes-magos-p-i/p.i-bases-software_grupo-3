@@ -5,7 +5,12 @@ import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import LoginModal from '@/components/auth/LoginModal.vue'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
-import { EmployeeAuthError } from '@/services/authService'
+import {
+  ClientAuthError,
+  EmployeeAuthError,
+  getClientSession,
+  loginClient,
+} from '@/services/authService'
 import {
   authenticateEmployee,
   closeEmployeeSession,
@@ -17,6 +22,8 @@ import { clearClientSession } from '@/services/client-session.service'
 vi.mock('@/services/authService', async (original) => ({
   ...(await original<typeof import('@/services/authService')>()),
   registerUser: vi.fn(),
+  loginClient: vi.fn(),
+  getClientSession: vi.fn(),
 }))
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')
@@ -42,6 +49,10 @@ describe('AppHeader authentication navigation', () => {
 
   beforeEach(async () => {
     clearClientSession()
+    vi.mocked(loginClient)
+      .mockReset()
+      .mockResolvedValue({ id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' })
+    vi.mocked(getClientSession).mockReset().mockResolvedValue(null)
     vi.mocked(closeEmployeeSession).mockResolvedValue(null)
     Object.assign(employeeSession.user, { value: null })
     Object.assign(employeeSession.status, { value: 'unknown' })
@@ -198,6 +209,71 @@ describe('AppHeader authentication navigation', () => {
     await page.get('[name="email"]').setValue(' Staff@Example.com ')
     await page.get('[name="password"]').setValue(' Exact password ')
   }
+
+  async function clientForm() {
+    await wrapper.get('.login-button').trigger('click')
+    await page.get('[name="email"]').setValue(' Ana@Example.com ')
+    await page.get('[name="password"]').setValue(' Exact password ')
+  }
+
+  it('enables local client login and redirects back to the portal', async () => {
+    await router.push('/?from=other-page')
+    await clientForm()
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(loginClient).toHaveBeenCalledExactlyOnceWith({
+      email: 'ana@example.com',
+      password: ' Exact password ',
+    })
+    expect(authenticateEmployee).not.toHaveBeenCalled()
+    expect(router.currentRoute.value.fullPath).toBe('/')
+    expect(page.findAll('dialog[open]')).toHaveLength(0)
+  })
+
+  it('keeps client failures in the dialog and allows correcting the password', async () => {
+    vi.mocked(loginClient).mockRejectedValueOnce(
+      new ClientAuthError('Correo o contraseña incorrectos.', 401),
+    )
+    await clientForm()
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(page.get('[role="alert"]').text()).toContain('incorrectos')
+    await page.get('[name="password"]').setValue('corrected')
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(loginClient).toHaveBeenCalledTimes(2)
+    expect(page.findAll('dialog[open]')).toHaveLength(0)
+  })
+
+  it('honors client rate limits without automatic retries', async () => {
+    vi.useFakeTimers()
+    vi.mocked(loginClient).mockRejectedValueOnce(new ClientAuthError('Espera', 429, 2))
+    await clientForm()
+    await page.get('form').trigger('submit')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(page.text()).toContain('2 segundos')
+    await page.get('form').trigger('submit')
+    expect(loginClient).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(page.get<HTMLButtonElement>('.login-submit').element.disabled).toBe(false)
+    expect(loginClient).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores the client profile after the header is mounted again', async () => {
+    wrapper.unmount()
+    localStorage.setItem('accessToken', 'saved-token')
+    vi.mocked(getClientSession).mockResolvedValue({
+      id: 7,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Rojas',
+    })
+    wrapper = renderHeader()
+    await flushPromises()
+    expect(getClientSession).toHaveBeenCalledWith('saved-token')
+    expect(wrapper.text()).toContain('Ana Rojas')
+    expect(wrapper.find('.account-avatar').exists()).toBe(true)
+  })
 
   it('submits staff credentials once and navigates after confirmed authentication', async () => {
     await employeeForm()

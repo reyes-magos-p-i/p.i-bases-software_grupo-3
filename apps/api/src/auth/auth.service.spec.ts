@@ -30,6 +30,8 @@ describe('AuthService', () => {
   let service: AuthService;
   let clients: {
     findByEmail: jest.Mock;
+    findWithLocalCredentials: jest.Mock;
+    isEmailVerificationPending: jest.Mock;
     deleteExpiredPendingClientByEmail: jest.Mock;
     createWithLocalCredentials: jest.Mock;
     createPendingWithLocalCredentials: jest.Mock;
@@ -58,6 +60,8 @@ describe('AuthService', () => {
   beforeEach(async () => {
     clients = {
       findByEmail: jest.fn(),
+      findWithLocalCredentials: jest.fn(),
+      isEmailVerificationPending: jest.fn().mockResolvedValue(false),
       deleteExpiredPendingClientByEmail: jest.fn(),
       createWithLocalCredentials: jest.fn(),
       createPendingWithLocalCredentials: jest.fn(),
@@ -95,6 +99,90 @@ describe('AuthService', () => {
     jest.clearAllMocks();
     hasher.hash.mockResolvedValue({ passwordHash: 'hashed-password', salt });
     hasher.verify.mockReset().mockResolvedValue(true);
+  });
+
+  describe('client login', () => {
+    const credentials = {
+      email: 'client@example.com',
+      password: ' Exact password ',
+    };
+    const client = {
+      id: 7,
+      email: credentials.email,
+      firstName: 'Ana',
+      firstSurname: 'Rojas',
+      status: 'ACTIVE',
+      passwordHash: 'stored-hash',
+    };
+
+    it('verifies the exact password and returns only the safe profile with a client token', async () => {
+      clients.findWithLocalCredentials.mockResolvedValue(client);
+      await expect(service.loginClient(credentials)).resolves.toEqual({
+        accessToken: 'signed-token',
+        client: {
+          id: 7,
+          email: credentials.email,
+          firstName: 'Ana',
+          lastName: 'Rojas',
+        },
+      });
+      expect(hasher.verify).toHaveBeenCalledWith(
+        credentials.password,
+        'stored-hash',
+      );
+      expect(jwt.sign).toHaveBeenCalledWith({
+        sub: 7,
+        email: credentials.email,
+        type: 'client',
+      });
+      expect(
+        users.findEmployeeWithLocalCredentialsByEmail,
+      ).not.toHaveBeenCalled();
+      expect(verificationSender.send).not.toHaveBeenCalled();
+    });
+
+    it.each([null, { ...client, status: 'INACTIVE' }])(
+      'rejects unavailable accounts without issuing tokens: %p',
+      async (account) => {
+        clients.findWithLocalCredentials.mockResolvedValue(account);
+        await expect(service.loginClient(credentials)).rejects.toThrow(
+          'Correo o contraseña incorrectos',
+        );
+        expect(hasher.verify).toHaveBeenCalledWith(
+          credentials.password,
+          expect.any(String),
+        );
+        expect(jwt.sign).not.toHaveBeenCalled();
+        expect(clients.isEmailVerificationPending).not.toHaveBeenCalled();
+      },
+    );
+
+    it('uses the same credential error for incorrect passwords without exposing verification status', async () => {
+      clients.findWithLocalCredentials.mockResolvedValue(client);
+      hasher.verify.mockResolvedValue(false);
+      await expect(service.loginClient(credentials)).rejects.toThrow(
+        'Correo o contraseña incorrectos',
+      );
+      expect(clients.isEmailVerificationPending).not.toHaveBeenCalled();
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('requires email confirmation after validating the password', async () => {
+      clients.findWithLocalCredentials.mockResolvedValue(client);
+      clients.isEmailVerificationPending.mockResolvedValue(true);
+      await expect(service.loginClient(credentials)).rejects.toMatchObject({
+        status: 403,
+        response: { code: 'EMAIL_VERIFICATION_REQUIRED' },
+      });
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('propagates persistence failures without attempting to issue a token', async () => {
+      const failure = new Error('Database unavailable');
+      clients.findWithLocalCredentials.mockRejectedValue(failure);
+      await expect(service.loginClient(credentials)).rejects.toBe(failure);
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
   });
 
   describe('register', () => {
