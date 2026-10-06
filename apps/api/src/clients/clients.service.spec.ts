@@ -17,7 +17,12 @@ describe('ClientsService', () => {
     savePassword: jest.Mock;
   };
 
-  const client = { id: 1, email: 'ana@example.com', firstName: 'Ana' };
+  const client = {
+    status: 'ACTIVE',
+    id: 1,
+    email: 'ana@example.com',
+    firstName: 'Ana',
+  };
 
   beforeEach(async () => {
     conn = { execute: jest.fn() };
@@ -97,6 +102,36 @@ describe('ClientsService', () => {
   });
 
   describe('pending email verification', () => {
+    it('excludes deactivated accounts when looking up a pending registration', async () => {
+      db.query.mockResolvedValue({ rows: [] });
+      await expect(
+        service.findPendingLocalClientByEmail(client.email),
+      ).resolves.toBeNull();
+      expect(db.query).toHaveBeenCalledWith(
+        expect.stringContaining("c.STATUS = 'ACTIVE'"),
+        { email: client.email },
+      );
+    });
+
+    it('cannot rotate verification for a deactivated account', async () => {
+      db.query.mockResolvedValue({ rowsAffected: 0 });
+      await expect(
+        service.replaceEmailVerification(42, 'hash', 30),
+      ).rejects.toThrow();
+      expect(db.query.mock.calls[0][0]).toContain(
+        "WHERE CLIENT_ID = :clientId AND STATUS = 'ACTIVE'",
+      );
+    });
+
+    it('does not consume a verification token belonging to an inactive account', async () => {
+      conn.execute.mockResolvedValue({ rowsAffected: 0 });
+      await expect(
+        service.consumeEmailVerification('token-hash'),
+      ).resolves.toBeNull();
+      expect(conn.execute.mock.calls[0][0]).toContain("c.STATUS = 'ACTIVE'");
+      expect(conn.execute).toHaveBeenCalledTimes(1);
+    });
+
     it('creates a pending client with its verification token and returns the public client', async () => {
       repository.createClient.mockResolvedValue(12);
       db.query.mockResolvedValue({ rows: [{ ...client, id: 12 }] });
@@ -283,6 +318,16 @@ describe('ClientsService', () => {
   });
 
   describe('deleteExpiredPendingClients', () => {
+    it('locks eligible clients and excludes inactive accounts from pending cleanup', async () => {
+      conn.execute.mockResolvedValue({ rows: [] });
+      await service.deleteExpiredPendingClients();
+      expect(conn.execute.mock.calls[0][0]).toContain("c.STATUS = 'ACTIVE'");
+      expect(conn.execute.mock.calls[0][0]).toContain(
+        'FOR UPDATE OF v.CLIENT_ID, c.STATUS SKIP LOCKED',
+      );
+      expect(conn.execute).toHaveBeenCalledTimes(1);
+    });
+
     it('deletes only pending clients older than the retention period transactionally', async () => {
       conn.execute
         .mockResolvedValueOnce({ rows: [{ clientId: 42 }] })
@@ -396,6 +441,42 @@ describe('ClientsService', () => {
   });
 
   describe('findOrCreateSocial', () => {
+    it.each(['GOOGLE', 'FACEBOOK'] as const)(
+      'rejects an inactive %s link without recreating or relinking',
+      async (provider) => {
+        db.query.mockResolvedValueOnce({
+          rows: [{ ...client, status: 'INACTIVE' }],
+        });
+        await expect(
+          service.findOrCreateSocial({
+            provider,
+            providerUserId: 'old-id',
+            email: client.email,
+            firstName: 'Ana',
+            lastName: 'Rojas',
+          }),
+        ).rejects.toMatchObject({ status: 401 });
+        expect(db.query).toHaveBeenCalledTimes(1);
+        expect(db.transaction).not.toHaveBeenCalled();
+        expect(repository.insertClient).not.toHaveBeenCalled();
+      },
+    );
+    it('rejects linking a new provider to an inactive email', async () => {
+      db.query
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ ...client, status: 'INACTIVE' }] });
+      await expect(
+        service.findOrCreateSocial({
+          provider: 'GOOGLE',
+          providerUserId: 'new-id',
+          email: client.email,
+          firstName: 'Ana',
+          lastName: 'Rojas',
+        }),
+      ).rejects.toMatchObject({ status: 401 });
+      expect(db.query).toHaveBeenCalledTimes(2);
+      expect(db.transaction).not.toHaveBeenCalled();
+    });
     it('returns the client already linked to this provider account', async () => {
       db.query.mockResolvedValueOnce({ rows: [client] }); // findByExternal hit
 

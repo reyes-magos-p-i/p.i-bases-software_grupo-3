@@ -20,6 +20,9 @@ const { JwtService } = runtime('@nestjs/jwt') as typeof import('@nestjs/jwt');
 const { AuthModule } = runtime(
   '../dist/auth/auth.module.js',
 ) as typeof import('../src/auth/auth.module');
+const { EmailVerificationSender } = runtime(
+  '../dist/auth/notifications/email-verification-sender.js',
+) as typeof import('../src/auth/notifications/email-verification-sender');
 const { UsersController } = runtime(
   '../dist/users/users.controller.js',
 ) as typeof import('../src/users/users.controller');
@@ -56,6 +59,7 @@ describe('Compiled user creation validation', () => {
     firstName: 'Ana',
     firstSurname: 'Solano',
     secondSurname: 'Rojas',
+    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
     branchId: 1,
@@ -81,6 +85,8 @@ describe('Compiled user creation validation', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue({})
+      .overrideProvider(EmailVerificationSender)
+      .useValue({ send: jest.fn() })
       .overrideProvider(UsersRepository)
       .useValue(repository)
       .compile();
@@ -134,8 +140,15 @@ describe('Compiled user creation validation', () => {
 
   it.each([
     { ...client, email: 'invalid' },
+    { ...client, phoneNumber: '22222222' },
+    { ...employee, phoneNumber: '+1 88888888' },
+    { ...employee, branchId: 0 },
     { ...employee, branchId: '1' },
+    { ...employee, hireDate: undefined },
+    { ...employee, hireDate: '2026-02-30' },
+    { ...employee, hireDate: '0000-01-01' },
     { ...employee, address: { districtId: '7' } },
+    { ...employee, address: { districtId: 0 } },
     { ...client, role: 'UNKNOWN' },
   ])('rejects invalid input before persistence: %p', async (body) => {
     const response = await browser.post('/api/users').send(body).expect(400);

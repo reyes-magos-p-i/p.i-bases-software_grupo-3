@@ -18,6 +18,7 @@ jest.mock('google-auth-library', () => ({
   OAuth2Client: jest.fn(),
 }));
 
+import { OAuth2Client } from 'google-auth-library';
 import { UsersRepository } from '../users/users.repository';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { EmployeeWithLocalCredentials } from '../users/types/employee-with-local-credentials.type';
@@ -140,10 +141,12 @@ describe('AuthService', () => {
         status: 'pending_verification',
         email: registerDto.email,
       });
-      expect(clients.createPendingWithLocalCredentials.mock.calls[0][3]).toMatch(
-        /^[a-f0-9]{64}$/u,
+      expect(
+        clients.createPendingWithLocalCredentials.mock.calls[0][3],
+      ).toMatch(/^[a-f0-9]{64}$/u);
+      expect(clients.createPendingWithLocalCredentials.mock.calls[0][4]).toBe(
+        30,
       );
-      expect(clients.createPendingWithLocalCredentials.mock.calls[0][4]).toBe(30);
       expect(verificationSender.send).toHaveBeenCalledWith({
         email: registerDto.email,
         confirmationUrl: expect.stringMatching(
@@ -179,7 +182,9 @@ describe('AuthService', () => {
         id: 5,
         email: registerDto.email,
       });
-      verificationSender.send.mockRejectedValue(new Error('SMTP private details'));
+      verificationSender.send.mockRejectedValue(
+        new Error('SMTP private details'),
+      );
 
       await expect(service.register(registerDto)).rejects.toMatchObject({
         response: {
@@ -187,7 +192,9 @@ describe('AuthService', () => {
           message: expect.stringContaining('reenvíe'),
         },
       });
-      expect(clients.createPendingWithLocalCredentials).toHaveBeenCalledTimes(1);
+      expect(clients.createPendingWithLocalCredentials).toHaveBeenCalledTimes(
+        1,
+      );
     });
 
     it('persists a pending account before attempting email delivery', async () => {
@@ -227,6 +234,7 @@ describe('AuthService', () => {
 
   describe('email verification', () => {
     const client = {
+      status: 'ACTIVE',
       id: 8,
       email: 'ana@example.com',
       firstName: 'Ana',
@@ -238,7 +246,9 @@ describe('AuthService', () => {
 
       await expect(
         service.resendEmailVerification(client.email),
-      ).resolves.toMatchObject({ message: expect.stringContaining('Si existe') });
+      ).resolves.toMatchObject({
+        message: expect.stringContaining('Si existe'),
+      });
 
       expect(clients.replaceEmailVerification).toHaveBeenCalledWith(
         client.id,
@@ -302,6 +312,32 @@ describe('AuthService', () => {
           message: 'Este enlace ya no es válido',
         },
       });
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('does not issue a session if the client was deactivated before confirmation', async () => {
+      clients.consumeEmailVerification.mockResolvedValue({
+        ...client,
+        status: 'INACTIVE',
+      });
+      await expect(
+        service.confirmEmailVerification('c'.repeat(64)),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('does not resend or replace credentials when an inactive email is already registered', async () => {
+      clients.findByEmail.mockResolvedValue({ ...client, status: 'INACTIVE' });
+      clients.findPendingLocalClientByEmail.mockResolvedValue(null);
+      await expect(service.register(registerDto)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      await expect(
+        service.resendEmailVerification(client.email),
+      ).resolves.toMatchObject({ message: expect.any(String) });
+      expect(verificationSender.send).not.toHaveBeenCalled();
+      expect(clients.replaceEmailVerification).not.toHaveBeenCalled();
+      expect(clients.createPendingWithLocalCredentials).not.toHaveBeenCalled();
       expect(jwt.sign).not.toHaveBeenCalled();
     });
 
@@ -434,9 +470,50 @@ describe('AuthService', () => {
     });
   });
 
+  it('does not issue a Google token for a deactivated social client', async () => {
+    const denied = new UnauthorizedException('blocked');
+    (OAuth2Client as unknown as jest.Mock).mockImplementation(() => ({
+      getToken: jest
+        .fn()
+        .mockResolvedValue({ tokens: { id_token: 'provider-token' } }),
+      verifyIdToken: jest.fn().mockResolvedValue({
+        getPayload: () => ({
+          sub: 'google-id',
+          email: 'user@example.com',
+          email_verified: true,
+        }),
+      }),
+    }));
+    clients.findOrCreateSocial.mockRejectedValue(denied);
+    const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(service.googleLogin('authorization-code')).rejects.toBe(
+        denied,
+      );
+      expect(jwt.sign).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it('keeps the email of a deactivated client reserved at registration', async () => {
+    clients.findByEmail.mockResolvedValue({
+      id: 42,
+      status: 'INACTIVE',
+      email: registerDto.email,
+    });
+    await expect(service.register(registerDto)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(hasher.hash).not.toHaveBeenCalled();
+    expect(clients.createWithLocalCredentials).not.toHaveBeenCalled();
+  });
   describe('issueToken', () => {
     it('signs a payload with type: client', () => {
-      const result = service.issueToken({ id: 9, email: 'x@y.com' } as never);
+      const result = service.issueToken({
+        id: 9,
+        email: 'x@y.com',
+        status: 'ACTIVE',
+      } as never);
 
       expect(jwt.sign).toHaveBeenCalledWith({
         sub: 9,
@@ -445,6 +522,21 @@ describe('AuthService', () => {
       });
       expect(result).toEqual({ accessToken: 'signed-token' });
     });
+    it('rejects inactive clients before signing a token', () => {
+      expect(() =>
+        service.issueToken({ id: 9, status: 'INACTIVE' } as never),
+      ).toThrow(UnauthorizedException);
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+    it.each(['UNKNOWN', '', null, undefined, 1])(
+      'rejects invalid client status %p without exposing its value',
+      (status) => {
+        expect(() => service.issueToken({ id: 9, status } as never)).toThrow(
+          'Invalid client status.',
+        );
+        expect(jwt.sign).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('facebookLogin', () => {
@@ -485,6 +577,7 @@ describe('AuthService', () => {
       clients.findOrCreateSocial.mockResolvedValue({
         id: 12,
         email: 'facebook@example.com',
+        status: 'ACTIVE',
         firstName: 'Ana',
         firstSurname: 'Perez',
       });

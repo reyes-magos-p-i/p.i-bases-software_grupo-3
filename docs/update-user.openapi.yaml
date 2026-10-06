@@ -1,0 +1,279 @@
+openapi: 3.0.3
+info:
+  title: Modificación de usuarios
+  version: 1.0.0
+  description: Edición parcial con confirmación en la interfaz. No modifica contraseñas, género ni campos históricos. No requiere cambios de esquema.
+servers:
+  - url: /api
+security:
+  - employeeCookie: []
+  - bearerAuth: []
+paths:
+  /users/edit-options:
+    get:
+      summary: Consultar catálogos de dirección
+      description: Administradores y empleados. No incluye sucursales.
+      responses:
+        "200":
+          description: Catálogos de dirección.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provinces, cantons, districts]
+                properties:
+                  provinces:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Option"
+                  cantons:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Option"
+                        - type: object
+                          required: [provinceId]
+                          properties:
+                            provinceId:
+                              type: integer
+                  districts:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Option"
+                        - type: object
+                          required: [cantonId]
+                          properties:
+                            cantonId:
+                              type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/Failure"
+  /users/clients/{id}:
+    patch:
+      summary: Modificar un cliente seleccionado
+      description: Administradores y empleados. Requiere origen autorizado. Enviar al menos un campo editable; null elimina celular o dirección. Los campos omitidos se conservan.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                firstName:
+                  $ref: "#/components/schemas/RequiredName"
+                secondName:
+                  $ref: "#/components/schemas/OptionalName"
+                firstSurname:
+                  $ref: "#/components/schemas/OptionalName"
+                secondSurname:
+                  $ref: "#/components/schemas/OptionalName"
+                email:
+                  $ref: "#/components/schemas/Email"
+                phoneNumber:
+                  type: string
+                  nullable: true
+                  description: Se eliminan espacios externos antes de validar y se almacena como ocho dígitos.
+                  pattern: '^(?:\+506[ -]?)?[678]\d{3}[ -]?\d{4}$'
+                address:
+                  $ref: "#/components/schemas/ClientAddress"
+      responses:
+        "200":
+          $ref: "#/components/responses/Updated"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/Failure"
+  /users/employees/{id}:
+    patch:
+      summary: Modificar personal seleccionado
+      description: Solo administradores y origen autorizado. Permite cambiar la sucursal, que debe existir. No convierte clientes. Segundo nombre admite null; los demás valores enviados no pueden ser nulos. Las propiedades omitidas se conservan.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                firstName:
+                  $ref: "#/components/schemas/RequiredName"
+                secondName:
+                  $ref: "#/components/schemas/OptionalName"
+                firstSurname:
+                  $ref: "#/components/schemas/RequiredName"
+                secondSurname:
+                  $ref: "#/components/schemas/RequiredName"
+                email:
+                  $ref: "#/components/schemas/Email"
+                phoneNumber:
+                  type: string
+                  description: Se eliminan espacios externos antes de validar y se almacena como ocho dígitos.
+                  pattern: '^(?:\+506[ -]?)?[678]\d{3}[ -]?\d{4}$'
+                address:
+                  $ref: "#/components/schemas/Address"
+                role:
+                  type: string
+                  enum: [EMPLOYEE, ADMINISTRATOR]
+                branchId:
+                  type: integer
+                  minimum: 1
+                  maximum: 9007199254740991
+                  description: Sucursal existente en CINEMAS.BRANCH_ID.
+      responses:
+        "200":
+          $ref: "#/components/responses/Updated"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/Failure"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    employeeCookie:
+      type: apiKey
+      in: cookie
+      name: cinetadel_employee_session
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 9007199254740991
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: Debe coincidir con FRONTEND_URL.
+      schema:
+        type: string
+  schemas:
+    RequiredName:
+      type: string
+      minLength: 1
+      description: Obligatorio si se envía. Se eliminan espacios externos; no admite texto vacío. Unicode válido con máximo de 100 bytes UTF-8, igual que en creación.
+    OptionalName:
+      type: string
+      nullable: true
+      description: Unicode válido con máximo de 100 bytes UTF-8. Se eliminan espacios externos; texto vacío o null elimina el valor.
+    Option:
+      type: object
+      required: [id, label]
+      properties:
+        id:
+          type: integer
+        label:
+          type: string
+    Email:
+      type: string
+      format: email
+      description: Obligatorio si se envía. Se normaliza con trim y minúsculas. Máximo de 150 bytes UTF-8, no caracteres.
+    DistrictId:
+      type: integer
+      minimum: 1
+      maximum: 9007199254740991
+    AddressDetails:
+      type: string
+      nullable: true
+      description: Opcional. Unicode válido con máximo de 255 bytes UTF-8; no se amplía la columna.
+    Address:
+      type: object
+      additionalProperties: false
+      required: [districtId]
+      properties:
+        districtId:
+          $ref: "#/components/schemas/DistrictId"
+        details:
+          $ref: "#/components/schemas/AddressDetails"
+    ClientAddress:
+      type: object
+      nullable: true
+      additionalProperties: false
+      required: [districtId]
+      properties:
+        districtId:
+          $ref: "#/components/schemas/DistrictId"
+        details:
+          $ref: "#/components/schemas/AddressDetails"
+    UpdatedUser:
+      type: object
+      required: [id, email, role]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        role:
+          type: string
+          enum: [CLIENT, EMPLOYEE, ADMINISTRATOR]
+    Error:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode:
+          type: integer
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        error:
+          type: string
+  responses:
+    Updated:
+      description: Usuario modificado. No devuelve credenciales ni envía correo.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdatedUser"
+    Invalid:
+      description: ID o datos inválidos, campo no permitido, distrito inexistente o cuerpo sin cambios.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Sesión ausente, inválida o expirada.
+    Forbidden:
+      description: Origen incorrecto o identidad sin permisos; un token de cliente no autoriza edición.
+    NotFound:
+      description: El usuario seleccionado no existe.
+    Conflict:
+      description: El correo pertenece a otro usuario del mismo tipo.
+    Failure:
+      description: No se pudo completar la modificación. No devuelve detalles internos de Oracle.

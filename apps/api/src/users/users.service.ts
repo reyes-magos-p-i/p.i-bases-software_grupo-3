@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { PasswordGenerator } from '../common/security/password-generator';
 import { PasswordHasher } from '../common/security/password-hasher';
@@ -10,10 +11,19 @@ import type { CreateClientDto } from './dto/create-client.dto';
 import type { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreatedUserDto } from './dto/created-user.dto';
 import type { UserCreationOptionsDto } from './dto/user-creation-options.dto';
+import type {
+  UpdateClientDto,
+  UpdateEmployeeDto,
+  UserEditOptionsDto,
+} from './dto/update-user.dto';
 import { UserRole } from './enums/user-role.enum';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { UsersRepository } from './users.repository';
 import { ClientsRepository } from '../clients/clients.repository';
+import type {
+  ListClientsQueryDto,
+  ListEmployeesQueryDto,
+} from './dto/list-users-query.dto';
 
 @Injectable()
 export class UsersService {
@@ -27,6 +37,61 @@ export class UsersService {
 
   getCreationOptions(): Promise<UserCreationOptionsDto> {
     return this.usersRepository.getCreationOptions();
+  }
+
+  async getEditOptions(): Promise<UserEditOptionsDto> {
+    const { provinces, cantons, districts } = await this.getCreationOptions();
+    return { provinces, cantons, districts };
+  }
+
+  deactivateClient(id: number) {
+    return this.clientsRepository.deactivateClient(id);
+  }
+
+  deactivateEmployee(id: number, actorId: number) {
+    return this.usersRepository.deactivateEmployee(id, actorId);
+  }
+
+  updateClient(id: number, data: UpdateClientDto) {
+    this.requireChanges(data);
+    return this.clientsRepository.updateClient(id, data);
+  }
+
+  updateEmployee(id: number, data: UpdateEmployeeDto) {
+    this.requireChanges(data);
+    return this.usersRepository.updateEmployee(id, data);
+  }
+
+  private requireChanges(data: UpdateClientDto | UpdateEmployeeDto) {
+    if (!Object.values(data).some((value) => value !== undefined)) {
+      throw new BadRequestException('No hay cambios para guardar.');
+    }
+  }
+
+  listClients(query: ListClientsQueryDto) {
+    return this.clientsRepository.listClients(query);
+  }
+
+  listEmployees(query: ListEmployeesQueryDto) {
+    return this.usersRepository.listEmployees(query);
+  }
+
+  getEmployeeListOptions() {
+    return this.usersRepository.getEmployeeListOptions();
+  }
+
+  async getClientDetail(id: number) {
+    const user = await this.clientsRepository.findClientDetailById(id);
+    if (!user)
+      throw new NotFoundException('El usuario seleccionado no existe.');
+    return user;
+  }
+
+  async getEmployeeDetail(id: number) {
+    const user = await this.usersRepository.findEmployeeDetailById(id);
+    if (!user)
+      throw new NotFoundException('El usuario seleccionado no existe.');
+    return user;
   }
 
   async create(
@@ -88,6 +153,7 @@ export class UsersService {
           details: data.address.details,
         },
         branchId: data.branchId,
+        hireDate: data.hireDate,
         passwordHash,
         salt,
       });
