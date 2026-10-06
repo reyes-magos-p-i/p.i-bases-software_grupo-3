@@ -6,6 +6,7 @@ import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
+import type { UserDetailSelection } from '@/types/user'
 import { createUser, getUserCreationOptions } from '@/services/user.service'
 import {
   closeEmployeeSession,
@@ -13,6 +14,7 @@ import {
   invalidateEmployeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
+import { clearClientAuth } from '@/services/client-session.service'
 
 const router = useRouter()
 const identity = employeeSession.user
@@ -23,6 +25,7 @@ const activeSection = ref<'employees' | 'clients' | 'theaters'>(
 const loggingOut = ref(false)
 const logoutError = ref('')
 const userDialog = useTemplateRef<InstanceType<typeof CreateUserDialog>>('user-dialog')
+const userList = useTemplateRef<InstanceType<typeof UserListPanel>>('user-list')
 const catalogs = ref<UserCreationOptions | null>(null)
 const catalogsLoading = ref(false)
 const catalogsError = ref('')
@@ -51,12 +54,19 @@ async function refreshPermissions() {
   }
 }
 
+function userUpdated(selection: UserDetailSelection) {
+  if (selection.section === 'employees' && selection.id === identity.value?.id) {
+    void refreshPermissions()
+  }
+}
+
 async function logout() {
   if (submitting.value || loggingOut.value) return
   loggingOut.value = true
   logoutError.value = ''
   try {
     await closeEmployeeSession()
+    await clearClientAuth()
     if (!disposed) await router.replace('/')
   } catch {
     if (!disposed)
@@ -133,6 +143,7 @@ async function submitUser(data: CreateUserRequest) {
       submitting.value = false
       if (completed) {
         submittingDialog?.complete()
+        userList.value?.refresh()
         await nextTick()
         resultNotice.value?.focus()
       }
@@ -271,10 +282,16 @@ function navigate(section: string) {
           {{ activeSection === 'clients' ? 'Añadir cliente' : 'Añadir empleado' }}
         </button>
       </div>
-      <div class="preview-placeholder">
-        <h2>Sección en preparación</h2>
-        <p>El contenido de esta sección se incorporará en próximos incrementos.</p>
-      </div>
+      <UserListPanel
+        :key="activeSection"
+        ref="user-list"
+        :section="activeSection"
+        :role="role"
+        :current-user-id="identity?.id"
+        @session-expired="sessionExpired"
+        @forbidden="refreshPermissions"
+        @user-updated="userUpdated"
+      />
     </section>
     <CreateUserDialog
       v-if="role === 'ADMINISTRATOR'"
