@@ -96,7 +96,7 @@ describe('MoviesService', () => {
 
       const result = await service.findAll();
 
-      expect(result).toEqual(movie);
+      expect(result).toEqual(movieAll);
       expect(repository.findAll).toHaveBeenCalledTimes(1);
     });
   });
@@ -107,7 +107,7 @@ describe('MoviesService', () => {
 
       const result = await service.findOne(1);
 
-      expect(result).toEqual(movie);
+      expect(result).toEqual(movieDetail);
       expect(repository.findOne).toHaveBeenCalledWith(1);
     });
 
