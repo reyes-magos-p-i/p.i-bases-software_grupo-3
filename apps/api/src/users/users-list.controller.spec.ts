@@ -35,6 +35,7 @@ describe('User list HTTP permissions and validation', () => {
   const clients = {
     findById: jest.fn(),
     isEmailVerificationPending: jest.fn(),
+    findPasswordStatus: jest.fn(),
   };
   const empty = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
   const get = (path: string) =>
@@ -101,6 +102,10 @@ describe('User list HTTP permissions and validation', () => {
     });
     clients.findById.mockResolvedValue({ id: 99, firstName: 'Cliente' });
     clients.isEmailVerificationPending.mockResolvedValue(false);
+    clients.findPasswordStatus.mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
+    });
   });
   afterAll(async () => {
     await app.close();

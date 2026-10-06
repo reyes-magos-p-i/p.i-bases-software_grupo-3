@@ -5,6 +5,8 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { EmployeeSessionService } from './employee-session.service';
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
+import { ClientsService } from '../clients/clients.service';
+import { ForbiddenException, InternalServerErrorException } from '@nestjs/common/exceptions/index.js';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -17,6 +19,8 @@ describe('AuthController', () => {
     facebookLogin: jest.Mock;
   };
   let session: { write: jest.Mock; clear: jest.Mock };
+  let clients: { changePassword: jest.Mock };
+
   const response = {} as Response;
 
   beforeEach(async () => {
@@ -29,12 +33,13 @@ describe('AuthController', () => {
       facebookLogin: jest.fn(),
     };
     session = { write: jest.fn(), clear: jest.fn() };
-
+    clients = { changePassword: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
         { provide: AuthService, useValue: auth },
         { provide: EmployeeSessionService, useValue: session },
+        { provide: ClientsService, useValue: clients },
       ],
     })
       .overrideGuard(ThrottlerGuard)
@@ -154,5 +159,45 @@ describe('AuthController', () => {
     expect(controller.logoutEmployee(response)).toBeUndefined();
     expect(session.clear).toHaveBeenCalledWith(response);
     expect(auth.loginEmployee).not.toHaveBeenCalled();
+  });
+
+
+  describe('passwordStatus()', () => {
+  it('returns the status attached to the request', () => {
+    const req = { passwordStatus: 'valid' } as never;
+    expect(controller.passwordStatus(req)).toEqual({ status: 'valid' });
+  });
+
+  it('throws when the status was never computed', () => {
+    const req = {} as never;
+    expect(() => controller.passwordStatus(req)).toThrow(InternalServerErrorException);
+  });
+});
+
+  describe('changeClientPassword()', () => {
+    it('rejects employee tokens', async () => {
+      const req = { accountType: 'employee' } as never;
+      await expect(
+        controller.changeClientPassword(req, {
+          newPassword: 'x',
+          confirmNewPassword: 'x',
+          expirationDays: 90,
+        } as never),
+      ).rejects.toThrow(ForbiddenException);
+      expect(clients.changePassword).not.toHaveBeenCalled();
+    });
+
+    it('delegates to ClientsService for client tokens', async () => {
+      const req = {
+        accountType: 'client',
+        user: { id: 1, email: 'a@b.com', firstName: 'Ana' },
+      } as never;
+      const dto = { newPassword: 'x', confirmNewPassword: 'x', expirationDays: 90 } as never;
+
+      await expect(controller.changeClientPassword(req, dto)).resolves.toEqual({
+        message: expect.any(String),
+      });
+      expect(clients.changePassword).toHaveBeenCalledWith(1, 'a@b.com', 'Ana', dto);
+    });
   });
 });

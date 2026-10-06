@@ -627,4 +627,20 @@ export class UsersRepository {
 
     return addressId;
   }
+
+  async findEmployeeCredentialsStatus(
+    employeeId: number,
+  ): Promise<{ setAt: Date; expirationDays: number } | null> {
+    const result = await this.db.query<{ PASSWORD_SET_AT: Date; EXPIRATION_DAYS: number }>(
+      `SELECT PASSWORD_SET_AT, EXPIRATION_DAYS FROM EMPLOYEE_LOCAL_CREDENTIALS WHERE EMPLOYEE_ID = :employeeId`,
+      { employeeId: { val: employeeId, type: oracle.NUMBER } },
+      { outFormat: oracle.OUT_FORMAT_OBJECT },
+    );
+    const row = result.rows?.[0];
+    if (!row) {
+      // Employee always has local credentials because they are created in a transactionwith the employee record.
+      throw new Error(`Employee ${employeeId} is missing local credentials.`);
+    }
+    return { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS };
+  }
 }

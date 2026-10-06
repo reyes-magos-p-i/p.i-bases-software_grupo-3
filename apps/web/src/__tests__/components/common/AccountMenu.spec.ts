@@ -15,6 +15,7 @@ describe('AccountMenu.vue', () => {
     const wrapper = mount(AccountMenu, { props: { user } })
 
     expect(wrapper.get('.account-name').text()).toBe('Ana Perez')
+    expect(wrapper.get('.account-avatar img').attributes('src')).toMatch(/^data:image\/svg\+xml/)
     expect(wrapper.get('.account-avatar').attributes('aria-expanded')).toBe('false')
     await wrapper.get('.account-avatar').trigger('click')
     expect(wrapper.get('.account-avatar').attributes('aria-expanded')).toBe('true')
@@ -23,7 +24,7 @@ describe('AccountMenu.vue', () => {
     expect(wrapper.get('.account-dropdown').text()).toContain('Personalizar perfil')
     expect(wrapper.get('.account-dropdown').text()).toContain('Ajustes de Cuenta')
     expect(wrapper.get('.account-dropdown').text()).toContain('Cambiar Contraseña')
-    expect(wrapper.findAll('.account-actions button:disabled')).toHaveLength(3)
+    expect(wrapper.findAll('.account-actions button:disabled')).toHaveLength(2)
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     await nextTick()
     expect(wrapper.find('.account-dropdown').exists()).toBe(false)

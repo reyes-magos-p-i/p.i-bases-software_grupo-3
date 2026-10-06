@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
+import argon2 from 'argon2';
 import oracle from 'oracledb';
 import { ClientsService } from './clients.service';
 import { DatabaseService } from '../database/database.service';
@@ -9,7 +10,12 @@ describe('ClientsService', () => {
   let service: ClientsService;
   let db: { query: jest.Mock; transaction: jest.Mock };
   let conn: { execute: jest.Mock };
-  let repository: { createClient: jest.Mock; insertClient: jest.Mock };
+  let repository: {
+    createClient: jest.Mock;
+    insertClient: jest.Mock;
+    findPasswordHash: jest.Mock;
+    savePassword: jest.Mock;
+  };
 
   const client = {
     status: 'ACTIVE',
@@ -20,7 +26,12 @@ describe('ClientsService', () => {
 
   beforeEach(async () => {
     conn = { execute: jest.fn() };
-    repository = { createClient: jest.fn(), insertClient: jest.fn() };
+    repository = {
+      createClient: jest.fn(),
+      insertClient: jest.fn(),
+      findPasswordHash: jest.fn(),
+      savePassword: jest.fn(),
+    };
     db = {
       query: jest.fn(),
       // Runs the work callback with a fake connection, like a real transaction would
@@ -213,7 +224,7 @@ describe('ClientsService', () => {
         .mockResolvedValueOnce({ rows: [client] });
       await expect(
         service.consumeEmailVerification('token-hash'),
-      ).resolves.toEqual(client);
+      ).resolves.toEqual(client); 
       expect(conn.execute).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM CLIENT_EMAIL_VERIFICATIONS'),
         expect.objectContaining({
@@ -581,6 +592,117 @@ describe('ClientsService', () => {
         firstSurname: null,
         secondSurname: null,
       });
+    });
+  });
+
+  describe('changePassword', () => {
+    const clientId = 1;
+    const email = 'ana@example.com';
+    const firstName = 'Ana';
+    const strongPassword = 'Cinetadel#2026';
+
+    it('requires the current password when the client already has one', async () => {
+      repository.findPasswordHash.mockResolvedValue({ passwordHash: 'irrelevant', salt: 's' });
+
+      await expect(
+        service.changePassword(clientId, email, firstName, {
+          newPassword: strongPassword,
+          confirmNewPassword: strongPassword,
+          expirationDays: 90,
+        }),
+      ).rejects.toMatchObject({ response: { code: 'CURRENT_PASSWORD_INCORRECT' } });
+    });
+
+    it('rejects an incorrect current password', async () => {
+      const storedHash = await argon2.hash('OldPassword#1');
+      repository.findPasswordHash.mockResolvedValue({ passwordHash: storedHash, salt: 's' });
+
+      await expect(
+        service.changePassword(clientId, email, firstName, {
+          currentPassword: 'WrongPassword#1',
+          newPassword: strongPassword,
+          confirmNewPassword: strongPassword,
+          expirationDays: 90,
+        }),
+      ).rejects.toMatchObject({ response: { code: 'CURRENT_PASSWORD_INCORRECT' } });
+    });
+
+    it('rejects mismatched confirmation', async () => {
+      const storedHash = await argon2.hash('OldPassword#1');
+      repository.findPasswordHash.mockResolvedValue({ passwordHash: storedHash, salt: 's' });
+
+      await expect(
+        service.changePassword(clientId, email, firstName, {
+          currentPassword: 'OldPassword#1',
+          newPassword: strongPassword,
+          confirmNewPassword: 'Different#1',
+          expirationDays: 90,
+        }),
+      ).rejects.toMatchObject({ response: { code: 'PASSWORDS_DO_NOT_MATCH' } });
+    });
+
+    it('rejects a new password equal to the current one', async () => {
+      const storedHash = await argon2.hash(strongPassword);
+      repository.findPasswordHash.mockResolvedValue({ passwordHash: storedHash, salt: 's' });
+
+      await expect(
+        service.changePassword(clientId, email, firstName, {
+          currentPassword: strongPassword,
+          newPassword: strongPassword,
+          confirmNewPassword: strongPassword,
+          expirationDays: 90,
+        }),
+      ).rejects.toMatchObject({ response: { code: 'NEW_PASSWORD_SAME_AS_CURRENT' } });
+    });
+
+    it('rejects a new password that violates the policy', async () => {
+      const storedHash = await argon2.hash('OldPassword#1');
+      repository.findPasswordHash.mockResolvedValue({ passwordHash: storedHash, salt: 's' });
+
+      await expect(
+        service.changePassword(clientId, email, firstName, {
+          currentPassword: 'OldPassword#1',
+          newPassword: 'weak',
+          confirmNewPassword: 'weak',
+          expirationDays: 90,
+        }),
+      ).rejects.toMatchObject({ response: { code: 'PASSWORD_POLICY_VIOLATION' } });
+    });
+
+    it('sets a password for the first time when the client has none (social-only account)', async () => {
+      repository.findPasswordHash.mockResolvedValue(null);
+
+      await service.changePassword(clientId, email, firstName, {
+        newPassword: strongPassword,
+        confirmNewPassword: strongPassword,
+        expirationDays: 30,
+      });
+
+      expect(repository.savePassword).toHaveBeenCalledWith(
+        clientId,
+        expect.any(String),
+        expect.any(String),
+        30,
+      );
+    });
+
+    it('changes the password successfully when everything is valid', async () => {
+      const storedHash = await argon2.hash('OldPassword#1');
+      repository.findPasswordHash.mockResolvedValue({ passwordHash: storedHash, salt: 's' });
+
+      await service.changePassword(clientId, email, firstName, {
+        currentPassword: 'OldPassword#1',
+        newPassword: strongPassword,
+        confirmNewPassword: strongPassword,
+        expirationDays: 60,
+      });
+
+      expect(repository.savePassword).toHaveBeenCalledWith(
+        clientId,
+        expect.any(String),
+        expect.any(String),
+        60,
+      );
     });
   });
 });
