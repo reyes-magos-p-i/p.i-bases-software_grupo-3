@@ -7,12 +7,50 @@ describe('MoviesController', () => {
   let controller: MoviesController;
   let service: jest.Mocked<MoviesService>;
 
-  const movie = [
+  const movieAll = [
     {
-      MOVIE_ID: 1,
-      TITLE: 'Interstellar',
+    id: 24,
+    title: 'Interstellar',
+    runningTime: 169,
+    releaseYear: 2014,
+    classification: 'TP',
+      },
+    ];
+
+  const movieDetail = {
+    id: 24,
+    title: 'Interstellar',
+    synopsis: 'A team travels through space searching for a new home.',
+    runningTime: 169,
+    releaseYear: 2014,
+
+    classification: {
+      id: 1,
+      name: 'TP',
     },
-  ];
+
+    languages: [
+      {
+        id: 1,
+        name: 'afar',
+      },
+      {
+        id: 2,
+        name: 'abjasio',
+      },
+    ],
+
+    genres: [
+      {
+        id: 3,
+        name: 'Aventura',
+      },
+      {
+        id: 4,
+        name: 'Ciencia Ficción',
+      },
+    ],
+  }
 
   beforeEach(async () => {
     const serviceMock = {
@@ -42,20 +80,20 @@ describe('MoviesController', () => {
   });
 
   it('should return all movies', async () => {
-    service.findAll.mockResolvedValue(movie);
+    service.findAll.mockResolvedValue(movieAll);
 
     const result = await controller.findAll();
 
-    expect(result).toEqual(movie);
+    expect(result).toEqual(movieAll);
     expect(service.findAll).toHaveBeenCalledTimes(1);
   });
 
   it('should return one movie', async () => {
-    service.findOne.mockResolvedValue(movie);
+    service.findOne.mockResolvedValue(movieDetail);
 
     const result = await controller.findOne(1);
 
-    expect(result).toEqual(movie);
+    expect(result).toEqual(movieDetail);
     expect(service.findOne).toHaveBeenCalledWith(1);
   });
 
@@ -84,11 +122,11 @@ describe('MoviesController', () => {
       title: 'Updated title',
     };
 
-    service.update.mockResolvedValue(movie);
+    service.update.mockResolvedValue(movieDetail);
 
     const result = await controller.update(1, dto);
 
-    expect(result).toEqual(movie);
+    expect(result).toEqual(movieDetail);
     expect(service.update).toHaveBeenCalledWith(1, dto);
   });
 

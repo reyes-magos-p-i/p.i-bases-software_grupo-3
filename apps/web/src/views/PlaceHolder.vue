@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
-import MovieCrud from '@/components/Movies/MovieCrud.vue';
 </script>
 
 <template>

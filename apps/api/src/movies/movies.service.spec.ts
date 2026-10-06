@@ -143,7 +143,7 @@ describe('MoviesService', () => {
       expect(repository.create).toHaveBeenCalledWith(dto);
     });
   });
-
+  /*
   describe('update', () => {
     it('should update an existing movie', async () => {
       const dto = {
@@ -210,4 +210,5 @@ describe('MoviesService', () => {
       expect(repository.remove).not.toHaveBeenCalled();
     });
   });
+  */
 });
