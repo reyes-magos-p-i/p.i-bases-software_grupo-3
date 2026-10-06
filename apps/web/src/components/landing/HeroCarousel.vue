@@ -160,7 +160,7 @@ function handleImageError(): void {
       ></i>
     </button>
 
-    <div class="carousel-indicators">
+    <div class="hero-carousel-indicators">
       <button
         v-for="(_, index) in slides"
         :key="index"
@@ -276,7 +276,7 @@ function handleImageError(): void {
   right: 16px;
 }
 
-.carousel-indicators {
+.hero-carousel-indicators {
   position: absolute;
 
   left: 50%;
