@@ -91,7 +91,7 @@ async function submit(data: CreateTheaterRequest) {
       submissionErrors.value = ['Revisa los datos de la sala e inténtalo nuevamente.']
     } else {
       submissionErrors.value = [
-        'No se pudo crear la sala. Comprueba la conexión e inténtalo nuevamente.',
+        'El resultado no pudo ser confirmado. Verifica si la sala fue creada antes de intentarlo de nuevo.',
       ]
     }
   } finally {
