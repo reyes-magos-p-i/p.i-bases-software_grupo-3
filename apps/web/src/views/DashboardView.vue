@@ -211,11 +211,21 @@ const availableSections = computed(() => //AGREGADO PELICULAS
     ? ['employees', 'clients', 'movies']
     : ['clients', 'movies'],
 )
-const sectionTitle = computed(() =>
-  activeSection.value === 'employees'
-    ? 'Empleados'
-    : 'Clientes',
-)
+const sectionTitle = computed(() => {
+  switch (activeSection.value) {
+    case 'employees':
+      return 'Empleados'
+
+    case 'clients':
+      return 'Clientes'
+
+    case 'movies':
+      return 'Películas'
+
+    default:
+      return ''
+  }
+})
 
 watch(role, () => {
   if (role.value === 'EMPLOYEE' && activeSection.value === 'employees') {
@@ -265,7 +275,8 @@ function navigate(section: string) { //AGREGADO MOVIES
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
-          v-if="role === 'ADMINISTRATOR'"
+          v-if="role === 'ADMINISTRATOR'&&
+          (activeSection === 'employees' || activeSection === 'clients')"
           type="button"
           class="add-user-button"
           :disabled="loggingOut"
@@ -274,6 +285,17 @@ function navigate(section: string) { //AGREGADO MOVIES
         >
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
           {{ activeSection === 'clients' ? 'Añadir cliente' : 'Añadir empleado' }}
+        </button>
+
+        <button
+          v-if="activeSection === 'movies'"
+          type="button"
+          class="add-user-button"
+          @click="openMovieDialog"
+        >
+          <i class="bi bi-plus-lg" aria-hidden="true"></i>
+
+          Añadir película
         </button>
       </div>
       <UserListPanel

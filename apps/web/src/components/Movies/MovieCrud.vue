@@ -114,9 +114,9 @@ defineExpose({ refresh })
 </script>
 
 <template>
-   <div style="display: block; padding: 20px; background: yellow; color: black;">
+   <!--<div style="display: block; padding: 20px; background: yellow; color: black;">
     MOVIE CRUD IS RENDERING
-  </div>
+  </div>-->
   <div class="movie-list-panel">
     <p v-if="loading" role="status">
       Cargando películas…
@@ -169,3 +169,59 @@ defineExpose({ refresh })
     </CrudTable>
   </div>
 </template>
+
+<style>
+  .movie-list-panel {
+    display: grid;
+    gap: 20px;
+  }
+
+  button {
+    padding: 10px 16px;
+    border: 1px solid var(--color-primary);
+    cursor: pointer;
+  }
+
+  .primary-button {
+    background: var(--color-primary);
+    color: var(--color-white);
+  }
+  .secondary-button {
+    background: var(--color-white);
+    color: var(--color-primary);
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .movie-actions {
+    display: flex;
+    gap: 4px;
+  }
+  .movie-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    text-decoration: none;
+    justify-content: center;
+    width: 36px;
+    min-height: 36px;
+    background: transparent;
+    border: 0;
+    color: var(--color-primary);
+    font-size: 1.125rem;
+  }
+  .movie-actions button:disabled {
+    pointer-events: none;
+  }
+  .movie-actions button:not(:disabled):hover {
+    background: var(--color-light_gray);
+  }
+  .action-hint {
+    display: inline-flex;
+  }
+
+
+</style>
