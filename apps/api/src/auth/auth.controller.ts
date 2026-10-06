@@ -27,7 +27,8 @@ import { ResendEmailVerificationDto } from './dto/resend-email-verification.dto'
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
-  constructor(private readonly auth: AuthService,
+  constructor(
+    private readonly auth: AuthService,
     private readonly session: EmployeeSessionService,
   ) {}
 
@@ -63,6 +64,14 @@ export class AuthController {
     return { user: result.user };
   }
 
+  @Post('clients/login')
+  @UseGuards(ThrottlerGuard, EmployeeSessionOriginGuard)
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(HttpStatus.OK)
+  async loginClient(@Body() dto: LoginDto) {
+    return this.auth.loginClient(dto);
+  }
+
   @Get('me')
   @Header('Cache-Control', 'no-store')
   @UseGuards(AuthGuard('jwt'))
@@ -83,7 +92,7 @@ export class AuthController {
   google(@Body('code') code: string) {
     //console.log(code)
 
-    return this.auth.googleLogin(code)
+    return this.auth.googleLogin(code);
   }
 
   // TODO(Diego): Facebook routes should be here.

@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   ServiceUnavailableException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
@@ -220,6 +221,27 @@ export class AuthService {
         firstSurname: employee.firstSurname,
         secondSurname: employee.secondSurname,
       },
+    };
+  }
+
+  async loginClient(dto: LoginDto) {
+    const client = await this.clients.findWithLocalCredentials(dto.email);
+    const matches = await this.passwordHasher.verify(
+      dto.password,
+      client?.passwordHash ?? LOGIN_REFERENCE_HASH,
+    );
+    if (!client || !matches || client.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Correo o contraseña incorrectos');
+    }
+    if (await this.clients.isEmailVerificationPending(client.id)) {
+      throw new ForbiddenException({
+        code: 'EMAIL_VERIFICATION_REQUIRED',
+        message: 'Confirma tu correo electrónico antes de iniciar sesión.',
+      });
+    }
+    return {
+      ...this.issueToken(client),
+      client: this.clientIdentity(client),
     };
   }
 
