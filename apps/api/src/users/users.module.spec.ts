@@ -102,7 +102,14 @@ describe('UsersModule (application HTTP integration)', () => {
         return Promise.resolve({ rows: [{ schema: 'TEST' }] });
       if (sql.startsWith('SELECT EMPLOYEE_ID')) {
         return Promise.resolve({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         });
       }
       if (sql.startsWith('SELECT 1')) return Promise.resolve({ rows: [] });
@@ -163,7 +170,14 @@ describe('UsersModule (application HTTP integration)', () => {
   it('mounts partial update routes with the real service and repositories', async () => {
     connection.execute
       .mockResolvedValueOnce({
-        rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        rows: [
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: 'ADMINISTRATOR',
+            FIRST_NAME: 'Ana',
+            EMAIL: 'admin@example.com',
+          },
+        ],
       })
       .mockResolvedValueOnce({ rows: [{ EMAIL: 'old@example.com' }] })
       .mockResolvedValueOnce({ rowsAffected: 1 });
@@ -181,7 +195,12 @@ describe('UsersModule (application HTTP integration)', () => {
         connection.execute
           .mockResolvedValueOnce({
             rows: [
-              { EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' },
+              {
+                EMPLOYEE_ID: 21,
+                ROLE: 'ADMINISTRATOR',
+                FIRST_NAME: 'Ana',
+                EMAIL: 'admin@example.com',
+              },
             ],
           })
           .mockResolvedValueOnce({ rows: [] });
@@ -195,7 +214,14 @@ describe('UsersModule (application HTTP integration)', () => {
     it('mounts client and employee listing routes with the actual repositories', async () => {
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] });
       await browser.get('/users/clients').expect(200, {
@@ -207,7 +233,14 @@ describe('UsersModule (application HTTP integration)', () => {
       });
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] });
       await browser.get('/users/employees').expect(200, {
@@ -225,7 +258,14 @@ describe('UsersModule (application HTTP integration)', () => {
       const hash = jest.spyOn(app.get(PasswordHasher), 'hash');
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
         .mockResolvedValueOnce({
@@ -273,7 +313,14 @@ describe('UsersModule (application HTTP integration)', () => {
     it('does not return partial catalogs if a later query fails', async () => {
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
         .mockRejectedValueOnce(new Error('Private Oracle catalog error'));
@@ -346,7 +393,14 @@ describe('UsersModule (application HTTP integration)', () => {
     settings.DEV_ADMIN_EMPLOYEE_ID = '21';
     const cookie = `${EMPLOYEE_SESSION_COOKIE}=${app.get(JwtService).sign({ sub: 21, type: 'employee', role: 'ADMINISTRATOR' })}`;
     connection.execute.mockResolvedValueOnce({
-      rows: [{ EMPLOYEE_ID: 21, ROLE: 'EMPLOYEE', FIRST_NAME: 'Ana' }],
+      rows: [
+        {
+          EMPLOYEE_ID: 21,
+          ROLE: 'EMPLOYEE',
+          FIRST_NAME: 'Ana',
+          EMAIL: 'employee@example.com',
+        },
+      ],
     });
     await request(app.getHttpServer())
       .post('/users')
@@ -406,7 +460,14 @@ describe('UsersModule (application HTTP integration)', () => {
 
   it('denies employees even if the requested account is an administrator', async () => {
     connection.execute.mockResolvedValueOnce({
-      rows: [{ EMPLOYEE_ID: 21, ROLE: 'EMPLOYEE', FIRST_NAME: 'Ana' }],
+      rows: [
+        {
+          EMPLOYEE_ID: 21,
+          ROLE: 'EMPLOYEE',
+          FIRST_NAME: 'Ana',
+          EMAIL: 'employee@example.com',
+        },
+      ],
     });
     await browser
       .post('/users')
@@ -427,7 +488,14 @@ describe('UsersModule (application HTTP integration)', () => {
   it('rolls back persistence failures and never sends credentials', async () => {
     connection.execute
       .mockResolvedValueOnce({
-        rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        rows: [
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: 'ADMINISTRATOR',
+            FIRST_NAME: 'Ana',
+            EMAIL: 'admin@example.com',
+          },
+        ],
       })
       .mockResolvedValueOnce({ rowsAffected: 1, outBinds: { addressId: [55] } })
       .mockRejectedValueOnce(new Error('Private Oracle details'));
@@ -458,7 +526,14 @@ describe('UsersModule (application HTTP integration)', () => {
     async (role) => {
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({
           rowsAffected: 1,

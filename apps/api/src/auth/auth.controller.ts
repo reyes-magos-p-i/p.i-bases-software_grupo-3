@@ -87,6 +87,18 @@ export class AuthController {
   @Header('Cache-Control', 'no-store')
   @UseGuards(AuthGuard('jwt'))
   me(@Req() req: Request) {
+    const user = req.user as
+      | { id?: number; role?: string; firstName?: string; email?: string }
+      | undefined;
+
+    if (req.accountType === 'employee' && user) {
+      return {
+        id: user.id,
+        role: user.role,
+        firstName: user.firstName,
+      };
+    }
+
     return req.user;
   }
 

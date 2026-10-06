@@ -160,6 +160,24 @@ describe('AuthController', () => {
     expect(controller.me(req)).toEqual({ id: 1, email: 'a@b.com' });
   });
 
+  it('me() strips employee personal data from the identity response', () => {
+    const req = {
+      accountType: 'employee',
+      user: {
+        id: 21,
+        role: 'ADMINISTRATOR',
+        firstName: 'Ana',
+        email: 'staff@example.com',
+      },
+    } as never;
+
+    expect(controller.me(req)).toEqual({
+      id: 21,
+      role: 'ADMINISTRATOR',
+      firstName: 'Ana',
+    });
+  });
+
   it('logout clears the cookie without requiring credentials', () => {
     expect(controller.logoutEmployee(response)).toBeUndefined();
     expect(session.clear).toHaveBeenCalledWith(response);
