@@ -10,7 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { ClientsService } from '../clients/clients.service';
 import { ConfigService } from '@nestjs/config';
-import { Client, SocialProfile} from '../clients/client.model';
+import { Client, SocialProfile } from '../clients/client.model';
 import { splitFirstWord } from '../clients/name.util';
 import { RegisterDto } from './dto/register.dto';
 import { OAuth2Client } from 'google-auth-library'; // google lib for authetication
@@ -98,7 +98,8 @@ export class AuthService {
     }
     await this.replaceAndSendVerification(client);
     return {
-      message: 'Si existe una cuenta pendiente con ese correo, enviaremos un nuevo enlace.',
+      message:
+        'Si existe una cuenta pendiente con ese correo, enviaremos un nuevo enlace.',
     };
   }
 
@@ -143,7 +144,9 @@ export class AuthService {
   }
 
   private verificationTtlMinutes(): number {
-    const configured = this.config.get<unknown>('EMAIL_VERIFICATION_TTL_MINUTES');
+    const configured = this.config.get<unknown>(
+      'EMAIL_VERIFICATION_TTL_MINUTES',
+    );
     if (configured === undefined) return 30;
     if (
       typeof configured !== 'string' ||
@@ -221,7 +224,7 @@ export class AuthService {
   }
 
   //google auth SIlvio
-  async googleLogin(authCode: string){
+  async googleLogin(authCode: string) {
     //Google clinet inizialitation
     const googleClient = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
@@ -229,41 +232,40 @@ export class AuthService {
       'postmessage',
     );
 
-    try{
+    try {
       //rxchange auth code for token from google
-      const {tokens} = await googleClient.getToken(authCode);
+      const { tokens } = await googleClient.getToken(authCode);
       const idToken = tokens.id_token;
 
-      if (!idToken){
-        throw new ConflictException('unable to acquire token from google')
-
+      if (!idToken) {
+        throw new ConflictException('unable to acquire token from google');
       }
 
       //token verification
       const ticket = await googleClient.verifyIdToken({
         idToken,
-        audience:process.env.GOOGLE_CLIENT_ID,
+        audience: process.env.GOOGLE_CLIENT_ID,
       });
 
       const payload = ticket.getPayload();
-      if(!payload?.email || payload.email_verified !== true){
-        throw new ConflictException('unable to verify with google or email not valid')
-
+      if (!payload?.email || payload.email_verified !== true) {
+        throw new ConflictException(
+          'unable to verify with google or email not valid',
+        );
       }
 
-      const  googleUser :SocialProfile = {
+      const googleUser: SocialProfile = {
         provider: 'GOOGLE',
         providerUserId: payload.sub,
         email: payload.email,
         firstName: payload.given_name ?? '',
-        lastName: payload.family_name?? '',
-
-      }
+        lastName: payload.family_name ?? '',
+      };
 
       const client = await this.clients.findOrCreateSocial(googleUser);
       const tokensPayload = this.issueToken(client);
 
-      return{
+      return {
         message: 'authentication success',
         client: {
           id: client.id,
@@ -271,21 +273,31 @@ export class AuthService {
           firstName: client.firstName,
           lastName: client.firstSurname ?? '',
         },
-        ... tokensPayload,
+        ...tokensPayload,
       };
-
-    }catch (error){
-      console.error('Error in google verification', error);
-      if (error instanceof ConflictException){
+    } catch (error) {
+      if (
+        error instanceof ConflictException ||
+        error instanceof UnauthorizedException
+      ) {
         throw error;
       }
-      throw new ConflictException('Error trying to validated google credentials')
+      console.error('Error in google verification', error);
+      throw new ConflictException(
+        'Error trying to validated google credentials',
+      );
     }
-
   }
 
-
   issueToken(client: Client) {
+    if (client.status !== 'ACTIVE' && client.status !== 'INACTIVE') {
+      throw new Error('Invalid client status.');
+    }
+    if (client.status === 'INACTIVE') {
+      throw new UnauthorizedException(
+        'No se pudo iniciar sesión con esta cuenta.',
+      );
+    }
     return {
       accessToken: this.jwt.sign({
         sub: client.id,
@@ -330,10 +342,7 @@ export class AuthService {
     }
 
     const profileUrl = new URL('https://graph.facebook.com/v21.0/me');
-    profileUrl.searchParams.set(
-      'fields',
-      'id,email,first_name,last_name',
-    );
+    profileUrl.searchParams.set('fields', 'id,email,first_name,last_name');
     profileUrl.searchParams.set('access_token', accessToken);
 
     const profileResponse = await fetch(profileUrl);
@@ -349,9 +358,7 @@ export class AuthService {
       profile.id !== tokenData.user_id ||
       !profile.email
     ) {
-      throw new UnauthorizedException(
-        'Could not verify Facebook profile',
-      );
+      throw new UnauthorizedException('Could not verify Facebook profile');
     }
     // CHECK: email is verified by Facebook
     const socialProfile: SocialProfile = {
@@ -374,5 +381,4 @@ export class AuthService {
       },
     };
   }
-
 }

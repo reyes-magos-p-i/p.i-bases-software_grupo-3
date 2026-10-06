@@ -1,0 +1,149 @@
+openapi: 3.0.3
+info:
+  title: Cinema - Desactivar un usuario
+  version: 1.0.0
+  description: Conserva datos históricos y bloquea acceso y gestión de cuentas inactivas.
+servers:
+  - url: /api
+security:
+  - employeeSession: []
+  - bearerAuth: []
+paths:
+  /users/clients/{id}/deactivate:
+    patch:
+      operationId: deactivateClient
+      summary: Desactivar un cliente
+      description: Empleados y administradores. No elimina datos ni permite reactivar cuentas.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        $ref: "#/components/requestBodies/Empty"
+      responses:
+        "204":
+          description: Usuario desactivado. Sin cuerpo.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: El cliente ya está desactivado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /users/employees/{id}/deactivate:
+    patch:
+      operationId: deactivateEmployee
+      summary: Desactivar personal
+      description: Solo administradores. Impide desactivar la propia cuenta y al último administrador activo.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        $ref: "#/components/requestBodies/Empty"
+      responses:
+        "204":
+          description: Usuario desactivado. Sin cuerpo.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: El empleado ya está desactivado, no puedes desactivar tu propia cuenta o debe permanecer al menos un administrador activo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+components:
+  securitySchemes:
+    employeeSession:
+      type: apiKey
+      in: cookie
+      name: cinetadel_employee_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 9007199254740991
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: Debe corresponder al origen configurado del frontend.
+      schema:
+        type: string
+  requestBodies:
+    Empty:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+  schemas:
+    Error:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode:
+          type: integer
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        error:
+          type: string
+  responses:
+    BadRequest:
+      description: ID inválido o cuerpo con campos no admitidos.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Sesión ausente, expirada o usuario inactivo.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Permiso insuficiente u origen no autorizado.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: El usuario seleccionado no existe.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Fallo inesperado sin detalles de infraestructura.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
