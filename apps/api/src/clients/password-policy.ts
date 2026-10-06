@@ -12,7 +12,7 @@ export type PasswordPolicyViolation =
   | 'matches_identity'
   | 'common_password';
 
-const SPECIAL_CHARACTERS = /[!@#$%^&*_\-]/;
+const SPECIAL_CHARACTERS = /[!@#$%^&*_-]/;
 
 
 

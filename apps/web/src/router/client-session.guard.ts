@@ -5,7 +5,7 @@ import { getClientPasswordStatus } from '@/services/authService'
 const PASSWORD_PATH = '/account/password'
 
 export const requireClientSession: NavigationGuard = async (to) => {
-  if (to.meta.requiresClient && !hasClientSession()) {
+  if (to.meta.requiresClient && !clientSession.user.value && !hasClientSession()) {
     return { path: '/', query: { login: 'client', reason: 'required' } }
   }
 
