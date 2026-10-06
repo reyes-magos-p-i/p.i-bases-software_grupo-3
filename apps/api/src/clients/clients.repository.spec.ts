@@ -596,7 +596,7 @@ describe('ClientsRepository', () => {
 
       const credentialsSql: string = connection.execute.mock.calls[2][0];
       expect(credentialsSql.replace(/\s+/gu, ' ').trim()).toBe(
-        'INSERT INTO CLIENT_LOCAL_CREDENTIALS ( CLIENT_ID, PASSWORD_HASH, SALT ) VALUES (:clientId, :passwordHash, :salt)',
+        'INSERT INTO CLIENT_LOCAL_CREDENTIALS ( CLIENT_ID, PASSWORD_HASH, SALT, PASSWORD_SET_AT, EXPIRATION_DAYS ) VALUES (:clientId, :passwordHash, :salt, SYSTIMESTAMP, :expirationDays)',
       );
       expect(connection.execute).toHaveBeenNthCalledWith(
         3,
@@ -605,6 +605,7 @@ describe('ClientsRepository', () => {
           clientId: { val: 42, type: oracle.NUMBER },
           passwordHash: { val: data.passwordHash, type: oracle.STRING },
           salt: { val: data.salt, type: oracle.STRING },
+          expirationDays: { val: 90, type: oracle.NUMBER },
         },
         { autoCommit: false },
       );

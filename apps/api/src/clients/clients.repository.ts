@@ -268,12 +268,13 @@ export class ClientsRepository {
         const clientId = await this.insertClient(connection, data);
         const credentialsResult = await connection.execute(
           `INSERT INTO CLIENT_LOCAL_CREDENTIALS (
-          CLIENT_ID, PASSWORD_HASH, SALT
-        ) VALUES (:clientId, :passwordHash, :salt)`,
+          CLIENT_ID, PASSWORD_HASH, SALT, PASSWORD_SET_AT, EXPIRATION_DAYS
+        ) VALUES (:clientId, :passwordHash, :salt, SYSTIMESTAMP, :expirationDays)`,
           {
             clientId: { val: clientId, type: oracle.NUMBER },
             passwordHash: { val: data.passwordHash, type: oracle.STRING },
             salt: { val: data.salt, type: oracle.STRING },
+            expirationDays: { val: 90, type: oracle.NUMBER },
           },
           { autoCommit: false },
         );
@@ -467,6 +468,5 @@ export class ClientsRepository {
     });
   }
 }
-
 
 
