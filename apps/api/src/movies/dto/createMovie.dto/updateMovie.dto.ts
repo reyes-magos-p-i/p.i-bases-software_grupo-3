@@ -21,7 +21,7 @@ export class UpdateMovieDto {
 
   @IsString()
   @IsNotEmpty()
-  posterImage: string;
+  posterImage?: string;
 
   @IsInt()
   releaseYear?: number;

@@ -16,6 +16,8 @@ import * as oracledb from 'oracledb';
           m.MOVIE_ID,
           m.TITLE,
           m.RUNNING_TIME,
+          m.SYNOPSIS,
+          m.POSTER_IMAGE,
           m.RELEASE_YEAR,
           c.CLASSIFICATION_NAME,
           l.NAME AS LANGUAGE_NAME,
@@ -23,15 +25,15 @@ import * as oracledb from 'oracledb';
       FROM
           MOVIES m
       LEFT JOIN
-          CLASSIFICATION c ON m.CLASSIFICATION_ID = c.CLASSIFICATION_ID
+          CLASSIFICATIONS c ON m.CLASSIFICATION_ID = c.CLASSIFICATION_ID
       LEFT JOIN
-          MOVIE_LANGUAGE ml ON m.MOVIE_ID = ml.MOVIE_ID
+          MOVIE_LANGUAGES ml ON m.MOVIE_ID = ml.MOVIE_ID
       LEFT JOIN
           LANGUAGES l ON ml.LANGUAGE_ID = l.LANGUAGE_ID
       LEFT JOIN
-          MOVIE_GENRE mg ON m.MOVIE_ID = mg.MOVIE_ID
+          MOVIE_GENRES mg ON m.MOVIE_ID = mg.MOVIE_ID
       LEFT JOIN
-          GENRE g ON mg.GENRE_ID = g.GENRE_ID
+          GENRES g ON mg.GENRE_ID = g.GENRE_ID
     `);
 
     return result.rows;
@@ -44,6 +46,8 @@ import * as oracledb from 'oracledb';
           m.MOVIE_ID,
           m.TITLE,
           m.RUNNING_TIME,
+          m.SYNOPSIS,
+          m.POSTER_IMAGE,
           m.RELEASE_YEAR,
           c.CLASSIFICATION_NAME,
           l.NAME AS LANGUAGE_NAME,
@@ -51,15 +55,15 @@ import * as oracledb from 'oracledb';
       FROM
           MOVIES m
       LEFT JOIN
-          CLASSIFICATION c ON m.CLASSIFICATION_ID = c.CLASSIFICATION_ID
+          CLASSIFICATIONS c ON m.CLASSIFICATION_ID = c.CLASSIFICATION_ID
       LEFT JOIN
-          MOVIE_LANGUAGE ml ON m.MOVIE_ID = ml.MOVIE_ID
+          MOVIE_LANGUAGES ml ON m.MOVIE_ID = ml.MOVIE_ID
       LEFT JOIN
           LANGUAGES l ON ml.LANGUAGE_ID = l.LANGUAGE_ID
       LEFT JOIN
-          MOVIE_GENRE mg ON m.MOVIE_ID = mg.MOVIE_ID
+          MOVIE_GENRES mg ON m.MOVIE_ID = mg.MOVIE_ID
       LEFT JOIN
-          GENRE g ON mg.GENRE_ID = g.GENRE_ID
+          GENRES g ON mg.GENRE_ID = g.GENRE_ID
       WHERE MOVIE_ID = :id
       `,
       { id },
@@ -157,7 +161,7 @@ import * as oracledb from 'oracledb';
   return this.db.transaction(async (conn) => {
     await conn.execute(
       `
-      DELETE FROM MOVIE_GENRE
+      DELETE FROM MOVIE_GENRES
       WHERE MOVIE_ID = :id
       `,
       { id },
@@ -165,7 +169,7 @@ import * as oracledb from 'oracledb';
 
     await conn.execute(
       `
-      DELETE FROM MOVIE_LANGUAGE
+      DELETE FROM MOVIE_LANGUAGES
       WHERE MOVIE_ID = :id
       `,
       { id },
@@ -206,7 +210,7 @@ import * as oracledb from 'oracledb';
     if (dto.languageIds) {
       await conn.execute(
         `
-        DELETE FROM MOVIE_LANGUAGE
+        DELETE FROM MOVIE_LANGUAGES
         WHERE MOVIE_ID = :id
         `,
         { id },
@@ -215,7 +219,7 @@ import * as oracledb from 'oracledb';
       for (const languageId of dto.languageIds) {
         await conn.execute(
           `
-          INSERT INTO MOVIE_LANGUAGE (
+          INSERT INTO MOVIE_LANGUAGES (
             MOVIE_ID,
             LANGUAGE_ID
           )
@@ -235,7 +239,7 @@ import * as oracledb from 'oracledb';
     if (dto.genreIds) {
       await conn.execute(
         `
-        DELETE FROM MOVIE_GENRE
+        DELETE FROM MOVIE_GENRES
         WHERE MOVIE_ID = :id
         `,
         { id },
@@ -244,7 +248,7 @@ import * as oracledb from 'oracledb';
       for (const genreId of dto.genreIds) {
         await conn.execute(
           `
-          INSERT INTO MOVIE_GENRE (
+          INSERT INTO MOVIE_GENRES (
             MOVIE_ID,
             GENRE_ID
           )

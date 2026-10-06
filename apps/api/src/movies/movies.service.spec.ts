@@ -13,6 +13,8 @@ describe('MoviesService', () => {
       MOVIE_ID: 1,
       TITLE: 'Interstellar',
       RUNNING_TIME: 169,
+      SYNOPSIS: 'Cristopher nolar goes to space AAAAAA',
+      POSTER_IMAGE: 'Interstelar.jpg',
       RELEASE_YEAR: 2014,
       CLASSIFICATION_NAME: 'PG-13',
       LANGUAGE_NAME: 'English',
@@ -80,6 +82,8 @@ describe('MoviesService', () => {
       const dto = {
         title: 'Interstellar',
         runningTime: 169,
+        synopsis: 'Cristopher nolar goes to space AAAAAA',
+        posterImage:'intertelas.jpg',
         releaseYear: 2014,
         classificationId: 1,
         languageIds: [1],

@@ -76,6 +76,8 @@ describe('MoviesRepository', () => {
     const dto = {
       title: 'Interstellar',
       runningTime: 169,
+      synopsis: 'Cristopher nolar goes to space AAAAAA',
+      posterImage:'intertelas.jpg',
       releaseYear: 2014,
       classificationId: 1,
       languageIds: [1, 2],

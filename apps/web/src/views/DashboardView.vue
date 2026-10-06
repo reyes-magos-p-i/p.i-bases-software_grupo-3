@@ -14,11 +14,13 @@ import {
   invalidateEmployeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
+import MovieCrud from '@/components/Movies/MovieCrud.vue'
+
 
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-const activeSection = ref<'employees' | 'clients'>(
+const activeSection = ref<'employees' | 'clients' | 'movies'>( // agregado movies
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
 const loggingOut = ref(false)
@@ -204,11 +206,15 @@ onBeforeUnmount(() => {
   disposed = true
   cancelCatalogRequest()
 })
-const availableSections = computed(() =>
-  role.value === 'ADMINISTRATOR' ? ['employees', 'clients'] : ['clients'],
+const availableSections = computed(() => //AGREGADO PELICULAS
+  role.value === 'ADMINISTRATOR'
+    ? ['employees', 'clients', 'movies']
+    : ['clients', 'movies'],
 )
 const sectionTitle = computed(() =>
-  activeSection.value === 'employees' ? 'Empleados' : 'Clientes',
+  activeSection.value === 'employees'
+    ? 'Empleados'
+    : 'Clientes',
 )
 
 watch(role, () => {
@@ -217,10 +223,13 @@ watch(role, () => {
   }
 })
 
-function navigate(section: string) {
+function navigate(section: string) { //AGREGADO MOVIES
   if (submitting.value || loggingOut.value) return
+
   if (
-    (section === 'employees' || section === 'clients') &&
+    (section === 'employees' ||
+      section === 'clients' ||
+      section === 'movies') &&
     availableSections.value.includes(section)
   ) {
     activeSection.value = section
@@ -268,6 +277,7 @@ function navigate(section: string) {
         </button>
       </div>
       <UserListPanel
+        v-if="activeSection === 'employees' || activeSection === 'clients'"
         :key="activeSection"
         ref="user-list"
         :section="activeSection"
@@ -275,6 +285,9 @@ function navigate(section: string) {
         @session-expired="sessionExpired"
         @forbidden="refreshPermissions"
         @user-updated="userUpdated"
+      />
+      <MovieCrud
+        v-else-if="activeSection === 'movies'"
       />
     </section>
     <CreateUserDialog
