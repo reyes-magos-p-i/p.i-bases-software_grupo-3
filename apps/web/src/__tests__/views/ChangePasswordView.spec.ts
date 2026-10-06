@@ -53,6 +53,21 @@ describe('ChangePasswordView.vue', () => {
     expect(wrapper.find('#currentPassword').exists()).toBe(false)
   })
 
+  it('retries loading the password status after a failure', async () => {
+    vi.mocked(getClientPasswordStatus)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce('valid')
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No se pudo comprobar el estado de tu contraseña.')
+    await wrapper.get('.form-card .primary-button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.status-error').exists()).toBe(false)
+    expect(wrapper.find('#currentPassword').exists()).toBe(true)
+  })
+
   it('shows the expired banner and hides the cancel button', async () => {
     vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('expired')
     const wrapper = mountView()
@@ -72,6 +87,56 @@ describe('ChangePasswordView.vue', () => {
     expect(changeClientPassword).not.toHaveBeenCalled()
   })
 
+  it('validates matching confirmation and password policy before submitting', async () => {
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('valid')
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('#currentPassword').setValue('OldPassword1!')
+    await wrapper.get('#newPassword').setValue('NotSecure')
+    await wrapper.get('#confirmNewPassword').setValue('Different')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.text()).toContain('Las contraseñas no coinciden')
+    expect(changeClientPassword).not.toHaveBeenCalled()
+
+    await wrapper.get('#confirmNewPassword').setValue('NotSecure')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.text()).toContain('La contraseña no cumple con la política de seguridad')
+    expect(changeClientPassword).not.toHaveBeenCalled()
+  })
+
+  it('lets users reveal and hide each password field', async () => {
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('valid')
+    const wrapper = mountView()
+    await flushPromises()
+
+    for (const id of ['currentPassword', 'newPassword', 'confirmNewPassword']) {
+      const toggle = wrapper.get(`[aria-controls="${id}"]`)
+      await toggle.trigger('click')
+      expect(wrapper.get(`#${id}`).attributes('type')).toBe('text')
+      await toggle.trigger('click')
+      expect(wrapper.get(`#${id}`).attributes('type')).toBe('password')
+    }
+  })
+
+  it('submits a valid password without a current password when setup is required', async () => {
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('must_set')
+    vi.mocked(changeClientPassword).mockResolvedValueOnce(undefined)
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('#newPassword').setValue('Secure-Password-784!')
+    await wrapper.get('#confirmNewPassword').setValue('Secure-Password-784!')
+    await wrapper.get('#expirationDays').setValue('120')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(changeClientPassword).toHaveBeenCalledWith({
+      newPassword: 'Secure-Password-784!',
+      confirmNewPassword: 'Secure-Password-784!',
+      expirationDays: 120,
+    })
+    expect(wrapper.text()).toContain('Tu contraseña se actualizó correctamente.')
+  })
+
   it('shows the four distinct backend error codes', async () => {
     vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('valid')
     vi.mocked(changeClientPassword).mockRejectedValueOnce(
@@ -85,6 +150,43 @@ describe('ChangePasswordView.vue', () => {
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
     expect(wrapper.text()).toContain('La nueva contraseña no puede ser igual a la actual.')
+  })
+
+  it.each([
+    ['CURRENT_PASSWORD_INCORRECT', 'La contraseña actual no es correcta.'],
+    ['PASSWORDS_DO_NOT_MATCH', 'Las contraseñas no coinciden.'],
+    ['PASSWORD_POLICY_VIOLATION', 'La contraseña no cumple con la política de seguridad.'],
+  ])('displays the %s backend error', async (code, message) => {
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('valid')
+    vi.mocked(changeClientPassword).mockRejectedValueOnce(
+      new ChangePasswordError(message, code, code === 'PASSWORD_POLICY_VIOLATION' ? ['min_length'] : undefined),
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('#currentPassword').setValue('OldPassword1!')
+    await wrapper.get('#newPassword').setValue('Secure-Password-784!')
+    await wrapper.get('#confirmNewPassword').setValue('Secure-Password-784!')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(message)
+    if (code === 'PASSWORD_POLICY_VIOLATION') {
+      expect(wrapper.find('.policy-checklist li.violated').exists()).toBe(true)
+    }
+  })
+
+  it('displays a generic error when password update fails unexpectedly', async () => {
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('valid')
+    vi.mocked(changeClientPassword).mockRejectedValueOnce(new Error('network'))
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('#currentPassword').setValue('OldPassword1!')
+    await wrapper.get('#newPassword').setValue('Secure-Password-784!')
+    await wrapper.get('#confirmNewPassword').setValue('Secure-Password-784!')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No se pudo actualizar la contraseña, intenta de nuevo.')
   })
 
   it('shows success and navigates home on continue', async () => {

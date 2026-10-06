@@ -60,6 +60,33 @@ describe('UsersRepository', () => {
     await module.close();
   });
 
+  describe('findEmployeeCredentialsStatus', () => {
+    it('returns the employee password date and expiration period', async () => {
+      const setAt = new Date('2026-01-01T00:00:00Z');
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ PASSWORD_SET_AT: setAt, EXPIRATION_DAYS: 120 }],
+      });
+
+      await expect(repository.findEmployeeCredentialsStatus(42)).resolves.toEqual({
+        setAt,
+        expirationDays: 120,
+      });
+      expect(connection.execute).toHaveBeenCalledWith(
+        'SELECT PASSWORD_SET_AT, EXPIRATION_DAYS FROM EMPLOYEE_LOCAL_CREDENTIALS WHERE EMPLOYEE_ID = :employeeId',
+        { employeeId: { val: 42, type: oracle.NUMBER } },
+        { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: true },
+      );
+    });
+
+    it('reports missing employee credentials instead of returning a valid status', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [] });
+
+      await expect(repository.findEmployeeCredentialsStatus(42)).rejects.toThrow(
+        'Employee 42 is missing local credentials.',
+      );
+    });
+  });
+
   describe('deactivateEmployee', () => {
     it('rejects self deactivation before acquiring a connection', async () => {
       await expect(repository.deactivateEmployee(21, 21)).rejects.toMatchObject(
