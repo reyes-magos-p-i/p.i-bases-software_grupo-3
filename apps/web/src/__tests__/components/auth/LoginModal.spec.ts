@@ -66,6 +66,47 @@ describe('LoginModal', () => {
     expect(wrapper.emitted('authenticated')).toEqual([[identity]])
   })
 
+  it('prevents local submission, mode changes and closing while social login is pending', async () => {
+    const wrapper = render({ enabled: true })
+    await wrapper.get('[name="email"]').setValue('ana@example.com')
+    await wrapper.get('[name="password"]').setValue('password')
+    wrapper.getComponent(SocialAuthButtons).vm.$emit('busy', true)
+    await nextTick()
+    await wrapper.get('form').trigger('submit')
+    await wrapper.get('.close').trigger('click')
+    await wrapper.get('.switch-mode').trigger('click')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(wrapper.emitted('switchMode')).toBeUndefined()
+    expect(wrapper.get<HTMLInputElement>('[name="email"]').element.disabled).toBe(true)
+    wrapper.getComponent(SocialAuthButtons).vm.$emit('busy', false)
+    await nextTick()
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toEqual([
+      [{ email: 'ana@example.com', password: 'password' }],
+    ])
+  })
+
+  it('applies the retry delay to client login and both social buttons', async () => {
+    const wrapper = render({ enabled: true, retryAfterSeconds: 12 })
+    expect(wrapper.text()).toContain('12 segundos')
+    expect(wrapper.getComponent(SocialAuthButtons).props('disabled')).toBe(true)
+    await wrapper.setProps({ retryAfterSeconds: 0 })
+    expect(wrapper.getComponent(SocialAuthButtons).props('disabled')).toBe(false)
+  })
+
+  it.each(['a..b@example.com', 'ana@example.c', 'ana@localhost'])(
+    'uses shared email validation for %s',
+    async (email) => {
+      const wrapper = render({ enabled: true })
+      await wrapper.get('[name="email"]').setValue(email)
+      await wrapper.get('[name="password"]').setValue('password')
+      await wrapper.get('form').trigger('submit')
+      expect(wrapper.emitted('submit')).toBeUndefined()
+      expect(wrapper.get('[name="email"]').attributes('aria-invalid')).toBe('true')
+    },
+  )
+
   it('shows email feedback after blur and clears it as the value is corrected', async () => {
     const wrapper = render()
     const email = wrapper.get<HTMLInputElement>('[name="email"]')

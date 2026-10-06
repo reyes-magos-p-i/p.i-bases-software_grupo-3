@@ -13,6 +13,98 @@ vi.mock('axios', () => ({
 }))
 vi.mock('vue3-google-login', () => ({ googleAuthCodeLogin }))
 
+describe('Client local authentication', () => {
+  const identity = { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' }
+  const credentials = { email: identity.email, password: ' Exact password ' }
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.resetAllMocks()
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    localStorage.clear()
+    create.mockImplementation((defaults) => ({ defaults, post, get }))
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    localStorage.clear()
+  })
+
+  it('establishes the existing client session after a successful local login', async () => {
+    const { loginClient } = await import('@/services/authService')
+    const { clientSession } = await import('@/services/client-session.service')
+    post.mockResolvedValue({ data: { client: identity, accessToken: 'client-token' } })
+    await expect(loginClient(credentials)).resolves.toEqual(identity)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/auth/clients/login', credentials, {
+      timeout: 15000,
+    })
+    expect(clientSession.user.value).toEqual(identity)
+    expect(localStorage.getItem('accessToken')).toBe('client-token')
+  })
+
+  it.each([
+    [400, undefined, 'Revisa'],
+    [401, undefined, 'incorrectos'],
+    [403, 'EMAIL_VERIFICATION_REQUIRED', 'Confirma'],
+    [403, undefined, 'autorizar'],
+    [500, undefined, 'conectar'],
+  ])('reports HTTP %s (%s) without leaking server details', async (status, code, message) => {
+    const { loginClient } = await import('@/services/authService')
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { status, data: { code, message: 'private details' } },
+    })
+    await expect(loginClient(credentials)).rejects.toThrow(message as string)
+    expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+
+  it('preserves the rate-limit delay in a typed error', async () => {
+    const { loginClient } = await import('@/services/authService')
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 429, headers: { 'retry-after': '12' } },
+    })
+    await expect(loginClient(credentials)).rejects.toMatchObject({
+      name: 'ClientAuthError',
+      status: 429,
+      retryAfterSeconds: 12,
+    })
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    {},
+    { client: identity },
+    { client: { ...identity, role: 'EMPLOYEE' }, accessToken: 'token' },
+  ])('does not store malformed authentication responses: %p', async (data) => {
+    const { loginClient } = await import('@/services/authService')
+    post.mockResolvedValue({ data })
+    await expect(loginClient(credentials)).rejects.toThrow()
+    expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+
+  it('verifies client Bearer credentials without sending the employee cookie', async () => {
+    const { getClientSession } = await import('@/services/authService')
+    get.mockResolvedValue({
+      data: { id: 7, email: identity.email, firstName: 'Ana', firstSurname: 'Rojas' },
+    })
+    await expect(getClientSession('saved-token')).resolves.toEqual(identity)
+    expect(get).toHaveBeenCalledExactlyOnceWith('/auth/me', {
+      timeout: 10000,
+      headers: { Authorization: 'Bearer saved-token' },
+      adapter: 'fetch',
+      withCredentials: false,
+    })
+  })
+
+  it('distinguishes expired sessions from transport failures', async () => {
+    const { getClientSession } = await import('@/services/authService')
+    get.mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } })
+    await expect(getClientSession('expired')).resolves.toBeNull()
+    get.mockRejectedValueOnce(new Error('Private network failure'))
+    await expect(getClientSession('saved')).rejects.toThrow('conectar')
+  })
+})
+
 describe('registerUser', () => {
   const payload: RegisterPayload = {
     email: 'test@example.com',

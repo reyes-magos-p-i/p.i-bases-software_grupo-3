@@ -3,6 +3,7 @@ import { computed, nextTick, reactive, ref, useId, useTemplateRef, watch } from 
 import BaseModal from '@/components/common/BaseModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 import type { ClientIdentity } from '@/types/client-auth'
+import { validEmail, validText } from '@/utils/user-validation'
 
 const props = withDefaults(
   defineProps<{
@@ -30,13 +31,14 @@ const form = reactive({ email: '', password: '' })
 const touched = reactive({ email: false, password: false })
 const showPassword = ref(false)
 const socialError = ref('')
-const encoder = new TextEncoder()
+const socialBusy = ref(false)
+const busy = computed(() => props.submitting || socialBusy.value)
 const isClient = computed(() => props.mode === 'client')
 const emailError = computed(() => {
   const value = form.email.trim().toLowerCase()
   if (!value) return 'Introduce tu correo electrónico.'
-  if (encoder.encode(value).length > 150) return 'El correo electrónico es demasiado largo.'
-  if (emailInput.value?.validity.typeMismatch || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)) {
+  if (!validText(value, 150)) return 'El correo electrónico es demasiado largo.'
+  if (emailInput.value?.validity.typeMismatch || !validEmail(value)) {
     return 'Introduce un correo electrónico válido.'
   }
   return ''
@@ -74,13 +76,13 @@ watch(
 )
 
 function close() {
-  if (props.submitting) return
+  if (busy.value) return
   clearPassword()
   emit('close')
 }
 
 function switchMode() {
-  if (props.submitting) return
+  if (busy.value) return
   clearPassword()
   emit('switchMode', isClient.value ? 'employee' : 'client')
 }
@@ -90,11 +92,12 @@ function markTouched(field: 'email' | 'password', event: FocusEvent) {
 }
 
 function focusModeSwitch(event: PointerEvent) {
-  if (event.button === 0 && !props.submitting) modeSwitch.value?.focus()
+  if (event.button === 0 && !busy.value) modeSwitch.value?.focus()
 }
 
 function submit() {
-  if (props.submitting || props.retryAfterSeconds > 0 || !props.open) return
+  if (busy.value || props.retryAfterSeconds > 0 || !props.open) return
+  socialError.value = ''
   touched.email = true
   touched.password = true
   if (emailError.value) {
@@ -114,13 +117,15 @@ function submit() {
   <BaseModal
     :open="open"
     :title="isClient ? 'Iniciar sesión' : 'Inicio de sesión del personal'"
-    :close-disabled="submitting"
+    :close-disabled="busy"
     @close="close"
   >
     <div class="login-content">
       <template v-if="isClient">
         <SocialAuthButtons
           mode="login"
+          :disabled="!open || submitting || retryAfterSeconds > 0"
+          @busy="socialBusy = $event"
           @authenticated="emit('authenticated', $event)"
           @error="socialError = $event"
         />
@@ -132,7 +137,7 @@ function submit() {
       <p class="required-note">
         <span class="required-mark" aria-hidden="true">*</span> Campos obligatorios
       </p>
-      <form novalidate :aria-busy="submitting" @submit.prevent="submit">
+      <form novalidate :aria-busy="busy" @submit.prevent="submit">
         <div class="login-field">
           <label :for="`${id}-email`"
             >Correo electrónico <span class="required-mark" aria-hidden="true">*</span></label
@@ -147,7 +152,7 @@ function submit() {
             autocapitalize="none"
             :spellcheck="false"
             required
-            :disabled="submitting"
+            :disabled="busy"
             :aria-invalid="touched.email && !!emailError"
             :aria-describedby="touched.email && emailError ? `${id}-email-error` : undefined"
             @blur="markTouched('email', $event)"
@@ -175,7 +180,7 @@ function submit() {
               :type="showPassword ? 'text' : 'password'"
               autocomplete="current-password"
               required
-              :disabled="submitting"
+              :disabled="busy"
               :aria-invalid="touched.password && !!passwordError"
               :aria-describedby="
                 touched.password && passwordError ? `${id}-password-error` : undefined
@@ -185,7 +190,7 @@ function submit() {
             <button
               type="button"
               class="password-toggle"
-              :disabled="submitting"
+              :disabled="busy"
               :aria-controls="`${id}-password`"
               :aria-label="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
               :aria-pressed="showPassword"
@@ -211,7 +216,7 @@ function submit() {
         <p v-if="errorMessage" ref="feedback" class="server-error" tabindex="-1" role="alert">
           {{ errorMessage }}
         </p>
-        <p v-if="retryAfterSeconds > 0 && !isClient" class="availability-note" role="status">
+        <p v-if="retryAfterSeconds > 0" class="availability-note" role="status">
           Puedes volver a intentarlo en {{ retryAfterSeconds }} segundos.
         </p>
         <p v-if="!enabled" :id="`${id}-availability`" class="availability-note" role="status">
@@ -220,7 +225,7 @@ function submit() {
         <button
           type="submit"
           class="login-submit"
-          :disabled="!enabled || submitting || retryAfterSeconds > 0"
+          :disabled="!enabled || busy || retryAfterSeconds > 0"
           :aria-describedby="!enabled ? `${id}-availability` : undefined"
         >
           {{ submitting ? 'Iniciando sesión…' : 'Iniciar sesión' }}
@@ -230,7 +235,7 @@ function submit() {
         ref="modeSwitch"
         type="button"
         class="text-button switch-mode"
-        :disabled="submitting"
+        :disabled="busy"
         @pointerdown="focusModeSwitch"
         @click="switchMode"
       >

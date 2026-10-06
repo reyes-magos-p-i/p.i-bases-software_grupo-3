@@ -186,6 +186,10 @@ function handleImageError(): void {
 .hero-carousel-content {
   position: absolute;
 
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
   left: clamp(24px, 6vw, 72px);
   bottom: clamp(38px, 7vw, 72px);
 
