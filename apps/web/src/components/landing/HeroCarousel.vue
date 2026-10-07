@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { getMovieFunctions } from '../../services/movieFunctions'
+import { getMovieFunctions, stripTrailingSlashes } from '../../services/movieFunctions'
 import placeholderImage from '../../assets/images/placeholder.svg'
 
 interface CarouselSlide {
@@ -28,7 +28,6 @@ function stopAutoSlide(): void {
   }
 }
 
-
 function setPlaceholderSlides(): void {
   slides.value = [
     {
@@ -48,7 +47,7 @@ onMounted(async () => {
       setPlaceholderSlides()
     } else {
       slides.value = movies.map((movie: { title: string; posterImage: string }) => ({
-        image: `${import.meta.env.VITE_API_BASE_URL}image/${movie.posterImage}`,
+        image: `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image/${movie.posterImage}`,
         alt: movie.title,
         title: movie.title,
         description: 'Disponible próximamente en Cinetadel',
@@ -76,8 +75,7 @@ function nextSlide(): void {
 
 function previousSlide(): void {
   if (!slides.value.length) return
-  currentIndex.value =
-    (currentIndex.value - 1 + slides.value.length) % slides.value.length
+  currentIndex.value = (currentIndex.value - 1 + slides.value.length) % slides.value.length
 }
 
 function selectSlide(index: number): void {
@@ -91,50 +89,34 @@ function handleImageError(): void {
 
   slide.image = placeholderImage
 }
-
 </script>
 
 <template>
-  <section
-    class="hero-carousel"
-    aria-label="Películas destacadas"
-  >
-<Transition
-  name="carousel-fade"
-  mode="out-in"
->
-  <div
-    v-if="currentSlide"
-    :key="currentIndex"
-    class="carousel-slide"
-  >
-    <img
-      :src="currentSlide.image"
-      :alt="currentSlide.alt"
-      class="hero-image"
-      @error="handleImageError"
-    />
+  <section class="hero-carousel" aria-label="Películas destacadas">
+    <Transition name="carousel-fade" mode="out-in">
+      <div v-if="currentSlide" :key="currentIndex" class="carousel-slide">
+        <img
+          :src="currentSlide.image"
+          :alt="currentSlide.alt"
+          class="hero-image"
+          @error="handleImageError"
+        />
 
-    <div class="hero-overlay"></div>
+        <div class="hero-overlay"></div>
 
-    <div class="hero-content">
-      <h1>
-        {{ currentSlide.title }}
-      </h1>
+        <div class="hero-carousel-content">
+          <h1>
+            {{ currentSlide.title }}
+          </h1>
 
-      <p>
-        {{ currentSlide.description }}
-      </p>
+          <p>
+            {{ currentSlide.description }}
+          </p>
 
-      <button
-        type="button"
-        class="purchase-button"
-      >
-        Comprar boletos
-      </button>
-    </div>
-  </div>
-</Transition>
+          <button type="button" class="purchase-button">Comprar boletos</button>
+        </div>
+      </div>
+    </Transition>
 
     <button
       type="button"
@@ -142,10 +124,7 @@ function handleImageError(): void {
       aria-label="Película anterior"
       @click="previousSlide"
     >
-      <i
-        class="bi bi-chevron-left"
-        aria-hidden="true"
-      ></i>
+      <i class="bi bi-chevron-left" aria-hidden="true"></i>
     </button>
 
     <button
@@ -154,10 +133,7 @@ function handleImageError(): void {
       aria-label="Siguiente película"
       @click="nextSlide"
     >
-      <i
-        class="bi bi-chevron-right"
-        aria-hidden="true"
-      ></i>
+      <i class="bi bi-chevron-right" aria-hidden="true"></i>
     </button>
 
     <div class="hero-carousel-indicators">
@@ -207,8 +183,12 @@ function handleImageError(): void {
   );
 }
 
-.hero-content {
+.hero-carousel-content {
   position: absolute;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 
   left: clamp(24px, 6vw, 72px);
   bottom: clamp(38px, 7vw, 72px);
@@ -218,14 +198,14 @@ function handleImageError(): void {
   color: var(--color-white);
 }
 
-.hero-content h1 {
+.hero-carousel-content h1 {
   margin-bottom: 12px;
 
   font-size: clamp(1.6rem, 4vw, 3rem);
   font-weight: 700;
 }
 
-.hero-content p {
+.hero-carousel-content p {
   margin-bottom: 20px;
 
   font-size: clamp(0.95rem, 2vw, 1.15rem);
@@ -323,5 +303,4 @@ function handleImageError(): void {
 .carousel-fade-leave-from {
   opacity: 1;
 }
-
 </style>

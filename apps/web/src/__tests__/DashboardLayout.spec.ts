@@ -6,7 +6,7 @@ import type { UserRole } from '@/types/user'
 
 const sections = [
   ['dashboard', 'Tablero'],
-  ['rooms', 'Salas'],
+  ['theaters', 'Salas'],
   ['movies', 'Películas'],
   ['employees', 'Empleados'],
   ['clients', 'Clientes'],
@@ -108,20 +108,22 @@ describe('DashboardLayout', () => {
     expect(wrapper.find('.bi-bell').exists()).toBe(false)
   })
 
-  it('hides only dashboard and employees for an employee, even if the parent enables them', () => {
+  it('hides administrator-only sections for an employee, even if the parent enables them', () => {
     const wrapper = renderLayout({
       role: 'EMPLOYEE',
       availableSections: sections.map(([id]) => id),
     })
     const navigation = wrapper.get('nav')
 
-    expect(navigation.findAll('button')).toHaveLength(8)
+    expect(navigation.findAll('button')).toHaveLength(7)
     for (const [id, label] of sections) {
       expect(navigation.find('[aria-label="' + label + '"]').exists()).toBe(
-        id !== 'dashboard' && id !== 'employees',
+
+
+        id !== 'dashboard' && id !== 'employees' && id !== 'theaters',
       )
     }
-    expect(wrapper.get('header').text()).toContain('Rol: Empleado')
+    expect(wrapper.get('header').text()).toContain('Sesión iniciada como Empleado')
   })
 
   it.each(['CLIENT', 'UNKNOWN'] as UserRole[])(
@@ -209,13 +211,15 @@ describe('DashboardLayout', () => {
     expect(wrapper.get('.sidebar-title').text()).toBe('Cinetadel')
   })
 
-  it('renders supplied identity and content without inventing a session or profile picture', () => {
+  it('renders supplied identity and a default profile image without inventing a session', () => {
     const wrapper = renderLayout({ userName: 'Ana Solano' }, { default: '<h1>Crear usuario</h1>' })
 
-    expect(wrapper.get('header').text()).toContain('Rol: Administrador')
+    expect(wrapper.get('header').text()).toContain('Sesión iniciada como Administrador')
     expect(wrapper.get('header').text()).toContain('Ana Solano')
     expect(wrapper.get('main h1').text()).toBe('Crear usuario')
-    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.get('header .user-profile img').attributes('src')).toMatch(
+      /^data:image\/svg\+xml/,
+    )
     expect(wrapper.get('.skip-link').attributes('href')).toBe(
       '#' + wrapper.get('main').attributes('id'),
     )

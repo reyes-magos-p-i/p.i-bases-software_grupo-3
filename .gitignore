@@ -11,6 +11,8 @@ dist/
 build/
 coverage/
 
+# DB Wallet
+wallet/
 
 # Environment variables
 
@@ -58,6 +60,7 @@ Desktop.ini
 # TypeScript
 
 *.tsbuildinfo
+*.vue.js
 
 
 # Temporary files
@@ -69,3 +72,7 @@ Desktop.ini
 # agents
 
 AGENTS.md
+
+
+preview.email.ts
+preview.html

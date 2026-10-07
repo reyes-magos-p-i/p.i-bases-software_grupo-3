@@ -5,11 +5,37 @@ import PlaceHolder from '@/views/PlaceHolder.vue'
 import TermsConditions from '@/views/TermsConditions.vue'
 import RefundPolicy from '@/views/RefundPolicy.vue'
 import PrivacyPolicy from '@/views/PrivacyPolicy.vue'
+import { requireEmployeeSession } from './employee-session.guard'
+import { requireClientSession } from './client-session.guard'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
 
   routes: [
+    {
+      path: '/recover-password',
+      name: 'recover-password',
+      component: () => import('@/views/ChangePasswordView.vue'),
+      props: (route) => ({ recovery: true, recoveryToken: route.hash.slice(1) }),
+    },
+    {
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('@/views/DashboardView.vue'),
+      meta: { requiresEmployee: true },
+    },
+    {
+      path: '/verify-email',
+      name: 'verify-email',
+      component: () => import('@/views/EmailVerificationView.vue'),
+    },
+    {
+      path: '/account/password',
+      name: 'account-password',
+      component: () => import('@/views/ChangePasswordView.vue'),
+      meta: { requiresClient: true },
+    },
+    { path: '/dev/dashboard', redirect: '/dashboard' },
     {
       path: '/',
       name: 'home',
@@ -37,13 +63,7 @@ const router = createRouter({
     },
   ],
 })
-
-if (import.meta.env.DEV) {
-  router.addRoute({
-    path: '/dev/dashboard',
-    name: 'dashboard-preview',
-    component: () => import('@/views/DashboardPreview.vue'),
-  })
-}
+router.beforeEach(requireClientSession)
+router.beforeEach(requireEmployeeSession)
 
 export default router

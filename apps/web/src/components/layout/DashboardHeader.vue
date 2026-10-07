@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import defaultProfileImage from '@/assets/profile/profile-circle-svgrepo-com.svg'
 import type { UserRole } from '@/types/user'
 
 const props = defineProps<{
@@ -30,11 +31,11 @@ const roleLabel = computed(
       >
         <i class="bi bi-list" aria-hidden="true"></i>
       </button>
-      <p class="role-label">Rol: {{ roleLabel }}</p>
+      <p class="role-label">Sesión iniciada como {{ roleLabel }}</p>
     </div>
     <div class="user-profile">
       <slot name="profile">
-        <i class="bi bi-person-circle" aria-hidden="true"></i>
+        <img :src="defaultProfileImage" alt="" aria-hidden="true" />
       </slot>
       <span v-if="userName" class="user-name">{{ userName }}</span>
     </div>
@@ -71,9 +72,12 @@ const roleLabel = computed(
   max-width: 100%;
 }
 
-.user-profile > .bi {
+.user-profile > img {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 50%;
   color: var(--color-primary);
-  font-size: 1.75rem;
 }
 
 .user-name {

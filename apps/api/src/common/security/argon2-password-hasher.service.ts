@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { argon2, randomBytes } from 'node:crypto';
+import { verify as verifyArgon2 } from 'argon2';
 import { PasswordHasher, type PasswordHashResult } from './password-hasher';
 
 const ARGON2_PARAMETERS = {
@@ -11,6 +12,10 @@ const ARGON2_PARAMETERS = {
 
 @Injectable()
 export class Argon2PasswordHasher extends PasswordHasher {
+  verify(password: string, passwordHash: string): Promise<boolean> {
+    return verifyArgon2(passwordHash, password);
+  }
+
   async hash(password: string): Promise<PasswordHashResult> {
     const saltBytes = randomBytes(16);
     const derivedKey = await new Promise<Buffer>((resolve, reject) => {

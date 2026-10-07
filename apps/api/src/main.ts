@@ -1,10 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 export async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.setGlobalPrefix('api');
+  app.set('trust proxy', 'loopback');
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -13,8 +16,10 @@ export async function bootstrap() {
     }),
   );
 
-  app.enableCors({ origin: process.env.FRONTEND_URL ?? 'http://localhost:5173' });
-  app.enableShutdownHooks();  // To ensure a gently close
+  app.enableCors({
+    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+  });
+  app.enableShutdownHooks();
 
   await app.listen(process.env.PORT ?? 3000);
 }

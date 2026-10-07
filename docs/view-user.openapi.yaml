@@ -1,0 +1,237 @@
+openapi: 3.0.3
+info:
+  title: Detalle de usuarios
+  version: 1.0.0
+  description: Consulta de solo lectura del usuario seleccionado. No devuelve credenciales ni modifica datos.
+servers:
+  - url: /api
+security:
+  - employeeCookie: []
+  - bearerAuth: []
+paths:
+  /users/clients/{id}:
+    get:
+      summary: Ver un cliente
+      description: Permitido únicamente para empleados y administradores con identidad vigente. Un token de cliente no autoriza esta consulta.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Datos vigentes del cliente seleccionado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientDetail"
+        "400":
+          $ref: "#/components/responses/InvalidId"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/Unavailable"
+  /users/employees/{id}:
+    get:
+      summary: Ver un empleado o administrador
+      description: Exclusivo de administradores con identidad vigente. El ID corresponde a EMPLOYEES, independientemente de su rol.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Datos vigentes del personal seleccionado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeDetail"
+        "400":
+          $ref: "#/components/responses/InvalidId"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/Unavailable"
+components:
+  securitySchemes:
+    employeeCookie:
+      type: apiKey
+      in: cookie
+      name: cinetadel_employee_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de personal. Los tokens de clientes son rechazados.
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      description: ID numérico del registro seleccionado, sin prefijos CL, EMP o ADM. No es la posición en el listado.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 9007199254740991
+  schemas:
+    Address:
+      type: object
+      nullable: true
+      required:
+        [
+          id,
+          provinceId,
+          provinceName,
+          cantonId,
+          cantonName,
+          districtId,
+          districtName,
+          details,
+        ]
+      properties:
+        id:
+          type: integer
+        provinceId:
+          type: integer
+        provinceName:
+          type: string
+        cantonId:
+          type: integer
+        cantonName:
+          type: string
+        districtId:
+          type: integer
+        districtName:
+          type: string
+        details:
+          type: string
+          nullable: true
+    UserDetail:
+      type: object
+      required:
+        [
+          id,
+          firstName,
+          secondName,
+          firstSurname,
+          secondSurname,
+          birthday,
+          phoneNumber,
+          email,
+          address,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: integer
+          description: La interfaz añade el prefijo según el rol; el valor de la API permanece numérico.
+        firstName:
+          type: string
+        secondName:
+          type: string
+          nullable: true
+        firstSurname:
+          type: string
+          nullable: true
+        secondSurname:
+          type: string
+          nullable: true
+        birthday:
+          type: string
+          format: date
+          nullable: true
+        phoneNumber:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+        address:
+          $ref: "#/components/schemas/Address"
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: UTC. NULL significa fecha histórica desconocida.
+    ClientDetail:
+      allOf:
+        - $ref: "#/components/schemas/UserDetail"
+        - type: object
+          required: [role, gender, language]
+          properties:
+            role:
+              type: string
+              enum: [CLIENT]
+            gender:
+              type: string
+              nullable: true
+              enum: [M, F, O, N, null]
+              description: Valor existente; N significa prefiero no decirlo. No hay texto libre de otra identidad.
+            language:
+              type: string
+    EmployeeDetail:
+      allOf:
+        - $ref: "#/components/schemas/UserDetail"
+        - type: object
+          required: [role, branchId, branchName, hireDate]
+          properties:
+            role:
+              type: string
+              enum: [EMPLOYEE, ADMINISTRATOR]
+            branchId:
+              type: integer
+            branchName:
+              type: string
+            hireDate:
+              type: string
+              format: date
+              nullable: true
+              description: Fecha sin conversión de zona horaria. NULL significa fecha histórica desconocida.
+    Error:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode:
+          type: integer
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        error:
+          type: string
+  responses:
+    InvalidId:
+      description: El ID debe ser un entero positivo dentro del rango seguro. No se consulta el registro.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthenticated:
+      description: Sesión ausente, inválida, expirada o identidad inexistente.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: La identidad autenticada no tiene permiso para consultar ese tipo de usuario.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: El usuario seleccionado no existe.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unavailable:
+      description: Fallo interno; no expone SQL, nombres de esquemas ni credenciales.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

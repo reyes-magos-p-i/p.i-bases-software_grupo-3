@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
-
 import HeroCarousel from '@/components/landing/HeroCarousel.vue'
 import MovieCatalog from '@/components/landing/MovieCatalog.vue'
+
+
+
 </script>
 
 <template>
@@ -16,8 +18,8 @@ import MovieCatalog from '@/components/landing/MovieCatalog.vue'
 
       <MovieCatalog />
     </div>
+    <Movie/>
   </main>
-
   <AppFooter />
 </template>
 
