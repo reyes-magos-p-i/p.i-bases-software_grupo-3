@@ -257,28 +257,11 @@ const sectionTitle = computed(() =>
         : activeSection.value === 'password'
           ? 'Cambiar contraseña'
             : activeSection.value === 'movies'
-              ? 'Peliculas'                  
+              ? 'Peliculas'
                 : 'Clientes',
 )
 
-const sectionTitle = computed(() => {
-  switch (activeSection.value) {
-    case 'employees':
-      return 'Empleados'
 
-    case 'clients':
-      return 'Clientes'
-
-    case 'movies':
-      return 'Películas'
-
-    case 'theaters':
-      return 'Salas'
-
-    default:
-      return ''
-  }
-})
 watch(role, () => {
   if (
     role.value === 'EMPLOYEE' &&
@@ -291,7 +274,7 @@ watch(role, () => {
 function navigate(section: string) {
   if (submitting.value || passwordChanging.value || theaterBusy.value || loggingOut.value) return
   if (
-    (section === 'employees' || section === 'clients' || section === 'theaters' || section === 'password' section === 'movies') &&
+    (section === 'employees' || section === 'clients' || section === 'theaters' || section === 'password' || section === 'movies') &&
     availableSections.value.includes(section)
   ) {
     activeSection.value = section
