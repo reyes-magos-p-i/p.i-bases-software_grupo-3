@@ -115,7 +115,7 @@ describe('DashboardLayout', () => {
     })
     const navigation = wrapper.get('nav')
 
-    expect(navigation.findAll('button')).toHaveLength(7)
+    expect(navigation.findAll('button')).toHaveLength(6)
     for (const [id, label] of sections) {
       expect(navigation.find('[aria-label="' + label + '"]').exists()).toBe(
 

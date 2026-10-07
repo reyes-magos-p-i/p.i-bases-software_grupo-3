@@ -391,7 +391,7 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
     expect(view.get('nav').text()).not.toContain('Tablero')
-    expect(view.get('nav').findAll('button')).toHaveLength(7)
+    expect(view.get('nav').findAll('button')).toHaveLength(6)
   })
 
   it('preserves clients as the current section across role changes', async () => {
@@ -410,7 +410,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(7)
+    expect(pending).toHaveLength(6)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')
