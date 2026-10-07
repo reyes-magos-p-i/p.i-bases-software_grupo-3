@@ -8,20 +8,6 @@ describe('MoviesService', () => {
   let service: MoviesService;
   let repository: jest.Mocked<MoviesRepository>;
 
-  const movie = [
-    {
-      MOVIE_ID: 1,
-      TITLE: 'Interstellar',
-      RUNNING_TIME: 169,
-      SYNOPSIS: 'Cristopher nolar goes to space AAAAAA',
-      POSTER_IMAGE: 'Interstelar.jpg',
-      RELEASE_YEAR: 2014,
-      CLASSIFICATION_NAME: 'PG-13',
-      LANGUAGE_NAME: 'English',
-      GENRE_NAME: 'Sci-Fi',
-    },
-  ];
-
     const movieAll = [
     {
     id: 24,
@@ -66,6 +52,7 @@ describe('MoviesService', () => {
       },
     ],
   }
+
 
   beforeEach(async () => {
     const repositoryMock = {
@@ -112,7 +99,7 @@ describe('MoviesService', () => {
     });
 
     it('should throw NotFoundException when movie does not exist', async () => {
-      repository.findOne.mockResolvedValue(movieDetail);
+      repository.findOne.mockResolvedValue(null);
 
       await expect(service.findOne(999)).rejects.toThrow(
         NotFoundException,

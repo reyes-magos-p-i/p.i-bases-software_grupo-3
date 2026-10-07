@@ -52,7 +52,7 @@ const emit = defineEmits<{
             {{ row[column.key] }}
           </td>
 
-          <td v-if="showActions" class="movie-actions">
+          <td v-if="showActions" class="movie-actions" data-test="actions" >
             <slot name="actions" :row="row">
               <span title="Ver" class="action-hint">
               <button type="button" @click="emit('view', row)">

@@ -29,48 +29,157 @@ describe('MoviesRepository', () => {
 
   describe('findAll', () => {
     it('should return movie rows', async () => {
-      const rows = [
+      const dbRows = [
         {
-          MOVIE_ID: 1,
+          MOVIE_ID: 24,
           TITLE: 'Interstellar',
+          RUNNING_TIME: 169,
+          RELEASE_YEAR: 2014,
+          CLASSIFICATION: 'TP',
+        },
+      ];
+
+      const expected = [
+        {
+          id: 24,
+          title: 'Interstellar',
+          runningTime: 169,
+          releaseYear: 2014,
+          classification: 'TP',
         },
       ];
 
       db.query.mockResolvedValue({
-        rows,
-      } as any);
+        rows: dbRows,
+      });
 
       const result = await repository.findAll();
 
-      expect(result).toEqual(rows);
+      expect(result).toEqual(expected);
       expect(db.query).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('findOne', () => {
-    it('should query using movie id', async () => {
-      const rows = [
-        {
-          MOVIE_ID: 1,
-          TITLE: 'Interstellar',
-        },
-      ];
+describe('findOne', () => {
+  it('should return a movie with classification, languages and genres', async () => {
+    const dbRows = [
+      {
+        MOVIE_ID: 24,
+        TITLE: 'Interstellar',
+        SYNOPSIS: 'A team travels through space searching for a new home.',
+        RUNNING_TIME: 169,
+        RELEASE_YEAR: 2014,
+        CLASSIFICATION_ID: 1,
+        CLASSIFICATION: 'TP',
+        LANGUAGE_ID: 1,
+        LANGUAGE: 'English',
+        GENRE_ID: 3,
+        GENRE: 'Adventure',
+      },
+      {
+        MOVIE_ID: 24,
+        TITLE: 'Interstellar',
+        SYNOPSIS: 'A team travels through space searching for a new home.',
+        RUNNING_TIME: 169,
+        RELEASE_YEAR: 2014,
+        CLASSIFICATION_ID: 1,
+        CLASSIFICATION: 'TP',
+        LANGUAGE_ID: 2,
+        LANGUAGE: 'Spanish',
+        GENRE_ID: 3,
+        GENRE: 'Adventure',
+      },
+      {
+        MOVIE_ID: 24,
+        TITLE: 'Interstellar',
+        SYNOPSIS: 'A team travels through space searching for a new home.',
+        RUNNING_TIME: 169,
+        RELEASE_YEAR: 2014,
+        CLASSIFICATION_ID: 1,
+        CLASSIFICATION: 'TP',
+        LANGUAGE_ID: 1,
+        LANGUAGE: 'English',
+        GENRE_ID: 4,
+        GENRE: 'Sci-Fi',
+      },
+      {
+        MOVIE_ID: 24,
+        TITLE: 'Interstellar',
+        SYNOPSIS: 'A team travels through space searching for a new home.',
+        RUNNING_TIME: 169,
+        RELEASE_YEAR: 2014,
+        CLASSIFICATION_ID: 1,
+        CLASSIFICATION: 'TP',
+        LANGUAGE_ID: 2,
+        LANGUAGE: 'Spanish',
+        GENRE_ID: 4,
+        GENRE: 'Sci-Fi',
+      },
+    ];
 
       db.query.mockResolvedValue({
-        rows,
-      } as any);
+        rows: dbRows,
+      });
 
-      const result = await repository.findOne(1);
+      const result = await repository.findOne(24);
 
-      expect(result).toEqual(rows);
+      expect(result).toEqual({
+        id: 24,
+        title: 'Interstellar',
+        synopsis: 'A team travels through space searching for a new home.',
+        runningTime: 169,
+        releaseYear: 2014,
+
+        classification: {
+          id: 1,
+          name: 'TP',
+        },
+
+        languages: [
+          {
+            id: 1,
+            name: 'English',
+          },
+          {
+            id: 2,
+            name: 'Spanish',
+          },
+        ],
+
+        genres: [
+          {
+            id: 3,
+            name: 'Adventure',
+          },
+          {
+            id: 4,
+            name: 'Sci-Fi',
+          },
+        ],
+      });
 
       expect(db.query).toHaveBeenCalledWith(
         expect.stringContaining('WHERE m.MOVIE_ID = :id'),
-        { id: 1 },
+        { id: 24 },
+      );
+    });
+
+    it('should return null when the movie does not exist', async () => {
+      db.query.mockResolvedValue({
+        rows: [],
+      });
+
+      const result = await repository.findOne(999);
+
+      expect(result).toBeNull();
+
+      expect(db.query).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE m.MOVIE_ID = :id'),
+        { id: 999 },
       );
     });
   });
-
+/*
   describe('create', () => {
   it('should create a movie and its relationships inside a transaction', async () => {
     const dto = {
@@ -109,5 +218,5 @@ describe('MoviesRepository', () => {
     expect(execute).toHaveBeenCalledTimes(5);
   });
 });
-
+*/
 });

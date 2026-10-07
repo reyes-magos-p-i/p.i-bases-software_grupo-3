@@ -97,7 +97,7 @@ import * as oracledb from 'oracledb';
       releaseYear: first.RELEASE_YEAR,
 
       classification: {
-        id: first.CLASIFICATION_ID,
+        id: first.CLASSIFICATION_ID,
         name: first.CLASSIFICATION,
       },
 
@@ -174,8 +174,13 @@ import * as oracledb from 'oracledb';
 
     const movieId = outBinds.movieId[0];
 
-    for (const languageId of dto.languageIds) {
-      await conn.execute(
+    if (dto.languageIds.length > 0) {
+      const languageBinds = dto.languageIds.map((languageId) => ({
+        movieId,
+        languageId,
+      }));
+
+      await conn.executeMany(
         `
         INSERT INTO MOVIE_LANGUAGES (
           MOVIE_ID,
@@ -186,15 +191,17 @@ import * as oracledb from 'oracledb';
           :languageId
         )
         `,
-        {
-          movieId,
-          languageId,
-        },
+        languageBinds,
       );
     }
 
-    for (const genreId of dto.genreIds) {
-      await conn.execute(
+    if (dto.genreIds.length > 0) {
+      const genreBinds = dto.genreIds.map((genreId) => ({
+        movieId,
+        genreId,
+      }));
+
+      await conn.executeMany(
         `
         INSERT INTO MOVIE_GENRES (
           MOVIE_ID,
@@ -205,10 +212,7 @@ import * as oracledb from 'oracledb';
           :genreId
         )
         `,
-        {
-          movieId,
-          genreId,
-        },
+        genreBinds,
       );
     }
 
@@ -245,85 +249,85 @@ import * as oracledb from 'oracledb';
 }
 
   async update(id: number, dto: UpdateMovieDto) {
-  return this.db.transaction(async (conn) => {
-    await conn.execute(
-      `
-      UPDATE MOVIES
-      SET
-        TITLE = COALESCE(:title, TITLE),
-        RUNNING_TIME = COALESCE(:runningTime, RUNNING_TIME),
-        RELEASE_YEAR = COALESCE(:releaseYear, RELEASE_YEAR),
-        CLASIFICATION_ID =
-          COALESCE(:classificationId, CLASIFICATION_ID)
-      WHERE MOVIE_ID = :id
-      `,
-      {
-        id,
-        title: dto.title ?? null,
-        runningTime: dto.runningTime ?? null,
-        releaseYear: dto.releaseYear ?? null,
-        classificationId: dto.classificationId ?? null,
-      },
-    );
-
-    if (dto.languageIds) {
+    return this.db.transaction(async (conn) => {
       await conn.execute(
         `
-        DELETE FROM MOVIE_LANGUAGES
+        UPDATE MOVIES
+        SET
+          TITLE = COALESCE(:title, TITLE),
+          RUNNING_TIME = COALESCE(:runningTime, RUNNING_TIME),
+          RELEASE_YEAR = COALESCE(:releaseYear, RELEASE_YEAR),
+          CLASIFICATION_ID =
+            COALESCE(:classificationId, CLASIFICATION_ID)
         WHERE MOVIE_ID = :id
         `,
-        { id },
+        {
+          id,
+          title: dto.title ?? null,
+          runningTime: dto.runningTime ?? null,
+          releaseYear: dto.releaseYear ?? null,
+          classificationId: dto.classificationId ?? null,
+        },
       );
 
-      for (const languageId of dto.languageIds) {
+      if (dto.languageIds) {
         await conn.execute(
           `
-          INSERT INTO MOVIE_LANGUAGES (
-            MOVIE_ID,
-            LANGUAGE_ID
-          )
-          VALUES (
-            :id,
-            :languageId
-          )
+          DELETE FROM MOVIE_LANGUAGES
+          WHERE MOVIE_ID = :id
           `,
-          {
-            id,
-            languageId,
-          },
+          { id },
         );
+
+        if (dto.languageIds.length > 0) {
+          await conn.executeMany(
+            `
+            INSERT INTO MOVIE_LANGUAGES (
+              MOVIE_ID,
+              LANGUAGE_ID
+            )
+            VALUES (
+              :id,
+              :languageId
+            )
+            `,
+            dto.languageIds.map((languageId) => ({
+              id,
+              languageId,
+            })),
+          );
+        }
       }
-    }
 
-    if (dto.genreIds) {
-      await conn.execute(
-        `
-        DELETE FROM MOVIE_GENRES
-        WHERE MOVIE_ID = :id
-        `,
-        { id },
-      );
-
-      for (const genreId of dto.genreIds) {
+      if (dto.genreIds) {
         await conn.execute(
           `
-          INSERT INTO MOVIE_GENRES (
-            MOVIE_ID,
-            GENRE_ID
-          )
-          VALUES (
-            :id,
-            :genreId
-          )
+          DELETE FROM MOVIE_GENRES
+          WHERE MOVIE_ID = :id
           `,
-          {
-            id,
-            genreId,
-          },
+          { id },
         );
+
+        if (dto.genreIds.length > 0) {
+          await conn.executeMany(
+            `
+            INSERT INTO MOVIE_GENRES (
+              MOVIE_ID,
+              GENRE_ID
+            )
+            VALUES (
+              :id,
+              :genreId
+            )
+            `,
+            dto.genreIds.map((genreId) => ({
+              id,
+              genreId,
+            })),
+          );
+        }
       }
-    }
-  });
-}
+    });
+  }
 
 }
