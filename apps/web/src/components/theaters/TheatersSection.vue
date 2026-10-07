@@ -104,7 +104,9 @@ async function loadTheaters() {
   theatersError.value = ''
   try {
     const result = await getTheaters(currentRequest.signal)
-    if (!currentRequest.signal.aborted && !disposed) theaters.value = result
+    if (!currentRequest.signal.aborted && !disposed) {
+      theaters.value = result.filter((theater) => theater.isActive)
+    }
   } catch (error) {
     if (currentRequest.signal.aborted || disposed) return
     if (isAxiosError(error) && error.response?.status === 401) sessionExpired()
