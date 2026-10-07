@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
+import ProjectionsSection from '@/components/projections/ProjectionsSection.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
@@ -27,8 +28,15 @@ import {
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-const activeSection = ref<'employees' | 'clients' | 'theaters' | 'password' | 'movies'>(
-
+type DashboardSection = 'employees' | 'clients' | 'theaters' | 'screenings' | 'password' | 'movies'
+// Sections an employee is moved away from when the server reports that role.
+const ADMINISTRATOR_SECTIONS: readonly DashboardSection[] = [
+  'employees',
+  'theaters',
+  'screenings',
+  'password',
+]
+const activeSection = ref<DashboardSection>(
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
 const loggingOut = ref(false)
@@ -42,7 +50,10 @@ const catalogsError = ref('')
 let catalogRequest: AbortController | undefined
 const submitting = ref(false)
 const passwordChanging = ref(false)
-const theaterBusy = ref(false)
+const sectionBusy = ref(false)
+const isUserSection = computed(
+  () => activeSection.value === 'employees' || activeSection.value === 'clients',
+)
 const submissionErrors = ref<string[]>([])
 const submissionBlocked = ref(false)
 const creationResult = ref('')
@@ -223,7 +234,7 @@ function openMovieDialog() {
 }
 
 function openUserDialog() {
-  if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters') return
+  if (loggingOut.value || role.value !== 'ADMINISTRATOR' || !isUserSection.value) return
   userDialog.value?.open()
   void loadCatalogs()
 }
@@ -244,7 +255,7 @@ onMounted(() => {
 })
 const availableSections = computed(() =>
   role.value === 'ADMINISTRATOR'
-    ? ['employees', 'clients', 'theaters', 'password', 'movies']
+    ? ['employees', 'clients', 'theaters', 'screenings', 'password', 'movies']
     : ['clients', 'password'],
 )
 const sectionTitle = computed(() =>
@@ -263,21 +274,15 @@ const sectionTitle = computed(() =>
 
 
 watch(role, () => {
-  if (
-    role.value === 'EMPLOYEE' &&
-    (activeSection.value === 'employees' || activeSection.value === 'theaters' || activeSection.value === 'password')
-  ) {
+  if (role.value === 'EMPLOYEE' && ADMINISTRATOR_SECTIONS.includes(activeSection.value)) {
     activeSection.value = 'clients'
   }
 })
 
 function navigate(section: string) {
-  if (submitting.value || passwordChanging.value || theaterBusy.value || loggingOut.value) return
-  if (
-    (section === 'employees' || section === 'clients' || section === 'theaters' || section === 'password' || section === 'movies') &&
-    availableSections.value.includes(section)
-  ) {
-    activeSection.value = section
+  if (submitting.value || passwordChanging.value || sectionBusy.value || loggingOut.value) return
+  if (availableSections.value.includes(section)) {
+    activeSection.value = section as DashboardSection
   }
 }
 
@@ -293,7 +298,7 @@ function returnToDashboard() {
     :user-name="identity.firstName"
     :active-section="activeSection"
     :available-sections="availableSections"
-    :can-logout="!submitting && !passwordChanging && !theaterBusy && !loggingOut"
+    :can-logout="!submitting && !passwordChanging && !sectionBusy && !loggingOut"
     @navigate="navigate"
     @logout="logout"
   >
@@ -305,7 +310,7 @@ function returnToDashboard() {
     </div>
 
     <p
-      v-if="creationResult && activeSection !== 'theaters'"
+      v-if="creationResult && isUserSection"
       ref="result-notice"
       class="creation-result"
       :role="resultIsWarning ? 'alert' : 'status'"
@@ -317,7 +322,12 @@ function returnToDashboard() {
     <TheatersSection
       v-if="activeSection === 'theaters'"
       :disabled="loggingOut"
-      @busy="theaterBusy = $event"
+      @busy="sectionBusy = $event"
+    />
+    <ProjectionsSection
+      v-else-if="activeSection === 'screenings'"
+      :disabled="loggingOut"
+      @busy="sectionBusy = $event"
     />
     <section
       v-else-if="activeSection !== 'password'"

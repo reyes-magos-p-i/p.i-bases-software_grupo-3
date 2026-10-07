@@ -1,6 +1,6 @@
 import oracle from 'oracledb';
 
-function likePattern(value: string): string {
+export function likePattern(value: string): string {
   return '%' + value.toLowerCase().replace(/[\\%_]/gu, String.raw`\$&`) + '%';
 }
 
