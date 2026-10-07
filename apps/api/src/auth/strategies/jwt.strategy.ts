@@ -1,3 +1,4 @@
+import { PasswordRecoveryRepository } from '../password-recovery.repository';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
@@ -15,6 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly clients: ClientsService,
     private readonly users: UsersRepository,
     private readonly session: EmployeeSessionService,
+    private readonly recovery: PasswordRecoveryRepository,
   ) {
     super({
       jwtFromRequest: (request: Request) => session.extractToken(request),
@@ -42,6 +44,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
+    if (
+      await this.recovery.sessionRevoked(
+        payload.type,
+        payload.sub,
+        'iat' in payload ? payload.iat : undefined,
+      )
+    ) {
+      throw new UnauthorizedException();
+    }
+
     if (payload.type === 'employee') {
       const employee = await this.users.findEmployeeIdentityById(payload.sub);
       if (!employee) throw new UnauthorizedException();
@@ -52,7 +64,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       request.accountType = 'employee';
       return employee;
     }
-    
+
     const client = await this.clients.findById(payload.sub);
     if (!client) throw new UnauthorizedException();
     if (await this.clients.isEmailVerificationPending(payload.sub)) {
