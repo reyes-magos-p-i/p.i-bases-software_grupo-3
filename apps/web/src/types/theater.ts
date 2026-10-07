@@ -25,6 +25,8 @@ export interface CreateTheaterRequest {
   status?: TheaterStatus
 }
 
+export type UpdateTheaterRequest = Partial<CreateTheaterRequest> & { isActive?: boolean }
+
 export interface Theater {
   theaterId: number
   branchId: number

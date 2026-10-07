@@ -3,8 +3,15 @@ import { nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 import { useRouter } from 'vue-router'
 import CreateTheaterDialog from './CreateTheaterDialog.vue'
+import TheaterDetailDialog from './TheaterDetailDialog.vue'
+import DeactivateTheaterDialog from './DeactivateTheaterDialog.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
-import { createTheater, getTheaterCreationOptions, getTheaters } from '@/services/theater.service'
+import {
+  createTheater,
+  getTheaterCreationOptions,
+  getTheaters,
+  updateTheater,
+} from '@/services/theater.service'
 import {
   invalidateEmployeeSession,
   restoreEmployeeSession,
@@ -19,12 +26,15 @@ const resultNotice = useTemplateRef<HTMLElement>('result-notice')
 const options = ref<TheaterCreationOptions | null>(null)
 const optionsLoading = ref(false)
 const optionsError = ref('')
-const submissionErrors = ref<string[]>([])
 const creationResult = ref('')
 const submitting = ref(false)
 const theaters = ref<Theater[]>([])
 const theatersLoading = ref(false)
 const theatersError = ref('')
+const selectedTheater = ref<Theater | null>(null)
+const editingTheater = ref<Theater | null>(null)
+const deactivatingTheater = ref<Theater | null>(null)
+const theaterSubmissionErrors = ref<string[]>([])
 let request: AbortController | undefined
 let theatersRequest: AbortController | undefined
 let disposed = false
@@ -41,6 +51,7 @@ const columns = [
 const rows = () =>
   theaters.value.map((theater) => ({
     ...theater,
+    theater,
     id: theater.theaterId,
     displayId: `S${theater.theaterId}`,
     dimensions: `${theater.dimensionX} x ${theater.dimensionY}`,
@@ -111,23 +122,35 @@ async function loadTheaters() {
   }
 }
 
-function open() {
+function open(theater: Theater | null = null) {
   if (props.disabled || optionsLoading.value) return
+  editingTheater.value = theater
+  theaterSubmissionErrors.value = []
   dialog.value?.open()
   void loadOptions()
+}
+
+function openCreate() {
+  open()
 }
 
 async function submit(data: CreateTheaterRequest) {
   if (submitting.value || props.disabled) return
   submitting.value = true
   emit('busy', true)
-  submissionErrors.value = []
+  theaterSubmissionErrors.value = []
   creationResult.value = ''
   try {
-    const theater = await createTheater(data)
+    const theater = editingTheater.value
+      ? await updateTheater(editingTheater.value.theaterId, data)
+      : await createTheater(data)
     if (disposed) return
     await loadTheaters()
-    creationResult.value = `Sala ${theater.theaterId} creada exitosamente.`
+    creationResult.value = editingTheater.value
+      ? `Sala ${theater.theaterId} modificada exitosamente.`
+      : `Sala ${theater.theaterId} creada exitosamente.`
+    theaterSubmissionErrors.value = []
+    editingTheater.value = null
     dialog.value?.complete()
     await nextTick()
     resultNotice.value?.focus()
@@ -135,13 +158,15 @@ async function submit(data: CreateTheaterRequest) {
     if (disposed) return
     if (isAxiosError(error) && error.response?.status === 401) sessionExpired()
     else if (isAxiosError(error) && error.response?.status === 403) {
-      submissionErrors.value = ['No tienes permiso para crear salas.']
+      theaterSubmissionErrors.value = [
+        `No tienes permiso para ${editingTheater.value ? 'modificar' : 'crear'} salas.`,
+      ]
       void refreshPermissions()
     } else if (isAxiosError(error) && error.response?.status === 400) {
-      submissionErrors.value = ['Revisa los datos de la sala e inténtalo nuevamente.']
+      theaterSubmissionErrors.value = ['Revisa los datos de la sala e inténtalo nuevamente.']
     } else {
-      submissionErrors.value = [
-        'El resultado no pudo ser confirmado. Verifica si la sala fue creada antes de intentarlo de nuevo.',
+      theaterSubmissionErrors.value = [
+        `El resultado no pudo ser confirmado. Verifica si la sala fue ${editingTheater.value ? 'modificada' : 'creada'} antes de intentarlo de nuevo.`,
       ]
     }
   } finally {
@@ -155,6 +180,24 @@ function retryOptions() {
 }
 
 function retryTheaters() {
+  void loadTheaters()
+}
+
+function editTheater(row: { theater?: Theater }) {
+  if (row.theater) open(row.theater)
+}
+
+function viewTheater(row: { theater?: Theater }) {
+  if (row.theater) selectedTheater.value = row.theater
+}
+
+function deactivateTheater(row: { theater?: Theater }) {
+  if (row.theater) deactivatingTheater.value = row.theater
+}
+
+function theaterDeactivated() {
+  deactivatingTheater.value = null
+  creationResult.value = 'La sala fue desactivada exitosamente.'
   void loadTheaters()
 }
 
@@ -175,7 +218,7 @@ onBeforeUnmount(() => {
         type="button"
         class="add-user-button"
         :disabled="disabled || submitting"
-        @click="open"
+        @click="openCreate"
       >
         <i class="bi bi-plus-lg" aria-hidden="true"></i>
         Crear sala
@@ -191,7 +234,31 @@ onBeforeUnmount(() => {
         <p class="result-count" role="status">
           {{ theaters.length }} {{ theaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
         </p>
-        <CrudTable :columns="columns" :rows="rows()" :show-actions="false" caption="Salas" />
+        <CrudTable :columns="columns" :rows="rows()" caption="Salas">
+          <template #actions="{ row }">
+            <div class="user-actions">
+              <span title="Ver" class="action-hint">
+                <button type="button" aria-label="Ver sala" @click="viewTheater(row)">
+                  <i class="bi bi-eye" aria-hidden="true"></i>
+                </button>
+              </span>
+              <span title="Modificar" class="action-hint">
+                <button type="button" aria-label="Modificar sala" @click="editTheater(row)">
+                  <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                </button>
+              </span>
+              <span title="Desactivar" class="action-hint">
+                <button
+                  type="button"
+                  aria-label="Desactivar sala"
+                  @click="deactivateTheater(row)"
+                >
+                  <i class="bi bi-trash3" aria-hidden="true"></i>
+                </button>
+              </span>
+            </div>
+          </template>
+        </CrudTable>
       </template>
       <div v-else class="empty-state">
         <i class="bi bi-display" aria-hidden="true"></i>
@@ -210,15 +277,50 @@ onBeforeUnmount(() => {
     </p>
     <CreateTheaterDialog
       ref="dialog"
+      :theater="editingTheater"
       :projectors="options?.projectors"
       :cinemas="options?.cinemas"
       :options-loading="optionsLoading"
       :options-error="optionsError"
       :submitting="submitting"
-      :submission-errors="submissionErrors"
+      :submission-errors="theaterSubmissionErrors"
       @retry-options="retryOptions"
       @submit="submit"
     />
+    <TheaterDetailDialog :theater="selectedTheater" @close="selectedTheater = null" />
+    <DeactivateTheaterDialog
+      :theater="deactivatingTheater"
+      @close="deactivatingTheater = null"
+      @deactivated="theaterDeactivated"
+      @session-expired="sessionExpired"
+    />
   </section>
 </template>
+
+<style scoped>
+.user-actions {
+  display: flex;
+  gap: 4px;
+}
+.user-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  width: 36px;
+  min-height: 36px;
+  padding: 8px;
+  border: 0;
+  color: var(--color-primary);
+  background: transparent;
+  font-size: 1.125rem;
+  text-decoration: none;
+}
+.user-actions button:not(:disabled):hover {
+  background: var(--color-light_gray);
+}
+.action-hint {
+  display: inline-flex;
+}
+</style>
 

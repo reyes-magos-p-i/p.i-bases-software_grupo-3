@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CreateTheaterRequest, Theater } from '@/types/theater'
 
-const { create, get, post } = vi.hoisted(() => ({
+const { create, get, post, patch, del } = vi.hoisted(() => ({
   create: vi.fn(),
   get: vi.fn(),
   post: vi.fn(),
+  patch: vi.fn(),
+  del: vi.fn(),
 }))
 
 vi.mock('axios', () => ({ default: { create } }))
@@ -23,7 +25,7 @@ describe('theater service', () => {
     vi.resetModules()
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
-    create.mockImplementation((defaults) => ({ defaults, get, post }))
+    create.mockImplementation((defaults) => ({ defaults, get, post, patch, delete: del }))
   })
 
   afterEach(() => vi.unstubAllEnvs())
@@ -66,6 +68,33 @@ describe('theater service', () => {
 
     await expect(createTheater(payload)).resolves.toEqual(theater)
     expect(post).toHaveBeenCalledExactlyOnceWith('/theaters', payload, { timeout: 30000 })
+  })
+
+  it('loads all theaters with the request signal and timeout', async () => {
+    const theaters: Theater[] = []
+    const controller = new AbortController()
+    get.mockResolvedValue({ data: theaters })
+
+    const { getTheaters } = await import('@/services/theater.service')
+
+    await expect(getTheaters(controller.signal)).resolves.toBe(theaters)
+    expect(get).toHaveBeenCalledExactlyOnceWith('/theaters', {
+      signal: controller.signal,
+      timeout: 10000,
+    })
+  })
+
+  it('updates and deactivates a theater', async () => {
+    const theater = { theaterId: 17, ...payload, isActive: true, status: 'Disponible' as const }
+    patch.mockResolvedValue({ data: theater })
+    del.mockResolvedValue({})
+
+    const { updateTheater, deleteTheater } = await import('@/services/theater.service')
+
+    await expect(updateTheater(17, payload)).resolves.toEqual(theater)
+    await expect(deleteTheater(17)).resolves.toBeUndefined()
+    expect(patch).toHaveBeenCalledExactlyOnceWith('/theaters/17', payload, { timeout: 30000 })
+    expect(del).toHaveBeenCalledExactlyOnceWith('/theaters/17', { timeout: 30000 })
   })
 
   it('propagates a catalog request failure without retrying', async () => {
