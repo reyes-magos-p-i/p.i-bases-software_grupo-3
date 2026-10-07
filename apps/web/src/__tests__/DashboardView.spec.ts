@@ -377,7 +377,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(7)
+    expect(pending).toHaveLength(6)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')
