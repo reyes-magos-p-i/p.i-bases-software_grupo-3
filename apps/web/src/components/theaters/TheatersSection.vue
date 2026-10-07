@@ -1,18 +1,14 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
-import { useRouter } from 'vue-router'
 import CreateTheaterDialog from './CreateTheaterDialog.vue'
+import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import { createTheater, getTheaterCreationOptions } from '@/services/theater.service'
-import {
-  invalidateEmployeeSession,
-  restoreEmployeeSession,
-} from '@/services/employee-session.service'
 import type { CreateTheaterRequest, TheaterCreationOptions } from '@/types/theater'
 
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
-const router = useRouter()
+const { state, sessionExpired, refreshPermissions } = useEmployeeSessionRecovery()
 const dialog = useTemplateRef<InstanceType<typeof CreateTheaterDialog>>('dialog')
 const resultNotice = useTemplateRef<HTMLElement>('result-notice')
 const options = ref<TheaterCreationOptions | null>(null)
@@ -22,22 +18,6 @@ const submissionErrors = ref<string[]>([])
 const creationResult = ref('')
 const submitting = ref(false)
 let request: AbortController | undefined
-let disposed = false
-
-function sessionExpired() {
-  invalidateEmployeeSession()
-  void router.replace({ path: '/', query: { login: 'employee', reason: 'expired' } })
-}
-
-async function refreshPermissions() {
-  try {
-    const current = await restoreEmployeeSession(true)
-    if (!disposed && !current) sessionExpired()
-  } catch {
-    if (!disposed)
-      void router.replace({ path: '/', query: { login: 'employee', reason: 'unavailable' } })
-  }
-}
 
 async function loadOptions() {
   if (optionsLoading.value || options.value) return
@@ -76,13 +56,13 @@ async function submit(data: CreateTheaterRequest) {
   creationResult.value = ''
   try {
     const theater = await createTheater(data)
-    if (disposed) return
+    if (state.disposed) return
     creationResult.value = `Sala ${theater.theaterId} creada exitosamente.`
     dialog.value?.complete()
     await nextTick()
     resultNotice.value?.focus()
   } catch (error) {
-    if (disposed) return
+    if (state.disposed) return
     if (isAxiosError(error) && error.response?.status === 401) sessionExpired()
     else if (isAxiosError(error) && error.response?.status === 403) {
       submissionErrors.value = ['No tienes permiso para crear salas.']
@@ -105,7 +85,6 @@ function retryOptions() {
 }
 
 onBeforeUnmount(() => {
-  disposed = true
   request?.abort()
 })
 </script>

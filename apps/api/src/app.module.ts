@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module';
 import { TheatersModule } from './theaters/theaters.module';
 import { CinemasModule } from './cinemas/cinemas.module';
 import { ProjectorsModule } from './projectors/projectors.module';
+import { ProjectionsModule } from './projections/projections.module';
 
 
 @Module({
@@ -25,6 +26,7 @@ import { ProjectorsModule } from './projectors/projectors.module';
     TheatersModule,
     CinemasModule,
     ProjectorsModule,
+    ProjectionsModule,
   ],
   controllers: [ImageController],
 })
