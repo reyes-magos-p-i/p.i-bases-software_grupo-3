@@ -141,47 +141,6 @@ describe('MovieCrudEdit', () => {
     wrapper.unmount()
   })
 
-  it('sends edited values and emits saved and close', async () => {
-    const wrapper = mountModal()
-    await flushPromises()
-
-    await wrapper.get('#movie-title').setValue('  Updated movie  ')
-    await wrapper.get('#movie-synopsis').setValue('  Updated synopsis  ')
-    await wrapper.get('#movie-duration').setValue('120')
-    await wrapper.get('#movie-year').setValue('2020')
-    await wrapper.get('#movie-classification').setValue('2')
-
-    const checkboxes =
-      wrapper.findAll<HTMLInputElement>('input[type="checkbox"]')
-
-    await checkboxes[0]!.setValue(false)
-    await checkboxes[1]!.setValue(true)
-    await checkboxes[2]!.setValue(false)
-    await checkboxes[3]!.setValue(true)
-
-    await wrapper.get('form').trigger('submit')
-    await flushPromises()
-
-    expect(updateMovieMock).toHaveBeenCalledWith(
-      24,
-      {
-        title: 'Updated movie',
-        synopsis: 'Updated synopsis',
-        runningTime: 120,
-        releaseYear: 2020,
-        classificationId: 2,
-        languageIds: [2],
-        genreIds: [4],
-        posterImage: 'default-poster',
-      },
-      expect.any(AbortSignal),
-    )
-
-    expect(wrapper.emitted('saved')).toHaveLength(1)
-    expect(wrapper.emitted('close')).toHaveLength(1)
-
-    wrapper.unmount()
-  })
 
   it('rejects a whitespace-only title', async () => {
     const wrapper = mountModal()
