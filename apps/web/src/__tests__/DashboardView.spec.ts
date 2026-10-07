@@ -22,6 +22,7 @@ const {
   createUser,
   getTheaterCreationOptions,
   createTheater,
+  getEmployeePasswordStatus,
 } = vi.hoisted(
   () => ({
     getUsers: vi.fn(),
@@ -30,6 +31,7 @@ const {
     createUser: vi.fn(),
     getTheaterCreationOptions: vi.fn(),
     createTheater: vi.fn(),
+    getEmployeePasswordStatus: vi.fn(),
   }),
 )
 vi.mock('@/services/user.service', () => ({
@@ -39,6 +41,11 @@ vi.mock('@/services/user.service', () => ({
   createUser,
 }))
 vi.mock('@/services/theater.service', () => ({ getTheaterCreationOptions, createTheater }))
+vi.mock('@/services/authService', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/services/authService')>('@/services/authService')
+  return { ...actual, getEmployeePasswordStatus }
+})
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')
   const user = ref<{ id: number; role: string; firstName: string; email?: string } | null>({
@@ -100,6 +107,7 @@ beforeEach(() => {
   getUsers
     .mockReset()
     .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 })
+  getEmployeePasswordStatus.mockReset().mockResolvedValue('valid')
   getEmployeeListOptions.mockReset().mockResolvedValue({ branches: [] })
   Object.assign(employeeSession.user, {
     value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana', email: 'ana@example.com' },
@@ -207,13 +215,13 @@ describe('DashboardView', () => {
     expect(view.findAllComponents(UserListPanel)).toHaveLength(1)
   })
 
-  it('does not expose the password section to employees', async () => {
+  it('exposes the password recovery section to employees', async () => {
     await setRole('EMPLOYEE')
     const view = await renderDashboard()
     await flushPromises()
 
-    expect(view.find('[aria-label="Cambiar contraseña"]').exists()).toBe(false)
-    expect(view.getComponent(DashboardLayout).props('availableSections')).not.toContain('password')
+    expect(view.find('[aria-label="Cambiar contraseña"]').exists()).toBe(true)
+    expect(view.getComponent(DashboardLayout).props('availableSections')).toContain('password')
   })
 
   it('provides the current staff ID to protect self deactivation', async () => {
@@ -293,6 +301,7 @@ describe('DashboardView', () => {
   })
   it('uses the authenticated identity without development role controls', async () => {
     const view = await renderDashboard()
+    await flushPromises()
     expect(view.text()).not.toContain('Vista de desarrollo')
     expect(view.text()).not.toContain('Usuario de prueba')
     expect(getUserCreationOptions).not.toHaveBeenCalled()
@@ -312,6 +321,19 @@ describe('DashboardView', () => {
     await view.get('[aria-label="Empleados"]').trigger('click')
     expect(view.get('h1').text()).toBe('Empleados')
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
+  })
+
+  it('opens the password form when the employee password has expired', async () => {
+    getEmployeePasswordStatus
+      .mockResolvedValueOnce('expired')
+      .mockResolvedValueOnce('expired')
+    const view = await renderDashboard()
+    await flushPromises()
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
+      'Cambiar contraseña',
+    )
+    expect(view.text()).toContain('Tu contraseña venció.')
   })
 
   it('prevents section navigation and logout while the password change is pending', async () => {
@@ -408,7 +430,7 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
     expect(view.get('nav').text()).not.toContain('Tablero')
-    expect(view.get('nav').findAll('button')).toHaveLength(6)
+    expect(view.get('nav').findAll('button')).toHaveLength(7)
   })
 
   it('preserves clients as the current section across role changes', async () => {

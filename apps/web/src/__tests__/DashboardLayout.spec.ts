@@ -115,12 +115,12 @@ describe('DashboardLayout', () => {
     })
     const navigation = wrapper.get('nav')
 
-    expect(navigation.findAll('button')).toHaveLength(6)
+    expect(navigation.findAll('button')).toHaveLength(7)
     for (const [id, label] of sections) {
       expect(navigation.find('[aria-label="' + label + '"]').exists()).toBe(
 
 
-        id !== 'dashboard' && id !== 'employees' && id !== 'theaters'&& id !== 'password',
+        id !== 'dashboard' && id !== 'employees' && id !== 'theaters',
       )
     }
     expect(wrapper.get('header').text()).toContain('Sesión iniciada como Empleado')

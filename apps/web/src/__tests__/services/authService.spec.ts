@@ -104,6 +104,29 @@ describe('Client local authentication', () => {
     get.mockRejectedValueOnce(new Error('Private network failure'))
     await expect(getClientSession('saved')).rejects.toThrow('conectar')
   })
+
+  it('checks employee password expiration through the session cookie', async () => {
+    const { getEmployeePasswordStatus } = await import('@/services/authService')
+    get.mockResolvedValue({ data: { status: 'expired' } })
+
+    await expect(getEmployeePasswordStatus()).resolves.toBe('expired')
+    expect(get).toHaveBeenCalledExactlyOnceWith('/auth/password-status', {
+      timeout: 10000,
+    })
+  })
+
+  it('preserves employee-session errors when password status cannot be checked', async () => {
+    const { getEmployeePasswordStatus } = await import('@/services/authService')
+    get.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 401 },
+    })
+
+    await expect(getEmployeePasswordStatus()).rejects.toMatchObject({
+      name: 'EmployeeAuthError',
+      status: 401,
+    })
+  })
 })
 
 describe('registerUser', () => {

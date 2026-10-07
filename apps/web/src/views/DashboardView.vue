@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
@@ -17,6 +17,10 @@ import {
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
 import { clearClientAuth } from '@/services/client-session.service'
+import {
+  EmployeeAuthError,
+  getEmployeePasswordStatus,
+} from '@/services/authService'
 
 const router = useRouter()
 const identity = employeeSession.user
@@ -27,6 +31,7 @@ const activeSection = ref<'employees' | 'clients' | 'theaters' | 'password'>(
 )
 const loggingOut = ref(false)
 const logoutError = ref('')
+const passwordStatusError = ref('')
 const userDialog = useTemplateRef<InstanceType<typeof CreateUserDialog>>('user-dialog')
 const userList = useTemplateRef<InstanceType<typeof UserListPanel>>('user-list')
 const catalogs = ref<UserCreationOptions | null>(null)
@@ -46,6 +51,22 @@ let disposed = false
 function sessionExpired() {
   invalidateEmployeeSession()
   void router.replace({ path: '/', query: { login: 'employee', reason: 'expired' } })
+}
+
+async function checkPasswordStatus() {
+  passwordStatusError.value = ''
+  try {
+    const status = await getEmployeePasswordStatus()
+    if (!disposed && status !== 'valid') activeSection.value = 'password'
+  } catch (error) {
+    if (disposed) return
+    if (error instanceof EmployeeAuthError && error.status === 401) {
+      sessionExpired()
+    } else {
+      passwordStatusError.value =
+        'No se pudo comprobar el estado de tu contraseña. Algunas funciones pueden no estar disponibles.'
+    }
+  }
 }
 
 async function refreshPermissions() {
@@ -211,8 +232,13 @@ onBeforeUnmount(() => {
   disposed = true
   cancelCatalogRequest()
 })
+onMounted(() => {
+  void checkPasswordStatus()
+})
 const availableSections = computed(() =>
-  role.value === 'ADMINISTRATOR' ? ['employees', 'clients', 'theaters', 'password'] : ['clients'],
+  role.value === 'ADMINISTRATOR'
+    ? ['employees', 'clients', 'theaters', 'password']
+    : ['clients', 'password'],
 )
 const sectionTitle = computed(() =>
   activeSection.value === 'employees'
@@ -246,7 +272,7 @@ function navigate(section: string) {
 }
 
 function returnToDashboard() {
-  activeSection.value = 'employees'
+  activeSection.value = role.value === 'ADMINISTRATOR' ? 'employees' : 'clients'
 }
 </script>
 
@@ -263,6 +289,10 @@ function returnToDashboard() {
   >
     <p v-if="loggingOut" role="status">Cerrando sesión…</p>
     <p v-if="logoutError" role="alert">{{ logoutError }}</p>
+    <div v-if="passwordStatusError" role="alert">
+      {{ passwordStatusError }}
+      <button type="button" @click="checkPasswordStatus">Reintentar</button>
+    </div>
 
     <p
       v-if="creationResult && activeSection !== 'theaters'"

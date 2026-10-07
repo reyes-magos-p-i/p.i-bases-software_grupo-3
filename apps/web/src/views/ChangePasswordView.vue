@@ -9,6 +9,7 @@ import {
   changeClientPassword,
   type ChangeEmployeePasswordPayload,
   getClientPasswordStatus,
+  getEmployeePasswordStatus,
   type ChangeClientPasswordPayload,
   type ClientPasswordStatus,
 } from '@/services/authService'
@@ -38,7 +39,7 @@ const user = computed(() =>
 const EXPIRATION_OPTIONS = [30, 60, 90, 120] as const
 
 const status = ref<ClientPasswordStatus>('valid')
-const statusLoading = ref(props.accountType !== 'employee')
+const statusLoading = ref(true)
 const statusError = ref('')
 const showCurrentPassword = ref(false)
 const showNewPassword = ref(false)
@@ -68,15 +69,12 @@ const policySatisfied = computed(() => isPasswordPolicySatisfied(policyChecks.va
 const isEmployee = computed(() => props.accountType === 'employee')
 
 async function loadStatus() {
-  if (isEmployee.value) {
-    status.value = 'valid'
-    statusLoading.value = false
-    return
-  }
   statusLoading.value = true
   statusError.value = ''
   try {
-    status.value = await getClientPasswordStatus()
+    status.value = isEmployee.value
+      ? await getEmployeePasswordStatus()
+      : await getClientPasswordStatus()
   } catch {
     statusError.value = 'No se pudo comprobar el estado de tu contraseña. Intenta de nuevo.'
   } finally {

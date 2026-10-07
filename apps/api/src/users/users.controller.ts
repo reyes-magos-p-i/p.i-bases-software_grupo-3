@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 import { AdministratorGuard } from './guards/administrator.guard';
 import { EmployeeSessionOriginGuard } from '../auth/guards/employee-session-origin.guard';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -18,7 +19,7 @@ import { CreateUserValidationPipe } from './pipes/create-user-validation.pipe';
 import { UsersService } from './users.service';
 
 @Controller('users')
-@UseGuards(AuthGuard('jwt'), AdministratorGuard)
+@UseGuards(AuthGuard('jwt'), AdministratorGuard, PasswordStatusGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

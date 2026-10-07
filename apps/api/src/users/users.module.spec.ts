@@ -26,6 +26,7 @@ import { PasswordGenerator } from '../common/security/password-generator';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { RandomPasswordGenerator } from '../common/security/random-password-generator.service';
 import { Argon2PasswordHasher } from '../common/security/argon2-password-hasher.service';
+import { UsersRepository } from './users.repository';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { SmtpInitialCredentialsSender } from './notifications/smtp-initial-credentials-sender';
 
@@ -144,6 +145,9 @@ describe('UsersModule (application HTTP integration)', () => {
       .mocked(nodemailer.createTransport)
       .mockReturnValue({ sendMail } as unknown as Mail<SMTPSentMessageInfo>);
     const module = await buildModule();
+    jest
+      .spyOn(module.get(UsersRepository), 'findEmployeeCredentialsStatus')
+      .mockResolvedValue({ setAt: new Date(), expirationDays: 90 });
     app = module.createNestApplication({ logger: false });
     app.useGlobalPipes(
       new ValidationPipe({
@@ -386,6 +390,28 @@ describe('UsersModule (application HTTP integration)', () => {
     const calls = connection.execute.mock.calls.length;
     await request(app.getHttpServer()).post('/users').send(client).expect(401);
     expect(connection.execute).toHaveBeenCalledTimes(calls);
+  });
+
+  it('blocks expired employee passwords on protected routes but allows password recovery', async () => {
+    jest
+      .spyOn(app.get(UsersRepository), 'findEmployeeCredentialsStatus')
+      .mockResolvedValue({
+        setAt: new Date(Date.now() - 91 * 24 * 60 * 60 * 1000),
+        expirationDays: 90,
+      });
+
+    const protectedResponse = await browser.get('/users/clients').expect(403);
+    expect(protectedResponse.body).toMatchObject({
+      code: 'PASSWORD_EXPIRED',
+    });
+
+    await browser
+      .get('/auth/password-status')
+      .expect(200, { status: 'expired' });
+    await browser
+      .patch('/auth/employees/password')
+      .send({})
+      .expect(400);
   });
 
   it('uses the current role rather than role claims or development flags', async () => {

@@ -233,6 +233,18 @@ export async function getEmployeeSession(): Promise<EmployeeIdentity | null> {
   }
 }
 
+export async function getEmployeePasswordStatus(): Promise<ClientPasswordStatus> {
+  try {
+    const { data } = await getApi().get<{ status: ClientPasswordStatus }>(
+      '/auth/password-status',
+      { timeout: 10000 },
+    )
+    return data.status
+  } catch (error) {
+    throw employeeAuthError(error)
+  }
+}
+
 export async function logoutEmployee(): Promise<void> {
   try {
     await getApi().post('/auth/employees/logout', undefined, { timeout: 10000 })

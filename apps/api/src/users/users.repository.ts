@@ -652,6 +652,13 @@ export class UsersRepository {
       // Employee always has local credentials because they are created in a transactionwith the employee record.
       throw new Error(`Employee ${employeeId} is missing local credentials.`);
     }
+    if (
+      !(row.PASSWORD_SET_AT instanceof Date) ||
+      Number.isNaN(row.PASSWORD_SET_AT.getTime()) ||
+      ![30, 60, 90, 120].includes(row.EXPIRATION_DAYS)
+    ) {
+      throw new Error('Oracle returned invalid employee password status.');
+    }
     return { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS };
   }
 

@@ -234,7 +234,7 @@ describe('AuthController', () => {
     });
 
     describe('changeEmployeePassword()', () => {
-      it('rejects client tokens and non-administrator employee tokens', async () => {
+      it('rejects client tokens and permits an employee to change their own password', async () => {
         await expect(
           controller.changeEmployeePassword(
             { accountType: 'client' } as never,
@@ -246,21 +246,23 @@ describe('AuthController', () => {
             },
           ),
         ).rejects.toThrow(ForbiddenException);
+        const dto = {
+          currentPassword: 'old',
+          newPassword: 'new',
+          confirmNewPassword: 'new',
+          expirationDays: 90,
+        };
+        auth.changeEmployeePassword.mockResolvedValue(undefined);
         await expect(
           controller.changeEmployeePassword(
             {
               accountType: 'employee',
               user: { id: 21, role: 'EMPLOYEE' },
             } as never,
-            {
-              currentPassword: 'old',
-              newPassword: 'new',
-              confirmNewPassword: 'new',
-              expirationDays: 90,
-            },
+            dto,
           ),
-        ).rejects.toThrow(ForbiddenException);
-        expect(auth.changeEmployeePassword).not.toHaveBeenCalled();
+        ).resolves.toEqual({ message: 'Contraseña actualizada correctamente' });
+        expect(auth.changeEmployeePassword).toHaveBeenCalledWith(21, dto);
       });
 
       it('delegates to AuthService for employee sessions', async () => {

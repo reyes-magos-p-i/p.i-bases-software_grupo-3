@@ -31,6 +31,7 @@ describe('User update and deactivation HTTP contracts', () => {
   const origin = 'http://localhost:5173';
   const repository = {
     findEmployeeIdentityById: jest.fn(),
+    findEmployeeCredentialsStatus: jest.fn(),
     updateEmployee: jest.fn(),
     deactivateEmployee: jest.fn(),
     getCreationOptions: jest.fn(),
@@ -108,6 +109,10 @@ describe('User update and deactivation HTTP contracts', () => {
       id: 21,
       role: 'ADMINISTRATOR',
       firstName: 'Ana',
+    });
+    repository.findEmployeeCredentialsStatus.mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
     });
     clients.findById.mockResolvedValue({ id: 99, firstName: 'Cliente' });
     clients.isEmailVerificationPending.mockResolvedValue(false);

@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 import { AdministratorGuard } from './guards/administrator.guard';
 import { EmployeeGuard } from './guards/employee.guard';
 import { UserIdParamsDto } from './dto/user-id-params.dto';
@@ -10,7 +11,7 @@ import {
 import { UsersService } from './users.service';
 
 @Controller('users')
-@UseGuards(AuthGuard('jwt'), EmployeeGuard)
+@UseGuards(AuthGuard('jwt'), EmployeeGuard, PasswordStatusGuard)
 export class UsersListController {
   constructor(private readonly usersService: UsersService) {}
 

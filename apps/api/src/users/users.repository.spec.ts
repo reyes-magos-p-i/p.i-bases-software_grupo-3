@@ -87,6 +87,20 @@ describe('UsersRepository', () => {
         repository.findEmployeeCredentialsStatus(42),
       ).rejects.toThrow('Employee 42 is missing local credentials.');
     });
+
+    it.each([
+      { PASSWORD_SET_AT: 'invalid-date', EXPIRATION_DAYS: 90 },
+      { PASSWORD_SET_AT: new Date('invalid'), EXPIRATION_DAYS: 90 },
+      { PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 45 },
+    ])(
+      'throws an error when oracle returns invalid password status: %p',
+      async (row) => {
+        connection.execute.mockResolvedValueOnce({ rows: [row] });
+        await expect(
+          repository.findEmployeeCredentialsStatus(42),
+        ).rejects.toThrow('Oracle returned invalid employee password status.');
+      },
+    );
   });
 
   describe('deactivateEmployee', () => {

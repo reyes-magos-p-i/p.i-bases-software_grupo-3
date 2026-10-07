@@ -5,6 +5,7 @@ import {
   changeClientPassword,
   changeEmployeePassword,
   getClientPasswordStatus,
+  getEmployeePasswordStatus,
   ChangePasswordError,
 } from '@/services/authService'
 import { clientSession } from '@/services/client-session.service'
@@ -18,6 +19,7 @@ vi.mock('@/services/authService', async () => {
     changeClientPassword: vi.fn(),
     changeEmployeePassword: vi.fn(),
     getClientPasswordStatus: vi.fn(),
+    getEmployeePasswordStatus: vi.fn(),
   }
 })
 vi.mock('@/services/employee-session.service', async () => {
@@ -31,6 +33,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: mockPush }) }))
 describe('ChangePasswordView.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(getEmployeePasswordStatus).mockResolvedValue('valid')
     clientSession.user.value = {
       id: 1,
       email: 'ana@example.com',
@@ -106,6 +109,16 @@ describe('ChangePasswordView.vue', () => {
     expect(wrapper.find('button.secondary').exists()).toBe(false)
   })
 
+  it('loads the employee password status and offers the expired-password recovery form', async () => {
+    vi.mocked(getEmployeePasswordStatus).mockResolvedValueOnce('expired')
+    const wrapper = mountView({ accountType: 'employee', embedded: true })
+    await flushPromises()
+
+    expect(getEmployeePasswordStatus).toHaveBeenCalledOnce()
+    expect(wrapper.text()).toContain('Tu contraseña venció.')
+    expect(wrapper.find('#currentPassword').exists()).toBe(true)
+  })
+
   it('requires the current password in voluntary mode', async () => {
     vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('valid')
     const wrapper = mountView()
@@ -175,6 +188,7 @@ describe('ChangePasswordView.vue', () => {
       }),
     )
     const wrapper = mountView({ accountType: 'employee', embedded: true })
+    await flushPromises()
     await wrapper.get('#currentPassword').setValue('CurrentPassword-123!')
     await wrapper.get('#newPassword').setValue('Secure-Password-784!')
     await wrapper.get('#confirmNewPassword').setValue('Secure-Password-784!')

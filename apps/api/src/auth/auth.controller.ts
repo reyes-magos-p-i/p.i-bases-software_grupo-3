@@ -31,7 +31,7 @@ import { PasswordStatus } from './password/password-status';
 import { Client } from '../clients/client.model';
 import { ClientsService } from '../clients/clients.service';
 import { ChangeEmployeePasswordDto } from './dto/change-employee-password.dto';
-import { UserRole } from '../users/enums/user-role.enum';
+import { PasswordStatusGuard } from './password/password-status.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -157,7 +157,8 @@ export class AuthController {
     return { message: 'Contraseña actualizada correctamente.' };
   }
 
-  @UseGuards(AuthGuard('jwt'), ThrottlerGuard)
+  @UseGuards(AuthGuard('jwt'), ThrottlerGuard, PasswordStatusGuard)
+  @AllowExpiredPassword()
   @Patch('employees/password')
   async changeEmployeePassword(
     @Req() req: Request,
@@ -168,12 +169,7 @@ export class AuthController {
         'This endpoint is only for employee accounts.',
       );
     }
-    const employee = req.user as { id: number; role: UserRole };
-    if (employee.role !== UserRole.ADMINISTRATOR) {
-      throw new ForbiddenException(
-        'This endpoint is only for administrator accounts.',
-      );
-    }
+    const employee = req.user as { id: number };
     await this.auth.changeEmployeePassword(employee.id, dto);
     return { message: 'Contraseña actualizada correctamente' };
   }
