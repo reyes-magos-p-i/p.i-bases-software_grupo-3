@@ -23,6 +23,12 @@ const { AuthModule } = runtime(
 const { EmailVerificationSender } = runtime(
   '../dist/auth/notifications/email-verification-sender.js',
 ) as typeof import('../src/auth/notifications/email-verification-sender');
+const { PasswordRecoverySender } = runtime(
+  '../dist/auth/notifications/password-recovery-sender.js',
+) as typeof import('../src/auth/notifications/password-recovery-sender');
+const { PasswordRecoveryRepository } = runtime(
+  '../dist/auth/password-recovery.repository.js',
+) as typeof import('../src/auth/password-recovery.repository');
 const { UsersController } = runtime(
   '../dist/users/users.controller.js',
 ) as typeof import('../src/users/users.controller');
@@ -88,6 +94,10 @@ describe('Compiled user creation validation', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue({})
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(UsersRepository)
