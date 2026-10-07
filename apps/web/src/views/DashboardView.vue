@@ -16,6 +16,8 @@ import {
   invalidateEmployeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
+import MovieCrud from '@/components/Movies/MovieCrud.vue'
+
 import { clearClientAuth } from '@/services/client-session.service'
 import {
   EmployeeAuthError,
@@ -25,7 +27,7 @@ import {
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-const activeSection = ref<'employees' | 'clients' | 'theaters' | 'password'>(
+const activeSection = ref<'employees' | 'clients' | 'theaters' | 'password' | 'movies'>(
 
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
@@ -215,6 +217,11 @@ async function loadCatalogs() {
   }
 }
 
+function openMovieDialog() {
+  if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters') return
+  //userDialog.value?.open()
+}
+
 function openUserDialog() {
   if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters') return
   userDialog.value?.open()
@@ -249,8 +256,11 @@ const sectionTitle = computed(() =>
         ? 'Salas'
         : activeSection.value === 'password'
           ? 'Cambiar contraseña'
-          : 'Clientes',
+            : activeSection.value === 'movies'
+              ? 'Peliculas'
+                : 'Clientes',
 )
+
 
 watch(role, () => {
   if (
@@ -264,7 +274,7 @@ watch(role, () => {
 function navigate(section: string) {
   if (submitting.value || passwordChanging.value || theaterBusy.value || loggingOut.value) return
   if (
-    (section === 'employees' || section === 'clients' || section === 'theaters' || section === 'password') &&
+    (section === 'employees' || section === 'clients' || section === 'theaters' || section === 'password' || section === 'movies') &&
     availableSections.value.includes(section)
   ) {
     activeSection.value = section
@@ -318,7 +328,8 @@ function returnToDashboard() {
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
-          v-if="role === 'ADMINISTRATOR'"
+          v-if="role === 'ADMINISTRATOR'&&
+          (activeSection === 'employees' || activeSection === 'clients')"
           type="button"
           class="add-user-button"
           :disabled="loggingOut"
@@ -328,8 +339,20 @@ function returnToDashboard() {
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
           {{ activeSection === 'clients' ? 'Añadir cliente' : 'Añadir empleado' }}
         </button>
+
+        <button
+          v-if="activeSection === 'movies'"
+          type="button"
+          class="add-user-button"
+          @click="openMovieDialog"
+        >
+          <i class="bi bi-plus-lg" aria-hidden="true"></i>
+
+          Añadir película
+        </button>
       </div>
       <UserListPanel
+        v-if="activeSection === 'employees' || activeSection === 'clients'"
         :key="activeSection"
         ref="user-list"
         :section="activeSection"
@@ -338,6 +361,9 @@ function returnToDashboard() {
         @session-expired="sessionExpired"
         @forbidden="refreshPermissions"
         @user-updated="userUpdated"
+      />
+      <MovieCrud
+        v-else-if="activeSection === 'movies'"
       />
     </section>
     <ChangePasswordView

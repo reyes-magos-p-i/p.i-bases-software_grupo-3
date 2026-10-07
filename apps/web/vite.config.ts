@@ -8,6 +8,10 @@ import tailwindcss from "@tailwindcss/vite";
 // https://vite.dev/config/
 export default defineConfig({
   server: {
+   /* https: {
+      key: fs.readFileSync('../localhost-key.pem'),
+      cert: fs.readFileSync('../localhost.pem'),
+    },*/
     proxy: {
       '^/api(?:/|$)': {
         target: 'http://127.0.0.1:3000',
