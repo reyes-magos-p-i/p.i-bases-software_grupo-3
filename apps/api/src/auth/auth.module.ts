@@ -55,7 +55,12 @@ import { PasswordStatusGuard } from './password/password-status.guard';
     EmployeeSessionOriginGuard,
     PasswordStatusGuard,
   ],
-  exports: [PassportModule, EmployeeSessionService, EmployeeSessionOriginGuard],
+  exports: [
+    PassportModule,
+    EmployeeSessionService,
+    EmployeeSessionOriginGuard,
+    PasswordStatusGuard,
+  ],
 })
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

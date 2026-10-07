@@ -12,6 +12,7 @@ import {
 import type { Request } from 'express';
 import type { UserIdentity } from './types/user-identity.type';
 import { AuthGuard } from '@nestjs/passport';
+import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 import { EmployeeSessionOriginGuard } from '../auth/guards/employee-session-origin.guard';
 import { AdministratorGuard } from './guards/administrator.guard';
 import { EmployeeGuard } from './guards/employee.guard';
@@ -20,7 +21,7 @@ import { UpdateClientDto, UpdateEmployeeDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
-@UseGuards(AuthGuard('jwt'), EmployeeGuard)
+@UseGuards(AuthGuard('jwt'), EmployeeGuard, PasswordStatusGuard)
 export class UsersUpdateController {
   constructor(private readonly usersService: UsersService) {}
 

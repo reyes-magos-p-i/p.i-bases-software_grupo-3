@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
+import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
 import type { UserDetailSelection } from '@/types/user'
 import { createUser, getUserCreationOptions } from '@/services/user.service'
@@ -18,15 +19,21 @@ import {
 import MovieCrud from '@/components/Movies/MovieCrud.vue'
 
 import { clearClientAuth } from '@/services/client-session.service'
+import {
+  EmployeeAuthError,
+  getEmployeePasswordStatus,
+} from '@/services/authService'
 
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-const activeSection = ref<'employees' | 'clients' | 'movies'| 'theaters'>( // agregado movies
+const activeSection = ref<'employees' | 'clients' | 'theaters' | 'password' | 'movies'|>(
+
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
 const loggingOut = ref(false)
 const logoutError = ref('')
+const passwordStatusError = ref('')
 const userDialog = useTemplateRef<InstanceType<typeof CreateUserDialog>>('user-dialog')
 const userList = useTemplateRef<InstanceType<typeof UserListPanel>>('user-list')
 const catalogs = ref<UserCreationOptions | null>(null)
@@ -34,6 +41,7 @@ const catalogsLoading = ref(false)
 const catalogsError = ref('')
 let catalogRequest: AbortController | undefined
 const submitting = ref(false)
+const passwordChanging = ref(false)
 const theaterBusy = ref(false)
 const submissionErrors = ref<string[]>([])
 const submissionBlocked = ref(false)
@@ -45,6 +53,22 @@ let disposed = false
 function sessionExpired() {
   invalidateEmployeeSession()
   void router.replace({ path: '/', query: { login: 'employee', reason: 'expired' } })
+}
+
+async function checkPasswordStatus() {
+  passwordStatusError.value = ''
+  try {
+    const status = await getEmployeePasswordStatus()
+    if (!disposed && status !== 'valid') activeSection.value = 'password'
+  } catch (error) {
+    if (disposed) return
+    if (error instanceof EmployeeAuthError && error.status === 401) {
+      sessionExpired()
+    } else {
+      passwordStatusError.value =
+        'No se pudo comprobar el estado de tu contraseña. Algunas funciones pueden no estar disponibles.'
+    }
+  }
 }
 
 async function refreshPermissions() {
@@ -64,7 +88,7 @@ function userUpdated(selection: UserDetailSelection) {
 }
 
 async function logout() {
-  if (submitting.value || loggingOut.value) return
+  if (submitting.value || passwordChanging.value || loggingOut.value) return
   loggingOut.value = true
   logoutError.value = ''
   try {
@@ -215,10 +239,26 @@ onBeforeUnmount(() => {
   disposed = true
   cancelCatalogRequest()
 })
+onMounted(() => {
+  void checkPasswordStatus()
+})
 const availableSections = computed(() =>
   role.value === 'ADMINISTRATOR'
-    ? ['employees', 'clients', 'movies', 'theaters']
-    : ['clients', 'movies'],
+    ? ['employees', 'clients', 'theaters', 'password']
+    : ['clients', 'password'],
+)
+const sectionTitle = computed(() =>
+  activeSection.value === 'employees'
+    ? 'Empleados'
+    : activeSection.value === 'clients'
+      ? 'Clientes'
+      : activeSection.value === 'theaters'
+        ? 'Salas'
+        : activeSection.value === 'password'
+          ? 'Cambiar contraseña'
+            : activeSection.value === 'movies'
+              ? 'Peliculas'                  
+                : 'Clientes',
 )
 
 const sectionTitle = computed(() => {
@@ -242,21 +282,24 @@ const sectionTitle = computed(() => {
 watch(role, () => {
   if (
     role.value === 'EMPLOYEE' &&
-    (activeSection.value === 'employees' || activeSection.value === 'theaters')
+    (activeSection.value === 'employees' || activeSection.value === 'theaters' || activeSection.value === 'password')
   ) {
     activeSection.value = 'clients'
   }
 })
 
 function navigate(section: string) {
-  if (submitting.value || theaterBusy.value || loggingOut.value) return
+  if (submitting.value || passwordChanging.value || theaterBusy.value || loggingOut.value) return
   if (
-    (section === 'employees' || section === 'clients' || section === 'theaters'||
-      section === 'movies') &&
+    (section === 'employees' || section === 'clients' || section === 'theaters' || section === 'password' section === 'movies') &&
     availableSections.value.includes(section)
   ) {
     activeSection.value = section
   }
+}
+
+function returnToDashboard() {
+  activeSection.value = role.value === 'ADMINISTRATOR' ? 'employees' : 'clients'
 }
 </script>
 
@@ -267,12 +310,16 @@ function navigate(section: string) {
     :user-name="identity.firstName"
     :active-section="activeSection"
     :available-sections="availableSections"
-    :can-logout="!submitting && !theaterBusy && !loggingOut"
+    :can-logout="!submitting && !passwordChanging && !theaterBusy && !loggingOut"
     @navigate="navigate"
     @logout="logout"
   >
     <p v-if="loggingOut" role="status">Cerrando sesión…</p>
     <p v-if="logoutError" role="alert">{{ logoutError }}</p>
+    <div v-if="passwordStatusError" role="alert">
+      {{ passwordStatusError }}
+      <button type="button" @click="checkPasswordStatus">Reintentar</button>
+    </div>
 
     <p
       v-if="creationResult && activeSection !== 'theaters'"
@@ -289,7 +336,12 @@ function navigate(section: string) {
       :disabled="loggingOut"
       @busy="theaterBusy = $event"
     />
-    <section v-else class="preview-content" aria-live="polite" aria-atomic="true">
+    <section
+      v-else-if="activeSection !== 'password'"
+      class="preview-content"
+      aria-live="polite"
+      aria-atomic="true"
+    >
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
@@ -331,8 +383,15 @@ function navigate(section: string) {
         v-else-if="activeSection === 'movies'"
       />
     </section>
+    <ChangePasswordView
+      v-else
+      embedded
+      account-type="employee"
+      @submission-state="passwordChanging = $event"
+      @return-to-dashboard="returnToDashboard"
+    />
     <CreateUserDialog
-      v-if="role === 'ADMINISTRATOR'"
+      v-if="role === 'ADMINISTRATOR' && activeSection !== 'password'"
       :key="activeSection"
       ref="user-dialog"
       :mode="activeSection === 'clients' ? 'client' : 'employee'"
@@ -354,4 +413,3 @@ function navigate(section: string) {
     <RouterLink to="/?login=employee">Volver al inicio de sesión</RouterLink>
   </p>
 </template>
-

@@ -19,7 +19,10 @@ describe('JwtStrategy', () => {
     isEmailVerificationPending: jest.Mock;
     findPasswordStatus: jest.Mock;
   };
-  let users: { findEmployeeIdentityById: jest.Mock };
+  let users: {
+    findEmployeeIdentityById: jest.Mock;
+    findEmployeeCredentialsStatus: jest.Mock;
+  };
   const request = { headers: {} } as Request;
 
   beforeEach(async () => {
@@ -28,7 +31,13 @@ describe('JwtStrategy', () => {
       isEmailVerificationPending: jest.fn().mockResolvedValue(false),
       findPasswordStatus: jest.fn().mockResolvedValue(null),
     };
-    users = { findEmployeeIdentityById: jest.fn() };
+    users = {
+      findEmployeeIdentityById: jest.fn(),
+      findEmployeeCredentialsStatus: jest.fn().mockResolvedValue({
+        setAt: new Date(),
+        expirationDays: 90,
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -139,6 +148,10 @@ describe('JwtStrategy', () => {
         role,
         firstName: 'Ana',
       });
+      users.findEmployeeCredentialsStatus.mockResolvedValue({
+        setAt: new Date(),
+        expirationDays: 90,
+      });
       await expect(
         strategy.validate(request, {
           sub: 21,
@@ -147,6 +160,7 @@ describe('JwtStrategy', () => {
         }),
       ).resolves.toEqual({ id: 21, role, firstName: 'Ana' });
       expect(users.findEmployeeIdentityById).toHaveBeenCalledWith(21);
+      expect(users.findEmployeeCredentialsStatus).toHaveBeenCalledWith(21);
       expect(clients.findById).not.toHaveBeenCalled();
     },
   );
@@ -156,6 +170,27 @@ describe('JwtStrategy', () => {
     await expect(
       strategy.validate(request, { sub: 21, type: 'employee' }),
     ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('attaches the computed employee password status to the request', async () => {
+    users.findEmployeeIdentityById.mockResolvedValue({
+      id: 21,
+      role: UserRole.ADMINISTRATOR,
+      firstName: 'Ana',
+    });
+    users.findEmployeeCredentialsStatus.mockResolvedValue({
+      setAt: new Date(Date.now() - 91 * 24 * 60 * 60 * 1000),
+      expirationDays: 90,
+    });
+    const authenticatedRequest = { headers: {} } as Request;
+
+    await strategy.validate(authenticatedRequest, {
+      sub: 21,
+      type: 'employee',
+    });
+
+    expect(authenticatedRequest.passwordStatus).toBe('expired');
+    expect(authenticatedRequest.accountType).toBe('employee');
   });
 
   it('rejects a client token from the employee cookie before querying persistence', async () => {
