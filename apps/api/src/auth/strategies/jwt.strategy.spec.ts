@@ -1,3 +1,4 @@
+import { PasswordRecoveryRepository } from '../password-recovery.repository';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
@@ -14,17 +15,37 @@ import {
 
 describe('JwtStrategy', () => {
   let strategy: JwtStrategy;
-  let clients: { findById: jest.Mock };
-  let users: { findEmployeeIdentityById: jest.Mock };
+  let clients: {
+    findById: jest.Mock;
+    isEmailVerificationPending: jest.Mock;
+    findPasswordStatus: jest.Mock;
+  };
+  let users: {
+    findEmployeeIdentityById: jest.Mock;
+    findEmployeeCredentialsStatus: jest.Mock;
+  };
+  const recovery = { sessionRevoked: jest.fn() };
   const request = { headers: {} } as Request;
 
   beforeEach(async () => {
-    clients = { findById: jest.fn() };
-    users = { findEmployeeIdentityById: jest.fn() };
+    recovery.sessionRevoked.mockReset().mockResolvedValue(false);
+    clients = {
+      findById: jest.fn(),
+      isEmailVerificationPending: jest.fn().mockResolvedValue(false),
+      findPasswordStatus: jest.fn().mockResolvedValue(null),
+    };
+    users = {
+      findEmployeeIdentityById: jest.fn(),
+      findEmployeeCredentialsStatus: jest.fn().mockResolvedValue({
+        setAt: new Date(),
+        expirationDays: 90,
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JwtStrategy,
+        { provide: PasswordRecoveryRepository, useValue: recovery },
         EmployeeSessionService,
         JwtService,
         { provide: ClientsService, useValue: clients },
@@ -74,6 +95,35 @@ describe('JwtStrategy', () => {
     },
   );
 
+  it.each(['client', 'employee'] as const)(
+    'revokes an existing %s token on the next request',
+    async (type) => {
+      const lookup =
+        type === 'client' ? clients.findById : users.findEmployeeIdentityById;
+      lookup
+        .mockResolvedValueOnce({
+          id: 21,
+          role: UserRole.EMPLOYEE,
+          firstName: 'Ana',
+        })
+        .mockResolvedValueOnce(null);
+      const payload = { sub: 21, type };
+      await expect(strategy.validate(request, payload)).resolves.toBeDefined();
+      await expect(strategy.validate(request, payload)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(lookup).toHaveBeenCalledTimes(2);
+    },
+  );
+  it('rejects sessions issued before a completed password recovery', async () => {
+    recovery.sessionRevoked.mockResolvedValue(true);
+    await expect(
+      strategy.validate(request, { sub: 7, type: 'client', iat: 123 }),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(recovery.sessionRevoked).toHaveBeenCalledWith('client', 7, 123);
+    expect(clients.findById).not.toHaveBeenCalled();
+  });
+
   it('rejects when the client no longer exists', async () => {
     clients.findById.mockResolvedValue(null);
 
@@ -90,7 +140,17 @@ describe('JwtStrategy', () => {
       strategy.validate(request, { sub: 1, type: 'client' }),
     ).resolves.toEqual(client);
     expect(clients.findById).toHaveBeenCalledWith(1);
+    expect(clients.isEmailVerificationPending).toHaveBeenCalledWith(1);
     expect(users.findEmployeeIdentityById).not.toHaveBeenCalled();
+  });
+
+  it('rejects an otherwise valid client token while email confirmation is pending', async () => {
+    clients.findById.mockResolvedValue({ id: 1, email: 'ana@example.com' });
+    clients.isEmailVerificationPending.mockResolvedValue(true);
+
+    await expect(
+      strategy.validate(request, { sub: 1, type: 'client' }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(
@@ -101,6 +161,10 @@ describe('JwtStrategy', () => {
         role,
         firstName: 'Ana',
       });
+      users.findEmployeeCredentialsStatus.mockResolvedValue({
+        setAt: new Date(),
+        expirationDays: 90,
+      });
       await expect(
         strategy.validate(request, {
           sub: 21,
@@ -109,6 +173,7 @@ describe('JwtStrategy', () => {
         }),
       ).resolves.toEqual({ id: 21, role, firstName: 'Ana' });
       expect(users.findEmployeeIdentityById).toHaveBeenCalledWith(21);
+      expect(users.findEmployeeCredentialsStatus).toHaveBeenCalledWith(21);
       expect(clients.findById).not.toHaveBeenCalled();
     },
   );
@@ -118,6 +183,27 @@ describe('JwtStrategy', () => {
     await expect(
       strategy.validate(request, { sub: 21, type: 'employee' }),
     ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('attaches the computed employee password status to the request', async () => {
+    users.findEmployeeIdentityById.mockResolvedValue({
+      id: 21,
+      role: UserRole.ADMINISTRATOR,
+      firstName: 'Ana',
+    });
+    users.findEmployeeCredentialsStatus.mockResolvedValue({
+      setAt: new Date(Date.now() - 91 * 24 * 60 * 60 * 1000),
+      expirationDays: 90,
+    });
+    const authenticatedRequest = { headers: {} } as Request;
+
+    await strategy.validate(authenticatedRequest, {
+      sub: 21,
+      type: 'employee',
+    });
+
+    expect(authenticatedRequest.passwordStatus).toBe('expired');
+    expect(authenticatedRequest.accountType).toBe('employee');
   });
 
   it('rejects a client token from the employee cookie before querying persistence', async () => {

@@ -1,8 +1,9 @@
 # Inicio de sesión del personal
 
 El portal integra el inicio de sesión de empleados y administradores. El formulario
-de clientes permite llegar al del personal, pero su autenticación, Google, Facebook
-y recuperación de contraseña siguen pendientes.
+de clientes permite llegar al del personal. El acceso local y social de clientes
+se documenta en [client-login.md](client-login.md); el vínculo «Olvidé mi contraseña»
+abre la [recuperación por correo](password-recovery.md).
 
 ## Preparación local
 
@@ -115,7 +116,7 @@ que utiliza ese prefijo global.
   Nginx compartida reenvía desde 127.0.0.1 y añade la IP visitante a X-Forwarded-For.
   Confirmar la topología y cantidad de procesos antes de desplegar múltiples instancias.
 - Activar AuthModule hace accesible también el registro público existente. No se
-  cambian sus reglas ni se implementa el inicio de sesión de clientes.
+  cambian sus reglas. El inicio de sesión de clientes se documenta por separado.
 
 ## Producción
 

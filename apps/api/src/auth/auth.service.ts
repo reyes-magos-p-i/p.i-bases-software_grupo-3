@@ -3,18 +3,23 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  ServiceUnavailableException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { createHash, randomBytes } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { ClientsService } from '../clients/clients.service';
 import { ConfigService } from '@nestjs/config';
-import { Client, SocialProfile} from '../clients/client.model';
+import { Client, SocialProfile } from '../clients/client.model';
 import { splitFirstWord } from '../clients/name.util';
 import { RegisterDto } from './dto/register.dto';
 import { OAuth2Client } from 'google-auth-library'; // google lib for authetication
 import { UsersRepository } from '../users/users.repository';
 import type { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
+import { EmailVerificationSender } from './notifications/email-verification-sender';
+import { validatePasswordChange } from './password/password-change-validator';
 
 // This non-account hash keeps missing credentials on the password verification path.
 const LOGIN_REFERENCE_HASH =
@@ -28,12 +33,22 @@ export class AuthService {
     private readonly passwordHasher: PasswordHasher,
     private readonly config: ConfigService,
     private readonly usersRepository: UsersRepository,
+    private readonly verificationSender: EmailVerificationSender,
   ) {}
 
   async register(dto: RegisterDto) {
+    await this.clients.deleteExpiredPendingClientByEmail(dto.email);
     // SAFEGUARD: we do not assign a password from the 'Register' form if the account exists
     // This will be managed in the 'User settings' when implemented in the navigation bar.
-    if (await this.clients.findByEmail(dto.email)) {
+    const existing = await this.clients.findByEmail(dto.email);
+    if (existing) {
+      const pending = await this.clients.findPendingLocalClientByEmail(
+        dto.email,
+      );
+      if (pending) {
+        await this.replaceAndSendVerification(pending);
+        return { status: 'pending_verification', email: pending.email };
+      }
       throw new ConflictException(
         'Este correo ya está registrado. Si usaste Google o Facebook, entra con ese botón.',
       );
@@ -42,9 +57,11 @@ export class AuthService {
     const [firstName, secondName] = splitFirstWord(dto.firstName);
     const [firstSurname, secondSurname] = splitFirstWord(dto.lastName);
 
+    const token = this.createVerificationToken();
+    const expiresInMinutes = this.verificationTtlMinutes();
     const { passwordHash, salt } = await this.passwordHasher.hash(dto.password);
 
-    const client = await this.clients.createWithLocalCredentials(
+    const client = await this.clients.createPendingWithLocalCredentials(
       {
         email: dto.email,
         firstName,
@@ -60,9 +77,157 @@ export class AuthService {
       passwordHash,
       // Public registration historically stores padded Base64 in the SALT column.
       Buffer.from(salt, 'base64').toString('base64'),
+      token.hash,
+      expiresInMinutes,
     );
 
-    return { id: client.id, email: client.email }; // minimum data needed
+    await this.sendVerificationEmail(
+      client.email,
+      token.value,
+      expiresInMinutes,
+    );
+    return { status: 'pending_verification', email: client.email };
+  }
+
+  async resendEmailVerification(email: string): Promise<{ message: string }> {
+    await this.clients.deleteExpiredPendingClientByEmail(email);
+    const client = await this.clients.findPendingLocalClientByEmail(email);
+    if (!client) {
+      return {
+        message:
+          'Si existe una cuenta pendiente con ese correo, enviaremos un nuevo enlace.',
+      };
+    }
+    await this.replaceAndSendVerification(client);
+    return {
+      message:
+        'Si existe una cuenta pendiente con ese correo, enviaremos un nuevo enlace.',
+    };
+  }
+
+  private async replaceAndSendVerification(client: Client): Promise<void> {
+    const token = this.createVerificationToken();
+    const expiresInMinutes = this.verificationTtlMinutes();
+    await this.clients.replaceEmailVerification(
+      client.id,
+      token.hash,
+      expiresInMinutes,
+    );
+    await this.sendVerificationEmail(
+      client.email,
+      token.value,
+      expiresInMinutes,
+    );
+  }
+
+  async confirmEmailVerification(token: string) {
+    const client = await this.clients.consumeEmailVerification(
+      this.hashVerificationToken(token),
+    );
+    if (!client) {
+      throw new BadRequestException({
+        code: 'EMAIL_VERIFICATION_INVALID',
+        message: 'Este enlace ya no es válido',
+      });
+    }
+    return {
+      accessToken: this.issueToken(client).accessToken,
+      client: this.clientIdentity(client),
+    };
+  }
+
+  async changeEmployeePassword(
+    employeeId: number,
+    input: {
+      currentPassword: string;
+      newPassword: string;
+      confirmNewPassword: string;
+      expirationDays: number;
+    },
+  ): Promise<void> {
+    const employee =
+      await this.usersRepository.findEmployeePasswordCredentials(employeeId);
+    if (
+      !employee ||
+      !(await this.passwordHasher.verify(
+        input.currentPassword,
+        employee.passwordHash,
+      ))
+    ) {
+      throw new BadRequestException({
+        code: 'CURRENT_PASSWORD_INCORRECT',
+        message: 'Contraseña actual incorrecta.',
+      });
+    }
+    await validatePasswordChange(input, employee, () =>
+      this.passwordHasher.verify(input.newPassword, employee.passwordHash),
+    );
+
+    const credentials = await this.passwordHasher.hash(input.newPassword);
+    await this.usersRepository.saveEmployeePassword(
+      employeeId,
+      credentials.passwordHash,
+      credentials.salt,
+      input.expirationDays,
+    );
+  }
+
+  private createVerificationToken() {
+    const value = randomBytes(32).toString('hex');
+    return { value, hash: this.hashVerificationToken(value) };
+  }
+
+  private hashVerificationToken(token: string): string {
+    return createHash('sha256').update(token, 'ascii').digest('hex');
+  }
+
+  private verificationTtlMinutes(): number {
+    const configured = this.config.get<unknown>(
+      'EMAIL_VERIFICATION_TTL_MINUTES',
+    );
+    if (configured === undefined) return 30;
+    if (
+      typeof configured !== 'string' ||
+      !/^[1-9]\d{0,3}$/u.test(configured) ||
+      Number(configured) > 1440
+    ) {
+      throw new Error(
+        'EMAIL_VERIFICATION_TTL_MINUTES must be an integer between 1 and 1440.',
+      );
+    }
+    return Number(configured);
+  }
+
+  private async sendVerificationEmail(
+    email: string,
+    token: string,
+    expiresInMinutes: number,
+  ) {
+    const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
+    const confirmationUrl = new URL('/verify-email', frontendUrl);
+    confirmationUrl.searchParams.set('token', token);
+    try {
+      await this.verificationSender.send({
+        email,
+        confirmationUrl: confirmationUrl.toString(),
+        expiresInMinutes,
+      });
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'EMAIL_DELIVERY_FAILED',
+        message:
+          'No se pudo enviar el correo de confirmación. Puedes solicitar que se reenvíe.',
+      });
+    }
+  }
+
+  private clientIdentity(client: Client) {
+    return {
+      id: client.id,
+      email: client.email,
+      firstName: client.firstName,
+      lastName: client.firstSurname ?? '',
+    };
   }
 
   async loginEmployee(dto: LoginDto): Promise<EmployeeLoginResult> {
@@ -96,8 +261,29 @@ export class AuthService {
     };
   }
 
+  async loginClient(dto: LoginDto) {
+    const client = await this.clients.findWithLocalCredentials(dto.email);
+    const matches = await this.passwordHasher.verify(
+      dto.password,
+      client?.passwordHash ?? LOGIN_REFERENCE_HASH,
+    );
+    if (!client || !matches || client.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Correo o contraseña incorrectos');
+    }
+    if (await this.clients.isEmailVerificationPending(client.id)) {
+      throw new ForbiddenException({
+        code: 'EMAIL_VERIFICATION_REQUIRED',
+        message: 'Confirma tu correo electrónico antes de iniciar sesión.',
+      });
+    }
+    return {
+      ...this.issueToken(client),
+      client: this.clientIdentity(client),
+    };
+  }
+
   //google auth SIlvio
-  async googleLogin(authCode: string){
+  async googleLogin(authCode: string) {
     //Google clinet inizialitation
     const googleClient = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
@@ -105,62 +291,72 @@ export class AuthService {
       'postmessage',
     );
 
-    try{
+    try {
       //rxchange auth code for token from google
-      const {tokens} = await googleClient.getToken(authCode);
+      const { tokens } = await googleClient.getToken(authCode);
       const idToken = tokens.id_token;
 
-      if (!idToken){
-        throw new ConflictException('unable to acquire token from google')
-
+      if (!idToken) {
+        throw new ConflictException('unable to acquire token from google');
       }
 
       //token verification
       const ticket = await googleClient.verifyIdToken({
         idToken,
-        audience:process.env.GOOGLE_CLIENT_ID,
+        audience: process.env.GOOGLE_CLIENT_ID,
       });
 
       const payload = ticket.getPayload();
-      if(!payload?.email){
-        throw new ConflictException('unable to verify with google or email not valid')
-
+      if (!payload?.email || payload.email_verified !== true) {
+        throw new ConflictException(
+          'unable to verify with google or email not valid',
+        );
       }
 
-      const  googleUser :SocialProfile = {
+      const googleUser: SocialProfile = {
         provider: 'GOOGLE',
         providerUserId: payload.sub,
         email: payload.email,
         firstName: payload.given_name ?? '',
-        lastName: payload.family_name?? '',
-
-      }
+        lastName: payload.family_name ?? '',
+      };
 
       const client = await this.clients.findOrCreateSocial(googleUser);
       const tokensPayload = this.issueToken(client);
 
-      return{
+      return {
         message: 'authentication success',
         client: {
           id: client.id,
           email: client.email,
           firstName: client.firstName,
+          lastName: client.firstSurname ?? '',
         },
-        ... tokensPayload,
+        ...tokensPayload,
       };
-
-    }catch (error){
-      console.error('Error in google verification', error);
-      if (error instanceof ConflictException){
+    } catch (error) {
+      if (
+        error instanceof ConflictException ||
+        error instanceof UnauthorizedException
+      ) {
         throw error;
       }
-      throw new ConflictException('Error trying to validated google credentials')
+      console.error('Error in google verification', error);
+      throw new ConflictException(
+        'Error trying to validated google credentials',
+      );
     }
-
   }
 
-
   issueToken(client: Client) {
+    if (client.status !== 'ACTIVE' && client.status !== 'INACTIVE') {
+      throw new Error('Invalid client status.');
+    }
+    if (client.status === 'INACTIVE') {
+      throw new UnauthorizedException(
+        'No se pudo iniciar sesión con esta cuenta.',
+      );
+    }
     return {
       accessToken: this.jwt.sign({
         sub: client.id,
@@ -205,10 +401,7 @@ export class AuthService {
     }
 
     const profileUrl = new URL('https://graph.facebook.com/v21.0/me');
-    profileUrl.searchParams.set(
-      'fields',
-      'id,email,first_name,last_name',
-    );
+    profileUrl.searchParams.set('fields', 'id,email,first_name,last_name');
     profileUrl.searchParams.set('access_token', accessToken);
 
     const profileResponse = await fetch(profileUrl);
@@ -224,9 +417,7 @@ export class AuthService {
       profile.id !== tokenData.user_id ||
       !profile.email
     ) {
-      throw new UnauthorizedException(
-        'Could not verify Facebook profile',
-      );
+      throw new UnauthorizedException('Could not verify Facebook profile');
     }
     // CHECK: email is verified by Facebook
     const socialProfile: SocialProfile = {
@@ -239,7 +430,14 @@ export class AuthService {
 
     const client = await this.clients.findOrCreateSocial(socialProfile);
 
-    return this.issueToken(client);
+    return {
+      ...this.issueToken(client),
+      client: {
+        id: client.id,
+        email: client.email,
+        firstName: client.firstName,
+        lastName: client.firstSurname ?? '',
+      },
+    };
   }
-
 }

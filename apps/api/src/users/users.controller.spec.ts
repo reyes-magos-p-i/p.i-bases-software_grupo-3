@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from '../auth/notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 import {
   BadGatewayException,
   ConflictException,
@@ -21,11 +23,15 @@ import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { UsersRepository } from './users.repository';
 import { UserRole } from './enums/user-role.enum';
+import { EmailVerificationSender } from '../auth/notifications/email-verification-sender';
 
 describe('UsersController (HTTP integration)', () => {
   let app: INestApplication<App>;
   const service = { create: jest.fn(), getCreationOptions: jest.fn() };
-  const repository = { findEmployeeIdentityById: jest.fn() };
+  const repository = {
+    findEmployeeIdentityById: jest.fn(),
+    findEmployeeCredentialsStatus: jest.fn(),
+  };
   let jwt: JwtService;
   let browser: ReturnType<typeof request.agent>;
   const origin = 'http://localhost:5173';
@@ -40,6 +46,7 @@ describe('UsersController (HTTP integration)', () => {
     firstName: 'José',
     firstSurname: 'Núñez',
     secondSurname: 'Solano',
+    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
     address: { districtId: 7, details: 'Casa azul' },
@@ -63,6 +70,12 @@ describe('UsersController (HTTP integration)', () => {
         get: (key: string) => ({ FRONTEND_URL: origin, NODE_ENV: 'test' })[key],
         getOrThrow: () => 'controller-test-secret',
       })
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
+      .overrideProvider(EmailVerificationSender)
+      .useValue({ send: jest.fn() })
       .overrideProvider(DatabaseService)
       .useValue({})
       .overrideProvider(UsersRepository)
@@ -97,6 +110,10 @@ describe('UsersController (HTTP integration)', () => {
     repository.findEmployeeIdentityById.mockReset().mockResolvedValue({
       id: 21,
       role: UserRole.ADMINISTRATOR,
+    });
+    repository.findEmployeeCredentialsStatus.mockReset().mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
     });
     service.create
       .mockReset()
@@ -267,9 +284,17 @@ describe('UsersController (HTTP integration)', () => {
         CreateAddressDto,
       );
       expect(service.create).toHaveBeenCalledWith(
-        expect.objectContaining({ ...employee, role }),
+        expect.objectContaining({
+          ...employee,
+          role,
+          email: employee.email.toLowerCase(),
+        }),
       );
-      expect(response.body).toEqual({ id: 42, role, email: employee.email });
+      expect(response.body).toEqual({
+        id: 42,
+        role,
+        email: employee.email.toLowerCase(),
+      });
     },
   );
 

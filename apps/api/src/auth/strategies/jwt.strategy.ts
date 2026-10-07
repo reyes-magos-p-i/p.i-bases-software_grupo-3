@@ -1,3 +1,4 @@
+import { PasswordRecoveryRepository } from '../password-recovery.repository';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
@@ -6,6 +7,7 @@ import type { Request } from 'express';
 import { EmployeeSessionService } from '../employee-session.service';
 import { ClientsService } from '../../clients/clients.service';
 import { UsersRepository } from '../../users/users.repository';
+import { computePasswordStatus } from '../password/password-status';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -14,6 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly clients: ClientsService,
     private readonly users: UsersRepository,
     private readonly session: EmployeeSessionService,
+    private readonly recovery: PasswordRecoveryRepository,
   ) {
     super({
       jwtFromRequest: (request: Request) => session.extractToken(request),
@@ -41,11 +44,36 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
-    const user =
-      payload.type === 'employee'
-        ? await this.users.findEmployeeIdentityById(payload.sub)
-        : await this.clients.findById(payload.sub);
-    if (!user) throw new UnauthorizedException();
-    return user;
+    if (
+      await this.recovery.sessionRevoked(
+        payload.type,
+        payload.sub,
+        'iat' in payload ? payload.iat : undefined,
+      )
+    ) {
+      throw new UnauthorizedException();
+    }
+
+    if (payload.type === 'employee') {
+      const employee = await this.users.findEmployeeIdentityById(payload.sub);
+      if (!employee) throw new UnauthorizedException();
+      const credentials = await this.users.findEmployeeCredentialsStatus(
+        employee.id,
+      );
+      request.passwordStatus = computePasswordStatus(credentials);
+      request.accountType = 'employee';
+      return employee;
+    }
+
+    const client = await this.clients.findById(payload.sub);
+    if (!client) throw new UnauthorizedException();
+    if (await this.clients.isEmailVerificationPending(payload.sub)) {
+      throw new UnauthorizedException();
+    }
+
+    const credentials = await this.clients.findPasswordStatus(client.id);
+    request.passwordStatus = computePasswordStatus(credentials);
+    request.accountType = 'client';
+    return client;
   }
 }

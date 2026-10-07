@@ -13,7 +13,7 @@ export class CreateAddressDto {
   @IsInt({
     message: 'El identificador del distrito debe ser un número entero.',
   })
-  @Min(Number.MIN_SAFE_INTEGER, {
+  @Min(1, {
     message: 'El identificador del distrito está fuera del rango admitido.',
   })
   @Max(Number.MAX_SAFE_INTEGER, {

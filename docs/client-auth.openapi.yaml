@@ -1,0 +1,93 @@
+openapi: 3.0.3
+info:
+  title: Inicio de sesión de clientes de Cinetadel
+  version: 1.0.0
+  description: >-
+    Acceso local de clientes activos con credenciales existentes y sin confirmación
+    de correo pendiente. Google y Facebook conservan sus contratos existentes.
+servers:
+  - url: /api
+paths:
+  /auth/clients/login:
+    post:
+      operationId: loginClient
+      summary: Iniciar sesión con correo y contraseña
+      description: >-
+        Valida Origin contra FRONTEND_URL. Admite cinco solicitudes por minuto e IP
+        en cada proceso, incluyendo intentos exitosos, con bloqueo de un minuto.
+        El correo se normaliza y la contraseña se conserva exactamente.
+      parameters:
+        - in: header
+          name: Origin
+          required: true
+          schema:
+            type: string
+          description: Origen configurado del frontend.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Máximo 150 bytes en UTF-8; se recorta y convierte a minúsculas.
+                password:
+                  type: string
+                  format: password
+                  minLength: 1
+                  maxLength: 128
+      responses:
+        "200":
+          description: Sesión iniciada. El JWT se utiliza como Bearer con GET /auth/me.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accessToken, client]
+                properties:
+                  accessToken:
+                    type: string
+                    description: JWT de cliente con la duración existente de 24 horas.
+                  client:
+                    type: object
+                    required: [id, email, firstName, lastName]
+                    properties:
+                      id:
+                        type: integer
+                        minimum: 1
+                      email:
+                        type: string
+                        format: email
+                      firstName:
+                        type: string
+                      lastName:
+                        type: string
+                        description: Primer apellido o cadena vacía cuando no está disponible.
+        "400":
+          description: Campos faltantes, inválidos o no permitidos.
+        "401":
+          description: Correo o contraseña incorrectos; incluye cuentas inactivas o sin credenciales locales.
+        "403":
+          description: >-
+            Origen no permitido, o correo pendiente de confirmación después de comprobar
+            la contraseña. En este último caso el cuerpo incluye el código EMAIL_VERIFICATION_REQUIRED.
+        "429":
+          description: Límite de intentos alcanzado.
+          headers:
+            Retry-After:
+              description: Segundos que deben transcurrir antes del siguiente intento.
+              schema:
+                type: integer
+                minimum: 1
+        "500":
+          description: Fallo interno sin detalles privados.

@@ -1,7 +1,19 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, useId, useTemplateRef, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  reactive,
+  ref,
+  useId,
+  useTemplateRef,
+  watch,
+} from 'vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
+import type { ClientIdentity } from '@/types/client-auth'
+import { validEmail, validText } from '@/utils/user-validation'
+import { ChangePasswordError, requestPasswordRecovery } from '@/services/authService'
 
 const props = withDefaults(
   defineProps<{
@@ -16,6 +28,7 @@ const props = withDefaults(
 )
 const emit = defineEmits<{
   close: []
+  authenticated: [identity: ClientIdentity]
   switchMode: [mode: 'client' | 'employee']
   submit: [credentials: { email: string; password: string }]
 }>()
@@ -27,13 +40,21 @@ const feedback = useTemplateRef<HTMLElement>('feedback')
 const form = reactive({ email: '', password: '' })
 const touched = reactive({ email: false, password: false })
 const showPassword = ref(false)
-const encoder = new TextEncoder()
+const socialError = ref('')
+const socialBusy = ref(false)
+const recoveryMode = ref(false)
+const recoverySubmitting = ref(false)
+const recoveryMessage = ref('')
+const recoveryError = ref('')
+const recoveryRetrySeconds = ref(0)
+let recoveryTimer: ReturnType<typeof setInterval> | undefined
+const busy = computed(() => props.submitting || socialBusy.value || recoverySubmitting.value)
 const isClient = computed(() => props.mode === 'client')
 const emailError = computed(() => {
   const value = form.email.trim().toLowerCase()
   if (!value) return 'Introduce tu correo electrónico.'
-  if (encoder.encode(value).length > 150) return 'El correo electrónico es demasiado largo.'
-  if (emailInput.value?.validity.typeMismatch || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)) {
+  if (!validText(value, 150)) return 'El correo electrónico es demasiado largo.'
+  if (emailInput.value?.validity.typeMismatch || !validEmail(value)) {
     return 'Introduce un correo electrónico válido.'
   }
   return ''
@@ -53,6 +74,10 @@ function clearPassword() {
 
 watch([() => props.open, () => props.mode], async ([open]) => {
   clearPassword()
+  recoveryMode.value = false
+  recoveryMessage.value = ''
+  recoveryError.value = ''
+  socialError.value = ''
   form.email = ''
   if (open) {
     await nextTick()
@@ -70,13 +95,13 @@ watch(
 )
 
 function close() {
-  if (props.submitting) return
+  if (busy.value) return
   clearPassword()
   emit('close')
 }
 
 function switchMode() {
-  if (props.submitting) return
+  if (busy.value) return
   clearPassword()
   emit('switchMode', isClient.value ? 'employee' : 'client')
 }
@@ -86,15 +111,20 @@ function markTouched(field: 'email' | 'password', event: FocusEvent) {
 }
 
 function focusModeSwitch(event: PointerEvent) {
-  if (event.button === 0 && !props.submitting) modeSwitch.value?.focus()
+  if (event.button === 0 && !busy.value) modeSwitch.value?.focus()
 }
 
-function submit() {
-  if (props.submitting || props.retryAfterSeconds > 0 || !props.open) return
+async function submit() {
+  if (busy.value || props.retryAfterSeconds > 0 || !props.open) return
+  socialError.value = ''
   touched.email = true
   touched.password = true
   if (emailError.value) {
     emailInput.value?.focus()
+    return
+  }
+  if (recoveryMode.value) {
+    await submitRecovery()
     return
   }
   if (passwordError.value) {
@@ -104,27 +134,82 @@ function submit() {
   if (!props.enabled) return
   emit('submit', { email: form.email.trim().toLowerCase(), password: form.password })
 }
+
+async function submitRecovery() {
+  if (recoveryRetrySeconds.value > 0) return
+  recoverySubmitting.value = true
+  recoveryMessage.value = ''
+  recoveryError.value = ''
+  try {
+    const result = await requestPasswordRecovery({
+      email: form.email.trim().toLowerCase(),
+      accountType: props.mode,
+    })
+    recoveryMessage.value = result.message
+  } catch (error) {
+    recoveryError.value =
+      error instanceof ChangePasswordError
+        ? error.message
+        : 'No se pudo solicitar la recuperación. Inténtalo nuevamente.'
+    if (error instanceof ChangePasswordError && error.retryAfterSeconds) {
+      recoveryRetrySeconds.value = error.retryAfterSeconds
+      clearInterval(recoveryTimer)
+      recoveryTimer = setInterval(() => {
+        recoveryRetrySeconds.value--
+        if (recoveryRetrySeconds.value <= 0) clearInterval(recoveryTimer)
+      }, 1000)
+    }
+  } finally {
+    recoverySubmitting.value = false
+  }
+}
+
+function toggleRecovery() {
+  if (busy.value) return
+  clearPassword()
+  recoveryMode.value = !recoveryMode.value
+  recoveryError.value = ''
+  recoveryMessage.value = ''
+  void nextTick(() => emailInput.value?.focus())
+}
+onBeforeUnmount(() => clearInterval(recoveryTimer))
 </script>
 
 <template>
   <BaseModal
     :open="open"
-    :title="isClient ? 'Iniciar sesión' : 'Inicio de sesión del personal'"
-    :close-disabled="submitting"
+    :title="
+      recoveryMode
+        ? 'Recuperar contraseña'
+        : isClient
+          ? 'Iniciar sesión'
+          : 'Inicio de sesión del personal'
+    "
+    :close-disabled="busy"
     @close="close"
   >
     <div class="login-content">
-      <template v-if="isClient">
-        <SocialAuthButtons mode="login" disabled />
-        <p class="availability-note">Google y Facebook estarán disponibles próximamente.</p>
+      <template v-if="isClient && !recoveryMode">
+        <SocialAuthButtons
+          mode="login"
+          :disabled="!open || submitting || retryAfterSeconds > 0"
+          @busy="socialBusy = $event"
+          @authenticated="emit('authenticated', $event)"
+          @error="socialError = $event"
+        />
+        <p v-if="socialError" class="server-error" role="alert">{{ socialError }}</p>
         <div class="login-divider" aria-hidden="true"></div>
       </template>
-      <p v-else class="login-intro">Acceso para empleados y administradores.</p>
+      <p v-else-if="!recoveryMode" class="login-intro">Acceso para empleados y administradores.</p>
+      <p v-else class="login-intro">
+        Introduce el correo registrado de tu cuenta {{ isClient ? 'de cliente' : 'del personal' }}.
+        Recibirás un enlace y una contraseña temporal válidos durante 30 minutos.
+      </p>
 
       <p class="required-note">
         <span class="required-mark" aria-hidden="true">*</span> Campos obligatorios
       </p>
-      <form novalidate :aria-busy="submitting" @submit.prevent="submit">
+      <form novalidate :aria-busy="busy" @submit.prevent="submit">
         <div class="login-field">
           <label :for="`${id}-email`"
             >Correo electrónico <span class="required-mark" aria-hidden="true">*</span></label
@@ -139,7 +224,7 @@ function submit() {
             autocapitalize="none"
             :spellcheck="false"
             required
-            :disabled="submitting"
+            :disabled="busy"
             :aria-invalid="touched.email && !!emailError"
             :aria-describedby="touched.email && emailError ? `${id}-email-error` : undefined"
             @blur="markTouched('email', $event)"
@@ -154,7 +239,7 @@ function submit() {
             {{ emailError }}
           </p>
         </div>
-        <div class="login-field">
+        <div v-if="!recoveryMode" class="login-field">
           <label :for="`${id}-password`"
             >Contraseña <span class="required-mark" aria-hidden="true">*</span></label
           >
@@ -167,7 +252,7 @@ function submit() {
               :type="showPassword ? 'text' : 'password'"
               autocomplete="current-password"
               required
-              :disabled="submitting"
+              :disabled="busy"
               :aria-invalid="touched.password && !!passwordError"
               :aria-describedby="
                 touched.password && passwordError ? `${id}-password-error` : undefined
@@ -177,7 +262,7 @@ function submit() {
             <button
               type="button"
               class="password-toggle"
-              :disabled="submitting"
+              :disabled="busy"
               :aria-controls="`${id}-password`"
               :aria-label="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
               :aria-pressed="showPassword"
@@ -197,32 +282,66 @@ function submit() {
           </p>
         </div>
         <div class="recovery-option">
-          <button type="button" class="text-button" disabled>Olvidé mi contraseña</button>
-          <span class="availability-note">Próximamente</span>
+          <button type="button" class="text-button" :disabled="busy" @click="toggleRecovery">
+            {{ recoveryMode ? 'Volver al inicio de sesión' : 'Olvidé mi contraseña' }}
+          </button>
         </div>
-        <p v-if="errorMessage" ref="feedback" class="server-error" tabindex="-1" role="alert">
+        <p v-if="recoveryMode && recoveryMessage" class="availability-note" role="status">
+          {{ recoveryMessage }}
+        </p>
+        <p v-if="recoveryMode && recoveryError" class="server-error" role="alert">
+          {{ recoveryError }}
+        </p>
+        <p v-if="recoveryMode && recoveryRetrySeconds > 0" class="availability-note" role="status">
+          Puedes volver a intentarlo en {{ recoveryRetrySeconds }} segundos.
+        </p>
+        <p
+          v-if="errorMessage && !recoveryMode"
+          ref="feedback"
+          class="server-error"
+          tabindex="-1"
+          role="alert"
+        >
           {{ errorMessage }}
         </p>
-        <p v-if="retryAfterSeconds > 0 && !isClient" class="availability-note" role="status">
+        <p v-if="retryAfterSeconds > 0" class="availability-note" role="status">
           Puedes volver a intentarlo en {{ retryAfterSeconds }} segundos.
         </p>
-        <p v-if="!enabled" :id="`${id}-availability`" class="availability-note" role="status">
-          El inicio de sesión estará disponible próximamente.
+        <p
+          v-if="!enabled && !recoveryMode"
+          :id="`${id}-availability`"
+          class="availability-note"
+          role="status"
+        >
+          El acceso con correo y contraseña estará disponible próximamente.
         </p>
         <button
           type="submit"
           class="login-submit"
-          :disabled="!enabled || submitting || retryAfterSeconds > 0"
-          :aria-describedby="!enabled ? `${id}-availability` : undefined"
+          :disabled="
+            (!enabled && !recoveryMode) ||
+            busy ||
+            retryAfterSeconds > 0 ||
+            (recoveryMode && recoveryRetrySeconds > 0)
+          "
+          :aria-describedby="!enabled && !recoveryMode ? `${id}-availability` : undefined"
         >
-          {{ submitting ? 'Iniciando sesión…' : 'Iniciar sesión' }}
+          {{
+            recoveryMode
+              ? recoverySubmitting
+                ? 'Enviando…'
+                : 'Enviar instrucciones'
+              : submitting
+                ? 'Iniciando sesión…'
+                : 'Iniciar sesión'
+          }}
         </button>
       </form>
       <button
         ref="modeSwitch"
         type="button"
         class="text-button switch-mode"
-        :disabled="submitting"
+        :disabled="busy"
         @pointerdown="focusModeSwitch"
         @click="switchMode"
       >

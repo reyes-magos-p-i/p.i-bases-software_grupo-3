@@ -1,3 +1,4 @@
+import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 jest.mock('oracledb', () => ({
   ...jest.requireActual('oracledb'),
   createPool: jest.fn(),
@@ -26,6 +27,7 @@ import { PasswordGenerator } from '../common/security/password-generator';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { RandomPasswordGenerator } from '../common/security/random-password-generator.service';
 import { Argon2PasswordHasher } from '../common/security/argon2-password-hasher.service';
+import { UsersRepository } from './users.repository';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { SmtpInitialCredentialsSender } from './notifications/smtp-initial-credentials-sender';
 
@@ -58,6 +60,7 @@ describe('UsersModule (application HTTP integration)', () => {
     firstName: 'Ana',
     firstSurname: 'Solano',
     secondSurname: 'Rojas',
+    hireDate: '2026-10-01',
     birthday: '2000-02-29',
     phoneNumber: '88888888',
     branchId: 1,
@@ -66,6 +69,8 @@ describe('UsersModule (application HTTP integration)', () => {
 
   function buildModule() {
     return Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(ConfigService)
       .useValue(config)
       .compile();
@@ -101,7 +106,14 @@ describe('UsersModule (application HTTP integration)', () => {
         return Promise.resolve({ rows: [{ schema: 'TEST' }] });
       if (sql.startsWith('SELECT EMPLOYEE_ID')) {
         return Promise.resolve({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         });
       }
       if (sql.startsWith('SELECT 1')) return Promise.resolve({ rows: [] });
@@ -136,6 +148,9 @@ describe('UsersModule (application HTTP integration)', () => {
       .mocked(nodemailer.createTransport)
       .mockReturnValue({ sendMail } as unknown as Mail<SMTPSentMessageInfo>);
     const module = await buildModule();
+    jest
+      .spyOn(module.get(UsersRepository), 'findEmployeeCredentialsStatus')
+      .mockResolvedValue({ setAt: new Date(), expirationDays: 90 });
     app = module.createNestApplication({ logger: false });
     app.useGlobalPipes(
       new ValidationPipe({
@@ -159,13 +174,105 @@ describe('UsersModule (application HTTP integration)', () => {
     await app.close();
   });
 
+  it('mounts partial update routes with the real service and repositories', async () => {
+    connection.execute
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: 'ADMINISTRATOR',
+            FIRST_NAME: 'Ana',
+            EMAIL: 'admin@example.com',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ EMAIL: 'old@example.com' }] })
+      .mockResolvedValueOnce({ rowsAffected: 1 });
+    await browser
+      .patch('/users/clients/42')
+      .send({ phoneNumber: null })
+      .expect(200, { id: 42, email: 'old@example.com', role: 'CLIENT' });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
   describe('GET /users/creation-options', () => {
+    it('mounts detail routes with actual repositories and reports missing users', async () => {
+      for (const section of ['clients', 'employees']) {
+        connection.execute
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                EMPLOYEE_ID: 21,
+                ROLE: 'ADMINISTRATOR',
+                FIRST_NAME: 'Ana',
+                EMAIL: 'admin@example.com',
+              },
+            ],
+          })
+          .mockResolvedValueOnce({ rows: [] });
+        const response = await browser.get(`/users/${section}/42`).expect(404);
+        expect(response.body).toMatchObject({
+          statusCode: 404,
+          message: 'El usuario seleccionado no existe.',
+        });
+      }
+    });
+    it('mounts client and employee listing routes with the actual repositories', async () => {
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] });
+      await browser.get('/users/clients').expect(200, {
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] });
+      await browser.get('/users/employees').expect(200, {
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+      expect(sendMail).not.toHaveBeenCalled();
+      expect(connection.commit).not.toHaveBeenCalled();
+    });
     it('reads Oracle catalogs through the registered route without creating users or sending credentials', async () => {
       const generate = jest.spyOn(app.get(PasswordGenerator), 'generate');
       const hash = jest.spyOn(app.get(PasswordHasher), 'hash');
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
         .mockResolvedValueOnce({
@@ -213,7 +320,14 @@ describe('UsersModule (application HTTP integration)', () => {
     it('does not return partial catalogs if a later query fails', async () => {
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
         .mockRejectedValueOnce(new Error('Private Oracle catalog error'));
@@ -281,12 +395,38 @@ describe('UsersModule (application HTTP integration)', () => {
     expect(connection.execute).toHaveBeenCalledTimes(calls);
   });
 
+  it('blocks expired employee passwords on protected routes but allows password recovery', async () => {
+    jest
+      .spyOn(app.get(UsersRepository), 'findEmployeeCredentialsStatus')
+      .mockResolvedValue({
+        setAt: new Date(Date.now() - 91 * 24 * 60 * 60 * 1000),
+        expirationDays: 90,
+      });
+
+    const protectedResponse = await browser.get('/users/clients').expect(403);
+    expect(protectedResponse.body).toMatchObject({
+      code: 'PASSWORD_EXPIRED',
+    });
+
+    await browser
+      .get('/auth/password-status')
+      .expect(200, { status: 'expired' });
+    await browser.patch('/auth/employees/password').send({}).expect(400);
+  });
+
   it('uses the current role rather than role claims or development flags', async () => {
     settings.DEV_ADMIN_ENABLED = 'true';
     settings.DEV_ADMIN_EMPLOYEE_ID = '21';
     const cookie = `${EMPLOYEE_SESSION_COOKIE}=${app.get(JwtService).sign({ sub: 21, type: 'employee', role: 'ADMINISTRATOR' })}`;
     connection.execute.mockResolvedValueOnce({
-      rows: [{ EMPLOYEE_ID: 21, ROLE: 'EMPLOYEE', FIRST_NAME: 'Ana' }],
+      rows: [
+        {
+          EMPLOYEE_ID: 21,
+          ROLE: 'EMPLOYEE',
+          FIRST_NAME: 'Ana',
+          EMAIL: 'employee@example.com',
+        },
+      ],
     });
     await request(app.getHttpServer())
       .post('/users')
@@ -307,7 +447,7 @@ describe('UsersModule (application HTTP integration)', () => {
       expect(response.body).toEqual({
         id: body.role === 'CLIENT' ? 43 : 42,
         role: body.role,
-        email: body.role === 'CLIENT' ? body.email.toLowerCase() : body.email,
+        email: body.email.toLowerCase(),
       });
       expect(operations).toEqual(
         body.role === 'CLIENT'
@@ -346,7 +486,14 @@ describe('UsersModule (application HTTP integration)', () => {
 
   it('denies employees even if the requested account is an administrator', async () => {
     connection.execute.mockResolvedValueOnce({
-      rows: [{ EMPLOYEE_ID: 21, ROLE: 'EMPLOYEE', FIRST_NAME: 'Ana' }],
+      rows: [
+        {
+          EMPLOYEE_ID: 21,
+          ROLE: 'EMPLOYEE',
+          FIRST_NAME: 'Ana',
+          EMAIL: 'employee@example.com',
+        },
+      ],
     });
     await browser
       .post('/users')
@@ -367,7 +514,14 @@ describe('UsersModule (application HTTP integration)', () => {
   it('rolls back persistence failures and never sends credentials', async () => {
     connection.execute
       .mockResolvedValueOnce({
-        rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        rows: [
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: 'ADMINISTRATOR',
+            FIRST_NAME: 'Ana',
+            EMAIL: 'admin@example.com',
+          },
+        ],
       })
       .mockResolvedValueOnce({ rowsAffected: 1, outBinds: { addressId: [55] } })
       .mockRejectedValueOnce(new Error('Private Oracle details'));
@@ -392,6 +546,42 @@ describe('UsersModule (application HTTP integration)', () => {
     expect(sendMail).toHaveBeenCalledTimes(1);
     expect(operations).toEqual(['insert', 'insert', 'commit']);
   });
+
+  it.each(['EMPLOYEE', 'ADMINISTRATOR'])(
+    'returns 409 without credentials email for duplicate %s email',
+    async (role) => {
+      connection.execute
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rowsAffected: 1,
+          outBinds: { addressId: [55] },
+        })
+        .mockRejectedValueOnce({
+          errorNum: 1,
+          message: 'ORA-00001: (PRODUCTION.UQ_EMPLOYEES_EMAIL)',
+        });
+      const response = await browser
+        .post('/users')
+        .send({ ...employee, role })
+        .expect(409);
+      expect(response.body.message).toBe(
+        'El correo electrónico ya está registrado para otro empleado.',
+      );
+      expect(response.text).not.toContain('ORA-');
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(sendMail).not.toHaveBeenCalled();
+    },
+  );
 
   it('persists an administrative client address without asserting terms acceptance', async () => {
     await browser
