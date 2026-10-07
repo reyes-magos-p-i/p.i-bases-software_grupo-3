@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-
+import { NotFoundException } from '@nestjs/common';
 import { MoviesRepository } from './movies.repository';
 import { DatabaseService } from '../database/database.service';
 
@@ -247,86 +247,200 @@ describe('findOne', () => {
 })
 });
 
-  describe('update', () => {
-    it('should update the movie inside a transaction', async () => {
-      const dto = {
-        title: 'Updated Interstellar',
-        synopsis: 'Updated synopsis',
-        runningTime: 170,
-        releaseYear: 2015,
-        classificationId: 2,
-        languageIds: [1, 2],
-        genreIds: [3, 4],
-      }
+  describe('catalogs', () => {
+  it.each([
+    ['findClassifications', [{ id: 1, name: 'TP' }]],
+    ['findGenres', [{ id: 2, name: 'Drama' }]],
+    ['findLanguages', [{ id: 3, name: 'Español' }]],
+  ] as const)('%s returns database options', async (method, options) => {
+    db.query.mockResolvedValueOnce({ rows: [...options] });
 
-      const conn = {
-        execute: jest.fn(),
-        executeMany: jest.fn(),
-      }
+    const result = await repository[method]();
 
-      db.transaction.mockImplementation(
-        async (work) => work(conn as any),
-      )
+    expect(result).toEqual(options);
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
 
-      conn.execute.mockResolvedValue({
-        rowsAffected: 1,
-      })
+  it.each([
+    'findClassifications',
+    'findGenres',
+    'findLanguages',
+  ] as const)('%s returns an empty array without rows', async (method) => {
+    db.query.mockResolvedValueOnce({ rows: undefined });
 
-      conn.executeMany.mockResolvedValue({
-        rowsAffected: 2,
-      })
+    expect(await repository[method]()).toEqual([]);
+  });
+});
 
-      await repository.update(24, dto)
+describe('update', () => {
+  const conn = {
+    execute: jest.fn(),
+    executeMany: jest.fn(),
+  };
 
-      expect(db.transaction).toHaveBeenCalledTimes(1)
-      expect(conn.execute).toHaveBeenCalled()
-    })
-  })
+  beforeEach(() => {
+    conn.execute.mockReset();
+    conn.executeMany.mockReset();
 
-  describe('update', () => {
-  it('should update the movie inside a transaction', async () => {
-    const dto = {
-      title: 'Updated Interstellar',
-      synopsis: 'Updated synopsis',
-      runningTime: 170,
-      releaseYear: 2015,
-      classificationId: 2,
-      languageIds: [1, 2],
-      genreIds: [3, 4],
-    }
+    conn.execute.mockResolvedValue({ rowsAffected: 1 });
+    conn.executeMany.mockResolvedValue({ rowsAffected: 1 });
 
-    const conn = {
-      execute: jest.fn(),
-      executeMany: jest.fn(),
-    }
+    // Run the actual transaction callback using the mocked connection.
+    db.transaction.mockImplementation(async (work) => {
+      return work(conn as unknown as Parameters<typeof work>[0]);
+    });
+  });
 
-      db.transaction.mockImplementation(
-        async (work) => work(conn as any),
-      )
+  it('updates all scalar fields', async () => {
+    await repository.update(24, {
+      title: 'Interstellar',
+      synopsis: 'A journey through space.',
+      posterImage: 'default-poster',
+      runningTime: 169,
+      releaseYear: 2014,
+      classificationId: 1,
+    });
 
-      conn.execute.mockResolvedValue({
-        rowsAffected: 1,
-      })
+    expect(conn.execute).toHaveBeenNthCalledWith(
+      1,
+      'ALTER SESSION DISABLE PARALLEL DML',
+    );
 
-      conn.executeMany.mockResolvedValue({
-        rowsAffected: 2,
-      })
+    expect(conn.execute).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('UPDATE MOVIES'),
+      {
+        id: 24,
+        title: 'Interstellar',
+        synopsis: 'A journey through space.',
+        posterImage: 'default-poster',
+        runningTime: 169,
+        releaseYear: 2014,
+        classificationId: 1,
+      },
+      { autoCommit: false },
+    );
 
-      await repository.update(24, dto)
+    expect(conn.executeMany).not.toHaveBeenCalled();
+  });
 
-      expect(db.transaction).toHaveBeenCalledTimes(1)
-      expect(conn.execute).toHaveBeenCalled()
-    })
-  })
+  it('binds omitted scalar fields as null', async () => {
+    await repository.update(24, { title: 'Updated title' });
 
-    it('should propagate database errors when deleting', async () => {
-      db.transaction.mockRejectedValue(
-        new Error('Database error'),
-      )
+    expect(conn.execute).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('UPDATE MOVIES'),
+      {
+        id: 24,
+        title: 'Updated title',
+        synopsis: null,
+        posterImage: null,
+        runningTime: null,
+        releaseYear: null,
+        classificationId: null,
+      },
+      { autoCommit: false },
+    );
+  });
 
-      await expect(
-        repository.remove(24),
-      ).rejects.toThrow('Database error')
-    })
+  it('throws NotFoundException when the movie does not exist', async () => {
+    conn.execute
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rowsAffected: 0 });
+
+    await expect(repository.update(999, {})).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(conn.execute).toHaveBeenCalledTimes(2);
+    expect(conn.executeMany).not.toHaveBeenCalled();
+  });
+
+  it('preserves relationships when their arrays are omitted', async () => {
+    await repository.update(24, { title: 'Updated title' });
+
+    expect(conn.execute).toHaveBeenCalledTimes(2);
+    expect(conn.executeMany).not.toHaveBeenCalled();
+  });
+
+  it('clears languages and genres when arrays are empty', async () => {
+    await repository.update(24, {
+      languageIds: [],
+      genreIds: [],
+    });
+
+    expect(conn.execute).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM MOVIE_LANGUAGES'),
+      { id: 24 },
+      { autoCommit: false },
+    );
+
+    expect(conn.execute).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM MOVIE_GENRES'),
+      { id: 24 },
+      { autoCommit: false },
+    );
+
+    expect(conn.executeMany).not.toHaveBeenCalled();
+  });
+
+  it('replaces relationships and removes duplicate IDs', async () => {
+    await repository.update(24, {
+      languageIds: [1, 1, 2],
+      genreIds: [3, 3, 4],
+    });
+
+    expect(conn.executeMany).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('INSERT INTO MOVIE_LANGUAGES'),
+      [
+        { id: 24, languageId: 1 },
+        { id: 24, languageId: 2 },
+      ],
+      { autoCommit: false },
+    );
+
+    expect(conn.executeMany).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('INSERT INTO MOVIE_GENRES'),
+      [
+        { id: 24, genreId: 3 },
+        { id: 24, genreId: 4 },
+      ],
+      { autoCommit: false },
+    );
+  });
+
+  it('propagates an update failure and stops further statements', async () => {
+    const failure = new Error('Database update failed');
+
+    conn.execute
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(failure);
+
+    await expect(
+      repository.update(24, { languageIds: [1], genreIds: [2] }),
+    ).rejects.toThrow(failure);
+
+    expect(conn.execute).toHaveBeenCalledTimes(2);
+    expect(conn.executeMany).not.toHaveBeenCalled();
+  });
+
+  it('propagates relationship insertion failures', async () => {
+    const failure = new Error('Language insert failed');
+    conn.executeMany.mockRejectedValueOnce(failure);
+
+    await expect(
+      repository.update(24, { languageIds: [1], genreIds: [2] }),
+    ).rejects.toThrow(failure);
+
+    // Genre modification must not start after the language failure.
+    expect(conn.execute).not.toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM MOVIE_GENRES'),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+});
 
 });

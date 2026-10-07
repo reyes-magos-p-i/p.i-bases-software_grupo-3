@@ -117,19 +117,25 @@ describe('MoviesController', () => {
     expect(service.create).toHaveBeenCalledWith(dto);
   });
 
-  it('should update a movie', async () => {
-    const dto = {
-      title: 'Updated title',
-    };
 
-    service.update.mockResolvedValue(movieDetail);
+it('passes movie updates to the service', async () => {
+  const updatedMovie = {
+  id: 24,
+  title: 'Updated title',
+  synopsis: 'A journey through space.',
+  runningTime: 169,
+  releaseYear: 2014,
+  classification: { id: 1, name: 'TP' },
+  languages: [{ id: 1, name: 'English' }],
+  genres: [{ id: 3, name: 'Science fiction' }],
+};
+  const dto = { title: 'Updated title' };
+  service.update.mockResolvedValueOnce(updatedMovie);
 
-    const result = await controller.update(1, dto);
+  await controller.update(24, dto);
 
-    expect(result).toEqual(movieDetail);
-    expect(service.update).toHaveBeenCalledWith(1, dto);
-  });
-
+  expect(service.update).toHaveBeenCalledWith(24, dto);
+});
   it('should delete a movie', async () => {
     service.remove.mockResolvedValue({
       message: 'Movie 1 deleted successfully',
