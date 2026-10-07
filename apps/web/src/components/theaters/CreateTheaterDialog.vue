@@ -46,12 +46,15 @@ const draft = reactive({
 })
 const errors = reactive<Record<string, string>>({})
 let opener: HTMLElement | null = null
+const allowedProjectors = ['IMAX', '70mm'] as const
+const allowedStatuses: TheaterStatus[] = ['Disponible', 'En función']
 
 function validate() {
   for (const key of Object.keys(errors)) delete errors[key]
   const seats = Number(draft.numberOfSeats)
   const dimensionX = Number(draft.dimensionX)
   const dimensionY = Number(draft.dimensionY)
+  const branchId = Number(draft.branchId)
   if (!Number.isInteger(seats) || seats < 1 || seats >= 5000)
     errors.numberOfSeats = 'Introduce un número entero entre 1 y 4999.'
   if (!Number.isInteger(dimensionX) || dimensionX < 1)
@@ -68,10 +71,17 @@ function validate() {
     seats !== dimensionX * dimensionY
   )
     errors.numberOfSeats = 'El número de asientos debe ser igual a Dimensión X por Dimensión Y.'
-  if (!props.projectors.some((item) => item.name === draft.projectorName))
-    errors.projectorName = 'Selecciona un tipo de proyector.'
-  if (!props.cinemas.some((item) => String(item.branchId) === String(draft.branchId)))
+  if (
+    !allowedProjectors.includes(draft.projectorName as (typeof allowedProjectors)[number]) ||
+    !props.projectors.some((item) => item.name === draft.projectorName)
+  )
+    errors.projectorName = 'Selecciona un proyector válido.'
+  if (
+    !Number.isInteger(branchId) ||
+    !props.cinemas.some((item) => item.branchId === branchId)
+  )
     errors.branchId = 'Selecciona una sucursal.'
+  if (!allowedStatuses.includes(draft.status)) errors.status = 'Selecciona un estado válido.'
   return Object.keys(errors).length === 0
 }
 
@@ -194,10 +204,16 @@ defineExpose({ open, complete })
       </div>
 
       <label :for="id + '-status'">Estado</label>
-      <select :id="id + '-status'" v-model="draft.status" name="status">
+      <select
+        :id="id + '-status'"
+        v-model="draft.status"
+        name="status"
+        :aria-invalid="!!errors.status"
+      >
         <option value="Disponible">Disponible</option>
         <option value="En función">En función</option>
       </select>
+      <small v-if="errors.status" class="field-error">{{ errors.status }}</small>
 
       <footer class="dialog-actions">
         <button type="button" class="secondary-button" :disabled="submitting" @click="close">Cancelar</button>
