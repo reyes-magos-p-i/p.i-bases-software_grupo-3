@@ -1,6 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { loginWithFacebook } from '@/facebook-auth'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 
 const { loginWithGoogle, facebookLogin, loginWithFacebook } = vi.hoisted(() => ({
