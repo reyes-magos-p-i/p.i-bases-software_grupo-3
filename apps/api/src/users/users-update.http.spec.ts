@@ -42,6 +42,7 @@ describe('User update and deactivation HTTP contracts', () => {
   const clients = {
     findById: jest.fn(),
     isEmailVerificationPending: jest.fn(),
+    findPasswordStatus: jest.fn(),
   };
   const generator = { generate: jest.fn() };
   const hasher = { hash: jest.fn() };
@@ -110,6 +111,10 @@ describe('User update and deactivation HTTP contracts', () => {
     });
     clients.findById.mockResolvedValue({ id: 99, firstName: 'Cliente' });
     clients.isEmailVerificationPending.mockResolvedValue(false);
+    clients.findPasswordStatus.mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
+    });
     clientsRepository.updateClient.mockResolvedValue({
       id: 42,
       email: 'ana@example.com',

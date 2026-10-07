@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
+import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
 import type { UserDetailSelection } from '@/types/user'
@@ -21,7 +22,7 @@ import { clearClientAuth } from '@/services/client-session.service'
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-const activeSection = ref<'employees' | 'clients' | 'movies'>( // agregado movies
+const activeSection = ref<'employees' | 'clients' | 'movies'| 'theaters'>( // agregado movies
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
 const loggingOut = ref(false)
@@ -33,6 +34,7 @@ const catalogsLoading = ref(false)
 const catalogsError = ref('')
 let catalogRequest: AbortController | undefined
 const submitting = ref(false)
+const theaterBusy = ref(false)
 const submissionErrors = ref<string[]>([])
 const submissionBlocked = ref(false)
 const creationResult = ref('')
@@ -192,7 +194,7 @@ async function loadCatalogs() {
 }
 
 function openUserDialog() {
-  if (loggingOut.value || role.value !== 'ADMINISTRATOR') return
+  if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters') return
   userDialog.value?.open()
   void loadCatalogs()
 }
@@ -208,10 +210,21 @@ onBeforeUnmount(() => {
   disposed = true
   cancelCatalogRequest()
 })
-const availableSections = computed(() => //AGREGADO PELICULAS
+const availableSections = computed(() =>
   role.value === 'ADMINISTRATOR'
-    ? ['employees', 'clients', 'movies']
+    ? ['employees', 'clients', 'movies', 'theaters']
     : ['clients', 'movies'],
+)
+
+const sectionTitle = computed(() =>
+  activeSection.value === 'employees'
+    ? 'Empleados'
+    : activeSection.value === 'theaters'
+      ? 'Salas'
+      : activeSection.value === 'movies'
+        ? 'Películas'
+        : 'Clientes',
+)
 )
 const sectionTitle = computed(() => {
   switch (activeSection.value) {
@@ -230,17 +243,18 @@ const sectionTitle = computed(() => {
 })
 
 watch(role, () => {
-  if (role.value === 'EMPLOYEE' && activeSection.value === 'employees') {
+  if (
+    role.value === 'EMPLOYEE' &&
+    (activeSection.value === 'employees' || activeSection.value === 'theaters')
+  ) {
     activeSection.value = 'clients'
   }
 })
 
-function navigate(section: string) { //AGREGADO MOVIES
-  if (submitting.value || loggingOut.value) return
-
+function navigate(section: string) {
+  if (submitting.value || theaterBusy.value || loggingOut.value) return
   if (
-    (section === 'employees' ||
-      section === 'clients' ||
+    (section === 'employees' || section === 'clients' || section === 'theaters'||
       section === 'movies') &&
     availableSections.value.includes(section)
   ) {
@@ -256,7 +270,7 @@ function navigate(section: string) { //AGREGADO MOVIES
     :user-name="identity.firstName"
     :active-section="activeSection"
     :available-sections="availableSections"
-    :can-logout="!submitting && !loggingOut"
+    :can-logout="!submitting && !theaterBusy && !loggingOut"
     @navigate="navigate"
     @logout="logout"
   >
@@ -264,7 +278,7 @@ function navigate(section: string) { //AGREGADO MOVIES
     <p v-if="logoutError" role="alert">{{ logoutError }}</p>
 
     <p
-      v-if="creationResult"
+      v-if="creationResult && activeSection !== 'theaters'"
       ref="result-notice"
       class="creation-result"
       :role="resultIsWarning ? 'alert' : 'status'"
@@ -273,7 +287,12 @@ function navigate(section: string) { //AGREGADO MOVIES
       {{ creationResult }}
     </p>
 
-    <section class="preview-content">
+    <TheatersSection
+      v-if="activeSection === 'theaters'"
+      :disabled="loggingOut"
+      @busy="theaterBusy = $event"
+    />
+    <section v-else class="preview-content" aria-live="polite" aria-atomic="true">
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
@@ -339,50 +358,3 @@ function navigate(section: string) { //AGREGADO MOVIES
   </p>
 </template>
 
-<style scoped>
-.creation-result {
-  padding: 16px;
-  border-left: 4px solid var(--color-primary);
-  background: var(--color-white);
-  overflow-wrap: anywhere;
-}
-.creation-result:focus {
-  outline: 2px solid var(--color-primary);
-}
-
-.section-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.preview-content h1 {
-  margin: 0;
-  font-size: clamp(1.5rem, 4vw, 2rem);
-}
-
-.add-user-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 10px 20px;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-small);
-  color: var(--color-white);
-  background: var(--color-primary);
-}
-
-.add-user-button:hover {
-  background: var(--color-dark);
-}
-
-.add-user-button:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-</style>
