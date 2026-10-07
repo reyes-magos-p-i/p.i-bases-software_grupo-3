@@ -3,6 +3,10 @@ import type {
   AvailableMovie,
   CreatedProjections,
   CreateProjectionRequest,
+  ProjectionDetail,
+  ProjectionFilterOptions,
+  ProjectionList,
+  ProjectionListQuery,
   ProjectionSchedulingOptions,
 } from '@/types/projection'
 
@@ -17,6 +21,31 @@ export async function getProjectionSchedulingOptions(signal?: AbortSignal) {
 export async function searchAvailableMovies(branchId: number, search: string, signal?: AbortSignal) {
   const response = await getApi().get<AvailableMovie[]>('/projections/available-movies', {
     params: { branchId, search },
+    signal,
+    timeout: 10000,
+  })
+  return response.data
+}
+
+export async function getProjectionFilterOptions(signal?: AbortSignal) {
+  const response = await getApi().get<ProjectionFilterOptions>('/projections/filter-options', {
+    signal,
+    timeout: 10000,
+  })
+  return response.data
+}
+
+export async function getProjections(query: ProjectionListQuery, signal?: AbortSignal) {
+  const response = await getApi().get<ProjectionList>('/projections', {
+    params: query,
+    signal,
+    timeout: 10000,
+  })
+  return response.data
+}
+
+export async function getProjectionDetail(id: number, signal?: AbortSignal) {
+  const response = await getApi().get<ProjectionDetail>(`/projections/${id}`, {
     signal,
     timeout: 10000,
   })

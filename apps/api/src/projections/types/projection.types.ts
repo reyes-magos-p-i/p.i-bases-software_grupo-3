@@ -21,6 +21,40 @@ export interface ProjectionSchedulingOptions extends ProjectionCatalogs {
   defaultTicketPrice: number;
 }
 
+export interface ProjectionFilterOptions extends ProjectionCatalogs {
+  movies: { movieId: number; title: string }[];
+}
+
+export interface ListedProjection {
+  movieFunctionId: number;
+  movieId: number;
+  movieTitle: string;
+  branchId: number;
+  branchName: string;
+  theaterId: number;
+  startTime: string;
+  endTime: string;
+  status: ProjectionStatus;
+  /** Null for functions scheduled before prices existed. */
+  price: number | null;
+}
+
+export interface ProjectionList {
+  items: ListedProjection[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface ProjectionDetail extends ListedProjection {
+  runningTime: number;
+  posterImage: string;
+  createdAt: string;
+  cleaningMinutes: number | null;
+  advertisementMinutes: number | null;
+}
+
 export interface AvailableMovie {
   movieId: number;
   title: string;

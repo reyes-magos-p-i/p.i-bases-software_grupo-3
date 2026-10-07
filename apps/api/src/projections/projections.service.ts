@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import type { AvailableMoviesQueryDto } from './dto/available-movies-query.dto';
 import type { CreateProjectionDto } from './dto/create-projection.dto';
@@ -17,8 +18,12 @@ import {
   scheduledDurationMinutes,
 } from './projection-schedule';
 import { ProjectionsRepository } from './projections.repository';
+import type { ListProjectionsQueryDto } from './dto/list-projections-query.dto';
 import type {
   CreatedProjections,
+  ProjectionDetail,
+  ProjectionFilterOptions,
+  ProjectionList,
   ProjectionSchedulingOptions,
 } from './types/projection.types';
 
@@ -28,9 +33,34 @@ export class ProjectionsService {
 
   async getSchedulingOptions(): Promise<ProjectionSchedulingOptions> {
     return {
-      ...(await this.repository.getSchedulingOptions()),
+      ...(await this.repository.getCatalogs(true)),
       defaultTicketPrice: DEFAULT_TICKET_PRICE,
     };
+  }
+
+  async getFilterOptions(): Promise<ProjectionFilterOptions> {
+    const [catalogs, movies] = await Promise.all([
+      this.repository.getCatalogs(false),
+      this.repository.getScheduledMovies(),
+    ]);
+    return { ...catalogs, movies };
+  }
+
+  async list(query: ListProjectionsQueryDto): Promise<ProjectionList> {
+    const { items, total } = await this.repository.listProjections(query);
+    return {
+      items,
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+      totalPages: Math.ceil(total / query.pageSize),
+    };
+  }
+
+  async findOne(id: number): Promise<ProjectionDetail> {
+    const projection = await this.repository.findProjection(id);
+    if (!projection) throw new NotFoundException(PROJECTION_MESSAGES.notFound);
+    return projection;
   }
 
   findAvailableMovies(query: AvailableMoviesQueryDto) {

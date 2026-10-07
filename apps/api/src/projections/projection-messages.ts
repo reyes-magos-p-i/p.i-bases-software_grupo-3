@@ -4,4 +4,5 @@ export const PROJECTION_MESSAGES = {
   pastSchedule: 'La fecha y hora de la proyección no puede estar en el pasado.',
   invalidPrice: 'El precio debe ser un número positivo en colones.',
   invalidRange: 'La fecha final no puede ser anterior a la fecha inicial.',
+  notFound: 'Esta proyección ya no está disponible.',
 } as const;

@@ -1,10 +1,8 @@
-import { Transform } from 'class-transformer';
 import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { ToInteger } from './query-transforms';
 
 export class AvailableMoviesQueryDto {
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' && /^\d+$/u.test(value) ? Number(value) : value,
-  )
+  @ToInteger()
   @IsInt({ message: 'Selecciona una sucursal válida.' })
   @Min(1, { message: 'Selecciona una sucursal válida.' })
   branchId: number;

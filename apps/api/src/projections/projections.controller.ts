@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Query,
   Req,
@@ -16,6 +17,8 @@ import { AdministratorGuard } from '../users/guards/administrator.guard';
 import type { UserIdentity } from '../users/types/user-identity.type';
 import { AvailableMoviesQueryDto } from './dto/available-movies-query.dto';
 import { CreateProjectionDto } from './dto/create-projection.dto';
+import { ListProjectionsQueryDto } from './dto/list-projections-query.dto';
+import { ProjectionIdParamsDto } from './dto/projection-id-params.dto';
 import { ProjectionsService } from './projections.service';
 
 @Controller('projections')
@@ -28,9 +31,24 @@ export class ProjectionsController {
     return this.projectionsService.getSchedulingOptions();
   }
 
+  @Get('filter-options')
+  getFilterOptions() {
+    return this.projectionsService.getFilterOptions();
+  }
+
   @Get('available-movies')
   findAvailableMovies(@Query() query: AvailableMoviesQueryDto) {
     return this.projectionsService.findAvailableMovies(query);
+  }
+
+  @Get()
+  list(@Query() query: ListProjectionsQueryDto) {
+    return this.projectionsService.list(query);
+  }
+
+  @Get(':id')
+  findOne(@Param() params: ProjectionIdParamsDto) {
+    return this.projectionsService.findOne(params.id);
   }
 
   @Post()

@@ -51,6 +51,55 @@ export interface CreatedProjections {
   projections: { movieFunctionId: number; startTime: string; endTime: string }[]
 }
 
+export interface ProjectionFilterOptions {
+  cinemas: ProjectionCinema[]
+  theaters: ProjectionTheater[]
+  movies: { movieId: number; title: string }[]
+}
+
+export interface ProjectionListQuery {
+  page: number
+  pageSize: number
+  search?: string
+  status?: ProjectionStatus
+  branchId?: number
+  theaterId?: number
+  movieId?: number
+  dateFrom?: string
+  dateTo?: string
+  timeFrom?: string
+  timeTo?: string
+}
+
+export interface ListedProjection {
+  movieFunctionId: number
+  movieId: number
+  movieTitle: string
+  branchId: number
+  branchName: string
+  theaterId: number
+  startTime: string
+  endTime: string
+  status: ProjectionStatus
+  price: number | null
+}
+
+export interface ProjectionList {
+  items: ListedProjection[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export interface ProjectionDetail extends ListedProjection {
+  runningTime: number
+  posterImage: string
+  createdAt: string
+  cleaningMinutes: number | null
+  advertisementMinutes: number | null
+}
+
 export interface ProjectionApiError {
   statusCode?: number
   message?: string | string[]

@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 import ProjectionFormDialog from './ProjectionFormDialog.vue'
+import ProjectionListPanel from './ProjectionListPanel.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import { createProjections, getProjectionSchedulingOptions } from '@/services/projection.service'
 import type {
@@ -14,6 +15,7 @@ const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
 const { state, sessionExpired, refreshPermissions } = useEmployeeSessionRecovery()
 const dialog = useTemplateRef<InstanceType<typeof ProjectionFormDialog>>('dialog')
+const list = useTemplateRef<InstanceType<typeof ProjectionListPanel>>('list')
 const resultNotice = useTemplateRef<HTMLElement>('result-notice')
 const options = ref<ProjectionSchedulingOptions | null>(null)
 const optionsLoading = ref(false)
@@ -77,6 +79,7 @@ async function submit(data: CreateProjectionRequest) {
     if (state.disposed) return
     creationResult.value = describeCreation(created.projections.length, created.status)
     dialog.value?.complete()
+    list.value?.refresh()
     await nextTick()
     resultNotice.value?.focus()
   } catch (error) {
@@ -127,10 +130,11 @@ onBeforeUnmount(() => request?.abort())
     >
       {{ creationResult }}
     </p>
-    <div class="preview-placeholder">
-      <h2>Listado en preparación</h2>
-      <p>El listado de proyecciones se incorporará en el próximo incremento.</p>
-    </div>
+    <ProjectionListPanel
+      ref="list"
+      @session-expired="sessionExpired"
+      @forbidden="refreshPermissions"
+    />
     <ProjectionFormDialog
       ref="dialog"
       :cinemas="options?.cinemas"

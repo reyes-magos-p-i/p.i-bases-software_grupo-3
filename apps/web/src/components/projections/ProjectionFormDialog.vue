@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, useTemplateRef, watch } from 'vue'
-import placeholderPoster from '@/assets/images/placeholder.svg'
-import { stripTrailingSlashes } from '@/services/movieFunctions'
+import ProjectionDialogShell from './ProjectionDialogShell.vue'
+import ProjectionPoster from './ProjectionPoster.vue'
 import { searchAvailableMovies } from '@/services/projection.service'
 import type {
   AvailableMovie,
@@ -41,8 +41,8 @@ const emit = defineEmits<{
 }>()
 
 const id = useId()
-const dialog = useTemplateRef<HTMLDialogElement>('dialog')
-const imagesBaseUrl = `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image`
+const shell = useTemplateRef<InstanceType<typeof ProjectionDialogShell>>('shell')
+const form = useTemplateRef<HTMLFormElement>('form')
 
 const emptyDraft = () => ({
   movieQuery: '',
@@ -72,12 +72,10 @@ const searchError = ref('')
 const listOpen = ref(false)
 const activeResult = ref(-1)
 const endTimeEdited = ref(false)
-const posterFailed = ref(false)
 const touched = reactive<Record<string, boolean>>({})
 const submitted = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let searchRequest: AbortController | undefined
-let opener: HTMLElement | null = null
 
 const branchTheaters = computed(() =>
   props.theaters.filter((theater) => String(theater.branchId) === String(draft.branchId)),
@@ -91,11 +89,6 @@ const suggestedEndTime = computed(() =>
   draft.startTime && minimumMinutes.value !== null
     ? addToTime(draft.startTime, minimumMinutes.value)
     : '',
-)
-const posterSource = computed(() =>
-  movie.value && !posterFailed.value
-    ? `${imagesBaseUrl}/${movie.value.posterImage}`
-    : placeholderPoster,
 )
 
 function activityError(value: string) {
@@ -211,7 +204,6 @@ function movieInput() {
 function selectMovie(selected: AvailableMovie) {
   movie.value = selected
   draft.movieQuery = selected.title
-  posterFailed.value = false
   listOpen.value = false
   results.value = []
   cancelSearch()
@@ -255,7 +247,7 @@ function submit() {
   if (props.submitting || props.optionsLoading) return
   submitted.value = true
   if (Object.keys(errors.value).length) {
-    void nextTick(() => dialog.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus())
+    void nextTick(() => form.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus())
     return
   }
   emit('submit', {
@@ -284,28 +276,18 @@ function reset() {
 }
 
 function open() {
-  if (!dialog.value || dialog.value.open) return
-  opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-  dialog.value.showModal()
-  dialog.value.querySelector<HTMLInputElement>('[name="movie"]')?.focus()
-}
-
-function restoreFocus() {
-  if (opener?.isConnected) opener.focus()
-  opener = null
+  shell.value?.open()
 }
 
 function close() {
   if (props.submitting) return
   cancelSearch()
-  dialog.value?.close()
-  restoreFocus()
+  shell.value?.close()
 }
 
 function complete() {
   reset()
-  dialog.value?.close()
-  restoreFocus()
+  shell.value?.close()
 }
 
 onBeforeUnmount(cancelSearch)
@@ -314,25 +296,13 @@ defineExpose({ open, complete })
 </script>
 
 <template>
-  <dialog
-    ref="dialog"
-    class="projection-dialog"
-    :aria-labelledby="id + '-title'"
-    @cancel.prevent="close"
+  <ProjectionDialogShell
+    ref="shell"
+    title="Agregar nueva proyección"
+    :close-disabled="submitting"
+    @close="close"
   >
-    <header class="dialog-heading">
-      <h2 :id="id + '-title'">Agregar nueva proyección</h2>
-      <button
-        type="button"
-        class="close-button"
-        aria-label="Cerrar formulario"
-        :disabled="submitting"
-        @click="close"
-      >
-        <i class="bi bi-x-lg" aria-hidden="true"></i>
-      </button>
-    </header>
-    <form novalidate :aria-busy="submitting" @submit.prevent="submit">
+    <form ref="form" novalidate :aria-busy="submitting" @submit.prevent="submit">
       <p class="required-note">
         Los campos con <span class="required-marker">*</span> son obligatorios.
       </p>
@@ -642,15 +612,11 @@ defineExpose({ open, complete })
           </section>
         </div>
 
-        <aside class="poster" aria-label="Película seleccionada">
-          <img
-            :src="posterSource"
-            :alt="movie ? `Póster de ${movie.title}` : 'Sin película seleccionada'"
-            @error="posterFailed = true"
-          />
-          <p v-if="movie" class="poster-title">{{ movie.title }}</p>
-          <p v-else class="poster-empty">El póster aparecerá al elegir una película.</p>
-        </aside>
+        <ProjectionPoster
+          :poster-image="movie?.posterImage"
+          :title="movie?.title"
+          empty-text="El póster aparecerá al elegir una película."
+        />
       </div>
 
       <footer class="dialog-actions">
@@ -663,16 +629,10 @@ defineExpose({ open, complete })
         </button>
       </footer>
     </form>
-  </dialog>
+  </ProjectionDialogShell>
 </template>
 
 <style scoped>
-.projection-dialog { position: fixed; top: 50%; left: 50%; width: min(calc(100% - 32px), 1200px); max-height: 94dvh; margin: 0; padding: 0; border: 0; border-radius: var(--radius-medium); color: var(--color-dark); background: #e4e4e4; transform: translate(-50%, -50%); overflow: hidden; }
-.projection-dialog[open] { display: flex; flex-direction: column; }
-.projection-dialog::backdrop { background: color-mix(in srgb, var(--color-black) 55%, transparent); }
-.dialog-heading { display: flex; flex-shrink: 0; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 32px; color: var(--color-white); background: var(--color-primary); }
-.dialog-heading h2 { margin: 0; font-size: 1.4rem; font-weight: 700; }
-.close-button { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: var(--radius-small); font-size: 1.5rem; color: inherit; background: transparent; }
 form { display: grid; gap: 16px; min-height: 0; padding: 24px 32px; overflow-y: auto; }
 .required-note, .form-status { margin: 0; font-size: .9rem; }
 .required-marker { color: var(--color-error); font-weight: 700; }
@@ -687,6 +647,7 @@ form { display: grid; gap: 16px; min-height: 0; padding: 24px 32px; overflow-y: 
 .field-wide { grid-column: 1 / -1; }
 label { color: var(--color-dark); font-size: .95rem; font-weight: 600; }
 input, select { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid #c8c8c8; border-radius: var(--radius-small); font: inherit; background: var(--color-white); box-shadow: 0 1px 3px color-mix(in srgb, var(--color-black) 12%, transparent); }
+select { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 input:focus, select:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 input:disabled, select:disabled { color: var(--color-gray); background: #ececec; cursor: not-allowed; }
 input[readonly] { background: #ececec; }
@@ -709,10 +670,6 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .currency-input { position: relative; }
 .currency-input span { position: absolute; top: 50%; left: 14px; color: var(--color-gray); font-weight: 700; transform: translateY(-50%); }
 .currency-input input { padding-left: 32px; }
-.poster { position: sticky; top: 0; display: grid; gap: 8px; margin: 0; }
-.poster img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--radius-small); background: var(--color-white); box-shadow: 0 4px 10px color-mix(in srgb, var(--color-black) 25%, transparent); }
-.poster-title { margin: 0; font-weight: 700; text-align: center; }
-.poster-empty { margin: 0; color: var(--color-medium_gray); font-size: .9rem; text-align: center; }
 .field-error, .form-error { margin: 0; color: var(--color-error); }
 .field-hint { margin: 0; color: #5f5f5f; font-size: .85rem; }
 .form-warning { display: flex; gap: 8px; align-items: center; margin: 0; padding: 8px 12px; border-left: 4px solid #b54708; border-radius: var(--radius-small); background: #fffaeb; }
@@ -724,11 +681,9 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .secondary-button:disabled, .create-button:disabled { opacity: .7; cursor: not-allowed; }
 @media (max-width: 900px) {
   .form-body { grid-template-columns: 1fr; }
-  .poster { position: static; order: -1; max-width: 200px; justify-self: center; }
 }
 @media (max-width: 640px) {
   form { padding: 20px 16px; }
-  .dialog-heading { padding: 16px; }
   .section-grid, .section-grid.two-columns { grid-template-columns: 1fr; }
   .dialog-actions { flex-direction: column-reverse; }
   .secondary-button, .create-button { justify-content: center; }

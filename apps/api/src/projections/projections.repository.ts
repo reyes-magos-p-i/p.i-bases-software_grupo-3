@@ -4,12 +4,16 @@ import { DatabaseService } from '../database/database.service';
 import { likePattern } from '../users/user-search.util';
 import { PROJECTION_MESSAGES } from './projection-messages';
 import { formatLocal, type ProjectionSlot } from './projection-schedule';
+import type { ListProjectionsQueryDto } from './dto/list-projections-query.dto';
 import type {
   AvailableMovie,
   CreatedProjection,
   CreatedProjections,
+  ListedProjection,
   NewProjections,
   ProjectionCatalogs,
+  ProjectionDetail,
+  ProjectionFilterOptions,
 } from './types/projection.types';
 
 const LOCAL_FORMAT = `'YYYY-MM-DD"T"HH24:MI'`;
@@ -18,37 +22,113 @@ const TRANSACTION = {
   autoCommit: false,
 } as const;
 const MOVIE_SEARCH_LIMIT = 10;
+const PROJECTION_COLUMNS = `mf.MOVIE_FUNCTION_ID AS "movieFunctionId", m.MOVIE_ID AS "movieId",
+       m.TITLE AS "movieTitle", t.BRANCH_ID AS "branchId", c.NAME AS "branchName",
+       mf.THEATER_ID AS "theaterId", TO_CHAR(mf.START_TIME, ${LOCAL_FORMAT}) AS "startTime",
+       TO_CHAR(mf.END_TIME, ${LOCAL_FORMAT}) AS "endTime", mf.STATUS AS "status", mf.PRICE AS "price"`;
+const PROJECTION_SOURCE = `FROM MOVIE_FUNCTIONS mf
+  JOIN MOVIES m ON m.MOVIE_ID = mf.MOVIE_ID
+  JOIN THEATERS t ON t.THEATER_ID = mf.THEATER_ID
+  JOIN CINEMAS c ON c.BRANCH_ID = t.BRANCH_ID`;
 
 type Binds = Exclude<oracle.BindParameters, unknown[]>;
+
+/** WHERE clause for the combinable list filters; every value travels as a bind. */
+function buildProjectionFilters(query: ListProjectionsQueryDto, binds: Binds): string {
+  const conditions = ['1 = 1'];
+  const add = (condition: string, name: string, value: string | number | undefined) => {
+    if (value === undefined) return;
+    conditions.push(condition);
+    binds[name] = value;
+  };
+  add('mf.STATUS = :status', 'status', query.status);
+  add('t.BRANCH_ID = :branchId', 'branchId', query.branchId);
+  add('mf.THEATER_ID = :theaterId', 'theaterId', query.theaterId);
+  add('mf.MOVIE_ID = :movieId', 'movieId', query.movieId);
+  add(`mf.SCREENING_DATE >= TO_DATE(:dateFrom, 'YYYY-MM-DD')`, 'dateFrom', query.dateFrom);
+  add(`mf.SCREENING_DATE <= TO_DATE(:dateTo, 'YYYY-MM-DD')`, 'dateTo', query.dateTo);
+  add(`TO_CHAR(mf.START_TIME, 'HH24:MI') >= :timeFrom`, 'timeFrom', query.timeFrom);
+  add(`TO_CHAR(mf.START_TIME, 'HH24:MI') <= :timeTo`, 'timeTo', query.timeTo);
+  const search = query.search?.trim();
+  if (search)
+    add(
+      String.raw`(LOWER(m.TITLE) LIKE :search ESCAPE '\' OR TO_CHAR(mf.MOVIE_FUNCTION_ID) LIKE :search ESCAPE '\')`,
+      'search',
+      likePattern(search),
+    );
+  return conditions.join(' AND ');
+}
 
 @Injectable()
 export class ProjectionsRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  async getSchedulingOptions(): Promise<ProjectionCatalogs> {
+  /** Branches and theaters; scheduling only offers active theaters, filters show all. */
+  async getCatalogs(onlyActiveTheaters: boolean): Promise<ProjectionCatalogs> {
     const [cinemas, theaters] = await Promise.all([
-      this.db.query<{ BRANCH_ID: number; NAME: string }>(
-        'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME',
+      this.db.query<ProjectionCatalogs['cinemas'][number]>(
+        'SELECT BRANCH_ID AS "branchId", NAME AS "name" FROM CINEMAS ORDER BY NAME',
       ),
-      this.db.query<{
-        THEATER_ID: number;
-        BRANCH_ID: number;
-        NUMBER_SEATS: number;
-      }>(
-        'SELECT THEATER_ID, BRANCH_ID, NUMBER_SEATS FROM THEATERS WHERE IS_ACTIVE = 1 ORDER BY THEATER_ID',
+      this.db.query<ProjectionCatalogs['theaters'][number]>(
+        `SELECT THEATER_ID AS "theaterId", BRANCH_ID AS "branchId", NUMBER_SEATS AS "numberOfSeats"
+           FROM THEATERS ${onlyActiveTheaters ? 'WHERE IS_ACTIVE = 1' : ''}
+          ORDER BY THEATER_ID`,
       ),
     ]);
-    return {
-      cinemas: (cinemas.rows ?? []).map((row) => ({
-        branchId: row.BRANCH_ID,
-        name: row.NAME,
-      })),
-      theaters: (theaters.rows ?? []).map((row) => ({
-        theaterId: row.THEATER_ID,
-        branchId: row.BRANCH_ID,
-        numberOfSeats: row.NUMBER_SEATS,
-      })),
-    };
+    return { cinemas: cinemas.rows ?? [], theaters: theaters.rows ?? [] };
+  }
+
+  /** Movies that have at least one projection, for the list filter. */
+  async getScheduledMovies(): Promise<ProjectionFilterOptions['movies']> {
+    const result = await this.db.query<ProjectionFilterOptions['movies'][number]>(
+      `SELECT m.MOVIE_ID AS "movieId", m.TITLE AS "title"
+         FROM MOVIES m
+        WHERE EXISTS (SELECT 1 FROM MOVIE_FUNCTIONS mf WHERE mf.MOVIE_ID = m.MOVIE_ID)
+        ORDER BY m.TITLE`,
+    );
+    return result.rows ?? [];
+  }
+
+  async listProjections(
+    query: ListProjectionsQueryDto,
+  ): Promise<{ items: ListedProjection[]; total: number }> {
+    const binds: Binds = {};
+    const where = buildProjectionFilters(query, binds);
+    const [count, page] = await Promise.all([
+      this.db.query<{ TOTAL: number }>(
+        `SELECT COUNT(*) AS TOTAL ${PROJECTION_SOURCE} WHERE ${where}`,
+        binds,
+      ),
+      this.db.query<ListedProjection>(
+        `SELECT ${PROJECTION_COLUMNS} ${PROJECTION_SOURCE} WHERE ${where}
+          ORDER BY mf.START_TIME, mf.MOVIE_FUNCTION_ID
+         OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY`,
+        {
+          ...binds,
+          offset: (query.page - 1) * query.pageSize,
+          pageSize: query.pageSize,
+        },
+      ),
+    ]);
+    return { items: page.rows ?? [], total: count.rows?.[0]?.TOTAL ?? 0 };
+  }
+
+  async findProjection(id: number): Promise<ProjectionDetail | null> {
+    const activityMinutes = (type: string) =>
+      `(SELECT MAX(a.DURATION_MINUTES) FROM MOVIE_FUNCTIONS_ACTIVITIES mfa
+          JOIN ACTIVITIES a ON a.ACTIVITY_ID = mfa.ACTIVITY_ID
+         WHERE mfa.MOVIE_FUNCTION_ID = mf.MOVIE_FUNCTION_ID AND a.TYPE = '${type}')`;
+    const result = await this.db.query<ProjectionDetail>(
+      `SELECT ${PROJECTION_COLUMNS},
+              m.RUNNING_TIME AS "runningTime", m.POSTER_IMAGE AS "posterImage",
+              TO_CHAR(mf.CREATED_AT AT TIME ZONE 'America/Costa_Rica', ${LOCAL_FORMAT}) AS "createdAt",
+              ${activityMinutes('CLEANING')} AS "cleaningMinutes",
+              ${activityMinutes('ADVERTISEMENT')} AS "advertisementMinutes"
+         ${PROJECTION_SOURCE}
+        WHERE mf.MOVIE_FUNCTION_ID = :id`,
+      { id: { val: id, type: oracle.NUMBER } },
+    );
+    return result.rows?.[0] ?? null;
   }
 
   async findAvailableMovies(
