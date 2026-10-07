@@ -45,11 +45,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (payload.type === 'employee') {
       const employee = await this.users.findEmployeeIdentityById(payload.sub);
       if (!employee) throw new UnauthorizedException();
-      /*
-      Note: Uncomment this when we implement password status for employees.
-      const credentials = await this.users.findEmployeeCredentialsStatus(employee.id);
+      const credentials = await this.users.findEmployeeCredentialsStatus(
+        employee.id,
+      );
       request.passwordStatus = computePasswordStatus(credentials);
-      */
       request.accountType = 'employee';
       return employee;
     }

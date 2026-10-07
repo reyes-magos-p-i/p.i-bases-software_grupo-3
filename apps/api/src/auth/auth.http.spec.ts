@@ -76,7 +76,17 @@ describe('Employee authentication (HTTP integration)', () => {
     jwt = module.get(JwtService);
     passwordHash ??= (await module.get(PasswordHasher).hash(password))
       .passwordHash;
-    db.query.mockResolvedValue({ rows: [employeeRow()] });
+    db.query.mockImplementation((sql: string) =>
+      Promise.resolve(
+        sql.includes('PASSWORD_SET_AT')
+          ? {
+              rows: [
+                { PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 },
+              ],
+            }
+          : { rows: [employeeRow()] },
+      ),
+    );
     await app.init();
   });
 
@@ -391,13 +401,23 @@ describe('Employee authentication (HTTP integration)', () => {
         .send({})
         .expect(attempt < 5 ? 400 : 429);
     }
-    expect(db.query).toHaveBeenCalledTimes(6);
+    expect(db.query).toHaveBeenCalledTimes(12);
   });
 
   it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(
     'logs in %s and recovers identity through the session cookie',
     async (role) => {
-      db.query.mockResolvedValue({ rows: [employeeRow(role)] });
+      db.query.mockImplementation((sql: string) =>
+        Promise.resolve(
+          sql.includes('PASSWORD_SET_AT')
+            ? {
+                rows: [
+                  { PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 },
+                ],
+              }
+            : { rows: [employeeRow(role)] },
+        ),
+      );
       const browser = request.agent(app.getHttpServer());
       const response = await browser
         .post('/api/auth/employees/login')
@@ -556,16 +576,26 @@ describe('Employee authentication (HTTP integration)', () => {
       type: 'employee',
       role: 'ADMINISTRATOR',
     });
-    db.query
-      .mockResolvedValueOnce({ rows: [employeeRow(UserRole.ADMINISTRATOR)] })
-      .mockResolvedValueOnce({ rows: [employeeRow(UserRole.EMPLOYEE)] });
+    let currentRole = UserRole.ADMINISTRATOR;
+    db.query.mockImplementation((sql: string) =>
+      Promise.resolve(
+        sql.includes('PASSWORD_SET_AT')
+          ? {
+              rows: [
+                { PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 },
+              ],
+            }
+          : { rows: [employeeRow(currentRole)] },
+      ),
+    );
     for (const role of [UserRole.ADMINISTRATOR, UserRole.EMPLOYEE]) {
       await request(app.getHttpServer())
         .get('/api/auth/me')
         .auth(token, { type: 'bearer' })
         .expect(200, { id: 21, role, firstName: 'Ana' });
+      currentRole = UserRole.EMPLOYEE;
     }
-    expect(db.query).toHaveBeenCalledTimes(2);
+    expect(db.query).toHaveBeenCalledTimes(4);
   });
 
   it.each([

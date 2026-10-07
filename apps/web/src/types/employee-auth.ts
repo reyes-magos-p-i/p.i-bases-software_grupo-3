@@ -4,6 +4,7 @@ export interface EmployeeIdentity {
   id: number
   firstName: string
   role: Exclude<UserRole, 'CLIENT'>
+  email?: string
 }
 
 export interface EmployeeLoginRequest {

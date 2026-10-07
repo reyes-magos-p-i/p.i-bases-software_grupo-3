@@ -159,10 +159,13 @@ paths:
       summary: Consultar la identidad autenticada
       description: |
         Verifica la firma y expiración del JWT y consulta la identidad en la base
-        en cada petición. Para personal devuelve únicamente id y el rol vigente;
-        no confía en roles enviados en el token. Rechaza empleados eliminados o
-        con identidad inválida. Conserva la respuesta de perfil para tokens de
-        cliente existentes; este incremento no incorpora el login de clientes.
+        en cada petición, incluyendo el estado de vigencia de la contraseña del
+        personal. Para personal devuelve únicamente id, rol y primer nombre
+        vigentes; no confía en roles enviados en el token. Rechaza empleados
+        eliminados o con identidad inválida. Conserva la respuesta de perfil para
+        tokens de cliente existentes; este incremento no incorpora el login de clientes.
+        La ruta sigue disponible con contraseña vencida para que el frontend
+        pueda consultar el estado y dirigir al formulario de recuperación.
         La cookie solo acepta tokens type=employee. Una cookie junto a cualquier
         cabecera Authorization devuelve 401, incluso si contienen el mismo token.
         Una cookie inválida no permite recurrir a Bearer. La consulta no escribe
@@ -191,6 +194,81 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UnauthorizedError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/password-status:
+    get:
+      operationId: getPasswordStatus
+      summary: Consultar vigencia de la contraseña
+      description: |
+        Disponible con contraseña vencida. Para personal, calcula el estado con
+        PASSWORD_SET_AT y EXPIRATION_DAYS; se usa para dirigir al formulario de
+        cambio antes de acceder a las rutas protegidas.
+      security:
+        - employeeSession: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Estado de la contraseña autenticada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [valid, expired, must_set]
+        "401":
+          description: Sesión ausente o inválida.
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/employees/password:
+    patch:
+      operationId: changeEmployeePassword
+      summary: Cambiar la contraseña propia de un empleado
+      description: |
+        Requiere la contraseña actual y permite elegir una vigencia de 30, 60,
+        90 o 120 días. Está disponible incluso cuando la contraseña expiró.
+        El estado queda vigente desde el momento de la actualización.
+      security:
+        - employeeSession: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [currentPassword, newPassword, confirmNewPassword, expirationDays]
+              properties:
+                currentPassword:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+                newPassword:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+                confirmNewPassword:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+                expirationDays:
+                  type: integer
+                  enum: [30, 60, 90, 120]
+      responses:
+        "200":
+          description: Contraseña actualizada.
+        "400":
+          description: Datos inválidos o contraseña actual incorrecta.
+        "401":
+          description: Sesión ausente o inválida.
+        "403":
+          description: Acceso denegado por estado o tipo de cuenta.
+        "429":
+          description: Límite de intentos alcanzado.
         "500":
           $ref: "#/components/responses/InternalError"
   /auth/employees/logout:
