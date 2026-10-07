@@ -1,6 +1,12 @@
 // Eventual changes, using a simple structure for mocking reasons right now
 
-export interface Movie {
+export interface Movie{
+  title: string
+  posterImage: string
+
+}
+
+export interface MovieAll {
   id: number
   title: string
   runningTime: number
