@@ -1,12 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
-import { changeClientPassword, getClientPasswordStatus, ChangePasswordError } from '@/services/authService'
+import {
+  changeClientPassword,
+  changeEmployeePassword,
+  getClientPasswordStatus,
+  getEmployeePasswordStatus,
+  ChangePasswordError,
+} from '@/services/authService'
 import { clientSession } from '@/services/client-session.service'
+import { employeeSession } from '@/services/employee-session.service'
 
 vi.mock('@/services/authService', async () => {
-  const actual = await vi.importActual<typeof import('@/services/authService')>('@/services/authService')
-  return { ...actual, changeClientPassword: vi.fn(), getClientPasswordStatus: vi.fn() }
+  const actual =
+    await vi.importActual<typeof import('@/services/authService')>('@/services/authService')
+  return {
+    ...actual,
+    changeClientPassword: vi.fn(),
+    changeEmployeePassword: vi.fn(),
+    getClientPasswordStatus: vi.fn(),
+    getEmployeePasswordStatus: vi.fn(),
+  }
+})
+vi.mock('@/services/employee-session.service', async () => {
+  const { ref } = await import('vue')
+  return { employeeSession: { user: ref(null) } }
 })
 
 const mockPush = vi.fn()
@@ -15,11 +33,26 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: mockPush }) }))
 describe('ChangePasswordView.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    clientSession.user.value = { id: 1, email: 'ana@example.com', firstName: 'Ana', lastName: 'Perez' }
+    vi.mocked(getEmployeePasswordStatus).mockResolvedValue('valid')
+    clientSession.user.value = {
+      id: 1,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Perez',
+    }
+    Object.assign(employeeSession.user, {
+      value: {
+        id: 21,
+        email: 'ana@example.com',
+        firstName: 'Ana',
+        role: 'ADMINISTRATOR',
+      },
+    })
   })
 
-  function mountView() {
+  function mountView(props: { embedded?: boolean; accountType?: 'client' | 'employee' } = {}) {
     return mount(ChangePasswordView, {
+      props,
       global: {
         stubs: {
           AppHeader: { template: '<header data-testid="landing-header"></header>' },
@@ -74,6 +107,16 @@ describe('ChangePasswordView.vue', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Tu contraseña venció.')
     expect(wrapper.find('button.secondary').exists()).toBe(false)
+  })
+
+  it('loads the employee password status and offers the expired-password recovery form', async () => {
+    vi.mocked(getEmployeePasswordStatus).mockResolvedValueOnce('expired')
+    const wrapper = mountView({ accountType: 'employee', embedded: true })
+    await flushPromises()
+
+    expect(getEmployeePasswordStatus).toHaveBeenCalledOnce()
+    expect(wrapper.text()).toContain('Tu contraseña venció.')
+    expect(wrapper.find('#currentPassword').exists()).toBe(true)
   })
 
   it('requires the current password in voluntary mode', async () => {
@@ -137,10 +180,36 @@ describe('ChangePasswordView.vue', () => {
     expect(wrapper.text()).toContain('Tu contraseña se actualizó correctamente.')
   })
 
+  it('emits the submission state while an employee password change is pending', async () => {
+    let resolveChange!: () => void
+    vi.mocked(changeEmployeePassword).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveChange = resolve
+      }),
+    )
+    const wrapper = mountView({ accountType: 'employee', embedded: true })
+    await flushPromises()
+    await wrapper.get('#currentPassword').setValue('CurrentPassword-123!')
+    await wrapper.get('#newPassword').setValue('Secure-Password-784!')
+    await wrapper.get('#confirmNewPassword').setValue('Secure-Password-784!')
+
+    const submission = wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.emitted('submission-state')).toEqual([[true]])
+
+    resolveChange()
+    await submission
+    await flushPromises()
+    expect(wrapper.emitted('submission-state')).toEqual([[true], [false]])
+  })
+
   it('shows the four distinct backend error codes', async () => {
     vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('valid')
     vi.mocked(changeClientPassword).mockRejectedValueOnce(
-      new ChangePasswordError('La nueva contraseña no puede ser igual a la actual.', 'NEW_PASSWORD_SAME_AS_CURRENT'),
+      new ChangePasswordError(
+        'La nueva contraseña no puede ser igual a la actual.',
+        'NEW_PASSWORD_SAME_AS_CURRENT',
+      ),
     )
     const wrapper = mountView()
     await flushPromises()
@@ -159,7 +228,11 @@ describe('ChangePasswordView.vue', () => {
   ])('displays the %s backend error', async (code, message) => {
     vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('valid')
     vi.mocked(changeClientPassword).mockRejectedValueOnce(
-      new ChangePasswordError(message, code, code === 'PASSWORD_POLICY_VIOLATION' ? ['min_length'] : undefined),
+      new ChangePasswordError(
+        message,
+        code,
+        code === 'PASSWORD_POLICY_VIOLATION' ? ['min_length'] : undefined,
+      ),
     )
     const wrapper = mountView()
     await flushPromises()
@@ -202,6 +275,78 @@ describe('ChangePasswordView.vue', () => {
     expect(wrapper.text()).toContain('Tu contraseña se actualizó correctamente.')
     await wrapper.find('.continue-button').trigger('click')
     expect(mockPush).toHaveBeenCalledWith('/')
+  })
+
+  it('embeds for administrators, skips client status, and keeps the policy checks live', async () => {
+    const wrapper = mountView({ embedded: true, accountType: 'employee' })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="landing-header"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="landing-footer"]').exists()).toBe(false)
+    expect(wrapper.find('#currentPassword').exists()).toBe(true)
+    expect(getClientPasswordStatus).not.toHaveBeenCalled()
+
+    await wrapper.get('#newPassword').setValue('weak')
+    expect(wrapper.findAll('.policy-checklist li.satisfied').length).toBeLessThan(7)
+    await wrapper.get('#confirmNewPassword').setValue('weak')
+    await wrapper.get('#currentPassword').setValue('Current!Password9')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.text()).toContain('La contraseña no cumple con la política de seguridad')
+    expect(changeEmployeePassword).not.toHaveBeenCalled()
+  })
+
+  it('updates an employee password with the selected expiration and returns to the dashboard', async () => {
+    vi.mocked(changeEmployeePassword).mockResolvedValueOnce(undefined)
+    const wrapper = mountView({ embedded: true, accountType: 'employee' })
+    await flushPromises()
+    await wrapper.get('#currentPassword').setValue('Current!Password9')
+    await wrapper.get('#newPassword').setValue('Cr0wn!River77')
+    await wrapper.get('#confirmNewPassword').setValue('Cr0wn!River77')
+    await wrapper.get('#expirationDays').setValue('60')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(changeEmployeePassword).toHaveBeenCalledWith({
+      currentPassword: 'Current!Password9',
+      newPassword: 'Cr0wn!River77',
+      confirmNewPassword: 'Cr0wn!River77',
+      expirationDays: 60,
+    })
+    expect(wrapper.text()).toContain('Contraseña actualizada correctamente')
+    await wrapper.get('.continue-button').trigger('click')
+    expect(wrapper.emitted('return-to-dashboard')).toHaveLength(1)
+    expect(mockPush).not.toHaveBeenCalled()
+  })
+
+  it('shows employee-specific errors and preserves the active session on backend failure', async () => {
+    vi.mocked(changeEmployeePassword).mockRejectedValueOnce(new Error('network'))
+    const wrapper = mountView({ embedded: true, accountType: 'employee' })
+    await flushPromises()
+    await wrapper.get('#currentPassword').setValue('Current!Password9')
+    await wrapper.get('#newPassword').setValue('Cr0wn!River77')
+    await wrapper.get('#confirmNewPassword').setValue('Cr0wn!River77')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No se pudo actualizar la contraseña, intenta de nuevo')
+    expect(employeeSession.user.value?.id).toBe(21)
+    expect(wrapper.find('.success-state').exists()).toBe(false)
+  })
+
+  it('shows the specified incorrect-current-password message for an administrator', async () => {
+    vi.mocked(changeEmployeePassword).mockRejectedValueOnce(
+      new ChangePasswordError('La contraseña actual no es correcta.', 'CURRENT_PASSWORD_INCORRECT'),
+    )
+    const wrapper = mountView({ embedded: true, accountType: 'employee' })
+    await flushPromises()
+    await wrapper.get('#currentPassword').setValue('Wrong!Password9')
+    await wrapper.get('#newPassword').setValue('Cr0wn!River77')
+    await wrapper.get('#confirmNewPassword').setValue('Cr0wn!River77')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Contraseña actual incorrecta')
+    expect(wrapper.find('.success-state').exists()).toBe(false)
   })
 })
 

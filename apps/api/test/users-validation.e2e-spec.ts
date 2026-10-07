@@ -47,7 +47,10 @@ describe('Compiled user creation validation', () => {
   let browser: ReturnType<typeof request.agent>;
   const origin = 'http://localhost:5173';
   const service = { create: jest.fn() };
-  const repository = { findEmployeeIdentityById: jest.fn() };
+  const repository = {
+    findEmployeeIdentityById: jest.fn(),
+    findEmployeeCredentialsStatus: jest.fn(),
+  };
   const client = {
     role: 'CLIENT',
     email: 'client@example.com',
@@ -113,6 +116,9 @@ describe('Compiled user creation validation', () => {
     repository.findEmployeeIdentityById
       .mockReset()
       .mockResolvedValue({ id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' });
+    repository.findEmployeeCredentialsStatus
+      .mockReset()
+      .mockResolvedValue({ setAt: new Date(), expirationDays: 90 });
     service.create
       .mockReset()
       .mockImplementation((data: CreateClientDto | CreateEmployeeDto) =>

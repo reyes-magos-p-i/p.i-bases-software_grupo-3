@@ -4,8 +4,9 @@ import { CreateTheaterDto } from './dto/create-theater.dto';
 import { UpdateTheaterDto } from './dto/update-theater.dto';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { AuthGuard } from '@nestjs/passport';
+import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 
-@UseGuards(AuthGuard('jwt'), AdministratorGuard)
+@UseGuards(AuthGuard('jwt'), AdministratorGuard, PasswordStatusGuard)
 @Controller('theaters')
 export class TheatersController {
   constructor(private readonly theatersService: TheatersService) {}

@@ -31,7 +31,10 @@ describe('User list HTTP permissions and validation', () => {
     listEmployees: jest.fn(),
     getEmployeeListOptions: jest.fn(),
   };
-  const repository = { findEmployeeIdentityById: jest.fn() };
+  const repository = {
+    findEmployeeIdentityById: jest.fn(),
+    findEmployeeCredentialsStatus: jest.fn(),
+  };
   const clients = {
     findById: jest.fn(),
     isEmailVerificationPending: jest.fn(),
@@ -86,6 +89,10 @@ describe('User list HTTP permissions and validation', () => {
       id: 21,
       role: 'ADMINISTRATOR',
       firstName: 'Ana',
+    });
+    repository.findEmployeeCredentialsStatus.mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
     });
     service.listClients.mockResolvedValue(empty);
     service.listEmployees.mockResolvedValue(empty);

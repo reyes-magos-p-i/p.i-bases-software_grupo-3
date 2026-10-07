@@ -6,6 +6,7 @@ import { MovieFuctionsModule } from './movie-fuctions/movie-fuctions.module';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { MoviesModule } from './movies/movies.module';
 import { TheatersModule } from './theaters/theaters.module';
 import { CinemasModule } from './cinemas/cinemas.module';
 import { ProjectorsModule } from './projectors/projectors.module';
@@ -23,6 +24,7 @@ import { ProjectionsModule } from './projections/projections.module';
     DatabaseModule,
     AuthModule,
     UsersModule,
+    MoviesModule,
     TheatersModule,
     CinemasModule,
     ProjectorsModule,

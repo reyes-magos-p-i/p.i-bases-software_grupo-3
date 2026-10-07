@@ -6,7 +6,10 @@ import type { Response } from 'express';
 import { EmployeeSessionService } from './employee-session.service';
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 import { ClientsService } from '../clients/clients.service';
-import { ForbiddenException, InternalServerErrorException } from '@nestjs/common/exceptions/index.js';
+import {
+  ForbiddenException,
+  InternalServerErrorException,
+} from '@nestjs/common/exceptions/index.js';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -17,6 +20,7 @@ describe('AuthController', () => {
     loginEmployee: jest.Mock;
     loginClient: jest.Mock;
     facebookLogin: jest.Mock;
+    changeEmployeePassword: jest.Mock;
   };
   let session: { write: jest.Mock; clear: jest.Mock };
   let clients: { changePassword: jest.Mock };
@@ -31,6 +35,7 @@ describe('AuthController', () => {
       loginEmployee: jest.fn(),
       loginClient: jest.fn(),
       facebookLogin: jest.fn(),
+      changeEmployeePassword: jest.fn(),
     };
     session = { write: jest.fn(), clear: jest.fn() };
     clients = { changePassword: jest.fn() };
@@ -155,24 +160,43 @@ describe('AuthController', () => {
     expect(controller.me(req)).toEqual({ id: 1, email: 'a@b.com' });
   });
 
+  it('me() strips employee personal data from the identity response', () => {
+    const req = {
+      accountType: 'employee',
+      user: {
+        id: 21,
+        role: 'ADMINISTRATOR',
+        firstName: 'Ana',
+        email: 'staff@example.com',
+      },
+    } as never;
+
+    expect(controller.me(req)).toEqual({
+      id: 21,
+      role: 'ADMINISTRATOR',
+      firstName: 'Ana',
+    });
+  });
+
   it('logout clears the cookie without requiring credentials', () => {
     expect(controller.logoutEmployee(response)).toBeUndefined();
     expect(session.clear).toHaveBeenCalledWith(response);
     expect(auth.loginEmployee).not.toHaveBeenCalled();
   });
 
-
   describe('passwordStatus()', () => {
-  it('returns the status attached to the request', () => {
-    const req = { passwordStatus: 'valid' } as never;
-    expect(controller.passwordStatus(req)).toEqual({ status: 'valid' });
-  });
+    it('returns the status attached to the request', () => {
+      const req = { passwordStatus: 'valid' } as never;
+      expect(controller.passwordStatus(req)).toEqual({ status: 'valid' });
+    });
 
-  it('throws when the status was never computed', () => {
-    const req = {} as never;
-    expect(() => controller.passwordStatus(req)).toThrow(InternalServerErrorException);
+    it('throws when the status was never computed', () => {
+      const req = {} as never;
+      expect(() => controller.passwordStatus(req)).toThrow(
+        InternalServerErrorException,
+      );
+    });
   });
-});
 
   describe('changeClientPassword()', () => {
     it('rejects employee tokens', async () => {
@@ -192,12 +216,74 @@ describe('AuthController', () => {
         accountType: 'client',
         user: { id: 1, email: 'a@b.com', firstName: 'Ana' },
       } as never;
-      const dto = { newPassword: 'x', confirmNewPassword: 'x', expirationDays: 90 } as never;
+      const dto = {
+        newPassword: 'x',
+        confirmNewPassword: 'x',
+        expirationDays: 90,
+      } as never;
 
       await expect(controller.changeClientPassword(req, dto)).resolves.toEqual({
         message: expect.any(String),
       });
-      expect(clients.changePassword).toHaveBeenCalledWith(1, 'a@b.com', 'Ana', dto);
+      expect(clients.changePassword).toHaveBeenCalledWith(
+        1,
+        'a@b.com',
+        'Ana',
+        dto,
+      );
+    });
+
+    describe('changeEmployeePassword()', () => {
+      it('rejects client tokens and permits an employee to change their own password', async () => {
+        await expect(
+          controller.changeEmployeePassword(
+            { accountType: 'client' } as never,
+            {
+              currentPassword: 'old',
+              newPassword: 'new',
+              confirmNewPassword: 'new',
+              expirationDays: 90,
+            },
+          ),
+        ).rejects.toThrow(ForbiddenException);
+        const dto = {
+          currentPassword: 'old',
+          newPassword: 'new',
+          confirmNewPassword: 'new',
+          expirationDays: 90,
+        };
+        auth.changeEmployeePassword.mockResolvedValue(undefined);
+        await expect(
+          controller.changeEmployeePassword(
+            {
+              accountType: 'employee',
+              user: { id: 21, role: 'EMPLOYEE' },
+            } as never,
+            dto,
+          ),
+        ).resolves.toEqual({ message: 'Contraseña actualizada correctamente' });
+        expect(auth.changeEmployeePassword).toHaveBeenCalledWith(21, dto);
+      });
+
+      it('delegates to AuthService for employee sessions', async () => {
+        const dto = {
+          currentPassword: 'old',
+          newPassword: 'new',
+          confirmNewPassword: 'new',
+          expirationDays: 90,
+        };
+        auth.changeEmployeePassword.mockResolvedValue(undefined);
+        await expect(
+          controller.changeEmployeePassword(
+            {
+              accountType: 'employee',
+              user: { id: 21, role: 'ADMINISTRATOR' },
+            } as never,
+            dto,
+          ),
+        ).resolves.toEqual({ message: 'Contraseña actualizada correctamente' });
+        expect(auth.changeEmployeePassword).toHaveBeenCalledWith(21, dto);
+      });
     });
   });
 });

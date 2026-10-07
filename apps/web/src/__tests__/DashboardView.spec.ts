@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import DashboardView from '@/views/DashboardView.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
+import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import { nextTick } from 'vue'
@@ -21,6 +22,7 @@ const {
   createUser,
   getTheaterCreationOptions,
   createTheater,
+  getEmployeePasswordStatus,
 } = vi.hoisted(
   () => ({
     getUsers: vi.fn(),
@@ -29,6 +31,7 @@ const {
     createUser: vi.fn(),
     getTheaterCreationOptions: vi.fn(),
     createTheater: vi.fn(),
+    getEmployeePasswordStatus: vi.fn(),
   }),
 )
 vi.mock('@/services/user.service', () => ({
@@ -38,12 +41,18 @@ vi.mock('@/services/user.service', () => ({
   createUser,
 }))
 vi.mock('@/services/theater.service', () => ({ getTheaterCreationOptions, createTheater }))
+vi.mock('@/services/authService', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/services/authService')>('@/services/authService')
+  return { ...actual, getEmployeePasswordStatus }
+})
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')
-  const user = ref<{ id: number; role: string; firstName: string } | null>({
+  const user = ref<{ id: number; role: string; firstName: string; email?: string } | null>({
     id: 21,
     role: 'ADMINISTRATOR',
     firstName: 'Ana',
+    email: 'ana@example.com',
   })
   return {
     employeeSession: { user },
@@ -55,7 +64,9 @@ vi.mock('@/services/employee-session.service', async () => {
   }
 })
 async function setRole(role: 'ADMINISTRATOR' | 'EMPLOYEE') {
-  Object.assign(employeeSession.user, { value: { id: 21, role, firstName: 'Ana' } })
+  Object.assign(employeeSession.user, {
+    value: { id: 21, role, firstName: 'Ana', email: 'ana@example.com' },
+  })
   await nextTick()
 }
 const catalogs: UserCreationOptions = {
@@ -96,15 +107,19 @@ beforeEach(() => {
   getUsers
     .mockReset()
     .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 })
+  getEmployeePasswordStatus.mockReset().mockResolvedValue('valid')
   getEmployeeListOptions.mockReset().mockResolvedValue({ branches: [] })
   Object.assign(employeeSession.user, {
-    value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' },
+    value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana', email: 'ana@example.com' },
   })
   vi.mocked(closeEmployeeSession).mockReset().mockResolvedValue(null)
   vi.mocked(invalidateEmployeeSession).mockClear()
-  vi.mocked(restoreEmployeeSession)
-    .mockReset()
-    .mockResolvedValue({ id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' })
+  vi.mocked(restoreEmployeeSession).mockReset().mockResolvedValue({
+    id: 21,
+    role: 'ADMINISTRATOR',
+    firstName: 'Ana',
+    email: 'ana@example.com',
+  })
   createUser.mockReset().mockResolvedValue({ id: 42, role: 'EMPLOYEE', email: 'ana@example.com' })
   getUserCreationOptions.mockReset().mockResolvedValue(catalogs)
   getTheaterCreationOptions.mockReset().mockResolvedValue({
@@ -183,6 +198,32 @@ async function renderDashboard() {
 }
 
 describe('DashboardView', () => {
+  it('shows the password section to administrators and returns from its embedded view', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    await view.get('[aria-label="Cambiar contraseña"]').trigger('click')
+    await flushPromises()
+
+    expect(view.getComponent(DashboardLayout).props('availableSections')).toContain('password')
+    expect(view.findComponent(ChangePasswordView).props()).toMatchObject({
+      embedded: true,
+      accountType: 'employee',
+    })
+    expect(view.findAllComponents(UserListPanel)).toHaveLength(0)
+    await view.findComponent(ChangePasswordView).vm.$emit('return-to-dashboard')
+    await flushPromises()
+    expect(view.findAllComponents(UserListPanel)).toHaveLength(1)
+  })
+
+  it('exposes the password recovery section to employees', async () => {
+    await setRole('EMPLOYEE')
+    const view = await renderDashboard()
+    await flushPromises()
+
+    expect(view.find('[aria-label="Cambiar contraseña"]').exists()).toBe(true)
+    expect(view.getComponent(DashboardLayout).props('availableSections')).toContain('password')
+  })
+
   it('provides the current staff ID to protect self deactivation', async () => {
     const view = await renderDashboard()
     await flushPromises()
@@ -260,6 +301,7 @@ describe('DashboardView', () => {
   })
   it('uses the authenticated identity without development role controls', async () => {
     const view = await renderDashboard()
+    await flushPromises()
     expect(view.text()).not.toContain('Vista de desarrollo')
     expect(view.text()).not.toContain('Usuario de prueba')
     expect(getUserCreationOptions).not.toHaveBeenCalled()
@@ -279,6 +321,36 @@ describe('DashboardView', () => {
     await view.get('[aria-label="Empleados"]').trigger('click')
     expect(view.get('h1').text()).toBe('Empleados')
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
+  })
+
+  it('opens the password form when the employee password has expired', async () => {
+    getEmployeePasswordStatus
+      .mockResolvedValueOnce('expired')
+      .mockResolvedValueOnce('expired')
+    const view = await renderDashboard()
+    await flushPromises()
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
+      'Cambiar contraseña',
+    )
+    expect(view.text()).toContain('Tu contraseña venció.')
+  })
+
+  it('prevents section navigation and logout while the password change is pending', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Cambiar contraseña"]').trigger('click')
+    const passwordView = view.getComponent(ChangePasswordView)
+    passwordView.vm.$emit('submission-state', true)
+    await nextTick()
+
+    await view.get('[aria-label="Clientes"]').trigger('click')
+    await view.get('.logout-button').trigger('click')
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
+      'Cambiar contraseña',
+    )
+    expect(view.get('.logout-button').attributes('disabled')).toBeDefined()
+    expect(closeEmployeeSession).not.toHaveBeenCalled()
   })
 
   it('shows the sala creation action only to administrators', async () => {
@@ -390,7 +462,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(6)
+    expect(pending).toHaveLength(5)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')

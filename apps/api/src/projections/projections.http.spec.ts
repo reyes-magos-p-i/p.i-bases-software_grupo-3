@@ -20,7 +20,10 @@ describe('Projections HTTP contracts', () => {
   let app: INestApplication<App>;
   let jwt: InstanceType<typeof JwtService>;
   const origin = 'http://localhost:5173';
-  const users = { findEmployeeIdentityById: jest.fn() };
+  const users = {
+    findEmployeeIdentityById: jest.fn(),
+    findEmployeeCredentialsStatus: jest.fn(),
+  };
   const repository = {
     getCatalogs: jest.fn(),
     getScheduledMovies: jest.fn(),
@@ -87,6 +90,7 @@ describe('Projections HTTP contracts', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role: 'ADMINISTRATOR' });
+    users.findEmployeeCredentialsStatus.mockResolvedValue({ setAt: new Date(), expirationDays: 90 });
     repository.findAvailableMovieRunningTime.mockResolvedValue(190);
     repository.createProjections.mockResolvedValue({
       status: 'INACTIVE',
