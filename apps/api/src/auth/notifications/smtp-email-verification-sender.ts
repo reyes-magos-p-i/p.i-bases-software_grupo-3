@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Mail, SMTPSentMessageInfo } from 'nodemailer';
 import { createSmtpTransport } from '../../common/smtp-transport';
@@ -43,7 +44,7 @@ export class SmtpEmailVerificationSender extends EmailVerificationSender {
         attachments: [
           {
             filename: 'cinetadel-logo.png',
-            path: LOGO_PATH,
+            content: readFileSync(LOGO_PATH),
             cid: LOGO_CID,
           },
         ],

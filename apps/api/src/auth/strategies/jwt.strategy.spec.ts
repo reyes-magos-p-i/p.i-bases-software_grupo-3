@@ -17,6 +17,7 @@ describe('JwtStrategy', () => {
   let clients: {
     findById: jest.Mock;
     isEmailVerificationPending: jest.Mock;
+    findPasswordStatus: jest.Mock;
   };
   let users: { findEmployeeIdentityById: jest.Mock };
   const request = { headers: {} } as Request;
@@ -25,6 +26,7 @@ describe('JwtStrategy', () => {
     clients = {
       findById: jest.fn(),
       isEmailVerificationPending: jest.fn().mockResolvedValue(false),
+      findPasswordStatus: jest.fn().mockResolvedValue(null),
     };
     users = { findEmployeeIdentityById: jest.fn() };
 

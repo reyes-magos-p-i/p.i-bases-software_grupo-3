@@ -9,6 +9,7 @@ import {
 } from '@/services/client-session.service'
 import { googleAuthCodeLogin } from 'vue3-google-login'
 import type { EmployeeIdentity, EmployeeLoginRequest } from '@/types/employee-auth'
+import { CLIENT_ACCESS_TOKEN_KEY } from './client-session.service'
 
 interface ClientAuthResponse {
   accessToken: string
@@ -236,5 +237,94 @@ export async function logoutEmployee(): Promise<void> {
     await getApi().post('/auth/employees/logout', undefined, { timeout: 10000 })
   } catch (error) {
     throw employeeAuthError(error)
+  }
+}
+
+
+function clientAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+export type ClientPasswordStatus = 'valid' | 'expired' | 'must_set'
+
+export class ChangePasswordError extends Error {
+  code?: string
+  violations?: string[]
+
+  constructor(message: string, code?: string, violations?: string[]) {
+    super(message)
+    this.name = 'ChangePasswordError'
+    this.code = code
+    this.violations = violations
+  }
+}
+
+export async function getClientPasswordStatus(): Promise<ClientPasswordStatus> {
+  try {
+    const { data } = await getApi().get<{ status: ClientPasswordStatus }>('/auth/password-status', {
+      headers: clientAuthHeader(),
+    })
+    return data.status
+  } catch {
+    throw new ChangePasswordError('No se pudo comprobar el estado de la contraseña.')
+  }
+}
+
+export interface ChangeClientPasswordPayload {
+  currentPassword?: string
+  newPassword: string
+  confirmNewPassword: string
+  expirationDays: 30 | 60 | 90 | 120
+}
+
+type ChangePasswordErrorResponse = {
+  code?: string
+  message?: string
+  violations?: string[]
+}
+
+const passwordChangeErrorMappers = new Map<
+  string,
+  (body: ChangePasswordErrorResponse) => ChangePasswordError
+>([
+  [
+    'CURRENT_PASSWORD_INCORRECT',
+    (body) => new ChangePasswordError('La contraseña actual no es correcta.', body.code),
+  ],
+  [
+    'PASSWORDS_DO_NOT_MATCH',
+    (body) => new ChangePasswordError('Las contraseñas no coinciden.', body.code),
+  ],
+  [
+    'NEW_PASSWORD_SAME_AS_CURRENT',
+    (body) =>
+      new ChangePasswordError('La nueva contraseña no puede ser igual a la actual.', body.code),
+  ],
+  [
+    'PASSWORD_POLICY_VIOLATION',
+    (body) =>
+      new ChangePasswordError(
+        'La contraseña no cumple con la política de seguridad.',
+        body.code,
+        body.violations,
+      ),
+  ],
+])
+
+function mapPasswordChangeError(error: unknown): ChangePasswordError {
+  if (isAxiosError(error) && error.response) {
+    const body = error.response.data as ChangePasswordErrorResponse
+    const mapper = body?.code ? passwordChangeErrorMappers.get(body.code) : undefined
+    if (mapper) return mapper(body)
+  }
+  return new ChangePasswordError('No se pudo actualizar la contraseña, intenta de nuevo.')
+}
+
+export async function changeClientPassword(payload: ChangeClientPasswordPayload): Promise<void> {
+  try {
+    await getApi().patch('/auth/clients/password', payload, { headers: clientAuthHeader() })
+  } catch (error) {
+    throw mapPasswordChangeError(error)
   }
 }

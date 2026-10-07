@@ -14,20 +14,30 @@ import {
 } from '@/services/employee-session.service'
 import type { UserCreationOptions } from '@/types/user'
 
-const { getUserCreationOptions, createUser, getUsers, getEmployeeListOptions } = vi.hoisted(() => ({
-  getUserCreationOptions: vi.fn(),
-  createUser: vi.fn(),
-  getUsers: vi
-    .fn()
-    .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 }),
-  getEmployeeListOptions: vi.fn().mockResolvedValue({ branches: [] }),
-}))
-vi.mock('@/services/user.service', () => ({
-  getUserCreationOptions,
-  createUser,
+const {
   getUsers,
   getEmployeeListOptions,
+  getUserCreationOptions,
+  createUser,
+  getTheaterCreationOptions,
+  createTheater,
+} = vi.hoisted(
+  () => ({
+    getUsers: vi.fn(),
+    getEmployeeListOptions: vi.fn(),
+    getUserCreationOptions: vi.fn(),
+    createUser: vi.fn(),
+    getTheaterCreationOptions: vi.fn(),
+    createTheater: vi.fn(),
+  }),
+)
+vi.mock('@/services/user.service', () => ({
+  getUsers,
+  getEmployeeListOptions,
+  getUserCreationOptions,
+  createUser,
 }))
+vi.mock('@/services/theater.service', () => ({ getTheaterCreationOptions, createTheater }))
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')
   const user = ref<{ id: number; role: string; firstName: string } | null>({
@@ -97,6 +107,23 @@ beforeEach(() => {
     .mockResolvedValue({ id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' })
   createUser.mockReset().mockResolvedValue({ id: 42, role: 'EMPLOYEE', email: 'ana@example.com' })
   getUserCreationOptions.mockReset().mockResolvedValue(catalogs)
+  getTheaterCreationOptions.mockReset().mockResolvedValue({
+    projectors: [
+      { projectorId: 1, name: 'IMAX' },
+      { projectorId: 2, name: '70mm' },
+    ],
+    cinemas: [{ branchId: 3, name: 'Cinépolis Central', companyId: 1 }],
+  })
+  createTheater.mockReset().mockResolvedValue({
+    theaterId: 4,
+    branchId: 3,
+    numberOfSeats: 250,
+    dimensionX: 20,
+    dimensionY: 12,
+    projectorName: 'IMAX',
+    isActive: true,
+    status: 'Disponible',
+  })
   // jsdom does not implement the native dialog methods.
   Object.defineProperties(dialogPrototype, {
     showModal: {
@@ -254,6 +281,73 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
   })
 
+  it('shows the sala creation action only to administrators', async () => {
+    const view = await renderDashboard()
+
+    await view.get('[aria-label="Salas"]').trigger('click')
+    expect(view.get('.add-user-button').text()).toContain('Crear sala')
+
+    await setRole('EMPLOYEE')
+    expect(view.find('.add-user-button').exists()).toBe(false)
+  })
+
+  it('creates a theater with the selected options', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Salas"]').trigger('click')
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+
+    expect(getTheaterCreationOptions).toHaveBeenCalledTimes(1)
+    expect(view.get('.theater-dialog h2').text()).toBe('Crear sala')
+    expect(view.text()).not.toContain('El número de sala se genera automáticamente.')
+    expect(view.get<HTMLSelectElement>('[name="status"]').element.value).toBe('Disponible')
+
+    await view.get('[name="numberOfSeats"]').setValue('240')
+    await view.get('[name="projectorName"]').setValue('IMAX')
+    await view.get('[name="branchId"]').setValue('3')
+    await view.get('[name="dimensionX"]').setValue('20')
+    await view.get('[name="dimensionY"]').setValue('12')
+    await view.get('.theater-dialog form').trigger('submit')
+    await flushPromises()
+
+    expect(createTheater).toHaveBeenCalledExactlyOnceWith({
+      numberOfSeats: 240,
+      dimensionX: 20,
+      dimensionY: 12,
+      projectorName: 'IMAX',
+      branchId: 3,
+      status: 'Disponible',
+    })
+    expect(view.get('.creation-result').text()).toContain('Sala 4 creada exitosamente')
+    expect(view.get<HTMLDialogElement>('.theater-dialog').element.open).toBe(false)
+  })
+
+  it('rejects invalid theater seat counts before submitting', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Salas"]').trigger('click')
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+    await view.get('[name="numberOfSeats"]').setValue('5000')
+    await view.get('.theater-dialog form').trigger('submit')
+
+    expect(createTheater).not.toHaveBeenCalled()
+    expect(view.get('.field-error').text()).toContain('entre 1 y 4999')
+  })
+
+  it('rejects theater seat counts that do not match the dimensions', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Salas"]').trigger('click')
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+    await view.get('[name="numberOfSeats"]').setValue('250')
+    await view.get('[name="dimensionX"]').setValue('20')
+    await view.get('[name="dimensionY"]').setValue('12')
+    await view.get('.theater-dialog form').trigger('submit')
+
+    expect(createTheater).not.toHaveBeenCalled()
+    expect(view.get('.field-error').text()).toContain('igual a Dimensión X por Dimensión Y')
+  })
+
   it('moves to clients and hides administrator options when the server reports an employee role', async () => {
     const view = await renderDashboard()
 
@@ -264,7 +358,7 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
     expect(view.get('nav').text()).not.toContain('Tablero')
-    expect(view.get('nav').findAll('button')).toHaveLength(8)
+    expect(view.get('nav').findAll('button')).toHaveLength(7)
   })
 
   it('preserves clients as the current section across role changes', async () => {
@@ -292,6 +386,7 @@ describe('DashboardView', () => {
     expect(view.get('h1').text()).toBe('Empleados')
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
+
 
   it('ignores navigation outside the available dashboard sections', async () => {
     const view = await renderDashboard()

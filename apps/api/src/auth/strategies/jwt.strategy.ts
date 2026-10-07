@@ -6,6 +6,7 @@ import type { Request } from 'express';
 import { EmployeeSessionService } from '../employee-session.service';
 import { ClientsService } from '../../clients/clients.service';
 import { UsersRepository } from '../../users/users.repository';
+import { computePasswordStatus } from '../password/password-status';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -41,17 +42,27 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
-    const user =
-      payload.type === 'employee'
-        ? await this.users.findEmployeeIdentityById(payload.sub)
-        : await this.clients.findById(payload.sub);
-    if (!user) throw new UnauthorizedException();
-    if (
-      payload.type === 'client' &&
-      (await this.clients.isEmailVerificationPending(payload.sub))
-    ) {
+    if (payload.type === 'employee') {
+      const employee = await this.users.findEmployeeIdentityById(payload.sub);
+      if (!employee) throw new UnauthorizedException();
+      /*
+      Note: Uncomment this when we implement password status for employees.
+      const credentials = await this.users.findEmployeeCredentialsStatus(employee.id);
+      request.passwordStatus = computePasswordStatus(credentials);
+      */
+      request.accountType = 'employee';
+      return employee;
+    }
+    
+    const client = await this.clients.findById(payload.sub);
+    if (!client) throw new UnauthorizedException();
+    if (await this.clients.isEmailVerificationPending(payload.sub)) {
       throw new UnauthorizedException();
     }
-    return user;
+
+    const credentials = await this.clients.findPasswordStatus(client.id);
+    request.passwordStatus = computePasswordStatus(credentials);
+    request.accountType = 'client';
+    return client;
   }
 }

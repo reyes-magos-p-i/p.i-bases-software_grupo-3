@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -14,6 +15,9 @@ import {
   SocialProfile,
 } from './client.model';
 import { splitFirstWord } from './name.util';
+import { validatePasswordPolicy } from './password-policy';
+import argon2 from 'argon2';
+import { randomBytes } from 'node:crypto';
 
 // "C" alias
 const CLIENT_COLUMNS = `
@@ -367,5 +371,55 @@ export class ClientsService {
       return clientId;
     });
     return (await this.findById(id))!;
+  }
+
+  async changePassword(
+    clientId: number,
+    email: string,
+    firstName: string,
+    input: {
+      currentPassword?: string;
+      newPassword: string;
+      confirmNewPassword: string;
+      expirationDays: number;
+    },
+  ): Promise<void> {
+    const existing = await this.clientsRepository.findPasswordHash(clientId);
+
+    if (existing) {
+      if (!input.currentPassword || !(await argon2.verify(existing.passwordHash, input.currentPassword))) {
+        throw new BadRequestException({
+          code: 'CURRENT_PASSWORD_INCORRECT',
+          message: 'Contraseña actual incorrecta.',
+        });
+      }
+    }
+
+    if (input.newPassword !== input.confirmNewPassword) {
+      throw new BadRequestException({
+        code: 'PASSWORDS_DO_NOT_MATCH',
+        message: 'Las contraseñas no coinciden.',
+      });
+    }
+
+    if (existing && (await argon2.verify(existing.passwordHash, input.newPassword))) {
+      throw new BadRequestException({
+        code: 'NEW_PASSWORD_SAME_AS_CURRENT',
+        message: 'La nueva contraseña no puede ser igual a la actual.',
+      });
+    }
+
+    const violations = validatePasswordPolicy(input.newPassword, { email, firstName });
+    if (violations.length > 0) {
+      throw new BadRequestException({ code: 'PASSWORD_POLICY_VIOLATION', violations });
+    }
+
+    const salt = randomBytes(16);
+    const passwordHash = await argon2.hash(input.newPassword, { salt });
+    await this.clientsRepository.savePassword(clientId, passwordHash, salt.toString('base64'), input.expirationDays);
+  }
+ 
+  async findPasswordStatus(clientId: number) {
+    return this.clientsRepository.findPasswordStatus(clientId);
   }
 }

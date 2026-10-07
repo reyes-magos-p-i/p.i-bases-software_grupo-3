@@ -22,6 +22,7 @@ import {
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 import { EmailVerificationSender } from './notifications/email-verification-sender';
 import { SmtpEmailVerificationSender } from './notifications/smtp-email-verification-sender';
+import { PasswordStatusGuard } from './password/password-status.guard';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { SmtpEmailVerificationSender } from './notifications/smtp-email-verifica
     JwtStrategy,
     EmployeeSessionService,
     EmployeeSessionOriginGuard,
+    PasswordStatusGuard,
   ],
   exports: [PassportModule, EmployeeSessionService, EmployeeSessionOriginGuard],
 })
