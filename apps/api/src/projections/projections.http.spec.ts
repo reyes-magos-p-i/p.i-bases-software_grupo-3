@@ -1,0 +1,163 @@
+import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { randomUUID } from 'node:crypto';
+import request from 'supertest';
+import type { App } from 'supertest/types';
+import { AuthModule } from '../auth/auth.module';
+import { EMPLOYEE_SESSION_COOKIE } from '../auth/employee-session.service';
+import { EmailVerificationSender } from '../auth/notifications/email-verification-sender';
+import { ClientsService } from '../clients/clients.service';
+import { DatabaseService } from '../database/database.service';
+import { UsersRepository } from '../users/users.repository';
+import { ProjectionsModule } from './projections.module';
+import { ProjectionsRepository } from './projections.repository';
+
+const secret = randomUUID();
+
+describe('Projections HTTP contracts', () => {
+  let app: INestApplication<App>;
+  let jwt: InstanceType<typeof JwtService>;
+  const origin = 'http://localhost:5173';
+  const users = { findEmployeeIdentityById: jest.fn() };
+  const repository = {
+    getSchedulingOptions: jest.fn(),
+    findAvailableMovies: jest.fn(),
+    findAvailableMovieRunningTime: jest.fn(),
+    createProjections: jest.fn(),
+  };
+  const session = () =>
+    `${EMPLOYEE_SESSION_COOKIE}=${jwt.sign({ sub: 21, type: 'employee' })}`;
+  const valid = {
+    movieId: 3,
+    theaterId: 7,
+    startDate: '2099-07-21',
+    endDate: '2099-07-23',
+    startTime: '21:00',
+    endTime: '01:55',
+    cleaningMinutes: 30,
+    advertisementMinutes: 15,
+    price: 4500.5,
+    status: 'INACTIVE',
+  };
+  const post = (body: object) =>
+    request(app.getHttpServer())
+      .post('/api/projections')
+      .set('Origin', origin)
+      .set('Cookie', session())
+      .send(body);
+
+  beforeAll(async () => {
+    const module = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
+        AuthModule,
+        ProjectionsModule,
+      ],
+    })
+      .overrideProvider(ConfigService)
+      .useValue({
+        get: (key: string) => ({ NODE_ENV: 'test', FRONTEND_URL: origin })[key],
+        getOrThrow: () => secret,
+      })
+      .overrideProvider(DatabaseService)
+      .useValue({})
+      .overrideProvider(EmailVerificationSender)
+      .useValue({ send: jest.fn() })
+      .overrideProvider(UsersRepository)
+      .useValue(users)
+      .overrideProvider(ClientsService)
+      .useValue({})
+      .overrideProvider(ProjectionsRepository)
+      .useValue(repository)
+      .compile();
+    jwt = module.get(JwtService);
+    app = module.createNestApplication({ logger: false });
+    app.setGlobalPrefix('api');
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
+    );
+    await app.init();
+  });
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role: 'ADMINISTRATOR' });
+    repository.findAvailableMovieRunningTime.mockResolvedValue(190);
+    repository.createProjections.mockResolvedValue({
+      status: 'INACTIVE',
+      price: 4500.5,
+      projections: [{ movieFunctionId: 100 }],
+    });
+  });
+
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  it('creates projections for the authenticated administrator', async () => {
+    await post(valid).expect(201, {
+      status: 'INACTIVE',
+      price: 4500.5,
+      projections: [{ movieFunctionId: 100 }],
+    });
+    expect(repository.createProjections).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'INACTIVE', slots: expect.any(Array) }),
+      21,
+    );
+    expect(repository.createProjections.mock.calls[0][0].slots).toHaveLength(3);
+  });
+
+  it('returns the scheduling options and the branch movie search', async () => {
+    repository.getSchedulingOptions.mockResolvedValue({ cinemas: [], theaters: [] });
+    repository.findAvailableMovies.mockResolvedValue([{ movieId: 3 }]);
+    await request(app.getHttpServer())
+      .get('/api/projections/options')
+      .set('Cookie', session())
+      .expect(200, { cinemas: [], theaters: [], defaultTicketPrice: 3500 });
+    await request(app.getHttpServer())
+      .get('/api/projections/available-movies?branchId=2&search=spi')
+      .set('Cookie', session())
+      .expect(200, [{ movieId: 3 }]);
+    expect(repository.findAvailableMovies).toHaveBeenCalledWith(2, 'spi');
+    await request(app.getHttpServer())
+      .get('/api/projections/available-movies?branchId=abc')
+      .set('Cookie', session())
+      .expect(400);
+  });
+
+  it.each([
+    [{ price: 0 }, 'El precio debe ser un número positivo en colones.'],
+    [{ price: -5 }, 'El precio debe ser un número positivo en colones.'],
+    [{ price: '4500' }, 'El precio debe ser un número positivo en colones.'],
+    [{ price: 10.123 }, 'El precio debe ser un número positivo en colones.'],
+    [{ startDate: '2099-02-30' }, 'Introduce una fecha válida (AAAA-MM-DD).'],
+    [{ startTime: '24:00' }, 'Introduce una hora válida (HH:mm).'],
+    [{ cleaningMinutes: 241 }, 'Los minutos deben ser un entero entre 0 y 240.'],
+    [{ status: 'CANCELLED' }, 'El estado debe ser activa o inactiva.'],
+    [{ movieId: 'x' }, 'Selecciona una película.'],
+  ])('rejects invalid fields %#', async (override, message) => {
+    const response = await post({ ...valid, ...override }).expect(400);
+    expect(response.body.message).toContain(message);
+    expect(repository.createProjections).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown fields and foreign origins', async () => {
+    await post({ ...valid, createdBy: 1 }).expect(400);
+    await request(app.getHttpServer())
+      .post('/api/projections')
+      .set('Origin', 'https://evil.example')
+      .set('Cookie', session())
+      .send(valid)
+      .expect(403);
+    expect(repository.createProjections).not.toHaveBeenCalled();
+  });
+
+  it('denies non administrators and anonymous requests', async () => {
+    users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role: 'EMPLOYEE' });
+    await post(valid).expect(403);
+    await request(app.getHttpServer()).get('/api/projections/options').expect(401);
+    expect(repository.createProjections).not.toHaveBeenCalled();
+  });
+});

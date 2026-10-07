@@ -1,0 +1,57 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { CreateProjectionRequest } from '@/types/projection'
+
+const { create, get, post } = vi.hoisted(() => ({
+  create: vi.fn(),
+  get: vi.fn(),
+  post: vi.fn(),
+}))
+
+vi.mock('axios', () => ({ default: { create } }))
+
+describe('projection service', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.resetAllMocks()
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    create.mockImplementation((defaults) => ({ defaults, get, post }))
+  })
+
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('loads the scheduling options', async () => {
+    const options = { cinemas: [], theaters: [] }
+    const controller = new AbortController()
+    get.mockResolvedValue({ data: options })
+    const { getProjectionSchedulingOptions } = await import('@/services/projection.service')
+
+    await expect(getProjectionSchedulingOptions(controller.signal)).resolves.toBe(options)
+    expect(get).toHaveBeenCalledWith('/projections/options', {
+      signal: controller.signal,
+      timeout: 10000,
+    })
+  })
+
+  it('searches the available movies of a branch', async () => {
+    const movies = [{ movieId: 3, title: 'Spider-Man', runningTime: 190, posterImage: 'a.jpg' }]
+    get.mockResolvedValue({ data: movies })
+    const { searchAvailableMovies } = await import('@/services/projection.service')
+
+    await expect(searchAvailableMovies(2, 'spi')).resolves.toBe(movies)
+    expect(get).toHaveBeenCalledWith('/projections/available-movies', {
+      params: { branchId: 2, search: 'spi' },
+      signal: undefined,
+      timeout: 10000,
+    })
+  })
+
+  it('creates projections', async () => {
+    const payload = { movieId: 3 } as CreateProjectionRequest
+    const created = { status: 'ACTIVE', price: 4500, projections: [] }
+    post.mockResolvedValue({ data: created })
+    const { createProjections } = await import('@/services/projection.service')
+
+    await expect(createProjections(payload)).resolves.toBe(created)
+    expect(post).toHaveBeenCalledWith('/projections', payload, { timeout: 30000 })
+  })
+})

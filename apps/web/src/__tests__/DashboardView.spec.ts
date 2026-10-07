@@ -348,6 +348,19 @@ describe('DashboardView', () => {
     expect(view.get('.field-error').text()).toContain('igual a Dimensión X por Dimensión Y')
   })
 
+  it('shows projections to administrators only', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Proyecciones"]').trigger('click')
+
+    expect(view.get('h1').text()).toBe('Proyecciones')
+    expect(view.get('.add-user-button').text()).toContain('Agregar Proyección')
+    expect(view.find('.creation-result').exists()).toBe(false)
+
+    await setRole('EMPLOYEE')
+    expect(view.get('h1').text()).toBe('Clientes')
+    expect(view.find('[aria-label="Proyecciones"]').exists()).toBe(false)
+  })
+
   it('moves to clients and hides administrator options when the server reports an employee role', async () => {
     const view = await renderDashboard()
 
@@ -377,7 +390,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(7)
+    expect(pending).toHaveLength(6)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')
