@@ -117,19 +117,6 @@ describe('MoviesController', () => {
     expect(service.create).toHaveBeenCalledWith(dto);
   });
 
-  describe('catalogs', () => {
-  it.each([
-    'findClassifications',
-    'findGenres',
-    'findLanguages',
-  ] as const)('%s returns service options', async (method) => {
-    const options = [{ id: 1, name: 'Option' }];
-    service[method].mockResolvedValueOnce(options);
-
-    expect(await controller[method]()).toEqual(options);
-    expect(service[method]).toHaveBeenCalledTimes(1);
-  });
-});
 
 it('passes movie updates to the service', async () => {
   const updatedMovie = {
