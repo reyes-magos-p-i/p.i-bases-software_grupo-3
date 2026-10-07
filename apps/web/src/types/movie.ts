@@ -4,6 +4,7 @@ export interface Movie {
   id: number
   title: string
   runningTime: number
+  posterImage: string
   releaseYear: string | null
   classification: string
 }

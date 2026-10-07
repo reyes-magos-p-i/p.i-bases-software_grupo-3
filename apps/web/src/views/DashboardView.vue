@@ -193,6 +193,11 @@ async function loadCatalogs() {
   }
 }
 
+function openMovieDialog() {
+  if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters') return
+  //userDialog.value?.open()
+}
+
 function openUserDialog() {
   if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters') return
   userDialog.value?.open()
