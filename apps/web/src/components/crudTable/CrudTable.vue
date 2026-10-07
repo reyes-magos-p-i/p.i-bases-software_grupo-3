@@ -49,7 +49,9 @@ const emit = defineEmits<{
       <tbody>
         <tr v-for="(row, index) in rows" :key="String(row.id ?? index)">
           <td v-for="column in columns" :key="column.key">
-            {{ row[column.key] }}
+            <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]">
+              {{ row[column.key] }}
+            </slot>
           </td>
 
           <td v-if="showActions" class="movie-actions" data-test="actions" >
