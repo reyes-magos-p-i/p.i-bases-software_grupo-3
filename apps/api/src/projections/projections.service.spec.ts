@@ -12,6 +12,7 @@ describe('ProjectionsService', () => {
     findAvailableMovies: jest.fn(),
     findAvailableMovieRunningTime: jest.fn(),
     createProjections: jest.fn(),
+    updateProjection: jest.fn(),
   };
   const service = new ProjectionsService(
     repository as unknown as ProjectionsRepository,
@@ -142,5 +143,65 @@ describe('ProjectionsService', () => {
       new ConflictException('La sala/película seleccionada ya no está disponible.'),
     );
     expect(repository.createProjections).not.toHaveBeenCalled();
+  });
+
+  describe('update', () => {
+    const changes = {
+      movieId: 3,
+      theaterId: 7,
+      startDate: '2099-07-21',
+      startTime: '21:00',
+      endTime: '01:55',
+      cleaningMinutes: 30,
+      advertisementMinutes: 15,
+    };
+
+    it('reschedules one date and returns the updated detail', async () => {
+      repository.findProjection.mockResolvedValue({ movieFunctionId: 100 });
+      await expect(
+        service.update(100, { ...changes, price: 4200, status: 'INACTIVE' }, 21),
+      ).resolves.toEqual({ movieFunctionId: 100 });
+      expect(repository.updateProjection).toHaveBeenCalledWith(
+        100,
+        {
+          movieId: 3,
+          theaterId: 7,
+          price: 4200,
+          status: 'INACTIVE',
+          cleaningMinutes: 30,
+          advertisementMinutes: 15,
+          slot: {
+            screeningDate: '2099-07-21',
+            startTime: '2099-07-21T21:00',
+            endTime: '2099-07-22T01:55',
+          },
+        },
+        21,
+      );
+    });
+
+    it('keeps the current price and status when they are omitted', async () => {
+      repository.findProjection.mockResolvedValue({ movieFunctionId: 100 });
+      await service.update(100, changes, 21);
+      expect(repository.updateProjection.mock.calls[0][1]).toMatchObject({
+        price: undefined,
+        status: undefined,
+      });
+    });
+
+    it.each([
+      [{ startDate: '2000-01-01' }, new BadRequestException('La fecha y hora de la proyección no puede estar en el pasado.')],
+      [{ endTime: '00:54' }, expect.any(BadRequestException)],
+    ])('applies the creation rules %#', async (override, error) => {
+      await expect(service.update(100, { ...changes, ...override }, 21)).rejects.toEqual(error);
+      expect(repository.updateProjection).not.toHaveBeenCalled();
+    });
+
+    it('reports an unavailable selection with the modification message', async () => {
+      repository.findAvailableMovieRunningTime.mockResolvedValue(null);
+      await expect(service.update(100, changes, 21)).rejects.toThrow(
+        new ConflictException('El elemento seleccionado ya no está disponible.'),
+      );
+    });
   });
 });

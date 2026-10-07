@@ -32,6 +32,7 @@ describe('Projections HTTP contracts', () => {
     findAvailableMovies: jest.fn(),
     findAvailableMovieRunningTime: jest.fn(),
     createProjections: jest.fn(),
+    updateProjection: jest.fn(),
   };
   const session = () =>
     `${EMPLOYEE_SESSION_COOKIE}=${jwt.sign({ sub: 21, type: 'employee' })}`;
@@ -219,5 +220,56 @@ describe('Projections HTTP contracts', () => {
     await post(valid).expect(403);
     await request(app.getHttpServer()).get('/api/projections/options').expect(401);
     expect(repository.createProjections).not.toHaveBeenCalled();
+  });
+
+  it('blocks administrators whose password expired', async () => {
+    users.findEmployeeCredentialsStatus.mockResolvedValue({
+      setAt: new Date('2000-01-01T00:00:00Z'),
+      expirationDays: 30,
+    });
+    const response = await get('').expect(403);
+    expect(response.body).toMatchObject({ code: 'PASSWORD_EXPIRED' });
+    await post(valid).expect(403);
+    expect(repository.listProjections).not.toHaveBeenCalled();
+    expect(repository.createProjections).not.toHaveBeenCalled();
+  });
+
+  describe('PUT /projections/:id', () => {
+    const changes = {
+      movieId: 3,
+      theaterId: 7,
+      startDate: '2099-07-21',
+      startTime: '21:00',
+      endTime: '01:55',
+      cleaningMinutes: 30,
+      advertisementMinutes: 15,
+      price: 4200,
+      status: 'ACTIVE',
+    };
+    const put = (body: object, path = '/100', origin_ = origin) =>
+      request(app.getHttpServer())
+        .put(`/api/projections${path}`)
+        .set('Origin', origin_)
+        .set('Cookie', session())
+        .send(body);
+
+    it('updates a projection and returns its detail', async () => {
+      repository.findProjection.mockResolvedValue({ movieFunctionId: 100 });
+      await put(changes).expect(200, { movieFunctionId: 100 });
+      expect(repository.updateProjection).toHaveBeenCalledWith(
+        100,
+        expect.objectContaining({ price: 4200, status: 'ACTIVE' }),
+        21,
+      );
+    });
+
+    it('rejects ranges, invalid ids and foreign origins', async () => {
+      const range = await put({ ...changes, endDate: '2099-07-25' }).expect(400);
+      expect(range.body.message).toContain('property endDate should not exist');
+      await put(changes, '/abc').expect(400);
+      await put({ ...changes, status: 'CANCELLED' }).expect(400);
+      await put(changes, '/100', 'https://evil.example').expect(403);
+      expect(repository.updateProjection).not.toHaveBeenCalled();
+    });
   });
 });

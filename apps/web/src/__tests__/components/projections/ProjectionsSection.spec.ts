@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ProjectionsSection from '@/components/projections/ProjectionsSection.vue'
 import ProjectionFormDialog from '@/components/projections/ProjectionFormDialog.vue'
+import ProjectionListPanel from '@/components/projections/ProjectionListPanel.vue'
 import {
   invalidateEmployeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
-import type { CreateProjectionRequest } from '@/types/projection'
+import type { CreateProjectionRequest, ProjectionDetail } from '@/types/projection'
 
 const {
   getProjectionSchedulingOptions,
@@ -14,9 +15,13 @@ const {
   replace,
   getProjections,
   getProjectionFilterOptions,
+  getProjectionDetail,
+  updateProjection,
 } = vi.hoisted(() => ({
   getProjections: vi.fn(),
   getProjectionFilterOptions: vi.fn(),
+  getProjectionDetail: vi.fn(),
+  updateProjection: vi.fn(),
   getProjectionSchedulingOptions: vi.fn(),
   createProjections: vi.fn(),
   replace: vi.fn(),
@@ -27,6 +32,8 @@ vi.mock('@/services/projection.service', () => ({
   searchAvailableMovies: vi.fn(),
   getProjections,
   getProjectionFilterOptions,
+  getProjectionDetail,
+  updateProjection,
 }))
 vi.mock('@/services/employee-session.service', () => ({
   invalidateEmployeeSession: vi.fn(),
@@ -190,5 +197,101 @@ describe('ProjectionsSection', () => {
     await flushPromises()
     expect(createProjections).toHaveBeenCalledTimes(1)
     wrapper = undefined
+  })
+
+  describe('modification', () => {
+    const detail = {
+      movieFunctionId: 100,
+      movieId: 3,
+      movieTitle: 'The Odyssey',
+      branchId: 2,
+      branchName: 'Mall Oxígeno',
+      theaterId: 7,
+      startTime: '2099-07-22T21:00',
+      endTime: '2099-07-23T00:55',
+      status: 'ACTIVE',
+      price: 3500,
+      runningTime: 190,
+      posterImage: 'o.jpg',
+      createdAt: '2099-07-01T09:30',
+      cleaningMinutes: 30,
+      advertisementMinutes: 15,
+    } as ProjectionDetail
+    const changes = { movieId: 3, theaterId: 7, price: 4200 } as never
+
+    async function startEditing() {
+      render()
+      wrapper!.getComponent(ProjectionListPanel).vm.$emit('edit', 100)
+      await flushPromises()
+    }
+
+    beforeEach(() => {
+      getProjectionDetail.mockResolvedValue(detail)
+      updateProjection.mockResolvedValue(detail)
+    })
+
+    it('opens the selected projection in the form and saves its changes', async () => {
+      await startEditing()
+      expect(getProjectionDetail).toHaveBeenCalledWith(100, expect.any(AbortSignal))
+      expect(getProjectionSchedulingOptions).toHaveBeenCalled()
+      expect(form().get('h2').text()).toBe('Modificar proyección')
+      expect(form().get('dialog').attributes('open')).toBeDefined()
+
+      form().vm.$emit('save', changes)
+      await flushPromises()
+      expect(updateProjection).toHaveBeenCalledExactlyOnceWith(100, changes)
+      expect(createProjections).not.toHaveBeenCalled()
+      expect(wrapper!.get('.creation-result').text()).toBe(
+        'Se guardaron los cambios de la proyección MF-100.',
+      )
+      expect(form().get('dialog').attributes('open')).toBeUndefined()
+      expect(getProjections).toHaveBeenCalledTimes(2)
+    })
+
+    it.each([
+      [httpError(404), ['Esta proyección ya no está disponible.']],
+      [httpError(409, 'El elemento seleccionado ya no está disponible.'), ['El elemento seleccionado ya no está disponible.']],
+      [new Error('Network Error'), ['No se pudieron guardar los cambios, intenta de nuevo.']],
+    ])('keeps the entered data when saving fails %#', async (error, messages) => {
+      updateProjection.mockRejectedValueOnce(error)
+      await startEditing()
+      form().vm.$emit('save', changes)
+      await flushPromises()
+      expect(form().props('submissionErrors')).toEqual(messages)
+      expect(form().get('dialog').attributes('open')).toBeDefined()
+    })
+
+    it.each([
+      [404, 'Esta proyección ya no está disponible.'],
+      [403, 'No tienes permisos para realizar esta acción.'],
+      [500, 'No se pudo cargar el detalle, intenta de nuevo.'],
+    ])('explains a projection that cannot be loaded (%i)', async (status, message) => {
+      getProjectionDetail.mockRejectedValueOnce(httpError(status))
+      await startEditing()
+      expect(wrapper!.get('.edit-error').text()).toBe(message)
+      expect(form().get('dialog').attributes('open')).toBeUndefined()
+    })
+
+    it('handles an expired session, a newer selection and creation afterwards', async () => {
+      getProjectionDetail.mockRejectedValueOnce(httpError(401))
+      await startEditing()
+      expect(invalidateEmployeeSession).toHaveBeenCalled()
+
+      let finishFirst!: (value: ProjectionDetail) => void
+      getProjectionDetail.mockReturnValueOnce(new Promise((resolve) => (finishFirst = resolve)))
+      const list = wrapper!.getComponent(ProjectionListPanel)
+      list.vm.$emit('edit', 100)
+      await flushPromises()
+      expect(wrapper!.text()).toContain('Cargando la proyección…')
+      list.vm.$emit('edit', 101)
+      finishFirst({ ...detail, movieTitle: 'Old' })
+      await flushPromises()
+      expect(form().vm.$el).toBeDefined()
+
+      await wrapper!.get('.add-user-button').trigger('click')
+      form().vm.$emit('save', changes)
+      await flushPromises()
+      expect(updateProjection).not.toHaveBeenCalled()
+    })
   })
 })

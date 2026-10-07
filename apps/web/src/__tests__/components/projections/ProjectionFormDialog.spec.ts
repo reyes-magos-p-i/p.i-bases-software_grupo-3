@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ProjectionFormDialog from '@/components/projections/ProjectionFormDialog.vue'
-import type { AvailableMovie } from '@/types/projection'
+import type { AvailableMovie, ProjectionDetail } from '@/types/projection'
 
 const { searchAvailableMovies } = vi.hoisted(() => ({ searchAvailableMovies: vi.fn() }))
 vi.mock('@/services/projection.service', () => ({ searchAvailableMovies }))
@@ -309,5 +309,132 @@ describe('ProjectionFormDialog', () => {
     wrapper!.vm.open()
     await wrapper!.get('dialog').trigger('cancel')
     expect(wrapper!.get('dialog').attributes('open')).toBeUndefined()
+  })
+
+  describe('modification', () => {
+    const detail: ProjectionDetail = {
+      movieFunctionId: 100,
+      movieId: 3,
+      movieTitle: spiderMan.title,
+      branchId: 2,
+      branchName: 'Mall Oxígeno',
+      theaterId: 7,
+      startTime: '2099-07-22T21:00',
+      endTime: '2099-07-23T00:55',
+      status: 'INACTIVE',
+      price: 4000,
+      runningTime: 190,
+      posterImage: 'spiderman.jpg',
+      createdAt: '2099-07-01T09:30',
+      cleaningMinutes: 30,
+      advertisementMinutes: 15,
+    }
+
+    async function renderEdit(extra: Record<string, unknown> = {}) {
+      wrapper = mount(ProjectionFormDialog, { props: { ...props, ...extra }, attachTo: document.body })
+      wrapper.vm.edit(detail)
+      await flushPromises()
+    }
+
+    it('prefills the projection and offers save and undo', async () => {
+      await renderEdit()
+      expect(wrapper!.get('h2').text()).toBe('Modificar proyección')
+      expect(wrapper!.find('[name="endDate"]').exists()).toBe(false)
+      expect(field('branchId').element).toHaveProperty('value', '2')
+      expect(field('theaterId').element).toHaveProperty('value', '7')
+      expect(field('movie').element).toHaveProperty('value', spiderMan.title)
+      expect(field('startDate').element).toHaveProperty('value', '2099-07-22')
+      expect(field('startTime').element).toHaveProperty('value', '21:00')
+      expect(field('endTime').element).toHaveProperty('value', '00:55')
+      expect(field('price').element).toHaveProperty('value', '4000')
+      expect(field('status').element).toHaveProperty('value', 'INACTIVE')
+      expect(wrapper!.findAll('.dialog-actions button').map((button) => button.text())).toEqual([
+        'Guardar cambios',
+        'Deshacer',
+      ])
+      expect(searchAvailableMovies).not.toHaveBeenCalled()
+    })
+
+    it('reports when nothing changed', async () => {
+      await renderEdit()
+      await wrapper!.get('form').trigger('submit')
+      expect(wrapper!.text()).toContain('No hay cambios para guardar.')
+      expect(wrapper!.emitted('save')).toBeUndefined()
+    })
+
+    it('confirms every change before saving', async () => {
+      await renderEdit()
+      await field('price').setValue('4200')
+      await field('startTime').setValue('20:00')
+      await field('status').setValue('ACTIVE')
+      await wrapper!.get('form').trigger('submit')
+      await flushPromises()
+
+      const items = wrapper!.findAll('.confirm-changes li').map((item) => [
+        item.get('strong').text(),
+        item.get('.before').text(),
+        item.get('.after').text(),
+      ])
+      expect(items.slice(0, 3)).toEqual([
+        ['Estado:', 'Inactiva', 'Activa'],
+        ['Hora inicio:', '9:00 pm', '8:00 pm'],
+        ['Hora fin:', '12:55 am', '11:55 pm'],
+      ])
+      expect(items[3]![0]).toBe('Precio:')
+      expect(items[3]![1]).toMatch(/4\s?000/u)
+      expect(items[3]![2]).toMatch(/4\s?200/u)
+      expect(document.activeElement?.textContent).toBe('Confirma los cambios')
+      expect(wrapper!.get('fieldset').attributes('disabled')).toBeDefined()
+
+      await wrapper!.get('.confirm-changes .secondary-button').trigger('click')
+      expect(wrapper!.find('.confirm-changes').exists()).toBe(false)
+      await wrapper!.get('form').trigger('submit')
+      await wrapper!.get('.confirm-changes .create-button').trigger('click')
+      expect(wrapper!.emitted('save')).toEqual([
+        [
+          {
+            movieId: 3,
+            theaterId: 7,
+            startDate: '2099-07-22',
+            startTime: '20:00',
+            endTime: '23:55',
+            cleaningMinutes: 30,
+            advertisementMinutes: 15,
+            price: 4200,
+            status: 'ACTIVE',
+          },
+        ],
+      ])
+      expect(wrapper!.emitted('submit')).toBeUndefined()
+    })
+
+    it('returns to the form when saving fails and undoes the changes', async () => {
+      await renderEdit()
+      await field('price').setValue('4200')
+      await wrapper!.get('form').trigger('submit')
+      await wrapper!.setProps({ submissionErrors: ['No se pudieron guardar los cambios, intenta de nuevo.'] })
+      expect(wrapper!.find('.confirm-changes').exists()).toBe(false)
+      expect(field('price').element).toHaveProperty('value', '4200')
+
+      await wrapper!.get('.undo-button').trigger('click')
+      expect(field('price').element).toHaveProperty('value', '4000')
+    })
+
+    it('uses defaults for missing values and switches back to creation', async () => {
+      wrapper = mount(ProjectionFormDialog, {
+        props: { ...props, defaultPrice: 3500 },
+        attachTo: document.body,
+      })
+      wrapper.vm.edit({ ...detail, price: null, cleaningMinutes: null, advertisementMinutes: null })
+      await flushPromises()
+      expect(field('price').element).toHaveProperty('value', '3500')
+      expect(field('cleaningMinutes').element).toHaveProperty('value', '30')
+      expect(field('advertisementMinutes').element).toHaveProperty('value', '15')
+
+      wrapper.vm.open()
+      await flushPromises()
+      expect(wrapper.get('h2').text()).toBe('Agregar nueva proyección')
+      expect(field('branchId').element).toHaveProperty('value', '')
+    })
   })
 })

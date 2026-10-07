@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CreateProjectionRequest } from '@/types/projection'
+import type { CreateProjectionRequest, UpdateProjectionRequest } from '@/types/projection'
 
-const { create, get, post } = vi.hoisted(() => ({
+const { create, get, post, put } = vi.hoisted(() => ({
+  put: vi.fn(),
   create: vi.fn(),
   get: vi.fn(),
   post: vi.fn(),
@@ -14,7 +15,7 @@ describe('projection service', () => {
     vi.resetModules()
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
-    create.mockImplementation((defaults) => ({ defaults, get, post }))
+    create.mockImplementation((defaults) => ({ defaults, get, post, put }))
   })
 
   afterEach(() => vi.unstubAllEnvs())
@@ -71,5 +72,14 @@ describe('projection service', () => {
 
     await expect(createProjections(payload)).resolves.toBe(created)
     expect(post).toHaveBeenCalledWith('/projections', payload, { timeout: 30000 })
+  })
+
+  it('updates one projection', async () => {
+    const payload = { movieId: 3, price: 4200 } as UpdateProjectionRequest
+    put.mockResolvedValue({ data: 'detail' })
+    const { updateProjection } = await import('@/services/projection.service')
+
+    await expect(updateProjection(100, payload)).resolves.toBe('detail')
+    expect(put).toHaveBeenCalledWith('/projections/100', payload, { timeout: 30000 })
   })
 })

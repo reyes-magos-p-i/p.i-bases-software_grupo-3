@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { DatabaseService } from '../database/database.service';
 import { ProjectionsRepository } from './projections.repository';
 import type { NewProjections } from './types/projection.types';
@@ -34,6 +34,8 @@ describe('ProjectionsRepository', () => {
     connection.execute.mockImplementation((sql) => {
       const override = Object.keys(overrides).find((key) => sql.includes(key));
       if (override) return Promise.resolve(overrides[override]);
+      if (sql.includes('SELECT STATUS FROM MOVIE_FUNCTIONS'))
+        return Promise.resolve({ rows: [{ STATUS: 'INACTIVE' }] });
       if (sql.includes('FROM THEATERS')) return Promise.resolve({ rows: [{ BRANCH_ID: 2 }] });
       if (sql.includes('FROM CINEMA_MOVIES')) return Promise.resolve({ rows: [{ 1: 1 }] });
       if (sql.includes('FROM MOVIE_FUNCTIONS mf')) return Promise.resolve({ rows: [] });
@@ -251,5 +253,80 @@ describe('ProjectionsRepository', () => {
     const failure = new Error('offline');
     db.transaction.mockRejectedValueOnce(failure);
     await expect(repository.createProjections(data, 21)).rejects.toBe(failure);
+  });
+
+  describe('updateProjection', () => {
+    const changes = {
+      movieId: 3,
+      theaterId: 7,
+      cleaningMinutes: 20,
+      advertisementMinutes: 10,
+      slot: data.slots[0]!,
+    };
+    const sqlOf = (fragment: string) =>
+      connection.execute.mock.calls.find(([sql]) => sql.includes(fragment))!;
+
+    it('reschedules the projection and replaces its activities', async () => {
+      await expect(
+        repository.updateProjection(100, { ...changes, price: 4200, status: 'ACTIVE' }, 21),
+      ).resolves.toBeUndefined();
+      const statements = connection.execute.mock.calls.map(([sql]) => sql);
+      expect(statements[0]).toContain('SELECT STATUS FROM MOVIE_FUNCTIONS');
+      expect(statements[0]).toContain('FOR UPDATE');
+      expect(sqlOf('FROM MOVIE_FUNCTIONS mf')[1]).toMatchObject({
+        excludedId: expect.objectContaining({ val: 100 }),
+        start0: '2099-07-21T21:00',
+      });
+      expect(sqlOf('UPDATE MOVIE_FUNCTIONS')[1]).toMatchObject({
+        id: 100,
+        movieId: 3,
+        theaterId: 7,
+        startTime: '2099-07-21T21:00',
+        endTime: '2099-07-22T01:55',
+        screeningDate: '2099-07-21',
+        price: expect.objectContaining({ val: 4200 }),
+        status: expect.objectContaining({ val: 'ACTIVE' }),
+      });
+      expect(sqlOf('DELETE FROM MOVIE_FUNCTIONS_ACTIVITIES')[1]).toEqual({ id: 100 });
+      expect(
+        statements.filter((sql) => sql.includes('INSERT INTO MOVIE_FUNCTIONS_ACTIVITIES')),
+      ).toHaveLength(2);
+    });
+
+    it('keeps the current price and status when they are omitted', async () => {
+      await repository.updateProjection(100, changes, 21);
+      expect(sqlOf('UPDATE MOVIE_FUNCTIONS')[1]).toMatchObject({
+        price: expect.objectContaining({ val: null }),
+        status: expect.objectContaining({ val: null }),
+      });
+      expect(sqlOf('UPDATE MOVIE_FUNCTIONS')[0]).toContain('COALESCE(:price, PRICE)');
+    });
+
+    it.each([
+      [{ rows: [] }, new NotFoundException('Esta proyección ya no está disponible.')],
+      [
+        { rows: [{ STATUS: 'CANCELLED' }] },
+        new ConflictException('Solo se pueden modificar proyecciones activas o inactivas.'),
+      ],
+      [
+        { rows: [{ STATUS: 'IN_PROGRESS' }] },
+        new ConflictException('Solo se pueden modificar proyecciones activas o inactivas.'),
+      ],
+    ])('rejects a missing or non editable projection %#', async (current, error) => {
+      respond({ 'SELECT STATUS FROM MOVIE_FUNCTIONS': current });
+      await expect(repository.updateProjection(100, changes, 21)).rejects.toThrow(error);
+      expect(connection.execute).not.toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE MOVIE_FUNCTIONS'),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('reports a movie or theater that is no longer available', async () => {
+      respond({ 'FROM CINEMA_MOVIES': { rows: [] } });
+      await expect(repository.updateProjection(100, changes, 21)).rejects.toThrow(
+        new ConflictException('El elemento seleccionado ya no está disponible.'),
+      );
+    });
   });
 });

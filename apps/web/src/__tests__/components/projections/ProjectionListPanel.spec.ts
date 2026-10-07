@@ -291,4 +291,19 @@ describe('ProjectionListPanel', () => {
     await flushPromises()
     wrapper = undefined
   })
+
+  it('offers modification only for active or inactive projections', async () => {
+    getProjections.mockResolvedValue(
+      list({ items: [item, { ...item, movieFunctionId: 8, status: 'ACTIVE' }], total: 2 }),
+    )
+    await render()
+    const cancelled = wrapper!.get('[aria-label="Modificar MF-007"]')
+    expect(cancelled.attributes('disabled')).toBeDefined()
+    expect(cancelled.attributes('title')).toBe('Solo se modifican proyecciones activas o inactivas')
+
+    const active = wrapper!.get('[aria-label="Modificar MF-008"]')
+    expect(active.attributes('title')).toBe('Modificar')
+    await active.trigger('click')
+    expect(wrapper!.emitted('edit')).toEqual([[8]])
+  })
 })
