@@ -27,7 +27,7 @@ import {
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-const activeSection = ref<'employees' | 'clients' | 'theaters' | 'password' | 'movies'|>(
+const activeSection = ref<'employees' | 'clients' | 'theaters' | 'password' | 'movies'>(
 
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
