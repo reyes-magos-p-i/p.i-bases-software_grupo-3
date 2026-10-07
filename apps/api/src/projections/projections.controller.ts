@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -52,6 +53,12 @@ export class ProjectionsController {
   @Get(':id')
   findOne(@Param() params: ProjectionIdParamsDto) {
     return this.projectionsService.findOne(params.id);
+  }
+
+  @Patch(':id/cancel')
+  @UseGuards(EmployeeSessionOriginGuard)
+  cancel(@Param() params: ProjectionIdParamsDto) {
+    return this.projectionsService.cancel(params.id);
   }
 
   @Put(':id')

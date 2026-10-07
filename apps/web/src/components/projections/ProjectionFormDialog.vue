@@ -42,6 +42,7 @@ const emit = defineEmits<{
   retryOptions: []
   submit: [data: CreateProjectionRequest]
   save: [data: UpdateProjectionRequest]
+  cancel: [projection: ProjectionDetail]
   sessionExpired: []
 }>()
 
@@ -792,6 +793,15 @@ defineExpose({ open, edit, complete })
           <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
           Deshacer
         </button>
+        <button
+          type="button"
+          class="create-button cancel-projection-button"
+          :disabled="submitting"
+          @click="emit('cancel', original!)"
+        >
+          <i class="bi bi-x-circle" aria-hidden="true"></i>
+          Cancelar Proyección
+        </button>
       </footer>
       <footer v-else class="dialog-actions">
         <button type="button" class="secondary-button" :disabled="submitting" @click="close">
@@ -854,6 +864,7 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .create-button { border: 0; color: var(--color-white); background: var(--color-primary); box-shadow: 0 2px 6px color-mix(in srgb, var(--color-black) 30%, transparent); }
 .secondary-button:disabled, .create-button:disabled { opacity: .7; cursor: not-allowed; }
 .edit-actions { justify-content: flex-start; }
+.cancel-projection-button { margin-left: auto; }
 .undo-button { display: inline-flex; gap: 10px; align-items: center; min-height: 48px; padding: 10px 22px; border: 0; border-radius: var(--radius-small); color: var(--color-white); font: inherit; font-weight: 600; background: #8a6e70; }
 .undo-button:disabled { opacity: .7; cursor: not-allowed; }
 .confirm-changes { display: grid; gap: 8px; padding: 16px 20px; border-left: 4px solid var(--color-primary); border-radius: var(--radius-medium); background: var(--color-white); }

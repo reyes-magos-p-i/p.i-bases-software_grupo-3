@@ -121,6 +121,11 @@ export class ProjectionsService {
     return this.findOne(id);
   }
 
+  async cancel(id: number): Promise<ProjectionDetail> {
+    await this.repository.cancelProjection(id);
+    return this.findOne(id);
+  }
+
   // Shared scheduling rules: no past start, available movie and theater, and an
   // end time that leaves room for ads + movie + cleaning. Returns the duration.
   private async scheduledDuration(

@@ -6,7 +6,10 @@ import ProjectionDetailDialog from './ProjectionDetailDialog.vue'
 import ProjectionStatusBadge from './ProjectionStatusBadge.vue'
 import { getProjectionFilterOptions, getProjections } from '@/services/projection.service'
 import {
+  CANCELLABLE_STATUSES,
+  EDITABLE_STATUSES,
   PROJECTION_STATUS_LABELS,
+  type ListedProjection,
   type ProjectionFilterOptions,
   type ProjectionList,
   type ProjectionListQuery,
@@ -34,8 +37,12 @@ const timeFilters = [
   { name: 'timeFrom', label: 'Hora inicio' },
   { name: 'timeTo', label: 'Hora fin' },
 ] as const
-const emit = defineEmits<{ sessionExpired: []; forbidden: []; edit: [id: number] }>()
-const EDITABLE_STATUSES: readonly string[] = ['ACTIVE', 'INACTIVE']
+const emit = defineEmits<{
+  sessionExpired: []
+  forbidden: []
+  edit: [id: number]
+  cancel: [projection: ListedProjection]
+}>()
 const id = useId()
 const emptyFilters = () => ({
   status: '' as ProjectionStatus | '',
@@ -211,6 +218,11 @@ function changePage(target: number) {
   void load()
 }
 
+function requestCancel(id: number) {
+  const projection = result.value?.items.find((item) => item.movieFunctionId === id)
+  if (projection) emit('cancel', projection)
+}
+
 function refresh() {
   void loadOptions()
   void load()
@@ -354,12 +366,21 @@ defineExpose({ refresh })
               </button>
               <button
                 type="button"
-                :title="EDITABLE_STATUSES.includes(row.status as string) ? 'Modificar' : 'Solo se modifican proyecciones activas o inactivas'"
+                :title="EDITABLE_STATUSES.includes(row.status as ProjectionStatus) ? 'Modificar' : 'Solo se modifican proyecciones activas o inactivas'"
                 :aria-label="`Modificar ${row.code}`"
-                :disabled="!EDITABLE_STATUSES.includes(row.status as string)"
+                :disabled="!EDITABLE_STATUSES.includes(row.status as ProjectionStatus)"
                 @click="emit('edit', row.id as number)"
               >
                 <i class="bi bi-pencil-square" aria-hidden="true"></i>
+              </button>
+              <button
+                type="button"
+                :title="CANCELLABLE_STATUSES.includes(row.status as ProjectionStatus) ? 'Cancelar' : 'Ya está cancelada o finalizada'"
+                :aria-label="`Cancelar ${row.code}`"
+                :disabled="!CANCELLABLE_STATUSES.includes(row.status as ProjectionStatus)"
+                @click="requestCancel(row.id as number)"
+              >
+                <i class="bi bi-x-circle" aria-hidden="true"></i>
               </button>
             </div>
           </template>

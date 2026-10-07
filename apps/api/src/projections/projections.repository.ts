@@ -15,6 +15,7 @@ import type {
   ProjectionChanges,
   ProjectionDetail,
   ProjectionFilterOptions,
+  ProjectionStatus,
 } from './types/projection.types';
 
 const LOCAL_FORMAT = `'YYYY-MM-DD"T"HH24:MI'`;
@@ -197,19 +198,28 @@ export class ProjectionsRepository {
     return { status: data.status, price: data.price, projections };
   }
 
+  /** Cancels a projection that has not finished; the theater becomes free for that slot. */
+  async cancelProjection(id: number): Promise<void> {
+    await this.db.transaction(async (connection) => {
+      const status = await this.lockProjectionStatus(connection, id);
+      if (status === 'CANCELLED') throw new ConflictException(PROJECTION_MESSAGES.alreadyCancelled);
+      if (status === 'FINISHED')
+        throw new ConflictException(PROJECTION_MESSAGES.finishedNotCancellable);
+      await connection.execute(
+        "UPDATE MOVIE_FUNCTIONS SET STATUS = 'CANCELLED' WHERE MOVIE_FUNCTION_ID = :id",
+        { id },
+        TRANSACTION,
+      );
+    });
+  }
+
   async updateProjection(
     id: number,
     data: ProjectionChanges,
     actorId: number,
   ): Promise<void> {
     await this.scheduling(async (connection) => {
-      const current = await connection.execute<{ STATUS: string }>(
-        'SELECT STATUS FROM MOVIE_FUNCTIONS WHERE MOVIE_FUNCTION_ID = :id FOR UPDATE',
-        { id: { val: id, type: oracle.NUMBER } },
-        TRANSACTION,
-      );
-      const status = current.rows?.[0]?.STATUS;
-      if (status === undefined) throw new NotFoundException(PROJECTION_MESSAGES.notFound);
+      const status = await this.lockProjectionStatus(connection, id);
       if (status !== 'ACTIVE' && status !== 'INACTIVE')
         throw new ConflictException(PROJECTION_MESSAGES.notEditable);
       await this.lockAvailableTheater(
@@ -247,6 +257,18 @@ export class ProjectionsRepository {
       );
       await this.linkActivities(connection, id, activityIds, actorId);
     });
+  }
+
+  // Locks the projection row so concurrent changes to it wait; missing means deleted.
+  private async lockProjectionStatus(connection: oracle.Connection, id: number) {
+    const current = await connection.execute<{ STATUS: ProjectionStatus }>(
+      'SELECT STATUS FROM MOVIE_FUNCTIONS WHERE MOVIE_FUNCTION_ID = :id FOR UPDATE',
+      { id: { val: id, type: oracle.NUMBER } },
+      TRANSACTION,
+    );
+    const status = current.rows?.[0]?.STATUS;
+    if (status === undefined) throw new NotFoundException(PROJECTION_MESSAGES.notFound);
+    return status;
   }
 
   // Runs a scheduling transaction; a unique constraint violation means another

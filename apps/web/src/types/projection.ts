@@ -8,6 +8,11 @@ export const PROJECTION_STATUS_LABELS: Record<ProjectionStatus, string> = {
   FINISHED: 'Finalizada',
 }
 
+/** Statuses an administrator can still modify. */
+export const EDITABLE_STATUSES: readonly ProjectionStatus[] = ['ACTIVE', 'INACTIVE']
+/** Statuses that can still be cancelled (not cancelled or finished yet). */
+export const CANCELLABLE_STATUSES: readonly ProjectionStatus[] = ['ACTIVE', 'INACTIVE', 'IN_PROGRESS']
+
 export interface ProjectionCinema {
   branchId: number
   name: string

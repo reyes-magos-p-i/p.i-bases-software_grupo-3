@@ -7,4 +7,6 @@ export const PROJECTION_MESSAGES = {
   notFound: 'Esta proyección ya no está disponible.',
   selectionUnavailable: 'El elemento seleccionado ya no está disponible.',
   notEditable: 'Solo se pueden modificar proyecciones activas o inactivas.',
+  alreadyCancelled: 'La proyección ya está cancelada.',
+  finishedNotCancellable: 'No se puede cancelar una proyección finalizada.',
 } as const;

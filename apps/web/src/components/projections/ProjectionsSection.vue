@@ -3,6 +3,7 @@ import { nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 import ProjectionFormDialog from './ProjectionFormDialog.vue'
 import ProjectionListPanel from './ProjectionListPanel.vue'
+import CancelProjectionDialog from './CancelProjectionDialog.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import {
   createProjections,
@@ -14,6 +15,8 @@ import type {
   CreateProjectionRequest,
   ProjectionApiError,
   ProjectionSchedulingOptions,
+  ListedProjection,
+  ProjectionDetail,
   UpdateProjectionRequest,
 } from '@/types/projection'
 import { projectionCode } from '@/utils/projection-format'
@@ -37,6 +40,8 @@ const submitting = ref(false)
 const editingId = ref<number | null>(null)
 const editLoading = ref(false)
 const editError = ref('')
+/** Projection waiting for the cancellation confirmation. */
+const cancelTarget = ref<ListedProjection | null>(null)
 let request: AbortController | undefined
 let editRequest: AbortController | undefined
 
@@ -180,6 +185,19 @@ function save(data: UpdateProjectionRequest) {
   )
 }
 
+async function cancelled(projection: ProjectionDetail) {
+  cancelTarget.value = null
+  if (editingId.value === projection.movieFunctionId) {
+    editingId.value = null
+    dialog.value?.complete()
+  }
+  editError.value = ''
+  creationResult.value = `La proyección ${projectionCode('MF', projection.movieFunctionId)} fue cancelada. La sala queda disponible para programar en ese horario.`
+  list.value?.refresh()
+  await nextTick()
+  resultNotice.value?.focus()
+}
+
 onBeforeUnmount(() => {
   request?.abort()
   editRequest?.abort()
@@ -217,6 +235,7 @@ onBeforeUnmount(() => {
       @session-expired="sessionExpired"
       @forbidden="refreshPermissions"
       @edit="edit"
+      @cancel="cancelTarget = $event"
     />
     <ProjectionFormDialog
       ref="dialog"
@@ -231,6 +250,14 @@ onBeforeUnmount(() => {
       @session-expired="sessionExpired"
       @submit="submit"
       @save="save"
+      @cancel="cancelTarget = $event"
+    />
+    <CancelProjectionDialog
+      :projection="cancelTarget"
+      @close="cancelTarget = null"
+      @cancelled="cancelled"
+      @session-expired="sessionExpired"
+      @forbidden="refreshPermissions"
     />
   </section>
 </template>
