@@ -15,7 +15,8 @@ se muestra el menú de cuenta existente y se vuelve al portal `/`.
   cuando no se encuentra la cuenta.
 - Con contraseña correcta y correo pendiente de confirmación, se solicita
   confirmar el correo y no se emite un token. Se reutiliza la verificación de
-  correo existente; esta historia no implementa recuperación de contraseñas.
+  correo existente. «Olvidé mi contraseña» abre la
+  [recuperación por correo](password-recovery.md).
 - Google y Facebook conservan sus integraciones y sus reglas de creación y
   vinculación de cuentas. El componente compartido bloquea clics simultáneos y
   comunica al modal cuándo hay una operación en curso.

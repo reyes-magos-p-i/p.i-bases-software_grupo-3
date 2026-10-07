@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from './notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from './password-recovery.repository';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -68,6 +70,10 @@ describe('Client login HTTP contracts', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue(database)
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue(sender)
       .compile();

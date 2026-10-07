@@ -1,3 +1,4 @@
+import { PasswordRecoveryRepository } from '../password-recovery.repository';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
@@ -23,9 +24,11 @@ describe('JwtStrategy', () => {
     findEmployeeIdentityById: jest.Mock;
     findEmployeeCredentialsStatus: jest.Mock;
   };
+  const recovery = { sessionRevoked: jest.fn() };
   const request = { headers: {} } as Request;
 
   beforeEach(async () => {
+    recovery.sessionRevoked.mockReset().mockResolvedValue(false);
     clients = {
       findById: jest.fn(),
       isEmailVerificationPending: jest.fn().mockResolvedValue(false),
@@ -42,6 +45,7 @@ describe('JwtStrategy', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JwtStrategy,
+        { provide: PasswordRecoveryRepository, useValue: recovery },
         EmployeeSessionService,
         JwtService,
         { provide: ClientsService, useValue: clients },
@@ -111,6 +115,15 @@ describe('JwtStrategy', () => {
       expect(lookup).toHaveBeenCalledTimes(2);
     },
   );
+  it('rejects sessions issued before a completed password recovery', async () => {
+    recovery.sessionRevoked.mockResolvedValue(true);
+    await expect(
+      strategy.validate(request, { sub: 7, type: 'client', iat: 123 }),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(recovery.sessionRevoked).toHaveBeenCalledWith('client', 7, 123);
+    expect(clients.findById).not.toHaveBeenCalled();
+  });
+
   it('rejects when the client no longer exists', async () => {
     clients.findById.mockResolvedValue(null);
 

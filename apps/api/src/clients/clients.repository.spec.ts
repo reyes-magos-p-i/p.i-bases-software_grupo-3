@@ -1116,65 +1116,89 @@ describe('ClientsRepository', () => {
   });
 
   describe('findPasswordStatus', () => {
-  it('returns null when the client has no local credentials', async () => {
-    connection.execute.mockResolvedValue({ rows: [] });
-    await expect(repository.findPasswordStatus(1)).resolves.toBeNull();
-  });
+    it('returns null when the client has no local credentials', async () => {
+      connection.execute.mockResolvedValue({ rows: [] });
+      await expect(repository.findPasswordStatus(1)).resolves.toBeNull();
+    });
 
-  it('returns the stored set date and expiration window', async () => {
-    const setAt = new Date('2026-01-01T00:00:00Z');
-    connection.execute.mockResolvedValue({ rows: [{ PASSWORD_SET_AT: setAt, EXPIRATION_DAYS: 90 }] });
-    await expect(repository.findPasswordStatus(1)).resolves.toEqual({
-      setAt,
-      expirationDays: 90,
+    it('returns the stored set date and expiration window', async () => {
+      const setAt = new Date('2026-01-01T00:00:00Z');
+      connection.execute.mockResolvedValue({
+        rows: [{ PASSWORD_SET_AT: setAt, EXPIRATION_DAYS: 90 }],
+      });
+      await expect(repository.findPasswordStatus(1)).resolves.toEqual({
+        setAt,
+        expirationDays: 90,
+      });
     });
   });
-});
 
-describe('findPasswordHash', () => {
-  it('returns null when the client has no local credentials', async () => {
-    connection.execute.mockResolvedValue({ rows: [] });
-    await expect(repository.findPasswordHash(1)).resolves.toBeNull();
-  });
+  describe('findPasswordHash', () => {
+    it('returns null when the client has no local credentials', async () => {
+      connection.execute.mockResolvedValue({ rows: [] });
+      await expect(repository.findPasswordHash(1)).resolves.toBeNull();
+    });
 
-  it('returns the stored hash and salt', async () => {
-    connection.execute.mockResolvedValue({ rows: [{ PASSWORD_HASH: 'hash', SALT: 'salt' }] });
-    await expect(repository.findPasswordHash(1)).resolves.toEqual({
-      passwordHash: 'hash',
-      salt: 'salt',
+    it('returns the stored hash and salt', async () => {
+      connection.execute.mockResolvedValue({
+        rows: [{ PASSWORD_HASH: 'hash', SALT: 'salt' }],
+      });
+      await expect(repository.findPasswordHash(1)).resolves.toEqual({
+        passwordHash: 'hash',
+        salt: 'salt',
+      });
     });
   });
-});
 
-describe('savePassword', () => {
-  it('upserts the credentials row inside a transaction', async () => {
+  describe('savePassword', () => {
+    it('upserts the credentials row inside a transaction', async () => {
+      connection.execute.mockResolvedValue({ rowsAffected: 1 });
+
+      await repository.savePassword(1, 'hash', 'salt', 90);
+
+      expect(connection.execute).toHaveBeenCalledWith(
+        expect.stringContaining('MERGE INTO CLIENT_LOCAL_CREDENTIALS'),
+        expect.objectContaining({
+          clientId: { val: 1, type: oracle.NUMBER },
+          passwordHash: { val: 'hash', type: oracle.STRING },
+          salt: { val: 'salt', type: oracle.STRING },
+          expirationDays: { val: 90, type: oracle.NUMBER },
+        }),
+        { autoCommit: false },
+      );
+      expect(connection.commit).toHaveBeenCalledTimes(1);
+      expect(connection.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws and rolls back when Oracle does not upsert exactly one row', async () => {
+      connection.execute.mockResolvedValue({ rowsAffected: 0 });
+
+      await expect(
+        repository.savePassword(1, 'hash', 'salt', 90),
+      ).rejects.toThrow(
+        'Oracle did not upsert exactly one credentials record.',
+      );
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
+    });
+  });
+
+  it('joins the recovery transaction without committing credentials independently', async () => {
     connection.execute.mockResolvedValue({ rowsAffected: 1 });
-
-    await repository.savePassword(1, 'hash', 'salt', 90);
-
+    await expect(
+      repository.savePassword(
+        7,
+        'new-hash',
+        'salt',
+        90,
+        connection as unknown as oracle.Connection,
+      ),
+    ).resolves.toBeUndefined();
     expect(connection.execute).toHaveBeenCalledWith(
-      expect.stringContaining('MERGE INTO CLIENT_LOCAL_CREDENTIALS'),
-      expect.objectContaining({
-        clientId: { val: 1, type: oracle.NUMBER },
-        passwordHash: { val: 'hash', type: oracle.STRING },
-        salt: { val: 'salt', type: oracle.STRING },
-        expirationDays: { val: 90, type: oracle.NUMBER },
-      }),
+      expect.any(String),
+      expect.any(Object),
       { autoCommit: false },
     );
-    expect(connection.commit).toHaveBeenCalledTimes(1);
-    expect(connection.close).toHaveBeenCalledTimes(1);
-  });
-
-  it('throws and rolls back when Oracle does not upsert exactly one row', async () => {
-    connection.execute.mockResolvedValue({ rowsAffected: 0 });
-
-    await expect(repository.savePassword(1, 'hash', 'salt', 90)).rejects.toThrow(
-      'Oracle did not upsert exactly one credentials record.',
-    );
-    expect(connection.rollback).toHaveBeenCalledTimes(1);
     expect(connection.commit).not.toHaveBeenCalled();
   });
-});
-
 });
