@@ -695,10 +695,10 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .search-input .bi { position: absolute; top: 50%; left: 14px; color: var(--color-gray); transform: translateY(-50%); }
 .search-input input { padding-left: 40px; }
 .movie-field { position: relative; }
-.movie-results { position: absolute; z-index: 2; top: 76px; right: 0; left: 0; max-height: 260px; margin: 0; padding: 4px; overflow-y: auto; list-style: none; border-radius: var(--radius-small); background: var(--color-white); box-shadow: 0 6px 16px color-mix(in srgb, var(--color-black) 25%, transparent); }
-.movie-results li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: var(--radius-small); cursor: pointer; }
+.movie-results { position: absolute; z-index: 2; top: 76px; right: 0; left: 0; max-height: 220px; margin: 0; padding: 0; overflow-y: auto; list-style: none; border: 1px solid #c8c8c8; background: var(--color-white); }
+.movie-results li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 12px; cursor: default; }
 .movie-results li span { color: var(--color-gray); }
-.movie-results li.is-active, .movie-results li:hover { background: color-mix(in srgb, var(--color-primary) 10%, transparent); }
+.movie-results li.is-active, .movie-results li:hover { background: #e8e8e8; }
 .minutes-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .minutes-field { justify-items: center; text-align: center; }
 .minutes-field input { width: 96px; text-align: center; font-weight: 700; }
