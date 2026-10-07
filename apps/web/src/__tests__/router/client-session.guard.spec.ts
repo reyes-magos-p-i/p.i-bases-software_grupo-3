@@ -16,8 +16,21 @@ describe('requireClientSession', () => {
   })
 
   it('blocks access to /account/password without a client session', async () => {
-    const result = await requireClientSession(route('/account/password', true), route('/', false), vi.fn())
+    const result = await requireClientSession(
+      route('/account/password', true),
+      route('/', false),
+      vi.fn(),
+    )
     expect(result).toEqual({ path: '/', query: { login: 'client', reason: 'required' } })
+  })
+
+  it('keeps recovery accessible even when an existing session has an expired password', async () => {
+    clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
+    vi.mocked(getClientPasswordStatus).mockResolvedValue('expired')
+    await expect(
+      requireClientSession(route('/recover-password'), route('/'), vi.fn()),
+    ).resolves.toBe(true)
+    expect(getClientPasswordStatus).not.toHaveBeenCalled()
   })
 
   it('allows navigation with no client session on a non-protected route', async () => {
@@ -34,7 +47,11 @@ describe('requireClientSession', () => {
 
   it('does not redirect when already headed to /account/password', async () => {
     clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
-    const result = await requireClientSession(route('/account/password', true), route('/', false), vi.fn())
+    const result = await requireClientSession(
+      route('/account/password', true),
+      route('/', false),
+      vi.fn(),
+    )
     expect(result).toBe(true)
     expect(getClientPasswordStatus).not.toHaveBeenCalled()
   })

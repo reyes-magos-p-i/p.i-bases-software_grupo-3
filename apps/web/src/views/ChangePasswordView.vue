@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
@@ -12,6 +12,8 @@ import {
   getEmployeePasswordStatus,
   type ChangeClientPasswordPayload,
   type ClientPasswordStatus,
+  validatePasswordRecovery,
+  resetPassword,
 } from '@/services/authService'
 import { clientSession } from '@/services/client-session.service'
 import { employeeSession } from '@/services/employee-session.service'
@@ -22,8 +24,10 @@ const props = withDefaults(
   defineProps<{
     embedded?: boolean
     accountType?: 'client' | 'employee'
+    recovery?: boolean
+    recoveryToken?: string
   }>(),
-  { embedded: false, accountType: 'client' },
+  { embedded: false, accountType: 'client', recovery: false, recoveryToken: '' },
 )
 const emit = defineEmits<{
   'return-to-dashboard': []
@@ -58,41 +62,71 @@ const errors = reactive<{ currentPassword?: string; confirm?: string; form?: str
 const violationCodes = ref<string[]>([])
 const loading = ref(false)
 const success = ref(false)
+const recoveryAccountType = ref<'client' | 'employee'>('client')
+const recoveryExpiresAt = ref('')
+const recoveryExpired = ref(false)
+const retrySeconds = ref(0)
+let retryTimer: ReturnType<typeof setInterval> | undefined
 
 const policyChecks = computed(() =>
   checkPasswordPolicy(form.newPassword, {
-    email: user.value?.email,
-    firstName: user.value?.firstName,
+    email: props.recovery ? undefined : user.value?.email,
+    firstName: props.recovery ? undefined : user.value?.firstName,
   }),
 )
 const policySatisfied = computed(() => isPasswordPolicySatisfied(policyChecks.value))
-const isEmployee = computed(() => props.accountType === 'employee')
+const isEmployee = computed(
+  () => (props.recovery ? recoveryAccountType.value : props.accountType) === 'employee',
+)
 
 async function loadStatus() {
   statusLoading.value = true
   statusError.value = ''
   try {
+    if (props.recovery) {
+      if (!/^[a-f0-9]{64}$/u.test(props.recoveryToken)) {
+        throw new ChangePasswordError(
+          'El enlace no es válido. Solicita una nueva recuperación.',
+          'RECOVERY_INVALID',
+        )
+      }
+      const result = await validatePasswordRecovery(props.recoveryToken)
+      recoveryAccountType.value = result.accountType
+      recoveryExpiresAt.value = new Date(result.expiresAt).toLocaleTimeString('es-CR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+      return
+    }
     status.value = isEmployee.value
       ? await getEmployeePasswordStatus()
       : await getClientPasswordStatus()
-  } catch {
-    statusError.value = 'No se pudo comprobar el estado de tu contraseña. Intenta de nuevo.'
+  } catch (error) {
+    recoveryExpired.value =
+      error instanceof ChangePasswordError && error.code === 'RECOVERY_INVALID'
+    statusError.value =
+      props.recovery && error instanceof ChangePasswordError
+        ? error.message
+        : 'No se pudo comprobar el estado de tu contraseña. Intenta de nuevo.'
   } finally {
     statusLoading.value = false
   }
 }
 
 onMounted(loadStatus)
+onBeforeUnmount(() => clearInterval(retryTimer))
 
 async function submit() {
-  if (loading.value) return
+  if (loading.value || retrySeconds.value > 0) return
   errors.currentPassword = undefined
   errors.confirm = undefined
   errors.form = undefined
   violationCodes.value = []
 
   if (!isMustSet.value && !form.currentPassword) {
-    errors.currentPassword = 'Ingresa tu contraseña actual'
+    errors.currentPassword = props.recovery
+      ? 'Ingresa la contraseña temporal del correo'
+      : 'Ingresa tu contraseña actual'
     return
   }
   if (form.newPassword !== form.confirmNewPassword) {
@@ -113,7 +147,23 @@ async function submit() {
       expirationDays: form.expirationDays,
     }
     if (!isMustSet.value) payload.currentPassword = form.currentPassword
-    if (isEmployee.value) {
+    if (props.recovery) {
+      await resetPassword({
+        token: props.recoveryToken,
+        temporaryPassword: form.currentPassword,
+        newPassword: form.newPassword,
+        confirmNewPassword: form.confirmNewPassword,
+        expirationDays: form.expirationDays,
+      })
+      form.currentPassword = ''
+      form.newPassword = ''
+      form.confirmNewPassword = ''
+      window.history.replaceState(
+        window.history.state,
+        '',
+        window.location.pathname + window.location.search,
+      )
+    } else if (isEmployee.value) {
       const employeePayload: ChangeEmployeePasswordPayload = {
         ...payload,
         currentPassword: form.currentPassword,
@@ -123,33 +173,65 @@ async function submit() {
     success.value = true
     status.value = 'valid'
   } catch (error) {
-    if (error instanceof ChangePasswordError) {
-      if (error.code === 'CURRENT_PASSWORD_INCORRECT')
-        errors.currentPassword = isEmployee.value ? 'Contraseña actual incorrecta' : error.message
-      else if (error.code === 'PASSWORDS_DO_NOT_MATCH')
-        errors.confirm = isEmployee.value ? 'Las contraseñas no coinciden' : error.message
-      else if (error.code === 'NEW_PASSWORD_SAME_AS_CURRENT')
-        errors.form = isEmployee.value
-          ? 'La nueva contraseña no puede ser igual a la actual'
-          : error.message
-      else if (error.code === 'PASSWORD_POLICY_VIOLATION') {
-        errors.form = isEmployee.value
-          ? 'La contraseña no cumple con la política de seguridad'
-          : error.message
-        violationCodes.value = error.violations ?? []
-      } else errors.form = isEmployee.value ? error.message.replace(/\.$/u, '') : error.message
-    } else {
-      errors.form = isEmployee.value
-        ? 'No se pudo actualizar la contraseña, intenta de nuevo'
-        : 'No se pudo actualizar la contraseña, intenta de nuevo.'
-    }
+    handleSubmissionError(error)
   } finally {
     loading.value = false
     emit('submission-state', false)
   }
 }
 
+function handleSubmissionError(error: unknown) {
+  if (!(error instanceof ChangePasswordError)) {
+    errors.form = isEmployee.value
+      ? 'No se pudo actualizar la contraseña, intenta de nuevo'
+      : 'No se pudo actualizar la contraseña, intenta de nuevo.'
+    return
+  }
+  switch (error.code) {
+    case 'RECOVERY_INVALID':
+      recoveryExpired.value = true
+      statusError.value = error.message
+      break
+    case 'TEMPORARY_PASSWORD_INCORRECT':
+      errors.currentPassword = error.message
+      break
+    case 'CURRENT_PASSWORD_INCORRECT':
+      errors.currentPassword = isEmployee.value ? 'Contraseña actual incorrecta' : error.message
+      break
+    case 'PASSWORDS_DO_NOT_MATCH':
+      errors.confirm = isEmployee.value ? 'Las contraseñas no coinciden' : error.message
+      break
+    case 'NEW_PASSWORD_SAME_AS_CURRENT':
+      errors.form = isEmployee.value
+        ? 'La nueva contraseña no puede ser igual a la actual'
+        : error.message
+      break
+    case 'PASSWORD_POLICY_VIOLATION':
+      errors.form = isEmployee.value
+        ? 'La contraseña no cumple con la política de seguridad'
+        : error.message
+      violationCodes.value = error.violations ?? []
+      break
+    default:
+      errors.form = isEmployee.value ? error.message.replace(/\.$/u, '') : error.message
+  }
+  if (error.retryAfterSeconds) startRetryDelay(error.retryAfterSeconds)
+}
+
+function startRetryDelay(seconds: number) {
+  retrySeconds.value = seconds
+  clearInterval(retryTimer)
+  retryTimer = setInterval(() => {
+    retrySeconds.value--
+    if (retrySeconds.value <= 0) clearInterval(retryTimer)
+  }, 1000)
+}
+
 function goHome() {
+  if (props.recovery) {
+    void router.push({ path: '/', query: { login: recoveryAccountType.value } })
+    return
+  }
   if (isEmployee.value && props.embedded) {
     emit('return-to-dashboard')
     return
@@ -165,7 +247,15 @@ function goHome() {
     <div class="change-password-container">
       <header class="page-heading">
         <p class="page-eyebrow">SEGURIDAD DE LA CUENTA</p>
-        <h1>{{ isMustSet ? 'Configura tu contraseña' : 'Cambiar contraseña' }}</h1>
+        <h1>
+          {{
+            props.recovery
+              ? 'Recuperar contraseña'
+              : isMustSet
+                ? 'Configura tu contraseña'
+                : 'Cambiar contraseña'
+          }}
+        </h1>
         <p class="page-description">
           Actualiza tu contraseña para mantener tu cuenta de Cinetadel segura.
         </p>
@@ -183,7 +273,17 @@ function goHome() {
               <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
               <p>{{ statusError }}</p>
             </div>
-            <button type="button" class="primary-button" @click="loadStatus">Reintentar</button>
+            <button
+              v-if="!recoveryExpired"
+              type="button"
+              class="primary-button"
+              @click="loadStatus"
+            >
+              Reintentar
+            </button>
+            <button v-if="props.recovery" type="button" class="secondary-button" @click="goHome">
+              Volver al inicio de sesión
+            </button>
           </template>
 
           <template v-else-if="success">
@@ -198,7 +298,9 @@ function goHome() {
                 }}
               </p>
               <button type="button" class="primary-button continue-button" @click="goHome">
-                {{ isEmployee ? 'Volver al tablero' : 'Continuar' }}
+                {{
+                  props.recovery ? 'Iniciar sesión' : isEmployee ? 'Volver al tablero' : 'Continuar'
+                }}
               </button>
             </div>
           </template>
@@ -207,6 +309,10 @@ function goHome() {
             <h2 id="password-form-title">
               {{ isMustSet ? 'Crear contraseña' : 'Cambiar contraseña' }}
             </h2>
+            <p v-if="props.recovery" class="status-message" role="status">
+              Introduce la contraseña temporal que recibiste por correo. El enlace vence a las
+              {{ recoveryExpiresAt }} (hora de tu dispositivo) y solo puede usarse una vez.
+            </p>
 
             <p v-if="status === 'expired'" class="status-message status-expired" role="alert">
               <i class="bi bi-clock-history" aria-hidden="true"></i>
@@ -219,13 +325,16 @@ function goHome() {
 
             <form class="password-form" :aria-busy="loading" @submit.prevent="submit">
               <div v-if="!isMustSet" class="form-field">
-                <label for="currentPassword">Contraseña actual</label>
+                <label for="currentPassword">{{
+                  props.recovery ? 'Contraseña temporal' : 'Contraseña actual'
+                }}</label>
                 <div class="password-control">
                   <input
                     id="currentPassword"
                     v-model="form.currentPassword"
                     :type="showCurrentPassword ? 'text' : 'password'"
-                    autocomplete="current-password"
+                    :autocomplete="props.recovery ? 'one-time-code' : 'current-password'"
+                    :disabled="loading"
                     :aria-invalid="!!errors.currentPassword"
                     :aria-describedby="
                       errors.currentPassword ? 'current-password-error' : undefined
@@ -263,6 +372,7 @@ function goHome() {
                     v-model="form.newPassword"
                     :type="showNewPassword ? 'text' : 'password'"
                     autocomplete="new-password"
+                    :disabled="loading"
                     aria-describedby="password-policy-title"
                   />
                   <button
@@ -289,6 +399,7 @@ function goHome() {
                     v-model="form.confirmNewPassword"
                     :type="showConfirmPassword ? 'text' : 'password'"
                     autocomplete="new-password"
+                    :disabled="loading"
                     :aria-invalid="!!errors.confirm"
                     :aria-describedby="errors.confirm ? 'confirm-password-error' : undefined"
                   />
@@ -318,7 +429,11 @@ function goHome() {
 
               <div class="form-field">
                 <label for="expirationDays">Vigencia de la contraseña</label>
-                <select id="expirationDays" v-model.number="form.expirationDays">
+                <select
+                  id="expirationDays"
+                  v-model.number="form.expirationDays"
+                  :disabled="loading"
+                >
                   <option v-for="days in EXPIRATION_OPTIONS" :key="days" :value="days">
                     {{ days }} días
                   </option>
@@ -330,11 +445,24 @@ function goHome() {
               </p>
 
               <div class="form-actions">
-                <button type="submit" class="primary-button" :disabled="loading">
+                <p v-if="retrySeconds > 0" role="status">
+                  Puedes volver a intentarlo en {{ retrySeconds }} segundos.
+                </p>
+                <button
+                  type="submit"
+                  class="primary-button"
+                  :disabled="loading || retrySeconds > 0"
+                >
                   <i class="bi bi-shield-lock" aria-hidden="true"></i>
                   {{ loading ? 'Guardando…' : 'Guardar contraseña' }}
                 </button>
-                <button v-if="!isForced" type="button" class="secondary-button" @click="goHome">
+                <button
+                  v-if="!isForced"
+                  type="button"
+                  class="secondary-button"
+                  :disabled="loading"
+                  @click="goHome"
+                >
                   Cancelar
                 </button>
               </div>
