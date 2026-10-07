@@ -179,44 +179,154 @@ describe('findOne', () => {
       );
     });
   });
-/*
+
   describe('create', () => {
   it('should create a movie and its relationships inside a transaction', async () => {
     const dto = {
       title: 'Interstellar',
+      synopsis: 'A team travels through space.',
       runningTime: 169,
-      synopsis: 'Cristopher nolar goes to space AAAAAA',
-      posterImage:'intertelas.jpg',
+      posterImage: 'blahblah.jpg',
       releaseYear: 2014,
       classificationId: 1,
       languageIds: [1, 2],
       genreIds: [3, 4],
-    };
+    }
 
-    const execute = jest.fn();
+    const mockConnection = {
+      execute: jest.fn(),
+      executeMany: jest.fn(),
+    }
 
-    execute
-      .mockResolvedValueOnce({
-        outBinds: {
-          movieId: [10],
-        },
-      })
-      .mockResolvedValue({});
+    db.transaction.mockImplementation(
+      async (work) => work(mockConnection as any),
+    )
 
-    db.transaction.mockImplementation(async (work: any) => {
-      return work({
-        execute,
-      });
-    });
+    mockConnection.execute.mockResolvedValueOnce({
+      rowsAffected: 1,
+      outBinds: {
+        movieId: [24],
+      },
+    })
 
-    const result = await repository.create(dto);
 
-    expect(result).toBe(10);
+    mockConnection.executeMany.mockResolvedValue({
+      rowsAffected: 2,
+    })
 
-    expect(db.transaction).toHaveBeenCalledTimes(1);
+    const result = await repository.create(dto)
 
-    expect(execute).toHaveBeenCalledTimes(5);
-  });
+    expect(db.transaction).toHaveBeenCalledTimes(1)
+
+    expect(mockConnection.execute).toHaveBeenCalled()
+
+    expect(mockConnection.executeMany).toHaveBeenCalled()
+
+    expect(result).toBeDefined()
+  })
+
+  it('should propagate errors during create', async () => {
+  const dto = {
+    title: 'Interstellar',
+    synopsis: 'Space movie',
+    runningTime: 169,
+    posterImage: 'jpen.jeg',
+    releaseYear: 2014,
+    classificationId: 1,
+    languageIds: [1],
+    genreIds: [3],
+  }
+
+  const error = new Error('Database error')
+
+  db.transaction.mockRejectedValue(error)
+
+  await expect(repository.create(dto)).rejects.toThrow(
+    'Database error',
+  )
+})
 });
-*/
+
+  describe('update', () => {
+    it('should update the movie inside a transaction', async () => {
+      const dto = {
+        title: 'Updated Interstellar',
+        synopsis: 'Updated synopsis',
+        runningTime: 170,
+        releaseYear: 2015,
+        classificationId: 2,
+        languageIds: [1, 2],
+        genreIds: [3, 4],
+      }
+
+      const conn = {
+        execute: jest.fn(),
+        executeMany: jest.fn(),
+      }
+
+      db.transaction.mockImplementation(
+        async (work) => work(conn as any),
+      )
+
+      conn.execute.mockResolvedValue({
+        rowsAffected: 1,
+      })
+
+      conn.executeMany.mockResolvedValue({
+        rowsAffected: 2,
+      })
+
+      await repository.update(24, dto)
+
+      expect(db.transaction).toHaveBeenCalledTimes(1)
+      expect(conn.execute).toHaveBeenCalled()
+    })
+  })
+
+  describe('update', () => {
+  it('should update the movie inside a transaction', async () => {
+    const dto = {
+      title: 'Updated Interstellar',
+      synopsis: 'Updated synopsis',
+      runningTime: 170,
+      releaseYear: 2015,
+      classificationId: 2,
+      languageIds: [1, 2],
+      genreIds: [3, 4],
+    }
+
+    const conn = {
+      execute: jest.fn(),
+      executeMany: jest.fn(),
+    }
+
+      db.transaction.mockImplementation(
+        async (work) => work(conn as any),
+      )
+
+      conn.execute.mockResolvedValue({
+        rowsAffected: 1,
+      })
+
+      conn.executeMany.mockResolvedValue({
+        rowsAffected: 2,
+      })
+
+      await repository.update(24, dto)
+
+      expect(db.transaction).toHaveBeenCalledTimes(1)
+      expect(conn.execute).toHaveBeenCalled()
+    })
+  })
+
+    it('should propagate database errors when deleting', async () => {
+      db.transaction.mockRejectedValue(
+        new Error('Database error'),
+      )
+
+      await expect(
+        repository.remove(24),
+      ).rejects.toThrow('Database error')
+    })
+
 });

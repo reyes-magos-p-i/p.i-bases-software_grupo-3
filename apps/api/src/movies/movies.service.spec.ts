@@ -130,39 +130,35 @@ describe('MoviesService', () => {
       expect(repository.create).toHaveBeenCalledWith(dto);
     });
   });
-  /*
+
   describe('update', () => {
-    it('should update an existing movie', async () => {
-      const dto = {
-        title: 'Updated Interstellar',
-      };
+      it('should update an existing movie', async () => {
+        const dto = {
+          title: 'Updated Interstellar',
+        };
 
-      repository.findOne
-        .mockResolvedValueOnce(movieDetail)
-        .mockResolvedValueOnce([
-          {
-            ...movie[0],
-            TITLE: 'Updated Interstellar',
-          },
-        ]);
+        const updatedMovie = {
+          ...movieDetail,
+          title: 'Updated Interstellar',
+        };
 
-      repository.update.mockResolvedValue(undefined);
+        repository.findOne
+          .mockResolvedValueOnce(movieDetail)
+          .mockResolvedValueOnce(updatedMovie);
 
-      const result = await service.update(1, dto);
+        repository.update.mockResolvedValue(undefined);
 
-      expect(repository.findOne).toHaveBeenCalledWith(1);
-      expect(repository.update).toHaveBeenCalledWith(1, dto);
+        const result = await service.update(1, dto);
 
-      expect(result).toEqual([
-        {
-          ...movie[0],
-          TITLE: 'Updated Interstellar',
-        },
-      ]);
-    });
+        expect(repository.findOne).toHaveBeenNthCalledWith(1, 1);
+        expect(repository.update).toHaveBeenCalledWith(1, dto);
+        expect(repository.findOne).toHaveBeenNthCalledWith(2, 1);
+
+        expect(result).toEqual(updatedMovie);
+      });
 
     it('should throw NotFoundException when updating missing movie', async () => {
-      repository.findOne.mockResolvedValue([]);
+      repository.findOne.mockResolvedValue(null);
 
       await expect(
         service.update(999, { title: 'Test' }),
@@ -188,7 +184,7 @@ describe('MoviesService', () => {
     });
 
     it('should throw NotFoundException when deleting missing movie', async () => {
-      repository.findOne.mockResolvedValue(movieDetail);
+      repository.findOne.mockResolvedValue(null);
 
       await expect(service.remove(999)).rejects.toThrow(
         NotFoundException,
@@ -197,5 +193,5 @@ describe('MoviesService', () => {
       expect(repository.remove).not.toHaveBeenCalled();
     });
   });
-  */
+
 });
