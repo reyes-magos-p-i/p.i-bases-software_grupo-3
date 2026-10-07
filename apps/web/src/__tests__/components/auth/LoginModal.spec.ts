@@ -1,14 +1,26 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { ChangePasswordError, requestPasswordRecovery } from '@/services/authService'
 import LoginModal from '@/components/auth/LoginModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 import { nextTick } from 'vue'
 
+vi.mock('@/services/authService', async (original) => ({
+  ...(await original<typeof import('@/services/authService')>()),
+  requestPasswordRecovery: vi.fn(),
+}))
+
 describe('LoginModal', () => {
   const wrappers: VueWrapper[] = []
+  beforeEach(() => {
+    vi.mocked(requestPasswordRecovery).mockReset().mockResolvedValue({
+      message: 'Si existe una cuenta habilitada, recibirás las instrucciones.',
+    })
+  })
   afterEach(() => {
     wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
     document.body.innerHTML = ''
+    vi.useRealTimers()
   })
   function render(props: Partial<InstanceType<typeof LoginModal>['$props']> = {}) {
     const wrapper = mount(LoginModal, {
@@ -28,6 +40,90 @@ describe('LoginModal', () => {
     wrappers.push(wrapper)
     return wrapper
   }
+
+  it.each(['client', 'employee'] as const)(
+    'requests %s recovery through the existing modal',
+    async (mode) => {
+      const wrapper = render({ mode, enabled: true })
+      await wrapper.get('.recovery-option button').trigger('click')
+      expect(wrapper.get('h2').text()).toBe('Recuperar contraseña')
+      expect(wrapper.find('[name="password"]').exists()).toBe(false)
+      expect(wrapper.findComponent(SocialAuthButtons).exists()).toBe(false)
+      expect(wrapper.text()).toContain('30 minutos')
+      await wrapper.get('[name="email"]').setValue(' ANA@Example.COM ')
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+      expect(requestPasswordRecovery).toHaveBeenCalledWith({
+        email: 'ana@example.com',
+        accountType: mode,
+      })
+      expect(wrapper.text()).toContain('Si existe una cuenta habilitada')
+      expect(wrapper.emitted('submit')).toBeUndefined()
+      await wrapper.get('.recovery-option button').trigger('click')
+      expect(wrapper.find('[name="password"]').exists()).toBe(true)
+      expect(wrapper.text()).not.toContain('Si existe una cuenta habilitada')
+    },
+  )
+
+  it('validates the recovery email before requesting instructions', async () => {
+    const wrapper = render({ enabled: true })
+    await wrapper.get('.recovery-option button').trigger('click')
+    await wrapper.get('[name="email"]').setValue('invalid')
+    await wrapper.get('form').trigger('submit')
+    expect(requestPasswordRecovery).not.toHaveBeenCalled()
+    expect(wrapper.get('[name="email"]').attributes('aria-invalid')).toBe('true')
+  })
+
+  it('blocks duplicate requests and mode changes while requesting recovery', async () => {
+    let finish!: (value: { message: string }) => void
+    vi.mocked(requestPasswordRecovery).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    const wrapper = render({ enabled: true })
+    await wrapper.get('.recovery-option button').trigger('click')
+    await wrapper.get('[name="email"]').setValue('ana@example.com')
+    await wrapper.get('form').trigger('submit')
+    await wrapper.get('form').trigger('submit')
+    expect(requestPasswordRecovery).toHaveBeenCalledTimes(1)
+    expect(wrapper.get<HTMLButtonElement>('.switch-mode').element.disabled).toBe(true)
+    finish({ message: 'Instrucciones enviadas' })
+    await flushPromises()
+    expect(wrapper.get<HTMLButtonElement>('[type="submit"]').element.disabled).toBe(false)
+  })
+
+  it.each([new ChangePasswordError('Servicio no disponible'), new Error('private detail')])(
+    'shows safe recovery failures: %s',
+    async (failure) => {
+      vi.mocked(requestPasswordRecovery).mockRejectedValue(failure)
+      const wrapper = render({ enabled: true })
+      await wrapper.get('.recovery-option button').trigger('click')
+      await wrapper.get('[name="email"]').setValue('ana@example.com')
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+      expect(wrapper.get('[role="alert"]').text()).not.toContain('private detail')
+      expect(wrapper.get<HTMLButtonElement>('[type="submit"]').element.disabled).toBe(false)
+    },
+  )
+
+  it('honors recovery retry delay and clears its timer on unmount', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const failure = new ChangePasswordError('Espera antes de intentar', 'RECOVERY_THROTTLED')
+    failure.retryAfterSeconds = 2
+    vi.mocked(requestPasswordRecovery).mockRejectedValue(failure)
+    const wrapper = render({ enabled: true })
+    await wrapper.get('.recovery-option button').trigger('click')
+    await wrapper.get('[name="email"]').setValue('ana@example.com')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    await wrapper.get('form').trigger('submit')
+    expect(requestPasswordRecovery).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('2 segundos')
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(wrapper.get<HTMLButtonElement>('[type="submit"]').element.disabled).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
 
   it.each(['client', 'employee'] as const)(
     'renders %s with required fields and pending actions',
@@ -65,6 +161,47 @@ describe('LoginModal', () => {
 
     expect(wrapper.emitted('authenticated')).toEqual([[identity]])
   })
+
+  it('prevents local submission, mode changes and closing while social login is pending', async () => {
+    const wrapper = render({ enabled: true })
+    await wrapper.get('[name="email"]').setValue('ana@example.com')
+    await wrapper.get('[name="password"]').setValue('password')
+    wrapper.getComponent(SocialAuthButtons).vm.$emit('busy', true)
+    await nextTick()
+    await wrapper.get('form').trigger('submit')
+    await wrapper.get('.close').trigger('click')
+    await wrapper.get('.switch-mode').trigger('click')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(wrapper.emitted('switchMode')).toBeUndefined()
+    expect(wrapper.get<HTMLInputElement>('[name="email"]').element.disabled).toBe(true)
+    wrapper.getComponent(SocialAuthButtons).vm.$emit('busy', false)
+    await nextTick()
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toEqual([
+      [{ email: 'ana@example.com', password: 'password' }],
+    ])
+  })
+
+  it('applies the retry delay to client login and both social buttons', async () => {
+    const wrapper = render({ enabled: true, retryAfterSeconds: 12 })
+    expect(wrapper.text()).toContain('12 segundos')
+    expect(wrapper.getComponent(SocialAuthButtons).props('disabled')).toBe(true)
+    await wrapper.setProps({ retryAfterSeconds: 0 })
+    expect(wrapper.getComponent(SocialAuthButtons).props('disabled')).toBe(false)
+  })
+
+  it.each(['a..b@example.com', 'ana@example.c', 'ana@localhost'])(
+    'uses shared email validation for %s',
+    async (email) => {
+      const wrapper = render({ enabled: true })
+      await wrapper.get('[name="email"]').setValue(email)
+      await wrapper.get('[name="password"]').setValue('password')
+      await wrapper.get('form').trigger('submit')
+      expect(wrapper.emitted('submit')).toBeUndefined()
+      expect(wrapper.get('[name="email"]').attributes('aria-invalid')).toBe('true')
+    },
+  )
 
   it('shows email feedback after blur and clears it as the value is corrected', async () => {
     const wrapper = render()

@@ -12,6 +12,13 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { ClientsModule } from '../clients/clients.module';
 import { PasswordHashingModule } from '../common/security/password-hashing.module';
 import { UsersPersistenceModule } from '../users/users-persistence.module';
+import { PasswordRecoveryController } from './password-recovery.controller';
+import { PasswordRecoveryService } from './password-recovery.service';
+import { PasswordRecoveryRepository } from './password-recovery.repository';
+import { PasswordRecoverySender } from './notifications/password-recovery-sender';
+import { SmtpPasswordRecoverySender } from './notifications/smtp-password-recovery-sender';
+import { PasswordGenerator } from '../common/security/password-generator';
+import { RandomPasswordGenerator } from '../common/security/random-password-generator.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -22,6 +29,7 @@ import {
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 import { EmailVerificationSender } from './notifications/email-verification-sender';
 import { SmtpEmailVerificationSender } from './notifications/smtp-email-verification-sender';
+import { PasswordStatusGuard } from './password/password-status.guard';
 
 @Module({
   imports: [
@@ -42,9 +50,13 @@ import { SmtpEmailVerificationSender } from './notifications/smtp-email-verifica
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, PasswordRecoveryController],
   providers: [
     AuthService,
+    PasswordRecoveryService,
+    PasswordRecoveryRepository,
+    { provide: PasswordGenerator, useClass: RandomPasswordGenerator },
+    { provide: PasswordRecoverySender, useClass: SmtpPasswordRecoverySender },
     {
       provide: EmailVerificationSender,
       useClass: SmtpEmailVerificationSender,
@@ -52,8 +64,14 @@ import { SmtpEmailVerificationSender } from './notifications/smtp-email-verifica
     JwtStrategy,
     EmployeeSessionService,
     EmployeeSessionOriginGuard,
+    PasswordStatusGuard,
   ],
-  exports: [PassportModule, EmployeeSessionService, EmployeeSessionOriginGuard],
+  exports: [
+    PassportModule,
+    EmployeeSessionService,
+    EmployeeSessionOriginGuard,
+    PasswordStatusGuard,
+  ],
 })
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

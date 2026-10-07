@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from './notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from './password-recovery.repository';
 import { type INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -53,6 +55,10 @@ describe('Employee authentication (HTTP integration)', () => {
         AuthModule,
       ],
     })
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(ConfigService)
@@ -76,7 +82,15 @@ describe('Employee authentication (HTTP integration)', () => {
     jwt = module.get(JwtService);
     passwordHash ??= (await module.get(PasswordHasher).hash(password))
       .passwordHash;
-    db.query.mockResolvedValue({ rows: [employeeRow()] });
+    db.query.mockImplementation((sql: string) =>
+      Promise.resolve(
+        sql.includes('PASSWORD_SET_AT')
+          ? {
+              rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 }],
+            }
+          : { rows: [employeeRow()] },
+      ),
+    );
     await app.init();
   });
 
@@ -391,13 +405,21 @@ describe('Employee authentication (HTTP integration)', () => {
         .send({})
         .expect(attempt < 5 ? 400 : 429);
     }
-    expect(db.query).toHaveBeenCalledTimes(6);
+    expect(db.query).toHaveBeenCalledTimes(12);
   });
 
   it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(
     'logs in %s and recovers identity through the session cookie',
     async (role) => {
-      db.query.mockResolvedValue({ rows: [employeeRow(role)] });
+      db.query.mockImplementation((sql: string) =>
+        Promise.resolve(
+          sql.includes('PASSWORD_SET_AT')
+            ? {
+                rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 }],
+              }
+            : { rows: [employeeRow(role)] },
+        ),
+      );
       const browser = request.agent(app.getHttpServer());
       const response = await browser
         .post('/api/auth/employees/login')
@@ -556,16 +578,24 @@ describe('Employee authentication (HTTP integration)', () => {
       type: 'employee',
       role: 'ADMINISTRATOR',
     });
-    db.query
-      .mockResolvedValueOnce({ rows: [employeeRow(UserRole.ADMINISTRATOR)] })
-      .mockResolvedValueOnce({ rows: [employeeRow(UserRole.EMPLOYEE)] });
+    let currentRole = UserRole.ADMINISTRATOR;
+    db.query.mockImplementation((sql: string) =>
+      Promise.resolve(
+        sql.includes('PASSWORD_SET_AT')
+          ? {
+              rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 }],
+            }
+          : { rows: [employeeRow(currentRole)] },
+      ),
+    );
     for (const role of [UserRole.ADMINISTRATOR, UserRole.EMPLOYEE]) {
       await request(app.getHttpServer())
         .get('/api/auth/me')
         .auth(token, { type: 'bearer' })
         .expect(200, { id: 21, role, firstName: 'Ana' });
+      currentRole = UserRole.EMPLOYEE;
     }
-    expect(db.query).toHaveBeenCalledTimes(2);
+    expect(db.query).toHaveBeenCalledTimes(4);
   });
 
   it.each([
@@ -608,11 +638,18 @@ describe('Employee authentication (HTTP integration)', () => {
       gender: null,
       language: 'es',
     };
-    db.query.mockImplementation((sql: string) =>
-      sql.includes('CLIENT_EMAIL_VERIFICATIONS')
-        ? Promise.resolve({ rows: [] })
-        : Promise.resolve({ rows: [client] }),
-    );
+
+    db.query.mockImplementation((sql: string) => {
+      if (sql.includes('CLIENT_EMAIL_VERIFICATIONS'))
+        return Promise.resolve({ rows: [] });
+      if (sql.includes('CLIENT_LOCAL_CREDENTIALS')) {
+        return Promise.resolve({
+          rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 }],
+        });
+      }
+      return Promise.resolve({ rows: [client] });
+    });
+
     const { accessToken } = app.get(AuthService).issueToken(client);
     await request(app.getHttpServer())
       .get('/api/auth/me')

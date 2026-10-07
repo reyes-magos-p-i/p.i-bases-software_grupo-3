@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import DashboardView from '@/views/DashboardView.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
+import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import { nextTick } from 'vue'
@@ -14,26 +15,44 @@ import {
 } from '@/services/employee-session.service'
 import type { UserCreationOptions } from '@/types/user'
 
-const { getUserCreationOptions, createUser, getUsers, getEmployeeListOptions } = vi.hoisted(() => ({
-  getUserCreationOptions: vi.fn(),
-  createUser: vi.fn(),
-  getUsers: vi
-    .fn()
-    .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 }),
-  getEmployeeListOptions: vi.fn().mockResolvedValue({ branches: [] }),
-}))
-vi.mock('@/services/user.service', () => ({
-  getUserCreationOptions,
-  createUser,
+const {
   getUsers,
   getEmployeeListOptions,
+  getUserCreationOptions,
+  createUser,
+  getTheaterCreationOptions,
+  createTheater,
+  getEmployeePasswordStatus,
+} = vi.hoisted(
+  () => ({
+    getUsers: vi.fn(),
+    getEmployeeListOptions: vi.fn(),
+    getUserCreationOptions: vi.fn(),
+    createUser: vi.fn(),
+    getTheaterCreationOptions: vi.fn(),
+    createTheater: vi.fn(),
+    getEmployeePasswordStatus: vi.fn(),
+  }),
+)
+vi.mock('@/services/user.service', () => ({
+  getUsers,
+  getEmployeeListOptions,
+  getUserCreationOptions,
+  createUser,
 }))
+vi.mock('@/services/theater.service', () => ({ getTheaterCreationOptions, createTheater }))
+vi.mock('@/services/authService', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/services/authService')>('@/services/authService')
+  return { ...actual, getEmployeePasswordStatus }
+})
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')
-  const user = ref<{ id: number; role: string; firstName: string } | null>({
+  const user = ref<{ id: number; role: string; firstName: string; email?: string } | null>({
     id: 21,
     role: 'ADMINISTRATOR',
     firstName: 'Ana',
+    email: 'ana@example.com',
   })
   return {
     employeeSession: { user },
@@ -45,7 +64,9 @@ vi.mock('@/services/employee-session.service', async () => {
   }
 })
 async function setRole(role: 'ADMINISTRATOR' | 'EMPLOYEE') {
-  Object.assign(employeeSession.user, { value: { id: 21, role, firstName: 'Ana' } })
+  Object.assign(employeeSession.user, {
+    value: { id: 21, role, firstName: 'Ana', email: 'ana@example.com' },
+  })
   await nextTick()
 }
 const catalogs: UserCreationOptions = {
@@ -86,17 +107,38 @@ beforeEach(() => {
   getUsers
     .mockReset()
     .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 })
+  getEmployeePasswordStatus.mockReset().mockResolvedValue('valid')
   getEmployeeListOptions.mockReset().mockResolvedValue({ branches: [] })
   Object.assign(employeeSession.user, {
-    value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' },
+    value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana', email: 'ana@example.com' },
   })
   vi.mocked(closeEmployeeSession).mockReset().mockResolvedValue(null)
   vi.mocked(invalidateEmployeeSession).mockClear()
-  vi.mocked(restoreEmployeeSession)
-    .mockReset()
-    .mockResolvedValue({ id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' })
+  vi.mocked(restoreEmployeeSession).mockReset().mockResolvedValue({
+    id: 21,
+    role: 'ADMINISTRATOR',
+    firstName: 'Ana',
+    email: 'ana@example.com',
+  })
   createUser.mockReset().mockResolvedValue({ id: 42, role: 'EMPLOYEE', email: 'ana@example.com' })
   getUserCreationOptions.mockReset().mockResolvedValue(catalogs)
+  getTheaterCreationOptions.mockReset().mockResolvedValue({
+    projectors: [
+      { projectorId: 1, name: 'IMAX' },
+      { projectorId: 2, name: '70mm' },
+    ],
+    cinemas: [{ branchId: 3, name: 'Cinépolis Central', companyId: 1 }],
+  })
+  createTheater.mockReset().mockResolvedValue({
+    theaterId: 4,
+    branchId: 3,
+    numberOfSeats: 250,
+    dimensionX: 20,
+    dimensionY: 12,
+    projectorName: 'IMAX',
+    isActive: true,
+    status: 'Disponible',
+  })
   // jsdom does not implement the native dialog methods.
   Object.defineProperties(dialogPrototype, {
     showModal: {
@@ -156,6 +198,32 @@ async function renderDashboard() {
 }
 
 describe('DashboardView', () => {
+  it('shows the password section to administrators and returns from its embedded view', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    await view.get('[aria-label="Cambiar contraseña"]').trigger('click')
+    await flushPromises()
+
+    expect(view.getComponent(DashboardLayout).props('availableSections')).toContain('password')
+    expect(view.findComponent(ChangePasswordView).props()).toMatchObject({
+      embedded: true,
+      accountType: 'employee',
+    })
+    expect(view.findAllComponents(UserListPanel)).toHaveLength(0)
+    await view.findComponent(ChangePasswordView).vm.$emit('return-to-dashboard')
+    await flushPromises()
+    expect(view.findAllComponents(UserListPanel)).toHaveLength(1)
+  })
+
+  it('exposes the password recovery section to employees', async () => {
+    await setRole('EMPLOYEE')
+    const view = await renderDashboard()
+    await flushPromises()
+
+    expect(view.find('[aria-label="Cambiar contraseña"]').exists()).toBe(true)
+    expect(view.getComponent(DashboardLayout).props('availableSections')).toContain('password')
+  })
+
   it('provides the current staff ID to protect self deactivation', async () => {
     const view = await renderDashboard()
     await flushPromises()
@@ -233,6 +301,7 @@ describe('DashboardView', () => {
   })
   it('uses the authenticated identity without development role controls', async () => {
     const view = await renderDashboard()
+    await flushPromises()
     expect(view.text()).not.toContain('Vista de desarrollo')
     expect(view.text()).not.toContain('Usuario de prueba')
     expect(getUserCreationOptions).not.toHaveBeenCalled()
@@ -254,6 +323,103 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
   })
 
+  it('opens the password form when the employee password has expired', async () => {
+    getEmployeePasswordStatus
+      .mockResolvedValueOnce('expired')
+      .mockResolvedValueOnce('expired')
+    const view = await renderDashboard()
+    await flushPromises()
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
+      'Cambiar contraseña',
+    )
+    expect(view.text()).toContain('Tu contraseña venció.')
+  })
+
+  it('prevents section navigation and logout while the password change is pending', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Cambiar contraseña"]').trigger('click')
+    const passwordView = view.getComponent(ChangePasswordView)
+    passwordView.vm.$emit('submission-state', true)
+    await nextTick()
+
+    await view.get('[aria-label="Clientes"]').trigger('click')
+    await view.get('.logout-button').trigger('click')
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
+      'Cambiar contraseña',
+    )
+    expect(view.get('.logout-button').attributes('disabled')).toBeDefined()
+    expect(closeEmployeeSession).not.toHaveBeenCalled()
+  })
+
+  it('shows the sala creation action only to administrators', async () => {
+    const view = await renderDashboard()
+
+    await view.get('[aria-label="Salas"]').trigger('click')
+    expect(view.get('.add-user-button').text()).toContain('Crear sala')
+
+    await setRole('EMPLOYEE')
+    expect(view.find('.add-user-button').exists()).toBe(false)
+  })
+
+  it('creates a theater with the selected options', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Salas"]').trigger('click')
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+
+    expect(getTheaterCreationOptions).toHaveBeenCalledTimes(1)
+    expect(view.get('.theater-dialog h2').text()).toBe('Crear sala')
+    expect(view.text()).not.toContain('El número de sala se genera automáticamente.')
+    expect(view.get<HTMLSelectElement>('[name="status"]').element.value).toBe('Disponible')
+
+    await view.get('[name="numberOfSeats"]').setValue('240')
+    await view.get('[name="projectorName"]').setValue('IMAX')
+    await view.get('[name="branchId"]').setValue('3')
+    await view.get('[name="dimensionX"]').setValue('20')
+    await view.get('[name="dimensionY"]').setValue('12')
+    await view.get('.theater-dialog form').trigger('submit')
+    await flushPromises()
+
+    expect(createTheater).toHaveBeenCalledExactlyOnceWith({
+      numberOfSeats: 240,
+      dimensionX: 20,
+      dimensionY: 12,
+      projectorName: 'IMAX',
+      branchId: 3,
+      status: 'Disponible',
+    })
+    expect(view.get('.creation-result').text()).toContain('Sala 4 creada exitosamente')
+    expect(view.get<HTMLDialogElement>('.theater-dialog').element.open).toBe(false)
+  })
+
+  it('rejects invalid theater seat counts before submitting', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Salas"]').trigger('click')
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+    await view.get('[name="numberOfSeats"]').setValue('5000')
+    await view.get('.theater-dialog form').trigger('submit')
+
+    expect(createTheater).not.toHaveBeenCalled()
+    expect(view.get('.field-error').text()).toContain('entre 1 y 4999')
+  })
+
+  it('rejects theater seat counts that do not match the dimensions', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Salas"]').trigger('click')
+    await view.get('.add-user-button').trigger('click')
+    await flushPromises()
+    await view.get('[name="numberOfSeats"]').setValue('250')
+    await view.get('[name="dimensionX"]').setValue('20')
+    await view.get('[name="dimensionY"]').setValue('12')
+    await view.get('.theater-dialog form').trigger('submit')
+
+    expect(createTheater).not.toHaveBeenCalled()
+    expect(view.get('.field-error').text()).toContain('igual a Dimensión X por Dimensión Y')
+  })
+
   it('moves to clients and hides administrator options when the server reports an employee role', async () => {
     const view = await renderDashboard()
 
@@ -264,7 +430,7 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
     expect(view.get('nav').text()).not.toContain('Tablero')
-    expect(view.get('nav').findAll('button')).toHaveLength(8)
+    expect(view.get('nav').findAll('button')).toHaveLength(7)
   })
 
   it('preserves clients as the current section across role changes', async () => {
@@ -283,7 +449,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(8)
+    expect(pending).toHaveLength(6)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')
@@ -292,6 +458,7 @@ describe('DashboardView', () => {
     expect(view.get('h1').text()).toBe('Empleados')
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
+
 
   it('ignores navigation outside the available dashboard sections', async () => {
     const view = await renderDashboard()

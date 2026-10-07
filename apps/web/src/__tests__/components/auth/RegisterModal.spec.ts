@@ -85,6 +85,31 @@ describe('RegisterModal.vue', () => {
     })
   }
 
+  it('shows independent controls to reveal and hide both password fields', async () => {
+    const wrapper = createWrapper()
+    const password = wrapper.get('#password')
+    const confirmation = wrapper.get('#confirmPassword')
+    const passwordToggle = wrapper.get('button[aria-controls="password"]')
+    const confirmationToggle = wrapper.get('button[aria-controls="confirmPassword"]')
+
+    expect(password.attributes('type')).toBe('password')
+    expect(confirmation.attributes('type')).toBe('password')
+
+    await passwordToggle.trigger('click')
+    expect(password.attributes('type')).toBe('text')
+    expect(confirmation.attributes('type')).toBe('password')
+    expect(passwordToggle.attributes('aria-label')).toBe('Ocultar contraseña')
+
+    await confirmationToggle.trigger('click')
+    expect(confirmation.attributes('type')).toBe('text')
+
+    await wrapper.setProps({ open: false })
+    expect(wrapper.find('#password').exists()).toBe(false)
+    await wrapper.setProps({ open: true })
+    expect(wrapper.get('#password').attributes('type')).toBe('password')
+    expect(wrapper.get('#confirmPassword').attributes('type')).toBe('password')
+  })
+
   function dateOneDayBeforeTurningEighteen(): string {
     const today = Object.fromEntries(
       new Intl.DateTimeFormat('en-CA', {

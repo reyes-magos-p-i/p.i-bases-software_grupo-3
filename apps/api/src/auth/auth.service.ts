@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   ServiceUnavailableException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
@@ -18,6 +19,7 @@ import { UsersRepository } from '../users/users.repository';
 import type { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
 import { EmailVerificationSender } from './notifications/email-verification-sender';
+import { validatePasswordChange } from './password/password-change-validator';
 
 // This non-account hash keeps missing credentials on the password verification path.
 const LOGIN_REFERENCE_HASH =
@@ -134,6 +136,42 @@ export class AuthService {
     };
   }
 
+  async changeEmployeePassword(
+    employeeId: number,
+    input: {
+      currentPassword: string;
+      newPassword: string;
+      confirmNewPassword: string;
+      expirationDays: number;
+    },
+  ): Promise<void> {
+    const employee =
+      await this.usersRepository.findEmployeePasswordCredentials(employeeId);
+    if (
+      !employee ||
+      !(await this.passwordHasher.verify(
+        input.currentPassword,
+        employee.passwordHash,
+      ))
+    ) {
+      throw new BadRequestException({
+        code: 'CURRENT_PASSWORD_INCORRECT',
+        message: 'Contraseña actual incorrecta.',
+      });
+    }
+    await validatePasswordChange(input, employee, () =>
+      this.passwordHasher.verify(input.newPassword, employee.passwordHash),
+    );
+
+    const credentials = await this.passwordHasher.hash(input.newPassword);
+    await this.usersRepository.saveEmployeePassword(
+      employeeId,
+      credentials.passwordHash,
+      credentials.salt,
+      input.expirationDays,
+    );
+  }
+
   private createVerificationToken() {
     const value = randomBytes(32).toString('hex');
     return { value, hash: this.hashVerificationToken(value) };
@@ -220,6 +258,27 @@ export class AuthService {
         firstSurname: employee.firstSurname,
         secondSurname: employee.secondSurname,
       },
+    };
+  }
+
+  async loginClient(dto: LoginDto) {
+    const client = await this.clients.findWithLocalCredentials(dto.email);
+    const matches = await this.passwordHasher.verify(
+      dto.password,
+      client?.passwordHash ?? LOGIN_REFERENCE_HASH,
+    );
+    if (!client || !matches || client.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Correo o contraseña incorrectos');
+    }
+    if (await this.clients.isEmailVerificationPending(client.id)) {
+      throw new ForbiddenException({
+        code: 'EMAIL_VERIFICATION_REQUIRED',
+        message: 'Confirma tu correo electrónico antes de iniciar sesión.',
+      });
+    }
+    return {
+      ...this.issueToken(client),
+      client: this.clientIdentity(client),
     };
   }
 

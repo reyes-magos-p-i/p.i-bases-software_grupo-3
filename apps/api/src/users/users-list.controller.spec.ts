@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from '../auth/notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 import {
   NotFoundException,
   ValidationPipe,
@@ -31,10 +33,14 @@ describe('User list HTTP permissions and validation', () => {
     listEmployees: jest.fn(),
     getEmployeeListOptions: jest.fn(),
   };
-  const repository = { findEmployeeIdentityById: jest.fn() };
+  const repository = {
+    findEmployeeIdentityById: jest.fn(),
+    findEmployeeCredentialsStatus: jest.fn(),
+  };
   const clients = {
     findById: jest.fn(),
     isEmailVerificationPending: jest.fn(),
+    findPasswordStatus: jest.fn(),
   };
   const empty = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
   const get = (path: string) =>
@@ -61,6 +67,10 @@ describe('User list HTTP permissions and validation', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue({})
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(UsersRepository)
@@ -86,6 +96,10 @@ describe('User list HTTP permissions and validation', () => {
       role: 'ADMINISTRATOR',
       firstName: 'Ana',
     });
+    repository.findEmployeeCredentialsStatus.mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
+    });
     service.listClients.mockResolvedValue(empty);
     service.listEmployees.mockResolvedValue(empty);
     service.getEmployeeListOptions.mockResolvedValue({ branches: [] });
@@ -101,6 +115,10 @@ describe('User list HTTP permissions and validation', () => {
     });
     clients.findById.mockResolvedValue({ id: 99, firstName: 'Cliente' });
     clients.isEmailVerificationPending.mockResolvedValue(false);
+    clients.findPasswordStatus.mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
+    });
   });
   afterAll(async () => {
     await app.close();

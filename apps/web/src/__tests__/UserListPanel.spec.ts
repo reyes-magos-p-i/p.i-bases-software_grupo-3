@@ -137,7 +137,7 @@ describe('UserListPanel', () => {
     expect(view.get('tbody td').text()).toBe('CL42')
     expect(view.findAll('th').slice(-1)[0]?.text()).toBe('Acciones')
     expect(
-      view.findAll('.actions button').map((button) => button.attributes('aria-label')),
+      view.findAll('[data-test="actions"] button').map((button) => button.attributes('aria-label')),
     ).toEqual(['Ver', 'Modificar', 'Desactivar'])
     expect(view.get('button[aria-label="Ver"]').attributes('disabled')).toBeUndefined()
     expect(view.get('button[aria-label="Modificar"]').attributes('disabled')).toBeUndefined()
@@ -354,7 +354,7 @@ describe('UserListPanel', () => {
     expect(view.get('table').text()).toContain('Administrador')
     expect(view.get('tbody td').text()).toBe('ADM42')
     expect(view.findAll('th').slice(-1)[0]?.text()).toBe('Acciones')
-    expect(view.findAll('.actions button')).toHaveLength(3)
+    expect(view.findAll('[data-test="actions"] button')).toHaveLength(3)
     expect(view.get('table').text()).toContain('Centro')
     expect(view.get('table').text()).toContain('01/10/2026')
     expect(view.get('table').text()).toContain('03/10/2026')

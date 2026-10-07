@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from '../auth/notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 import {
   ConflictException,
   NotFoundException,
@@ -31,6 +33,7 @@ describe('User update and deactivation HTTP contracts', () => {
   const origin = 'http://localhost:5173';
   const repository = {
     findEmployeeIdentityById: jest.fn(),
+    findEmployeeCredentialsStatus: jest.fn(),
     updateEmployee: jest.fn(),
     deactivateEmployee: jest.fn(),
     getCreationOptions: jest.fn(),
@@ -42,6 +45,7 @@ describe('User update and deactivation HTTP contracts', () => {
   const clients = {
     findById: jest.fn(),
     isEmailVerificationPending: jest.fn(),
+    findPasswordStatus: jest.fn(),
   };
   const generator = { generate: jest.fn() };
   const hasher = { hash: jest.fn() };
@@ -80,6 +84,10 @@ describe('User update and deactivation HTTP contracts', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue({})
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(UsersRepository)
@@ -108,8 +116,16 @@ describe('User update and deactivation HTTP contracts', () => {
       role: 'ADMINISTRATOR',
       firstName: 'Ana',
     });
+    repository.findEmployeeCredentialsStatus.mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
+    });
     clients.findById.mockResolvedValue({ id: 99, firstName: 'Cliente' });
     clients.isEmailVerificationPending.mockResolvedValue(false);
+    clients.findPasswordStatus.mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
+    });
     clientsRepository.updateClient.mockResolvedValue({
       id: 42,
       email: 'ana@example.com',

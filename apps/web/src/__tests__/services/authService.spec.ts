@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RegisterPayload } from '@/types/client'
 
-const { create, post, get, googleAuthCodeLogin } = vi.hoisted(() => ({
+const { create, post, get, patch, googleAuthCodeLogin } = vi.hoisted(() => ({
   create: vi.fn(),
   post: vi.fn(),
   get: vi.fn(),
+  patch: vi.fn(),
   googleAuthCodeLogin: vi.fn(),
 }))
 vi.mock('axios', () => ({
@@ -12,6 +13,121 @@ vi.mock('axios', () => ({
   isAxiosError: (error: { isAxiosError?: boolean }) => error?.isAxiosError === true,
 }))
 vi.mock('vue3-google-login', () => ({ googleAuthCodeLogin }))
+
+describe('Client local authentication', () => {
+  const identity = { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' }
+  const credentials = { email: identity.email, password: ' Exact password ' }
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.resetAllMocks()
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    localStorage.clear()
+    create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    localStorage.clear()
+  })
+
+  it('establishes the existing client session after a successful local login', async () => {
+    const { loginClient } = await import('@/services/authService')
+    const { clientSession } = await import('@/services/client-session.service')
+    post.mockResolvedValue({ data: { client: identity, accessToken: 'client-token' } })
+    await expect(loginClient(credentials)).resolves.toEqual(identity)
+    expect(post).toHaveBeenCalledExactlyOnceWith('/auth/clients/login', credentials, {
+      timeout: 15000,
+    })
+    expect(clientSession.user.value).toEqual(identity)
+    expect(localStorage.getItem('accessToken')).toBe('client-token')
+  })
+
+  it.each([
+    [400, undefined, 'Revisa'],
+    [401, undefined, 'incorrectos'],
+    [403, 'EMAIL_VERIFICATION_REQUIRED', 'Confirma'],
+    [403, undefined, 'autorizar'],
+    [500, undefined, 'conectar'],
+  ])('reports HTTP %s (%s) without leaking server details', async (status, code, message) => {
+    const { loginClient } = await import('@/services/authService')
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { status, data: { code, message: 'private details' } },
+    })
+    await expect(loginClient(credentials)).rejects.toThrow(message as string)
+    expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+
+  it('preserves the rate-limit delay in a typed error', async () => {
+    const { loginClient } = await import('@/services/authService')
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 429, headers: { 'retry-after': '12' } },
+    })
+    await expect(loginClient(credentials)).rejects.toMatchObject({
+      name: 'ClientAuthError',
+      status: 429,
+      retryAfterSeconds: 12,
+    })
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    {},
+    { client: identity },
+    { client: { ...identity, role: 'EMPLOYEE' }, accessToken: 'token' },
+  ])('does not store malformed authentication responses: %p', async (data) => {
+    const { loginClient } = await import('@/services/authService')
+    post.mockResolvedValue({ data })
+    await expect(loginClient(credentials)).rejects.toThrow()
+    expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+
+  it('verifies client Bearer credentials without sending the employee cookie', async () => {
+    const { getClientSession } = await import('@/services/authService')
+    get.mockResolvedValue({
+      data: { id: 7, email: identity.email, firstName: 'Ana', firstSurname: 'Rojas' },
+    })
+    await expect(getClientSession('saved-token')).resolves.toEqual(identity)
+    expect(get).toHaveBeenCalledExactlyOnceWith('/auth/me', {
+      timeout: 10000,
+      headers: { Authorization: 'Bearer saved-token' },
+      adapter: 'fetch',
+      withCredentials: false,
+    })
+  })
+
+  it('distinguishes expired sessions from transport failures', async () => {
+    const { getClientSession } = await import('@/services/authService')
+    get.mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } })
+    await expect(getClientSession('expired')).resolves.toBeNull()
+    get.mockRejectedValueOnce(new Error('Private network failure'))
+    await expect(getClientSession('saved')).rejects.toThrow('conectar')
+  })
+
+  it('checks employee password expiration through the session cookie', async () => {
+    const { getEmployeePasswordStatus } = await import('@/services/authService')
+    get.mockResolvedValue({ data: { status: 'expired' } })
+
+    await expect(getEmployeePasswordStatus()).resolves.toBe('expired')
+    expect(get).toHaveBeenCalledExactlyOnceWith('/auth/password-status', {
+      timeout: 10000,
+    })
+  })
+
+  it('preserves employee-session errors when password status cannot be checked', async () => {
+    const { getEmployeePasswordStatus } = await import('@/services/authService')
+    get.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 401 },
+    })
+
+    await expect(getEmployeePasswordStatus()).rejects.toMatchObject({
+      name: 'EmployeeAuthError',
+      status: 401,
+    })
+  })
+})
 
 describe('registerUser', () => {
   const payload: RegisterPayload = {
@@ -30,7 +146,7 @@ describe('registerUser', () => {
     vi.resetModules()
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
-    create.mockImplementation((defaults) => ({ defaults, post, get }))
+    create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
   })
 
   afterEach(() => vi.unstubAllEnvs())
@@ -95,7 +211,7 @@ describe('email verification API', () => {
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
     get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
-    create.mockImplementation((defaults) => ({ defaults, post, get }))
+    create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
   })
 
   afterEach(() => {
@@ -179,7 +295,7 @@ describe('facebook authentication API', () => {
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
     get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
-    create.mockImplementation((defaults) => ({ defaults, post, get }))
+    create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
   })
 
   afterEach(() => {
@@ -239,7 +355,7 @@ describe('employee authentication API', () => {
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
-    create.mockImplementation((defaults) => ({ defaults, post, get }))
+    create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
   })
   afterEach(() => {
     vi.unstubAllEnvs()
@@ -258,6 +374,41 @@ describe('employee authentication API', () => {
     expect(post).toHaveBeenCalledExactlyOnceWith('/auth/employees/login', credentials, {
       timeout: 15000,
     })
+  })
+
+  it('changes employee passwords through the cookie-authenticated endpoint', async () => {
+    const { changeEmployeePassword } = await import('@/services/authService')
+    const payload = {
+      currentPassword: 'Current!Password9',
+      newPassword: 'Cr0wn!River77',
+      confirmNewPassword: 'Cr0wn!River77',
+      expirationDays: 90 as const,
+    }
+    patch.mockResolvedValueOnce({ data: { message: 'Contraseña actualizada correctamente' } })
+    await expect(changeEmployeePassword(payload)).resolves.toBeUndefined()
+    expect(patch).toHaveBeenCalledExactlyOnceWith('/auth/employees/password', payload, {
+      headers: undefined,
+    })
+  })
+
+  it('maps employee password errors without exposing backend messages', async () => {
+    const { changeEmployeePassword } = await import('@/services/authService')
+    patch.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: { code: 'CURRENT_PASSWORD_INCORRECT', message: 'database details' },
+      },
+    })
+    await expect(
+      changeEmployeePassword({
+        currentPassword: 'bad',
+        newPassword: 'Cr0wn!River77',
+        confirmNewPassword: 'Cr0wn!River77',
+        expirationDays: 90,
+      }),
+    ).rejects.toMatchObject({ code: 'CURRENT_PASSWORD_INCORRECT' })
+    expect(patch).toHaveBeenCalledTimes(1)
   })
 
   it('blocks employee login while a client session is stored', async () => {

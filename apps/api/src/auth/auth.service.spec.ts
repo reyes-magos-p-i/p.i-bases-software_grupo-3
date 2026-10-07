@@ -30,6 +30,8 @@ describe('AuthService', () => {
   let service: AuthService;
   let clients: {
     findByEmail: jest.Mock;
+    findWithLocalCredentials: jest.Mock;
+    isEmailVerificationPending: jest.Mock;
     deleteExpiredPendingClientByEmail: jest.Mock;
     createWithLocalCredentials: jest.Mock;
     createPendingWithLocalCredentials: jest.Mock;
@@ -39,7 +41,11 @@ describe('AuthService', () => {
     findOrCreateSocial: jest.Mock; // for google auth
   };
   let jwt: { sign: jest.Mock; signAsync: jest.Mock };
-  let users: { findEmployeeWithLocalCredentialsByEmail: jest.Mock };
+  let users: {
+    findEmployeeWithLocalCredentialsByEmail: jest.Mock;
+    findEmployeePasswordCredentials: jest.Mock;
+    saveEmployeePassword: jest.Mock;
+  };
   let config: { getOrThrow: jest.Mock; get: jest.Mock };
   let verificationSender: { send: jest.Mock };
 
@@ -58,6 +64,8 @@ describe('AuthService', () => {
   beforeEach(async () => {
     clients = {
       findByEmail: jest.fn(),
+      findWithLocalCredentials: jest.fn(),
+      isEmailVerificationPending: jest.fn().mockResolvedValue(false),
       deleteExpiredPendingClientByEmail: jest.fn(),
       createWithLocalCredentials: jest.fn(),
       createPendingWithLocalCredentials: jest.fn(),
@@ -70,7 +78,11 @@ describe('AuthService', () => {
       sign: jest.fn().mockReturnValue('signed-token'),
       signAsync: jest.fn().mockResolvedValue('employee-token'),
     };
-    users = { findEmployeeWithLocalCredentialsByEmail: jest.fn() };
+    users = {
+      findEmployeeWithLocalCredentialsByEmail: jest.fn(),
+      findEmployeePasswordCredentials: jest.fn(),
+      saveEmployeePassword: jest.fn(),
+    };
     config = {
       getOrThrow: jest.fn((key: string) =>
         key === 'FRONTEND_URL' ? 'http://localhost:5173' : `test-${key}`,
@@ -95,6 +107,186 @@ describe('AuthService', () => {
     jest.clearAllMocks();
     hasher.hash.mockResolvedValue({ passwordHash: 'hashed-password', salt });
     hasher.verify.mockReset().mockResolvedValue(true);
+  });
+
+  describe('client login', () => {
+    const credentials = {
+      email: 'client@example.com',
+      password: ' Exact password ',
+    };
+    const client = {
+      id: 7,
+      email: credentials.email,
+      firstName: 'Ana',
+      firstSurname: 'Rojas',
+      status: 'ACTIVE',
+      passwordHash: 'stored-hash',
+    };
+
+    it('verifies the exact password and returns only the safe profile with a client token', async () => {
+      clients.findWithLocalCredentials.mockResolvedValue(client);
+      await expect(service.loginClient(credentials)).resolves.toEqual({
+        accessToken: 'signed-token',
+        client: {
+          id: 7,
+          email: credentials.email,
+          firstName: 'Ana',
+          lastName: 'Rojas',
+        },
+      });
+      expect(hasher.verify).toHaveBeenCalledWith(
+        credentials.password,
+        'stored-hash',
+      );
+      expect(jwt.sign).toHaveBeenCalledWith({
+        sub: 7,
+        email: credentials.email,
+        type: 'client',
+      });
+      expect(
+        users.findEmployeeWithLocalCredentialsByEmail,
+      ).not.toHaveBeenCalled();
+      expect(verificationSender.send).not.toHaveBeenCalled();
+    });
+
+    it.each([null, { ...client, status: 'INACTIVE' }])(
+      'rejects unavailable accounts without issuing tokens: %p',
+      async (account) => {
+        clients.findWithLocalCredentials.mockResolvedValue(account);
+        await expect(service.loginClient(credentials)).rejects.toThrow(
+          'Correo o contraseña incorrectos',
+        );
+        expect(hasher.verify).toHaveBeenCalledWith(
+          credentials.password,
+          expect.any(String),
+        );
+        expect(jwt.sign).not.toHaveBeenCalled();
+        expect(clients.isEmailVerificationPending).not.toHaveBeenCalled();
+      },
+    );
+
+    it('uses the same credential error for incorrect passwords without exposing verification status', async () => {
+      clients.findWithLocalCredentials.mockResolvedValue(client);
+      hasher.verify.mockResolvedValue(false);
+      await expect(service.loginClient(credentials)).rejects.toThrow(
+        'Correo o contraseña incorrectos',
+      );
+      expect(clients.isEmailVerificationPending).not.toHaveBeenCalled();
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('requires email confirmation after validating the password', async () => {
+      clients.findWithLocalCredentials.mockResolvedValue(client);
+      clients.isEmailVerificationPending.mockResolvedValue(true);
+      await expect(service.loginClient(credentials)).rejects.toMatchObject({
+        status: 403,
+        response: { code: 'EMAIL_VERIFICATION_REQUIRED' },
+      });
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('propagates persistence failures without attempting to issue a token', async () => {
+      const failure = new Error('Database unavailable');
+      clients.findWithLocalCredentials.mockRejectedValue(failure);
+      await expect(service.loginClient(credentials)).rejects.toBe(failure);
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changeEmployeePassword', () => {
+    const employee = {
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      passwordHash: 'current-hash',
+    };
+    const input = {
+      currentPassword: 'Current!Password9',
+      newPassword: 'Cr0wn!River77',
+      confirmNewPassword: 'Cr0wn!River77',
+      expirationDays: 90,
+    };
+
+    beforeEach(() => {
+      users.findEmployeePasswordCredentials.mockResolvedValue(employee);
+      hasher.verify.mockResolvedValue(false);
+    });
+
+    it('validates the current password and policy, then saves the new hash and expiration', async () => {
+      hasher.verify.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+      await expect(
+        service.changeEmployeePassword(21, input),
+      ).resolves.toBeUndefined();
+
+      expect(hasher.verify).toHaveBeenNthCalledWith(
+        1,
+        input.currentPassword,
+        employee.passwordHash,
+      );
+      expect(hasher.verify).toHaveBeenNthCalledWith(
+        2,
+        input.newPassword,
+        employee.passwordHash,
+      );
+      expect(hasher.hash).toHaveBeenCalledWith(input.newPassword);
+      expect(users.saveEmployeePassword).toHaveBeenCalledWith(
+        21,
+        'hashed-password',
+        salt,
+        90,
+      );
+    });
+
+    it('rejects an incorrect current password without hashing or saving', async () => {
+      hasher.verify.mockResolvedValue(false);
+      await expect(
+        service.changeEmployeePassword(21, input),
+      ).rejects.toMatchObject({
+        response: { code: 'CURRENT_PASSWORD_INCORRECT' },
+      });
+      expect(hasher.hash).not.toHaveBeenCalled();
+      expect(users.saveEmployeePassword).not.toHaveBeenCalled();
+    });
+
+    it('rejects new passwords that do not match', async () => {
+      hasher.verify.mockResolvedValueOnce(true);
+      await expect(
+        service.changeEmployeePassword(21, {
+          ...input,
+          confirmNewPassword: 'Different!Password9',
+        }),
+      ).rejects.toMatchObject({ response: { code: 'PASSWORDS_DO_NOT_MATCH' } });
+      expect(hasher.hash).not.toHaveBeenCalled();
+    });
+
+    it('rejects reusing the current password', async () => {
+      hasher.verify.mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+      await expect(
+        service.changeEmployeePassword(21, {
+          ...input,
+          newPassword: input.currentPassword,
+          confirmNewPassword: input.currentPassword,
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'NEW_PASSWORD_SAME_AS_CURRENT' },
+      });
+      expect(hasher.hash).not.toHaveBeenCalled();
+    });
+
+    it('rejects passwords that violate the policy and passes employee identity context', async () => {
+      hasher.verify.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+      await expect(
+        service.changeEmployeePassword(21, {
+          ...input,
+          newPassword: 'password',
+          confirmNewPassword: 'password',
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'PASSWORD_POLICY_VIOLATION' },
+      });
+      expect(hasher.hash).not.toHaveBeenCalled();
+      expect(users.saveEmployeePassword).not.toHaveBeenCalled();
+    });
   });
 
   describe('register', () => {
