@@ -8,6 +8,7 @@ import type {
   ProjectionList,
   ProjectionListQuery,
   ProjectionSchedulingOptions,
+  UpdateProjectionRequest,
 } from '@/types/projection'
 
 export async function getProjectionSchedulingOptions(signal?: AbortSignal) {
@@ -48,6 +49,13 @@ export async function getProjectionDetail(id: number, signal?: AbortSignal) {
   const response = await getApi().get<ProjectionDetail>(`/projections/${id}`, {
     signal,
     timeout: 10000,
+  })
+  return response.data
+}
+
+export async function updateProjection(id: number, data: UpdateProjectionRequest) {
+  const response = await getApi().put<ProjectionDetail>(`/projections/${id}`, data, {
+    timeout: 30000,
   })
   return response.data
 }

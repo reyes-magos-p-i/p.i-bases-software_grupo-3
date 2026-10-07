@@ -72,6 +72,18 @@ export interface NewProjections {
   slots: ProjectionSlot[];
 }
 
+export interface ProjectionChanges {
+  movieId: number;
+  theaterId: number;
+  /** Undefined keeps the current price. */
+  price?: number;
+  /** Undefined keeps the current status. */
+  status?: ProjectionStatus;
+  cleaningMinutes: number;
+  advertisementMinutes: number;
+  slot: ProjectionSlot;
+}
+
 export interface CreatedProjection {
   movieFunctionId: number;
   startTime: string;

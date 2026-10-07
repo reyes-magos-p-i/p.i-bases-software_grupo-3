@@ -45,6 +45,9 @@ export interface CreateProjectionRequest {
   status: 'ACTIVE' | 'INACTIVE'
 }
 
+/** A modification reschedules a single date. */
+export type UpdateProjectionRequest = Omit<CreateProjectionRequest, 'endDate'>
+
 export interface CreatedProjections {
   status: ProjectionStatus
   price: number

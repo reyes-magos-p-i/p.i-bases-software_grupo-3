@@ -5,4 +5,6 @@ export const PROJECTION_MESSAGES = {
   invalidPrice: 'El precio debe ser un número positivo en colones.',
   invalidRange: 'La fecha final no puede ser anterior a la fecha inicial.',
   notFound: 'Esta proyección ya no está disponible.',
+  selectionUnavailable: 'El elemento seleccionado ya no está disponible.',
+  notEditable: 'Solo se pueden modificar proyecciones activas o inactivas.',
 } as const;

@@ -34,7 +34,8 @@ const timeFilters = [
   { name: 'timeFrom', label: 'Hora inicio' },
   { name: 'timeTo', label: 'Hora fin' },
 ] as const
-const emit = defineEmits<{ sessionExpired: []; forbidden: [] }>()
+const emit = defineEmits<{ sessionExpired: []; forbidden: []; edit: [id: number] }>()
+const EDITABLE_STATUSES: readonly string[] = ['ACTIVE', 'INACTIVE']
 const id = useId()
 const emptyFilters = () => ({
   status: '' as ProjectionStatus | '',
@@ -351,6 +352,15 @@ defineExpose({ refresh })
               >
                 <i class="bi bi-eye" aria-hidden="true"></i>
               </button>
+              <button
+                type="button"
+                :title="EDITABLE_STATUSES.includes(row.status as string) ? 'Modificar' : 'Solo se modifican proyecciones activas o inactivas'"
+                :aria-label="`Modificar ${row.code}`"
+                :disabled="!EDITABLE_STATUSES.includes(row.status as string)"
+                @click="emit('edit', row.id as number)"
+              >
+                <i class="bi bi-pencil-square" aria-hidden="true"></i>
+              </button>
             </div>
           </template>
         </CrudTable>
@@ -446,7 +456,9 @@ button { padding: 10px 16px; border: 1px solid var(--color-primary); cursor: poi
 button:disabled, fieldset:disabled select, fieldset:disabled input { opacity: .5; cursor: default; }
 input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .row-actions button { display: inline-grid; place-items: center; width: 36px; min-height: 36px; padding: 0; border: 0; color: var(--color-primary); font-size: 1.125rem; background: transparent; }
-.row-actions button:hover { background: var(--color-light_gray); }
+.row-actions { display: flex; gap: 4px; }
+.row-actions button:not(:disabled):hover { background: var(--color-light_gray); }
+.row-actions button:disabled { opacity: .35; cursor: not-allowed; }
 .feedback, .empty-state { margin: 0; padding: 24px; border-radius: var(--radius-medium); background: var(--color-white); }
 .error { color: var(--color-error); border-left: 4px solid var(--color-error); }
 .result-count { margin: 0 0 12px; color: var(--color-gray); font-size: .875rem; }

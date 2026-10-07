@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import oracle from 'oracledb';
 import { DatabaseService } from '../database/database.service';
 import { likePattern } from '../users/user-search.util';
@@ -12,6 +12,7 @@ import type {
   ListedProjection,
   NewProjections,
   ProjectionCatalogs,
+  ProjectionChanges,
   ProjectionDetail,
   ProjectionFilterOptions,
 } from './types/projection.types';
@@ -176,34 +177,113 @@ export class ProjectionsRepository {
     data: NewProjections,
     actorId: number,
   ): Promise<CreatedProjections> {
+    const projections = await this.scheduling(async (connection) => {
+      await this.lockAvailableTheater(
+        connection,
+        data.theaterId,
+        data.movieId,
+        PROJECTION_MESSAGES.unavailable,
+      );
+      await this.rejectScheduleConflicts(connection, data.theaterId, data.slots);
+      const activityIds = await this.ensureActivities(connection, data);
+      const created: CreatedProjection[] = [];
+      for (const slot of data.slots) {
+        const movieFunctionId = await this.insertProjection(connection, data, slot, actorId);
+        await this.linkActivities(connection, movieFunctionId, activityIds, actorId);
+        created.push({ movieFunctionId, startTime: slot.startTime, endTime: slot.endTime });
+      }
+      return created;
+    });
+    return { status: data.status, price: data.price, projections };
+  }
+
+  async updateProjection(
+    id: number,
+    data: ProjectionChanges,
+    actorId: number,
+  ): Promise<void> {
+    await this.scheduling(async (connection) => {
+      const current = await connection.execute<{ STATUS: string }>(
+        'SELECT STATUS FROM MOVIE_FUNCTIONS WHERE MOVIE_FUNCTION_ID = :id FOR UPDATE',
+        { id: { val: id, type: oracle.NUMBER } },
+        TRANSACTION,
+      );
+      const status = current.rows?.[0]?.STATUS;
+      if (status === undefined) throw new NotFoundException(PROJECTION_MESSAGES.notFound);
+      if (status !== 'ACTIVE' && status !== 'INACTIVE')
+        throw new ConflictException(PROJECTION_MESSAGES.notEditable);
+      await this.lockAvailableTheater(
+        connection,
+        data.theaterId,
+        data.movieId,
+        PROJECTION_MESSAGES.selectionUnavailable,
+      );
+      await this.rejectScheduleConflicts(connection, data.theaterId, [data.slot], id);
+      const activityIds = await this.ensureActivities(connection, data);
+      await connection.execute(
+        `UPDATE MOVIE_FUNCTIONS
+            SET MOVIE_ID = :movieId, THEATER_ID = :theaterId,
+                START_TIME = TO_TIMESTAMP(:startTime, ${LOCAL_FORMAT}),
+                END_TIME = TO_TIMESTAMP(:endTime, ${LOCAL_FORMAT}),
+                SCREENING_DATE = TO_DATE(:screeningDate, 'YYYY-MM-DD'),
+                PRICE = COALESCE(:price, PRICE), STATUS = COALESCE(:status, STATUS)
+          WHERE MOVIE_FUNCTION_ID = :id`,
+        {
+          id,
+          movieId: data.movieId,
+          theaterId: data.theaterId,
+          startTime: data.slot.startTime,
+          endTime: data.slot.endTime,
+          screeningDate: data.slot.screeningDate,
+          price: { val: data.price ?? null, type: oracle.NUMBER },
+          status: { val: data.status ?? null, type: oracle.STRING },
+        },
+        TRANSACTION,
+      );
+      await connection.execute(
+        'DELETE FROM MOVIE_FUNCTIONS_ACTIVITIES WHERE MOVIE_FUNCTION_ID = :id',
+        { id },
+        TRANSACTION,
+      );
+      await this.linkActivities(connection, id, activityIds, actorId);
+    });
+  }
+
+  // Runs a scheduling transaction; a unique constraint violation means another
+  // projection took the same slot.
+  private async scheduling<T>(work: (connection: oracle.Connection) => Promise<T>) {
     try {
-      const projections = await this.db.transaction(async (connection) => {
-        await this.lockAvailableTheater(connection, data.theaterId, data.movieId);
-        await this.rejectScheduleConflicts(connection, data.theaterId, data.slots);
-        const activityIds = [
-          await this.ensureActivity(connection, 'ADVERTISEMENT', data.advertisementMinutes),
-          await this.ensureActivity(connection, 'CLEANING', data.cleaningMinutes),
-        ];
-        const created: CreatedProjection[] = [];
-        for (const slot of data.slots) {
-          const movieFunctionId = await this.insertProjection(connection, data, slot, actorId);
-          for (const activityId of activityIds)
-            await connection.execute(
-              `INSERT INTO MOVIE_FUNCTIONS_ACTIVITIES (MOVIE_FUNCTION_ID, ACTIVITY_ID, CREATED_BY)
-               VALUES (:movieFunctionId, :activityId, :actorId)`,
-              { movieFunctionId, activityId, actorId },
-              TRANSACTION,
-            );
-          created.push({ movieFunctionId, startTime: slot.startTime, endTime: slot.endTime });
-        }
-        return created;
-      });
-      return { status: data.status, price: data.price, projections };
+      return await this.db.transaction(work);
     } catch (error) {
       if ((error as { errorNum?: number } | null)?.errorNum === 1)
         throw new ConflictException(`${PROJECTION_MESSAGES.scheduleConflict}.`);
       throw error;
     }
+  }
+
+  private async ensureActivities(
+    connection: oracle.Connection,
+    data: { advertisementMinutes: number; cleaningMinutes: number },
+  ) {
+    return [
+      await this.ensureActivity(connection, 'ADVERTISEMENT', data.advertisementMinutes),
+      await this.ensureActivity(connection, 'CLEANING', data.cleaningMinutes),
+    ];
+  }
+
+  private async linkActivities(
+    connection: oracle.Connection,
+    movieFunctionId: number,
+    activityIds: readonly number[],
+    actorId: number,
+  ) {
+    for (const activityId of activityIds)
+      await connection.execute(
+        `INSERT INTO MOVIE_FUNCTIONS_ACTIVITIES (MOVIE_FUNCTION_ID, ACTIVITY_ID, CREATED_BY)
+         VALUES (:movieFunctionId, :activityId, :actorId)`,
+        { movieFunctionId, activityId, actorId },
+        TRANSACTION,
+      );
   }
 
   // Locks the theater row so concurrent schedules for the same theater are
@@ -212,6 +292,7 @@ export class ProjectionsRepository {
     connection: oracle.Connection,
     theaterId: number,
     movieId: number,
+    unavailableMessage: string,
   ) {
     const theater = await connection.execute<{ BRANCH_ID: number }>(
       'SELECT BRANCH_ID FROM THEATERS WHERE THEATER_ID = :theaterId AND IS_ACTIVE = 1 FOR UPDATE',
@@ -227,16 +308,19 @@ export class ProjectionsRepository {
             { branchId, movieId: { val: movieId, type: oracle.NUMBER } },
             TRANSACTION,
           );
-    if (!movie?.rows?.length)
-      throw new ConflictException(PROJECTION_MESSAGES.unavailable);
+    if (!movie?.rows?.length) throw new ConflictException(unavailableMessage);
   }
 
   private async rejectScheduleConflicts(
     connection: oracle.Connection,
     theaterId: number,
     slots: readonly ProjectionSlot[],
+    excludedId?: number,
   ) {
-    const binds: Binds = { theaterId: { val: theaterId, type: oracle.NUMBER } };
+    const binds: Binds = {
+      theaterId: { val: theaterId, type: oracle.NUMBER },
+      excludedId: { val: excludedId ?? null, type: oracle.NUMBER },
+    };
     const overlaps = slots.map((slot, index) => {
       binds[`start${index}`] = slot.startTime;
       binds[`end${index}`] = slot.endTime;
@@ -252,6 +336,7 @@ export class ProjectionsRepository {
               COUNT(*) OVER () AS "total"
          FROM MOVIE_FUNCTIONS mf
         WHERE mf.THEATER_ID = :theaterId AND mf.STATUS <> 'CANCELLED'
+          AND (:excludedId IS NULL OR mf.MOVIE_FUNCTION_ID <> :excludedId)
           AND (${overlaps.join(' OR ')})
         ORDER BY mf.START_TIME
         FETCH FIRST ${MAX_REPORTED_CONFLICTS} ROWS ONLY`,

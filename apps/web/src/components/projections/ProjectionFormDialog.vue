@@ -3,13 +3,17 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, useTemplateR
 import ProjectionDialogShell from './ProjectionDialogShell.vue'
 import ProjectionPoster from './ProjectionPoster.vue'
 import { searchAvailableMovies } from '@/services/projection.service'
-import type {
-  AvailableMovie,
-  CreateProjectionRequest,
-  ProjectionCinema,
-  ProjectionTheater,
+import {
+  PROJECTION_STATUS_LABELS,
+  type AvailableMovie,
+  type CreateProjectionRequest,
+  type ProjectionCinema,
+  type ProjectionDetail,
+  type ProjectionTheater,
+  type UpdateProjectionRequest,
 } from '@/types/projection'
 import { addToTime, daysInRange, durationBetween, localNow } from '@/utils/projection-time'
+import { formatPrice, formatProjectionDate, formatProjectionTime } from '@/utils/projection-format'
 
 const MAX_DAYS = 31
 const SEARCH_DELAY_MS = 300
@@ -37,6 +41,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   retryOptions: []
   submit: [data: CreateProjectionRequest]
+  save: [data: UpdateProjectionRequest]
   sessionExpired: []
 }>()
 
@@ -74,6 +79,12 @@ const activeResult = ref(-1)
 const endTimeEdited = ref(false)
 const touched = reactive<Record<string, boolean>>({})
 const submitted = ref(false)
+/** Projection being modified; null while creating. */
+const original = ref<ProjectionDetail | null>(null)
+const confirming = ref(false)
+const noChanges = ref(false)
+const isEditing = computed(() => original.value !== null)
+let applyingSnapshot = false
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let searchRequest: AbortController | undefined
 
@@ -227,6 +238,7 @@ function movieKeydown(event: KeyboardEvent) {
 watch(
   () => draft.branchId,
   () => {
+    if (applyingSnapshot) return
     if (!branchTheaters.value.some((theater) => String(theater.theaterId) === draft.theaterId))
       draft.theaterId = ''
     movie.value = null
@@ -243,26 +255,124 @@ function editEndTime() {
   endTimeEdited.value = draft.endTime !== suggestedEndTime.value
 }
 
+// Human readable values of a draft, used for the "before → after" confirmation.
+function describe(values: typeof draft, title: string) {
+  const minutes = (value: string) => `${value} minutos`
+  const time = (value: string) => formatProjectionTime(`0000-00-00T${value}`)
+  return {
+    Película: title,
+    Sucursal:
+      props.cinemas.find((cinema) => String(cinema.branchId) === values.branchId)?.name ??
+      `Sucursal ${values.branchId}`,
+    Sala: `Sala ${values.theaterId}`,
+    Estado: PROJECTION_STATUS_LABELS[values.status],
+    Fecha: formatProjectionDate(`${values.startDate}T00:00`),
+    'Hora inicio': time(values.startTime),
+    'Hora fin': time(values.endTime),
+    Anuncios: minutes(values.advertisementMinutes),
+    Limpieza: minutes(values.cleaningMinutes),
+    Precio: formatPrice(Number(values.price)),
+  }
+}
+
+const originalDraft = computed(() => (original.value ? snapshotOf(original.value) : null))
+const changes = computed(() => {
+  if (!original.value || !originalDraft.value) return []
+  const before = describe(originalDraft.value, original.value.movieTitle)
+  const after = describe(draft, draft.movieQuery)
+  return (Object.keys(before) as (keyof typeof before)[])
+    .filter((field) => before[field] !== after[field])
+    .map((field) => ({ field, before: before[field], after: after[field] }))
+})
+
+function snapshotOf(detail: ProjectionDetail): typeof draft {
+  return {
+    movieQuery: detail.movieTitle,
+    branchId: String(detail.branchId),
+    theaterId: String(detail.theaterId),
+    status: detail.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+    startDate: detail.startTime.slice(0, 10),
+    endDate: '',
+    startTime: detail.startTime.slice(11, 16),
+    endTime: detail.endTime.slice(11, 16),
+    cleaningMinutes: String(detail.cleaningMinutes ?? 30),
+    advertisementMinutes: String(detail.advertisementMinutes ?? 15),
+    price: String(detail.price ?? props.defaultPrice ?? ''),
+  }
+}
+
+function applySnapshot(detail: ProjectionDetail) {
+  // The branch watcher would clear the movie and theater being restored.
+  applyingSnapshot = true
+  cancelSearch()
+  Object.assign(draft, snapshotOf(detail))
+  movie.value = {
+    movieId: detail.movieId,
+    title: detail.movieTitle,
+    runningTime: detail.runningTime,
+    posterImage: detail.posterImage,
+  }
+  results.value = []
+  endTimeEdited.value = draft.endTime !== suggestedEndTime.value
+  confirming.value = false
+  noChanges.value = false
+  submitted.value = false
+  for (const key of Object.keys(touched)) delete touched[key]
+  void nextTick(() => {
+    applyingSnapshot = false
+  })
+}
+
 function submit() {
   if (props.submitting || props.optionsLoading) return
   submitted.value = true
+  noChanges.value = false
   if (Object.keys(errors.value).length) {
     void nextTick(() => form.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus())
     return
   }
-  emit('submit', {
+  if (!isEditing.value) {
+    emit('submit', { ...request(), endDate: draft.endDate || draft.startDate })
+    return
+  }
+  if (!changes.value.length) {
+    noChanges.value = true
+    return
+  }
+  confirming.value = true
+  void nextTick(() => form.value?.querySelector<HTMLElement>('.confirm-changes h3')?.focus())
+}
+
+function request(): UpdateProjectionRequest {
+  return {
     movieId: movie.value!.movieId,
     theaterId: Number(draft.theaterId),
     startDate: draft.startDate,
-    endDate: draft.endDate || draft.startDate,
     startTime: draft.startTime,
     endTime: draft.endTime,
     cleaningMinutes: Number(draft.cleaningMinutes),
     advertisementMinutes: Number(draft.advertisementMinutes),
     price: Number(draft.price),
     status: draft.status,
-  })
+  }
 }
+
+function confirmChanges() {
+  if (props.submitting || !confirming.value) return
+  emit('save', request())
+}
+
+function undo() {
+  if (original.value && !props.submitting) applySnapshot(original.value)
+}
+
+// A failed save returns to the form so the error and the entered data stay visible.
+watch(
+  () => props.submissionErrors,
+  (messages) => {
+    if (messages.length) confirming.value = false
+  },
+)
 
 function reset() {
   cancelSearch()
@@ -272,10 +382,22 @@ function reset() {
   searchError.value = ''
   endTimeEdited.value = false
   submitted.value = false
+  confirming.value = false
+  noChanges.value = false
   for (const key of Object.keys(touched)) delete touched[key]
 }
 
 function open() {
+  if (original.value) {
+    original.value = null
+    reset()
+  }
+  shell.value?.open()
+}
+
+function edit(detail: ProjectionDetail) {
+  original.value = detail
+  applySnapshot(detail)
   shell.value?.open()
 }
 
@@ -286,19 +408,20 @@ function close() {
 }
 
 function complete() {
+  original.value = null
   reset()
   shell.value?.close()
 }
 
 onBeforeUnmount(cancelSearch)
 
-defineExpose({ open, complete })
+defineExpose({ open, edit, complete })
 </script>
 
 <template>
   <ProjectionDialogShell
     ref="shell"
-    title="Agregar nueva proyección"
+    :title="isEditing ? 'Modificar proyección' : 'Agregar nueva proyección'"
     :close-disabled="submitting"
     @close="close"
   >
@@ -314,9 +437,13 @@ defineExpose({ open, complete })
       <p v-if="submissionErrors.length" class="form-error" role="alert" tabindex="-1">
         {{ submissionErrors.join(' ') }}
       </p>
+      <p v-if="noChanges" class="form-status" role="status">
+        No hay cambios para guardar. Modifica al menos un campo.
+      </p>
 
       <div class="form-body">
-        <div class="form-sections">
+        <fieldset class="form-sections" :disabled="confirming">
+          <legend class="visually-hidden">Datos de la proyección</legend>
           <section class="form-section" :aria-labelledby="id + '-place-title'">
             <h3 :id="id + '-place-title'"><span>1</span> Película y sala</h3>
             <div class="section-grid">
@@ -470,7 +597,7 @@ defineExpose({ open, complete })
                   {{ visibleError('startDate') }}
                 </small>
               </div>
-              <div class="field">
+              <div v-if="!isEditing" class="field">
                 <label :for="id + '-end-date'">Repetir hasta (opcional)</label>
                 <input
                   :id="id + '-end-date'"
@@ -610,7 +737,7 @@ defineExpose({ open, complete })
               </small>
             </div>
           </section>
-        </div>
+        </fieldset>
 
         <ProjectionPoster
           :poster-image="movie?.posterImage"
@@ -619,7 +746,54 @@ defineExpose({ open, complete })
         />
       </div>
 
-      <footer class="dialog-actions">
+      <section
+        v-if="confirming"
+        class="confirm-changes"
+        :aria-labelledby="id + '-confirm-title'"
+        aria-live="polite"
+      >
+        <h3 :id="id + '-confirm-title'" tabindex="-1">Confirma los cambios</h3>
+        <p>Revisa cada campo modificado antes de guardar.</p>
+        <ul>
+          <li v-for="change in changes" :key="change.field">
+            <strong>{{ change.field }}:</strong>
+            <span class="before">{{ change.before }}</span>
+            <i class="bi bi-arrow-right" aria-label="cambia a"></i>
+            <span class="after">{{ change.after }}</span>
+          </li>
+        </ul>
+        <div class="dialog-actions">
+          <button
+            type="button"
+            class="secondary-button"
+            :disabled="submitting"
+            @click="confirming = false"
+          >
+            Volver a editar
+          </button>
+          <button
+            type="button"
+            class="create-button"
+            :disabled="submitting"
+            @click="confirmChanges"
+          >
+            <i class="bi bi-check2-circle" aria-hidden="true"></i>
+            {{ submitting ? 'Guardando…' : 'Confirmar cambios' }}
+          </button>
+        </div>
+      </section>
+
+      <footer v-else-if="isEditing" class="dialog-actions edit-actions">
+        <button type="submit" class="create-button" :disabled="submitting || optionsLoading">
+          <i class="bi bi-floppy" aria-hidden="true"></i>
+          Guardar cambios
+        </button>
+        <button type="button" class="undo-button" :disabled="submitting" @click="undo">
+          <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+          Deshacer
+        </button>
+      </footer>
+      <footer v-else class="dialog-actions">
         <button type="button" class="secondary-button" :disabled="submitting" @click="close">
           Cancelar
         </button>
@@ -637,7 +811,7 @@ form { display: grid; gap: 16px; min-height: 0; padding: 24px 32px; overflow-y: 
 .required-note, .form-status { margin: 0; font-size: .9rem; }
 .required-marker { color: var(--color-error); font-weight: 700; }
 .form-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 32px; align-items: start; }
-.form-sections { display: grid; gap: 16px; }
+.form-sections { display: grid; gap: 16px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .form-section { display: grid; gap: 12px; padding: 18px 20px; border-radius: var(--radius-medium); background: #f2f2f2; }
 .form-section h3 { display: flex; gap: 10px; align-items: center; margin: 0; font-size: 1.05rem; font-weight: 700; }
 .form-section h3 span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--color-white); font-size: .85rem; background: var(--color-primary); }
@@ -679,6 +853,16 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .secondary-button { border: 1px solid var(--color-primary); color: var(--color-primary); background: var(--color-white); }
 .create-button { border: 0; color: var(--color-white); background: var(--color-primary); box-shadow: 0 2px 6px color-mix(in srgb, var(--color-black) 30%, transparent); }
 .secondary-button:disabled, .create-button:disabled { opacity: .7; cursor: not-allowed; }
+.edit-actions { justify-content: flex-start; }
+.undo-button { display: inline-flex; gap: 10px; align-items: center; min-height: 48px; padding: 10px 22px; border: 0; border-radius: var(--radius-small); color: var(--color-white); font: inherit; font-weight: 600; background: #8a6e70; }
+.undo-button:disabled { opacity: .7; cursor: not-allowed; }
+.confirm-changes { display: grid; gap: 8px; padding: 16px 20px; border-left: 4px solid var(--color-primary); border-radius: var(--radius-medium); background: var(--color-white); }
+.confirm-changes h3 { margin: 0; font-size: 1.1rem; }
+.confirm-changes p { margin: 0; }
+.confirm-changes ul { display: grid; gap: 6px; margin: 0; padding-left: 20px; }
+.confirm-changes .before { color: var(--color-gray); text-decoration: line-through; }
+.confirm-changes .after { font-weight: 700; }
+.confirm-changes .bi-arrow-right { margin: 0 6px; }
 @media (max-width: 900px) {
   .form-body { grid-template-columns: 1fr; }
 }
