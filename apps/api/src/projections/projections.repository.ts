@@ -253,7 +253,13 @@ export class ProjectionsRepository {
   // projection took the same slot.
   private async scheduling<T>(work: (connection: oracle.Connection) => Promise<T>) {
     try {
-      return await this.db.transaction(work);
+      return await this.db.transaction(async (connection) => {
+        // Autonomous Database may run DML in parallel; a parallel DELETE followed by
+        // INSERTs on the same table in one transaction deadlocks (ORA-12860).
+        // ALTER SESSION does not commit, so the transaction stays intact.
+        await connection.execute('ALTER SESSION DISABLE PARALLEL DML', {}, TRANSACTION);
+        return work(connection);
+      });
     } catch (error) {
       if ((error as { errorNum?: number } | null)?.errorNum === 1)
         throw new ConflictException(`${PROJECTION_MESSAGES.scheduleConflict}.`);

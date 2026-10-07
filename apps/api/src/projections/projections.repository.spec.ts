@@ -176,7 +176,8 @@ describe('ProjectionsRepository', () => {
       ],
     });
     const statements = connection.execute.mock.calls.map(([sql]) => sql);
-    expect(statements[0]).toContain('FOR UPDATE');
+    expect(statements[0]).toBe('ALTER SESSION DISABLE PARALLEL DML');
+    expect(statements[1]).toContain('FOR UPDATE');
     const conflictCall = connection.execute.mock.calls.find(([sql]) =>
       sql.includes('FROM MOVIE_FUNCTIONS mf'),
     )!;
@@ -271,8 +272,9 @@ describe('ProjectionsRepository', () => {
         repository.updateProjection(100, { ...changes, price: 4200, status: 'ACTIVE' }, 21),
       ).resolves.toBeUndefined();
       const statements = connection.execute.mock.calls.map(([sql]) => sql);
-      expect(statements[0]).toContain('SELECT STATUS FROM MOVIE_FUNCTIONS');
-      expect(statements[0]).toContain('FOR UPDATE');
+      expect(statements[0]).toBe('ALTER SESSION DISABLE PARALLEL DML');
+      expect(statements[1]).toContain('SELECT STATUS FROM MOVIE_FUNCTIONS');
+      expect(statements[1]).toContain('FOR UPDATE');
       expect(sqlOf('FROM MOVIE_FUNCTIONS mf')[1]).toMatchObject({
         excludedId: expect.objectContaining({ val: 100 }),
         start0: '2099-07-21T21:00',
