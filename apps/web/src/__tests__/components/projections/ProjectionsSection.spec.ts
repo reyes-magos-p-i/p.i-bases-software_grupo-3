@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ProjectionsSection from '@/components/projections/ProjectionsSection.vue'
 import ProjectionFormDialog from '@/components/projections/ProjectionFormDialog.vue'
 import ProjectionListPanel from '@/components/projections/ProjectionListPanel.vue'
+import CancelProjectionDialog from '@/components/projections/CancelProjectionDialog.vue'
 import {
   invalidateEmployeeSession,
   restoreEmployeeSession,
@@ -17,11 +18,13 @@ const {
   getProjectionFilterOptions,
   getProjectionDetail,
   updateProjection,
+  cancelProjection,
 } = vi.hoisted(() => ({
   getProjections: vi.fn(),
   getProjectionFilterOptions: vi.fn(),
   getProjectionDetail: vi.fn(),
   updateProjection: vi.fn(),
+  cancelProjection: vi.fn(),
   getProjectionSchedulingOptions: vi.fn(),
   createProjections: vi.fn(),
   replace: vi.fn(),
@@ -34,6 +37,7 @@ vi.mock('@/services/projection.service', () => ({
   getProjectionFilterOptions,
   getProjectionDetail,
   updateProjection,
+  cancelProjection,
 }))
 vi.mock('@/services/employee-session.service', () => ({
   invalidateEmployeeSession: vi.fn(),
@@ -293,5 +297,71 @@ describe('ProjectionsSection', () => {
       await flushPromises()
       expect(updateProjection).not.toHaveBeenCalled()
     })
+  })
+
+})
+
+describe('cancellation', () => {
+  const projection = {
+    movieFunctionId: 21,
+    movieId: 42,
+    movieTitle: 'The Odyssey',
+    branchId: 2,
+    branchName: 'Mall Oxígeno',
+    theaterId: 1,
+    startTime: '2099-10-08T14:55',
+    endTime: '2099-10-08T18:30',
+    status: 'ACTIVE',
+    price: 3500,
+  } as ProjectionDetail
+
+  beforeEach(() => vi.spyOn(window, 'scrollTo').mockImplementation(() => {}))
+
+  it('confirms a cancellation requested from the list', async () => {
+    render()
+    await flushPromises()
+    const cancelDialog = wrapper!.getComponent(CancelProjectionDialog)
+    expect(cancelDialog.props('projection')).toBeNull()
+    wrapper!.getComponent(ProjectionListPanel).vm.$emit('cancel', projection)
+    await flushPromises()
+    expect(cancelDialog.props('projection')).toEqual(projection)
+
+    cancelDialog.vm.$emit('cancelled', { ...projection, status: 'CANCELLED' })
+    await flushPromises()
+    expect(cancelDialog.props('projection')).toBeNull()
+    expect(wrapper!.get('.creation-result').text()).toBe(
+      'La proyección MF-021 fue cancelada. La sala queda disponible para programar en ese horario.',
+    )
+    expect(getProjections).toHaveBeenCalledTimes(2)
+
+    wrapper!.getComponent(ProjectionListPanel).vm.$emit('cancel', projection)
+    await flushPromises()
+    cancelDialog.vm.$emit('close')
+    cancelDialog.vm.$emit('sessionExpired')
+    cancelDialog.vm.$emit('forbidden')
+    await flushPromises()
+    expect(cancelDialog.props('projection')).toBeNull()
+    expect(invalidateEmployeeSession).toHaveBeenCalled()
+    expect(restoreEmployeeSession).toHaveBeenCalled()
+  })
+
+  it('closes the modification form of the cancelled projection', async () => {
+    getProjectionDetail.mockResolvedValue({ ...projection, runningTime: 170, posterImage: 'o.jpg' })
+    render()
+    wrapper!.getComponent(ProjectionListPanel).vm.$emit('edit', 21)
+    await flushPromises()
+    expect(form().get('dialog').attributes('open')).toBeDefined()
+
+    form().vm.$emit('cancel', projection)
+    await flushPromises()
+    const cancelDialog = wrapper!.getComponent(CancelProjectionDialog)
+    expect(cancelDialog.props('projection')).toEqual(projection)
+    cancelDialog.vm.$emit('cancelled', { ...projection, status: 'CANCELLED' })
+    await flushPromises()
+    expect(form().get('dialog').attributes('open')).toBeUndefined()
+
+    form().vm.$emit('save', {} as never)
+    await flushPromises()
+    expect(updateProjection).not.toHaveBeenCalled()
   })
 })

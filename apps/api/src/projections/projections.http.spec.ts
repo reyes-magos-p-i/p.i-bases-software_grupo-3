@@ -33,6 +33,7 @@ describe('Projections HTTP contracts', () => {
     findAvailableMovieRunningTime: jest.fn(),
     createProjections: jest.fn(),
     updateProjection: jest.fn(),
+    cancelProjection: jest.fn(),
   };
   const session = () =>
     `${EMPLOYEE_SESSION_COOKIE}=${jwt.sign({ sub: 21, type: 'employee' })}`;
@@ -270,6 +271,28 @@ describe('Projections HTTP contracts', () => {
       await put({ ...changes, status: 'CANCELLED' }).expect(400);
       await put(changes, '/100', 'https://evil.example').expect(403);
       expect(repository.updateProjection).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /projections/:id/cancel', () => {
+    const cancel = (path = '/100', origin_ = origin) =>
+      request(app.getHttpServer())
+        .patch(`/api/projections${path}/cancel`)
+        .set('Origin', origin_)
+        .set('Cookie', session());
+
+    it('cancels a projection and returns its detail', async () => {
+      repository.findProjection.mockResolvedValue({ movieFunctionId: 100, status: 'CANCELLED' });
+      await cancel().expect(200, { movieFunctionId: 100, status: 'CANCELLED' });
+      expect(repository.cancelProjection).toHaveBeenCalledWith(100);
+    });
+
+    it('rejects invalid ids, foreign origins and non administrators', async () => {
+      await cancel('/abc').expect(400);
+      await cancel('/100', 'https://evil.example').expect(403);
+      users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role: 'EMPLOYEE' });
+      await cancel().expect(403);
+      expect(repository.cancelProjection).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CreateProjectionRequest, UpdateProjectionRequest } from '@/types/projection'
 
-const { create, get, post, put } = vi.hoisted(() => ({
+const { create, get, post, put, patch } = vi.hoisted(() => ({
+  patch: vi.fn(),
   put: vi.fn(),
   create: vi.fn(),
   get: vi.fn(),
@@ -15,7 +16,7 @@ describe('projection service', () => {
     vi.resetModules()
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
-    create.mockImplementation((defaults) => ({ defaults, get, post, put }))
+    create.mockImplementation((defaults) => ({ defaults, get, post, put, patch }))
   })
 
   afterEach(() => vi.unstubAllEnvs())
@@ -81,5 +82,13 @@ describe('projection service', () => {
 
     await expect(updateProjection(100, payload)).resolves.toBe('detail')
     expect(put).toHaveBeenCalledWith('/projections/100', payload, { timeout: 30000 })
+  })
+
+  it('cancels one projection', async () => {
+    patch.mockResolvedValue({ data: 'cancelled' })
+    const { cancelProjection } = await import('@/services/projection.service')
+
+    await expect(cancelProjection(21)).resolves.toBe('cancelled')
+    expect(patch).toHaveBeenCalledWith('/projections/21/cancel', undefined, { timeout: 30000 })
   })
 })

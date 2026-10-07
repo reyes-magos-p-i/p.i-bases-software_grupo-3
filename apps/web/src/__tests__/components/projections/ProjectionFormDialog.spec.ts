@@ -351,8 +351,11 @@ describe('ProjectionFormDialog', () => {
       expect(wrapper!.findAll('.dialog-actions button').map((button) => button.text())).toEqual([
         'Guardar cambios',
         'Deshacer',
+        'Cancelar Proyección',
       ])
       expect(searchAvailableMovies).not.toHaveBeenCalled()
+      await wrapper!.get('.cancel-projection-button').trigger('click')
+      expect(wrapper!.emitted('cancel')).toEqual([[detail]])
     })
 
     it('reports when nothing changed', async () => {

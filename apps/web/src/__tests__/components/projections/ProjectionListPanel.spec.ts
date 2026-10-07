@@ -306,4 +306,21 @@ describe('ProjectionListPanel', () => {
     await active.trigger('click')
     expect(wrapper!.emitted('edit')).toEqual([[8]])
   })
+
+  it('offers cancellation only while a projection can still be cancelled', async () => {
+    const running = { ...item, movieFunctionId: 9, status: 'IN_PROGRESS' as const }
+    getProjections.mockResolvedValue(
+      list({ items: [item, running, { ...item, movieFunctionId: 10, status: 'FINISHED' }], total: 3 }),
+    )
+    await render()
+    expect(wrapper!.get('[aria-label="Cancelar MF-007"]').attributes('disabled')).toBeDefined()
+    const finished = wrapper!.get('[aria-label="Cancelar MF-010"]')
+    expect(finished.attributes('disabled')).toBeDefined()
+    expect(finished.attributes('title')).toBe('Ya está cancelada o finalizada')
+
+    const cancellable = wrapper!.get('[aria-label="Cancelar MF-009"]')
+    expect(cancellable.attributes('title')).toBe('Cancelar')
+    await cancellable.trigger('click')
+    expect(wrapper!.emitted('cancel')).toEqual([[running]])
+  })
 })

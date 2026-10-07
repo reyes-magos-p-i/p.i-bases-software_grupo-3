@@ -331,4 +331,27 @@ describe('ProjectionsRepository', () => {
       );
     });
   });
+
+  describe('cancelProjection', () => {
+    it('cancels a projection that has not finished', async () => {
+      await expect(repository.cancelProjection(100)).resolves.toBeUndefined();
+      const statements = connection.execute.mock.calls.map(([sql]) => sql);
+      expect(statements[0]).toContain('FOR UPDATE');
+      expect(statements[1]).toContain("SET STATUS = 'CANCELLED'");
+      expect(connection.execute.mock.calls[1][1]).toEqual({ id: 100 });
+    });
+
+    it.each([
+      [{ rows: [] }, new NotFoundException('Esta proyección ya no está disponible.')],
+      [{ rows: [{ STATUS: 'CANCELLED' }] }, new ConflictException('La proyección ya está cancelada.')],
+      [
+        { rows: [{ STATUS: 'FINISHED' }] },
+        new ConflictException('No se puede cancelar una proyección finalizada.'),
+      ],
+    ])('rejects a projection that cannot be cancelled %#', async (current, error) => {
+      respond({ 'SELECT STATUS FROM MOVIE_FUNCTIONS': current });
+      await expect(repository.cancelProjection(100)).rejects.toThrow(error);
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+    });
+  });
 });

@@ -13,6 +13,7 @@ describe('ProjectionsService', () => {
     findAvailableMovieRunningTime: jest.fn(),
     createProjections: jest.fn(),
     updateProjection: jest.fn(),
+    cancelProjection: jest.fn(),
   };
   const service = new ProjectionsService(
     repository as unknown as ProjectionsRepository,
@@ -203,5 +204,11 @@ describe('ProjectionsService', () => {
         new ConflictException('El elemento seleccionado ya no está disponible.'),
       );
     });
+  });
+
+  it('cancels a projection and returns its updated detail', async () => {
+    repository.findProjection.mockResolvedValue({ movieFunctionId: 100, status: 'CANCELLED' });
+    await expect(service.cancel(100)).resolves.toEqual({ movieFunctionId: 100, status: 'CANCELLED' });
+    expect(repository.cancelProjection).toHaveBeenCalledWith(100);
   });
 });
