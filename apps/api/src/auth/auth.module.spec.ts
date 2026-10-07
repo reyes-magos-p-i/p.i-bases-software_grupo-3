@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from './notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from './password-recovery.repository';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { verify } from 'argon2';
@@ -17,7 +19,6 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { EmployeeSessionService } from './employee-session.service';
 import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 import { EmailVerificationSender } from './notifications/email-verification-sender';
-
 
 describe('AuthModule', () => {
   let module: TestingModule;
@@ -52,12 +53,14 @@ describe('AuthModule', () => {
       .overrideProvider(ConfigService)
       .useValue({
         getOrThrow: (key: string) =>
-          key === 'FRONTEND_URL'
-            ? 'https://cinema.example'
-            : 'test-jwt-secret',
+          key === 'FRONTEND_URL' ? 'https://cinema.example' : 'test-jwt-secret',
         get: (key: string) =>
           ({ FRONTEND_URL: 'https://cinema.example', NODE_ENV: 'test' })[key],
       })
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(DatabaseService)

@@ -54,7 +54,13 @@ function updateRetryDelay() {
 
 async function enforceClientPasswordStatus() {
   const user = clientUser.value
-  if (!user || !hasClientSession() || route.path === PASSWORD_PATH) return
+  if (
+    !user ||
+    !hasClientSession() ||
+    route.path === PASSWORD_PATH ||
+    route.path === '/recover-password'
+  )
+    return
 
   try {
     const status = await getClientPasswordStatus()
@@ -64,7 +70,8 @@ async function enforceClientPasswordStatus() {
     }
   } catch {
     if (!disposed) {
-      recoveryError.value = 'No se pudo comprobar el estado de tu contraseña. Puedes volver a intentarlo.'
+      recoveryError.value =
+        'No se pudo comprobar el estado de tu contraseña. Puedes volver a intentarlo.'
     }
   }
 }
@@ -204,7 +211,12 @@ function goToChangePassword() {
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
       </RouterLink>
       <div class="navbar-actions">
-        <AccountMenu v-if="clientUser" :user="clientUser" @logout="logoutClient" @change-password="goToChangePassword" />
+        <AccountMenu
+          v-if="clientUser"
+          :user="clientUser"
+          @logout="logoutClient"
+          @change-password="goToChangePassword"
+        />
         <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
           >Ir al dashboard</RouterLink
         >

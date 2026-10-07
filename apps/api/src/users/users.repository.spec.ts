@@ -1729,4 +1729,22 @@ describe('UsersRepository', () => {
       );
     });
   });
+  it('joins the recovery transaction without committing credentials independently', async () => {
+    connection.execute.mockResolvedValue({ rowsAffected: 1 });
+    await expect(
+      repository.saveEmployeePassword(
+        7,
+        'new-hash',
+        'salt',
+        90,
+        connection as unknown as oracle.Connection,
+      ),
+    ).resolves.toBeUndefined();
+    expect(connection.execute).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Object),
+      { autoCommit: false },
+    );
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
 });

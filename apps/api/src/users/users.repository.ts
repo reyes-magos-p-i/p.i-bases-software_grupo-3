@@ -662,9 +662,7 @@ export class UsersRepository {
     return { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS };
   }
 
-  async findEmployeePasswordCredentials(
-    employeeId: number,
-  ): Promise<{
+  async findEmployeePasswordCredentials(employeeId: number): Promise<{
     email: string;
     firstName: string;
     passwordHash: string;
@@ -705,8 +703,12 @@ export class UsersRepository {
     passwordHash: string,
     salt: string,
     expirationDays: number,
+    connection?: oracle.Connection,
   ): Promise<void> {
-    const result = await this.db.query(
+    const execute = connection
+      ? connection.execute.bind(connection)
+      : this.db.query.bind(this.db);
+    const result = await execute(
       `UPDATE EMPLOYEE_LOCAL_CREDENTIALS
           SET PASSWORD_HASH = :passwordHash,
               SALT = :salt,
@@ -723,6 +725,7 @@ export class UsersRepository {
         salt: { val: salt, type: oracle.STRING },
         expirationDays: { val: expirationDays, type: oracle.NUMBER },
       },
+      { autoCommit: !connection },
     );
     if (result.rowsAffected !== 1) {
       throw new Error('Oracle did not update a single employee password.');

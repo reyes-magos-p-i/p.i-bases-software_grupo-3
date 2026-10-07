@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from './notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from './password-recovery.repository';
 import { type INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -53,6 +55,10 @@ describe('Employee authentication (HTTP integration)', () => {
         AuthModule,
       ],
     })
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(ConfigService)
@@ -80,9 +86,7 @@ describe('Employee authentication (HTTP integration)', () => {
       Promise.resolve(
         sql.includes('PASSWORD_SET_AT')
           ? {
-              rows: [
-                { PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 },
-              ],
+              rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 }],
             }
           : { rows: [employeeRow()] },
       ),
@@ -411,9 +415,7 @@ describe('Employee authentication (HTTP integration)', () => {
         Promise.resolve(
           sql.includes('PASSWORD_SET_AT')
             ? {
-                rows: [
-                  { PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 },
-                ],
+                rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 }],
               }
             : { rows: [employeeRow(role)] },
         ),
@@ -581,9 +583,7 @@ describe('Employee authentication (HTTP integration)', () => {
       Promise.resolve(
         sql.includes('PASSWORD_SET_AT')
           ? {
-              rows: [
-                { PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 },
-              ],
+              rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 }],
             }
           : { rows: [employeeRow(currentRole)] },
       ),
@@ -640,7 +640,8 @@ describe('Employee authentication (HTTP integration)', () => {
     };
 
     db.query.mockImplementation((sql: string) => {
-      if (sql.includes('CLIENT_EMAIL_VERIFICATIONS')) return Promise.resolve({ rows: [] });
+      if (sql.includes('CLIENT_EMAIL_VERIFICATIONS'))
+        return Promise.resolve({ rows: [] });
       if (sql.includes('CLIENT_LOCAL_CREDENTIALS')) {
         return Promise.resolve({
           rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 }],

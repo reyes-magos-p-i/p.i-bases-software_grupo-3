@@ -292,7 +292,10 @@ export class ClientsRepository {
              )`,
             {
               clientId: { val: clientId, type: oracle.NUMBER },
-              tokenHash: { val: emailVerification.tokenHash, type: oracle.STRING },
+              tokenHash: {
+                val: emailVerification.tokenHash,
+                type: oracle.STRING,
+              },
               expiresInMinutes: {
                 val: emailVerification.expiresInMinutes,
                 type: oracle.NUMBER,
@@ -301,7 +304,9 @@ export class ClientsRepository {
             { autoCommit: false },
           );
           if (verificationResult.rowsAffected !== 1) {
-            throw new Error('Oracle did not create a single email verification.');
+            throw new Error(
+              'Oracle did not create a single email verification.',
+            );
           }
         }
 
@@ -418,17 +423,26 @@ export class ClientsRepository {
     return addressId;
   }
 
-  async findPasswordStatus(clientId: number): Promise<{ setAt: Date; expirationDays: number } | null> {
-    const result = await this.db.query<{ PASSWORD_SET_AT: Date; EXPIRATION_DAYS: number }>(
+  async findPasswordStatus(
+    clientId: number,
+  ): Promise<{ setAt: Date; expirationDays: number } | null> {
+    const result = await this.db.query<{
+      PASSWORD_SET_AT: Date;
+      EXPIRATION_DAYS: number;
+    }>(
       `SELECT PASSWORD_SET_AT, EXPIRATION_DAYS FROM CLIENT_LOCAL_CREDENTIALS WHERE CLIENT_ID = :clientId`,
       { clientId: { val: clientId, type: oracle.NUMBER } },
       { outFormat: oracle.OUT_FORMAT_OBJECT },
     );
     const row = result.rows?.[0];
-    return row ? { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS } : null;
+    return row
+      ? { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS }
+      : null;
   }
 
-  async findPasswordHash(clientId: number): Promise<{ passwordHash: string; salt: string } | null> {
+  async findPasswordHash(
+    clientId: number,
+  ): Promise<{ passwordHash: string; salt: string } | null> {
     const result = await this.db.query<{ PASSWORD_HASH: string; SALT: string }>(
       `SELECT PASSWORD_HASH, SALT FROM CLIENT_LOCAL_CREDENTIALS WHERE CLIENT_ID = :clientId`,
       { clientId: { val: clientId, type: oracle.NUMBER } },
@@ -443,8 +457,9 @@ export class ClientsRepository {
     passwordHash: string,
     salt: string,
     expirationDays: number,
+    connection?: oracle.Connection,
   ): Promise<void> {
-    await this.db.transaction(async (connection) => {
+    const save = async (connection: oracle.Connection) => {
       const result = await connection.execute(
         `MERGE INTO CLIENT_LOCAL_CREDENTIALS t
         USING (SELECT :clientId AS client_id FROM dual) s
@@ -463,10 +478,12 @@ export class ClientsRepository {
         { autoCommit: false },
       );
       if (result.rowsAffected !== 1) {
-        throw new Error('Oracle did not upsert exactly one credentials record.');
+        throw new Error(
+          'Oracle did not upsert exactly one credentials record.',
+        );
       }
-    });
+    };
+    if (connection) await save(connection);
+    else await this.db.transaction(save);
   }
 }
-
-
