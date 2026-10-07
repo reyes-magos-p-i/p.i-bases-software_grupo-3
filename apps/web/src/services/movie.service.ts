@@ -1,5 +1,5 @@
 import { getApi } from '@/services/api'
-import type { Movie, MovieAll, MovieDetail,  } from '@/types/movie'
+import type {  MovieAll, MovieDetail,  } from '@/types/movie'
 
 export interface CreateMoviePayload {
   title: string
