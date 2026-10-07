@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { nextTick, reactive, useId, useTemplateRef } from 'vue'
+import { computed, nextTick, reactive, useId, useTemplateRef } from 'vue'
 import type {
   CreateTheaterRequest,
   TheaterCinema,
   TheaterProjector,
   TheaterStatus,
+  Theater,
 } from '@/types/theater'
 
 const props = withDefaults(
   defineProps<{
+    theater?: Theater | null
     projectors?: readonly TheaterProjector[]
     cinemas?: readonly TheaterCinema[]
     optionsLoading?: boolean
@@ -31,6 +33,7 @@ const emit = defineEmits<{
 }>()
 
 const id = useId()
+const editing = computed(() => !!props.theater)
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
 const feedback = useTemplateRef<HTMLElement>('feedback')
 const draft = reactive({
@@ -43,12 +46,15 @@ const draft = reactive({
 })
 const errors = reactive<Record<string, string>>({})
 let opener: HTMLElement | null = null
+const allowedProjectors = ['IMAX', '70mm'] as const
+const allowedStatuses: TheaterStatus[] = ['Disponible', 'En función']
 
 function validate() {
   for (const key of Object.keys(errors)) delete errors[key]
   const seats = Number(draft.numberOfSeats)
   const dimensionX = Number(draft.dimensionX)
   const dimensionY = Number(draft.dimensionY)
+  const branchId = Number(draft.branchId)
   if (!Number.isInteger(seats) || seats < 1 || seats >= 5000)
     errors.numberOfSeats = 'Introduce un número entero entre 1 y 4999.'
   if (!Number.isInteger(dimensionX) || dimensionX < 1)
@@ -65,10 +71,17 @@ function validate() {
     seats !== dimensionX * dimensionY
   )
     errors.numberOfSeats = 'El número de asientos debe ser igual a Dimensión X por Dimensión Y.'
-  if (!props.projectors.some((item) => item.name === draft.projectorName))
-    errors.projectorName = 'Selecciona un tipo de proyector.'
-  if (!props.cinemas.some((item) => String(item.branchId) === String(draft.branchId)))
+  if (
+    !allowedProjectors.includes(draft.projectorName as (typeof allowedProjectors)[number]) ||
+    !props.projectors.some((item) => item.name === draft.projectorName)
+  )
+    errors.projectorName = 'Selecciona un proyector válido.'
+  if (
+    !Number.isInteger(branchId) ||
+    !props.cinemas.some((item) => item.branchId === branchId)
+  )
     errors.branchId = 'Selecciona una sucursal.'
+  if (!allowedStatuses.includes(draft.status)) errors.status = 'Selecciona un estado válido.'
   return Object.keys(errors).length === 0
 }
 
@@ -100,8 +113,25 @@ function reset() {
   for (const key of Object.keys(errors)) delete errors[key]
 }
 
+function populate() {
+  if (!props.theater) {
+    reset()
+    return
+  }
+  Object.assign(draft, {
+    numberOfSeats: String(props.theater.numberOfSeats),
+    dimensionX: String(props.theater.dimensionX),
+    dimensionY: String(props.theater.dimensionY),
+    projectorName: props.theater.projectorName,
+    branchId: String(props.theater.branchId),
+    status: props.theater.status,
+  })
+  for (const key of Object.keys(errors)) delete errors[key]
+}
+
 function open() {
   if (!dialog.value || dialog.value.open) return
+  populate()
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
   dialog.value.showModal()
   dialog.value.querySelector<HTMLInputElement>('[name="numberOfSeats"]')?.focus()
@@ -131,7 +161,7 @@ defineExpose({ open, complete })
 <template>
   <dialog ref="dialog" class="theater-dialog" :aria-labelledby="id + '-title'" @cancel.prevent="close">
     <header class="dialog-heading">
-      <h2 :id="id + '-title'">Crear sala</h2>
+      <h2 :id="id + '-title'">{{ editing ? 'Modificar sala' : 'Crear sala' }}</h2>
       <button type="button" class="close-button" aria-label="Cerrar formulario" :disabled="submitting" @click="close">
         <i class="bi bi-x-lg" aria-hidden="true"></i>
       </button>
@@ -174,10 +204,16 @@ defineExpose({ open, complete })
       </div>
 
       <label :for="id + '-status'">Estado</label>
-      <select :id="id + '-status'" v-model="draft.status" name="status">
+      <select
+        :id="id + '-status'"
+        v-model="draft.status"
+        name="status"
+        :aria-invalid="!!errors.status"
+      >
         <option value="Disponible">Disponible</option>
         <option value="En función">En función</option>
       </select>
+      <small v-if="errors.status" class="field-error">{{ errors.status }}</small>
 
       <footer class="dialog-actions">
         <button type="button" class="secondary-button" :disabled="submitting" @click="close">Cancelar</button>
@@ -197,6 +233,9 @@ form { display: grid; gap: 8px; padding: 24px; overflow-y: auto; }
 .required-note { margin: 0 0 4px; font-size: .9rem; }
 .required-marker { color: #b42318; font-weight: 700; }
 input, select { min-height: 42px; padding: 8px 10px; border: 1px solid #a9adb5; border-radius: var(--radius-small); font: inherit; background: var(--color-white); }
+input[type='number'] { color-scheme: light; }
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button { filter: invert(0.55); }
 input:focus, select:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 .field-error, .form-error { color: #b42318; }
 .field-error { margin-bottom: 4px; }
