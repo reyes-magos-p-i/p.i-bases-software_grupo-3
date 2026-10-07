@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from '../auth/notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 import {
   ConflictException,
   NotFoundException,
@@ -82,6 +84,10 @@ describe('User update and deactivation HTTP contracts', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue({})
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(UsersRepository)

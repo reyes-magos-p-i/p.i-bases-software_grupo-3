@@ -10,6 +10,11 @@ import {
 import { googleAuthCodeLogin } from 'vue3-google-login'
 import type { EmployeeIdentity, EmployeeLoginRequest } from '@/types/employee-auth'
 import { CLIENT_ACCESS_TOKEN_KEY } from './client-session.service'
+import type {
+  PasswordRecoveryRequest,
+  PasswordRecoveryStatus,
+  ResetPasswordRequest,
+} from '@/types/password-recovery'
 
 interface ClientAuthResponse {
   accessToken: string
@@ -235,10 +240,9 @@ export async function getEmployeeSession(): Promise<EmployeeIdentity | null> {
 
 export async function getEmployeePasswordStatus(): Promise<ClientPasswordStatus> {
   try {
-    const { data } = await getApi().get<{ status: ClientPasswordStatus }>(
-      '/auth/password-status',
-      { timeout: 10000 },
-    )
+    const { data } = await getApi().get<{ status: ClientPasswordStatus }>('/auth/password-status', {
+      timeout: 10000,
+    })
     return data.status
   } catch (error) {
     throw employeeAuthError(error)
@@ -263,12 +267,74 @@ export type ClientPasswordStatus = 'valid' | 'expired' | 'must_set'
 export class ChangePasswordError extends Error {
   code?: string
   violations?: string[]
+  retryAfterSeconds?: number
 
   constructor(message: string, code?: string, violations?: string[]) {
     super(message)
     this.name = 'ChangePasswordError'
     this.code = code
     this.violations = violations
+  }
+}
+
+export function requestPasswordRecovery(
+  input: PasswordRecoveryRequest,
+): Promise<{ message: string }> {
+  return recoveryRequest('request', input)
+}
+
+export function validatePasswordRecovery(token: string): Promise<PasswordRecoveryStatus> {
+  return recoveryRequest('validate', { token })
+}
+
+export function resetPassword(input: ResetPasswordRequest): Promise<{ message: string }> {
+  return recoveryRequest('reset', input)
+}
+
+async function recoveryRequest<T>(action: string, input: object): Promise<T> {
+  try {
+    const { data } = await getApi().post<T>(`/auth/password-recovery/${action}`, input, {
+      timeout: 45000,
+      adapter: 'fetch',
+      withCredentials: false,
+    })
+    return data
+  } catch (error) {
+    throw mapPasswordRecoveryError(error)
+  }
+}
+
+function mapPasswordRecoveryError(error: unknown): ChangePasswordError {
+  const fallback = new ChangePasswordError(
+    'No se pudo completar la recuperación. Inténtalo nuevamente.',
+  )
+  if (!isAxiosError(error)) return fallback
+
+  if (error.response?.status === 429) {
+    const failure = new ChangePasswordError(
+      'Se alcanzó el límite de intentos. Espera un minuto antes de volver a intentarlo.',
+      'RECOVERY_THROTTLED',
+    )
+    const seconds = Number(error.response.headers?.['retry-after'])
+    failure.retryAfterSeconds =
+      Number.isFinite(seconds) && seconds > 0 ? Math.min(60, Math.ceil(seconds)) : 60
+    return failure
+  }
+
+  const code = error.response?.data?.code
+  switch (code) {
+    case 'RECOVERY_INVALID':
+      return new ChangePasswordError(
+        'El enlace venció o ya no es válido. Solicita una nueva recuperación.',
+        code,
+      )
+    case 'TEMPORARY_PASSWORD_INCORRECT':
+      return new ChangePasswordError(
+        'La contraseña temporal no es correcta. Revisa el correo recibido.',
+        code,
+      )
+    default:
+      return code && passwordChangeErrorMappers.has(code) ? mapPasswordChangeError(error) : fallback
   }
 }
 

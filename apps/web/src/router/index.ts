@@ -13,6 +13,12 @@ const router = createRouter({
 
   routes: [
     {
+      path: '/recover-password',
+      name: 'recover-password',
+      component: () => import('@/views/ChangePasswordView.vue'),
+      props: (route) => ({ recovery: true, recoveryToken: route.hash.slice(1) }),
+    },
+    {
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('@/views/DashboardView.vue'),

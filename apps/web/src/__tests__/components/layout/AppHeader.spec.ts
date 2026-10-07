@@ -436,4 +436,21 @@ describe('AppHeader authentication navigation', () => {
     await flushPromises()
     expect(wrapper.find('.session-feedback').exists()).toBe(false)
   })
+  it('does not force a password-status redirect away from the recovery link', async () => {
+    wrapper.unmount()
+    router.addRoute({ path: '/recover-password', component: { template: '<p>Recovery</p>' } })
+    await router.push('/recover-password')
+    localStorage.setItem('accessToken', 'client-token')
+    vi.mocked(getClientSession).mockResolvedValue({
+      id: 7,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Rojas',
+    })
+    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue('expired')
+    wrapper = renderHeader()
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/recover-password')
+    expect(getClientPasswordStatus).not.toHaveBeenCalled()
+  })
 })

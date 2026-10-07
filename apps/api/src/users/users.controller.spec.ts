@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from '../auth/notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 import {
   BadGatewayException,
   ConflictException,
@@ -68,6 +70,10 @@ describe('UsersController (HTTP integration)', () => {
         get: (key: string) => ({ FRONTEND_URL: origin, NODE_ENV: 'test' })[key],
         getOrThrow: () => 'controller-test-secret',
       })
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(DatabaseService)

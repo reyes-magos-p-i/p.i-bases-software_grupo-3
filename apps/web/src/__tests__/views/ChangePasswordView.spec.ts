@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import {
@@ -7,6 +7,8 @@ import {
   getClientPasswordStatus,
   getEmployeePasswordStatus,
   ChangePasswordError,
+  validatePasswordRecovery,
+  resetPassword,
 } from '@/services/authService'
 import { clientSession } from '@/services/client-session.service'
 import { employeeSession } from '@/services/employee-session.service'
@@ -20,6 +22,8 @@ vi.mock('@/services/authService', async () => {
     changeEmployeePassword: vi.fn(),
     getClientPasswordStatus: vi.fn(),
     getEmployeePasswordStatus: vi.fn(),
+    validatePasswordRecovery: vi.fn(),
+    resetPassword: vi.fn(),
   }
 })
 vi.mock('@/services/employee-session.service', async () => {
@@ -33,6 +37,10 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: mockPush }) }))
 describe('ChangePasswordView.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(validatePasswordRecovery)
+      .mockReset()
+      .mockResolvedValue({ accountType: 'client', expiresAt: '2030-01-01T12:00:00Z' })
+    vi.mocked(resetPassword).mockReset().mockResolvedValue({ message: 'Actualizada' })
     vi.mocked(getEmployeePasswordStatus).mockResolvedValue('valid')
     clientSession.user.value = {
       id: 1,
@@ -49,8 +57,18 @@ describe('ChangePasswordView.vue', () => {
       },
     })
   })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
-  function mountView(props: { embedded?: boolean; accountType?: 'client' | 'employee' } = {}) {
+  function mountView(
+    props: {
+      embedded?: boolean
+      accountType?: 'client' | 'employee'
+      recovery?: boolean
+      recoveryToken?: string
+    } = {},
+  ) {
     return mount(ChangePasswordView, {
       props,
       global: {
@@ -61,6 +79,132 @@ describe('ChangePasswordView.vue', () => {
       },
     })
   }
+
+  it.each(['client', 'employee'] as const)(
+    'recovers %s through the shared form and returns to the matching login',
+    async (accountType) => {
+      vi.mocked(validatePasswordRecovery).mockResolvedValue({
+        accountType,
+        expiresAt: '2030-01-01T12:00:00Z',
+      })
+      const wrapper = mountView({ recovery: true, recoveryToken: 'a'.repeat(64) })
+      await flushPromises()
+      expect(validatePasswordRecovery).toHaveBeenCalledWith('a'.repeat(64))
+      expect(getClientPasswordStatus).not.toHaveBeenCalled()
+      expect(getEmployeePasswordStatus).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain('Contraseña temporal')
+      expect(wrapper.text()).toContain('solo puede usarse una vez')
+      await wrapper.get('#currentPassword').setValue('temporary')
+      await wrapper.get('#newPassword').setValue('NewSecret123!')
+      await wrapper.get('#confirmNewPassword').setValue('NewSecret123!')
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+      expect(resetPassword).toHaveBeenCalledWith({
+        token: 'a'.repeat(64),
+        temporaryPassword: 'temporary',
+        newPassword: 'NewSecret123!',
+        confirmNewPassword: 'NewSecret123!',
+        expirationDays: 90,
+      })
+      expect(changeClientPassword).not.toHaveBeenCalled()
+      expect(changeEmployeePassword).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain('Contraseña actualizada')
+      await wrapper.get('.continue-button').trigger('click')
+      expect(mockPush).toHaveBeenCalledWith({ path: '/', query: { login: accountType } })
+      wrapper.unmount()
+    },
+  )
+
+  it('rejects missing or malformed links without calling the API', async () => {
+    const wrapper = mountView({ recovery: true, recoveryToken: 'invalid' })
+    await flushPromises()
+    expect(validatePasswordRecovery).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('El enlace no es válido')
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Volver al inicio de sesión')
+    wrapper.unmount()
+  })
+
+  it('offers a new recovery for expired links', async () => {
+    vi.mocked(validatePasswordRecovery).mockRejectedValue(
+      new ChangePasswordError('El enlace venció', 'RECOVERY_INVALID'),
+    )
+    const wrapper = mountView({ recovery: true, recoveryToken: 'a'.repeat(64) })
+    await flushPromises()
+    expect(wrapper.text()).toContain('El enlace venció')
+    expect(wrapper.text()).not.toContain('Reintentar')
+    await wrapper.get('.secondary-button').trigger('click')
+    expect(mockPush).toHaveBeenCalledWith({ path: '/', query: { login: 'client' } })
+    wrapper.unmount()
+  })
+
+  it('allows retrying link validation after a network failure', async () => {
+    vi.mocked(validatePasswordRecovery).mockRejectedValueOnce(new Error('network'))
+    const wrapper = mountView({ recovery: true, recoveryToken: 'a'.repeat(64) })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Reintentar')
+    await wrapper.get('.primary-button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('form').exists()).toBe(true)
+    expect(validatePasswordRecovery).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('requires the temporary password and matching new passwords before submitting', async () => {
+    const wrapper = mountView({ recovery: true, recoveryToken: 'a'.repeat(64) })
+    await flushPromises()
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.text()).toContain('Ingresa la contraseña temporal del correo')
+    await wrapper.get('#currentPassword').setValue('temporary')
+    await wrapper.get('#newPassword').setValue('NewSecret123!')
+    await wrapper.get('#confirmNewPassword').setValue('OtherSecret123!')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.text()).toContain('Las contraseñas no coinciden')
+    expect(resetPassword).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each(['TEMPORARY_PASSWORD_INCORRECT', 'RECOVERY_INVALID', 'PASSWORD_POLICY_VIOLATION'])(
+    'displays recovery rejection %s without claiming success',
+    async (code) => {
+      vi.mocked(resetPassword).mockRejectedValue(
+        new ChangePasswordError('Solicitud rechazada', code, ['matches_identity']),
+      )
+      const wrapper = mountView({ recovery: true, recoveryToken: 'a'.repeat(64) })
+      await flushPromises()
+      await wrapper.get('#currentPassword').setValue('temporary')
+      await wrapper.get('#newPassword').setValue('NewSecret123!')
+      await wrapper.get('#confirmNewPassword').setValue('NewSecret123!')
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+      expect(wrapper.find('.success-state').exists()).toBe(false)
+      expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+      if (code === 'RECOVERY_INVALID') expect(wrapper.find('form').exists()).toBe(false)
+      else expect(wrapper.find('form').exists()).toBe(true)
+      wrapper.unmount()
+    },
+  )
+
+  it('blocks repeated reset requests during the retry delay', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const error = new ChangePasswordError('Espera', 'RECOVERY_THROTTLED')
+    error.retryAfterSeconds = 2
+    vi.mocked(resetPassword).mockRejectedValue(error)
+    const wrapper = mountView({ recovery: true, recoveryToken: 'a'.repeat(64) })
+    await flushPromises()
+    await wrapper.get('#currentPassword').setValue('temporary')
+    await wrapper.get('#newPassword').setValue('NewSecret123!')
+    await wrapper.get('#confirmNewPassword').setValue('NewSecret123!')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    await wrapper.get('form').trigger('submit')
+    expect(resetPassword).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('2 segundos')
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(wrapper.get<HTMLButtonElement>('[type="submit"]').element.disabled).toBe(false)
+    wrapper.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
 
   it('keeps the landing header and footer and lays out the form beside the policy card', async () => {
     vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('valid')
