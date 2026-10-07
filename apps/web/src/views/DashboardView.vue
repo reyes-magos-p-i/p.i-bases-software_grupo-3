@@ -273,13 +273,17 @@ function returnToDashboard() {
       {{ creationResult }}
     </p>
 
-    <section v-if="activeSection !== 'password'" class="preview-content">
     <TheatersSection
       v-if="activeSection === 'theaters'"
       :disabled="loggingOut"
       @busy="theaterBusy = $event"
     />
-    <section v-else class="preview-content" aria-live="polite" aria-atomic="true">
+    <section
+      v-else-if="activeSection !== 'password'"
+      class="preview-content"
+      aria-live="polite"
+      aria-atomic="true"
+    >
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
@@ -334,4 +338,3 @@ function returnToDashboard() {
     <RouterLink to="/?login=employee">Volver al inicio de sesión</RouterLink>
   </p>
 </template>
-
