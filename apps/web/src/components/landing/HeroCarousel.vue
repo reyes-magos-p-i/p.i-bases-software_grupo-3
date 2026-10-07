@@ -104,7 +104,7 @@ function handleImageError(): void {
 
         <div class="hero-overlay"></div>
 
-        <div class="hero-content">
+        <div class="hero-carousel-content">
           <h1>
             {{ currentSlide.title }}
           </h1>
@@ -136,7 +136,7 @@ function handleImageError(): void {
       <i class="bi bi-chevron-right" aria-hidden="true"></i>
     </button>
 
-    <div class="carousel-indicators">
+    <div class="hero-carousel-indicators">
       <button
         v-for="(_, index) in slides"
         :key="index"
@@ -183,7 +183,7 @@ function handleImageError(): void {
   );
 }
 
-.hero-content {
+.hero-carousel-content {
   position: absolute;
 
   display: flex;
@@ -198,14 +198,14 @@ function handleImageError(): void {
   color: var(--color-white);
 }
 
-.hero-content h1 {
+.hero-carousel-content h1 {
   margin-bottom: 12px;
 
   font-size: clamp(1.6rem, 4vw, 3rem);
   font-weight: 700;
 }
 
-.hero-content p {
+.hero-carousel-content p {
   margin-bottom: 20px;
 
   font-size: clamp(0.95rem, 2vw, 1.15rem);
@@ -256,7 +256,7 @@ function handleImageError(): void {
   right: 16px;
 }
 
-.carousel-indicators {
+.hero-carousel-indicators {
   position: absolute;
 
   left: 50%;
