@@ -19,7 +19,7 @@ import { UsersRepository } from '../users/users.repository';
 import type { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
 import { EmailVerificationSender } from './notifications/email-verification-sender';
-import { validatePasswordPolicy } from '../clients/password-policy';
+import { validatePasswordChange } from './password/password-change-validator';
 
 // This non-account hash keeps missing credentials on the password verification path.
 const LOGIN_REFERENCE_HASH =
@@ -159,31 +159,9 @@ export class AuthService {
         message: 'Contraseña actual incorrecta.',
       });
     }
-    if (input.newPassword !== input.confirmNewPassword) {
-      throw new BadRequestException({
-        code: 'PASSWORDS_DO_NOT_MATCH',
-        message: 'Las contraseñas no coinciden.',
-      });
-    }
-    if (
-      await this.passwordHasher.verify(input.newPassword, employee.passwordHash)
-    ) {
-      throw new BadRequestException({
-        code: 'NEW_PASSWORD_SAME_AS_CURRENT',
-        message: 'La nueva contraseña no puede ser igual a la actual.',
-      });
-    }
-
-    const violations = validatePasswordPolicy(input.newPassword, {
-      email: employee.email,
-      firstName: employee.firstName,
-    });
-    if (violations.length > 0) {
-      throw new BadRequestException({
-        code: 'PASSWORD_POLICY_VIOLATION',
-        violations,
-      });
-    }
+    await validatePasswordChange(input, employee, () =>
+      this.passwordHasher.verify(input.newPassword, employee.passwordHash),
+    );
 
     const credentials = await this.passwordHasher.hash(input.newPassword);
     await this.usersRepository.saveEmployeePassword(

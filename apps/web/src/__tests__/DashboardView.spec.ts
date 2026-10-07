@@ -21,6 +21,7 @@ const {
   getUserCreationOptions,
   createUser,
   getTheaterCreationOptions,
+  getTheaters,
   createTheater,
   getEmployeePasswordStatus,
 } = vi.hoisted(
@@ -30,6 +31,7 @@ const {
     getUserCreationOptions: vi.fn(),
     createUser: vi.fn(),
     getTheaterCreationOptions: vi.fn(),
+    getTheaters: vi.fn().mockResolvedValue([]),
     createTheater: vi.fn(),
     getEmployeePasswordStatus: vi.fn(),
   }),
@@ -40,7 +42,12 @@ vi.mock('@/services/user.service', () => ({
   getUserCreationOptions,
   createUser,
 }))
-vi.mock('@/services/theater.service', () => ({ getTheaterCreationOptions, createTheater }))
+vi.mock('@/services/theater.service', () => ({
+  getTheaterCreationOptions,
+  getTheaters,
+  createTheater,
+  updateTheater: vi.fn(),
+}))
 vi.mock('@/services/authService', async () => {
   const actual =
     await vi.importActual<typeof import('@/services/authService')>('@/services/authService')
@@ -462,7 +469,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(5)
+    expect(pending).toHaveLength(4)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')

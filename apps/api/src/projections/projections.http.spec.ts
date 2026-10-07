@@ -8,6 +8,8 @@ import type { App } from 'supertest/types';
 import { AuthModule } from '../auth/auth.module';
 import { EMPLOYEE_SESSION_COOKIE } from '../auth/employee-session.service';
 import { EmailVerificationSender } from '../auth/notifications/email-verification-sender';
+import { PasswordRecoverySender } from '../auth/notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 import { ClientsService } from '../clients/clients.service';
 import { DatabaseService } from '../database/database.service';
 import { UsersRepository } from '../users/users.repository';
@@ -71,6 +73,10 @@ describe('Projections HTTP contracts', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue({})
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(UsersRepository)

@@ -1,3 +1,4 @@
+import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 jest.mock('oracledb', () => ({
   ...jest.requireActual('oracledb'),
   createPool: jest.fn(),
@@ -68,6 +69,8 @@ describe('UsersModule (application HTTP integration)', () => {
 
   function buildModule() {
     return Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(ConfigService)
       .useValue(config)
       .compile();
@@ -408,10 +411,7 @@ describe('UsersModule (application HTTP integration)', () => {
     await browser
       .get('/auth/password-status')
       .expect(200, { status: 'expired' });
-    await browser
-      .patch('/auth/employees/password')
-      .send({})
-      .expect(400);
+    await browser.patch('/auth/employees/password').send({}).expect(400);
   });
 
   it('uses the current role rather than role claims or development flags', async () => {

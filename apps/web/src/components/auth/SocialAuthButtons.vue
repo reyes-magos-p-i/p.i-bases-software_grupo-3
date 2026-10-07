@@ -40,7 +40,9 @@ async function onFacebook() {
     if (response.status === 'connected' && response.authResponse) {
       const result = await facebookLogin(response.authResponse.accessToken)
       emit('authenticated', result.client)
+      return
     }
+    emit('error', 'No se pudo conectar con Facebook. Inténtalo nuevamente.')
   } catch {
     emit('error', 'No se pudo conectar con Facebook. Inténtalo nuevamente.')
   } finally {

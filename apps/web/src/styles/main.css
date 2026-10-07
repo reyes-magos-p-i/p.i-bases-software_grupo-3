@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 @plugin "daisyui";
 
 *,
@@ -33,6 +33,10 @@ select {
   font: inherit;
 }
 
+.password-control input[type='password']::-ms-reveal {
+  display: none;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -46,4 +50,3 @@ img {
   width: min(1180px, calc(100% - 32px));
   margin-inline: auto;
 }
-

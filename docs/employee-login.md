@@ -2,8 +2,8 @@
 
 El portal integra el inicio de sesión de empleados y administradores. El formulario
 de clientes permite llegar al del personal. El acceso local y social de clientes
-se documenta en [client-login.md](client-login.md); la recuperación de contraseña
-corresponde a otra historia.
+se documenta en [client-login.md](client-login.md); el vínculo «Olvidé mi contraseña»
+abre la [recuperación por correo](password-recovery.md).
 
 ## Preparación local
 

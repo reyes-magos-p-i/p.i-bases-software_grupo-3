@@ -9,10 +9,8 @@ const COMMON_PASSWORDS = new Set([
   'password1',
   '12345678',
   'qwerty123',
-  'contrasena',
   'contrasena123',
-  'contraseña',
-  'contraseña123',
+  'cinetadel1',
 ])
 
 export function checkPasswordPolicy(
@@ -26,18 +24,23 @@ export function checkPasswordPolicy(
 
   return [
     { code: 'min_length', label: 'Al menos 8 caracteres', satisfied: password.length >= 8 },
+    {
+      code: 'max_length',
+      label: 'Como máximo 128 caracteres',
+      satisfied: [...password].length <= 128,
+    },
     { code: 'missing_uppercase', label: 'Una letra mayúscula', satisfied: /[A-Z]/.test(password) },
     { code: 'missing_lowercase', label: 'Una letra minúscula', satisfied: /[a-z]/.test(password) },
     { code: 'missing_number', label: 'Un número', satisfied: /\d/.test(password) },
     {
       code: 'missing_special_character',
-      label: 'Un carácter especial (!@#$...)',
-      satisfied: /[^A-Za-z0-9]/.test(password),
+      label: 'Un carácter especial (!@#$%^&*_-)',
+      satisfied: /[!@#$%^&*_-]/.test(password),
     },
     {
       code: 'matches_identity',
-      label: 'No puede ser igual a tu correo o nombre',
-      satisfied: password.length === 0 || !identityValues.includes(normalized),
+      label: 'No puede contener tu correo o nombre (de 4 caracteres o más)',
+      satisfied: !identityValues.some((value) => value.length >= 4 && normalized.includes(value)),
     },
     {
       code: 'common_password',
