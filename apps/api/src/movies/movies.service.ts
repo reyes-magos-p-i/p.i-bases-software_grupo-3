@@ -62,4 +62,16 @@ export class MoviesService {
       message: `Movie ${id} deleted successfully`,
     };
   }
+
+  findClassifications() {
+    return this.moviesRepository.findClassifications();
+  }
+
+  findGenres() {
+    return this.moviesRepository.findGenres();
+  }
+
+  findLanguages() {
+    return this.moviesRepository.findLanguages();
+  }
 }

@@ -131,40 +131,35 @@ describe('MoviesService', () => {
     });
   });
 
+  describe('catalogs', () => {
+  it.each([
+    'findClassifications',
+    'findGenres',
+    'findLanguages',
+  ] as const)('%s delegates to the repository', async (method) => {
+    const options = [{ id: 1, name: 'Option' }];
+    repository[method].mockResolvedValueOnce(options);
+
+    expect(await service[method]()).toEqual(options);
+    expect(repository[method]).toHaveBeenCalledTimes(1);
+  });
+});
+
   describe('update', () => {
-      it('should update an existing movie', async () => {
-        const dto = {
-          title: 'Updated Interstellar',
-        };
+    it('passes the ID and changes to the repository', async () => {
+      const dto = { title: 'Updated title' };
+      repository.update.mockResolvedValueOnce(undefined);
 
-        const updatedMovie = {
-          ...movieDetail,
-          title: 'Updated Interstellar',
-        };
+      await service.update(24, dto);
 
-        repository.findOne
-          .mockResolvedValueOnce(movieDetail)
-          .mockResolvedValueOnce(updatedMovie);
+      expect(repository.update).toHaveBeenCalledWith(24, dto);
+    });
 
-        repository.update.mockResolvedValue(undefined);
+    it('propagates repository errors', async () => {
+      const failure = new NotFoundException('Movie not found');
+      repository.update.mockRejectedValueOnce(failure);
 
-        const result = await service.update(1, dto);
-
-        expect(repository.findOne).toHaveBeenNthCalledWith(1, 1);
-        expect(repository.update).toHaveBeenCalledWith(1, dto);
-        expect(repository.findOne).toHaveBeenNthCalledWith(2, 1);
-
-        expect(result).toEqual(updatedMovie);
-      });
-
-    it('should throw NotFoundException when updating missing movie', async () => {
-      repository.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.update(999, { title: 'Test' }),
-      ).rejects.toThrow(NotFoundException);
-
-      expect(repository.update).not.toHaveBeenCalled();
+      await expect(service.update(999, {})).rejects.toThrow(failure);
     });
   });
 

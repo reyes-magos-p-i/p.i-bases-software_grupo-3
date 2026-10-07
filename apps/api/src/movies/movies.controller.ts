@@ -33,10 +33,27 @@ export class MoviesController {
     return this.moviesService.findAll();
   }
 
+  @Get('classifications')
+    findClassifications() {
+    return this.moviesService.findClassifications();
+  }
+
+  @Get('genres')
+  findGenres() {
+    return this.moviesService.findGenres();
+  }
+
+  @Get('languages')
+  findLanguages() {
+    return this.moviesService.findLanguages();
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.moviesService.findOne(id);
   }
+
+
 
   @Patch(':id')
   update(

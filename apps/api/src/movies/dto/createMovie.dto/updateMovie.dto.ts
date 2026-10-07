@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsString,
   Min,
+  IsOptional
 } from 'class-validator';
 
 export class UpdateMovieDto {
@@ -21,6 +22,7 @@ export class UpdateMovieDto {
 
   @IsString()
   @IsNotEmpty()
+  @IsOptional()
   posterImage?: string;
 
   @IsInt()
