@@ -59,7 +59,7 @@ onBeforeUnmount(() => {
 <template>
   <BaseModal :open="theater !== null" title="Desactivar sala" :close-disabled="saving" @close="close">
     <div v-if="theater" class="theater-deactivation-content" :aria-busy="saving">
-      <p>¿Deseas desactivar la sala <strong>S{{ theater.theaterId }}</strong>?</p>
+      <p>¿Deseas desactivar la sala <strong>{{ theater.theaterId }}</strong>?</p>
       <p class="deactivation-warning">La sala dejará de estar disponible, pero sus datos se conservarán.</p>
       <p v-if="error" ref="feedback" class="deactivation-error" role="alert" tabindex="-1">{{ error }}</p>
       <footer>

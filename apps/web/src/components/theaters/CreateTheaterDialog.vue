@@ -217,6 +217,9 @@ form { display: grid; gap: 8px; padding: 24px; overflow-y: auto; }
 .required-note { margin: 0 0 4px; font-size: .9rem; }
 .required-marker { color: #b42318; font-weight: 700; }
 input, select { min-height: 42px; padding: 8px 10px; border: 1px solid #a9adb5; border-radius: var(--radius-small); font: inherit; background: var(--color-white); }
+input[type='number'] { color-scheme: light; }
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button { filter: invert(0.55); }
 input:focus, select:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 .field-error, .form-error { color: #b42318; }
 .field-error { margin-bottom: 4px; }

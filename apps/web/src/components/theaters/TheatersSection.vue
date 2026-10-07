@@ -53,7 +53,7 @@ const rows = () =>
     ...theater,
     theater,
     id: theater.theaterId,
-    displayId: `S${theater.theaterId}`,
+    displayId: String(theater.theaterId),
     dimensions: `${theater.dimensionX} x ${theater.dimensionY}`,
     status: theater.isActive ? theater.status : 'Inactiva',
   }))
