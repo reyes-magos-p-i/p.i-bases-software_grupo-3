@@ -31,3 +31,13 @@ export interface MovieDetail {
   languages: MovieOption[]
   genres: MovieOption[]
 }
+
+export type UpdateMoviePayload = {
+  title: string
+  synopsis: string
+  runningTime: number
+  releaseYear: number
+  classificationId: number
+  languageIds: number[]
+  genreIds: number[]
+}

@@ -4,13 +4,20 @@ import { isAxiosError } from 'axios'
 import MovieCrudView from './MovieCrudView.vue'
 
 import CrudTable from '@/components/crudTable/CrudTable.vue'
-import { deleteMovie, getMovies } from '@/services/movie.service'
-import type { MovieAll } from '@/types/movie'
+import { deleteMovie, getMovies, getClassifications, getGenres, getLanguages } from '@/services/movie.service'
+import type { MovieAll, MovieOption } from '@/types/movie'
+import MovieCrudEdit from './MovieCrudEdit.vue'
 
 const movies = ref<MovieAll[]>([])
 const loading = ref(false)
 const listError = ref('')
 const selectedMovieId = ref<number | null>(null)
+const editingMovieId = ref<number | null>(null)
+
+const classifications = ref<MovieOption[]>([])
+const languages = ref<MovieOption[]>([])
+const genres = ref<MovieOption[]>([])
+const catalogsError = ref('')
 
 let request: AbortController | undefined
 let disposed = false
@@ -32,7 +39,41 @@ const rows = computed(() =>
   })),
 )
 
+export type UpdateMoviePayload = {
+  title: string
+  synopsis: string
+  runningTime: number
+  releaseYear: number
+  classificationId: number
+  languageIds: number[]
+  genreIds: number[]
+}
+
+async function loadCatalogs() {
+  catalogsError.value = ''
+
+  try {
+    const [classificationOptions, genreOptions, languageOptions] =
+      await Promise.all([
+        getClassifications(),
+        getGenres(),
+        getLanguages(),
+      ])
+
+    classifications.value = classificationOptions
+    genres.value = genreOptions
+    languages.value = languageOptions
+  } catch {
+    catalogsError.value = 'No se pudieron cargar las opciones de películas.'
+  }
+}
+
+onMounted(() => {
+  void loadCatalogs()
+})
+
 async function load() {
+
   request?.abort()
 
   const currentRequest = new AbortController()
@@ -78,6 +119,12 @@ function viewMovie(row: Record<string, unknown>) {
 
 function editMovie(row: Record<string, unknown>) {
   console.log('Edit:', row)
+  const id = Number(row.id)
+
+  if (!Number.isInteger(id) || id <= 0) return
+
+  editingMovieId.value = id
+
 }
 
 async function removeMovie(row: Record<string, unknown>) {
@@ -137,6 +184,19 @@ defineExpose({ refresh })
     <MovieCrudView
       :movie-id="selectedMovieId"
       @close="selectedMovieId = null"
+    />
+
+    <p v-if="catalogsError" role="alert">
+      {{ catalogsError }}
+    </p>
+
+    <MovieCrudEdit
+    :movie-id="editingMovieId"
+    :classifications="classifications"
+    :languages="languages"
+    :genres="genres"
+    @close="editingMovieId = null"
+    @saved="load"
     />
   </div>
 </template>

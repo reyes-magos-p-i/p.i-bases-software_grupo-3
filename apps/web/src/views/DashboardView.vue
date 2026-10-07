@@ -244,7 +244,7 @@ onMounted(() => {
 })
 const availableSections = computed(() =>
   role.value === 'ADMINISTRATOR'
-    ? ['employees', 'clients', 'theaters', 'password']
+    ? ['employees', 'clients', 'theaters', 'password', 'movies']
     : ['clients', 'password'],
 )
 const sectionTitle = computed(() =>
@@ -363,7 +363,7 @@ function returnToDashboard() {
         @user-updated="userUpdated"
       />
       <MovieCrud
-        v-else-if="activeSection === 'movies'"
+        v-if="activeSection === 'movies'"
       />
     </section>
     <ChangePasswordView

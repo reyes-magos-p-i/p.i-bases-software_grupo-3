@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CreateMovieDto } from './dto/createMovie.dto/createMovie.dto';
 import { UpdateMovieDto } from './dto/createMovie.dto/updateMovie.dto';
@@ -248,86 +248,139 @@ import * as oracledb from 'oracledb';
   });
 }
 
-  async update(id: number, dto: UpdateMovieDto) {
-    return this.db.transaction(async (conn) => {
-      await conn.execute(
+  async update(id: number, dto: UpdateMovieDto): Promise<void> {
+    await this.db.transaction(async (conn) => {
+      // Run before modifying data on this connection.
+      await conn.execute('ALTER SESSION DISABLE PARALLEL DML');
+
+      const result = await conn.execute(
         `
         UPDATE MOVIES
         SET
           TITLE = COALESCE(:title, TITLE),
+          SYNOPSIS = COALESCE(:synopsis, SYNOPSIS),
+          POSTER_IMAGE = COALESCE(:posterImage, POSTER_IMAGE),
           RUNNING_TIME = COALESCE(:runningTime, RUNNING_TIME),
           RELEASE_YEAR = COALESCE(:releaseYear, RELEASE_YEAR),
-          CLASIFICATION_ID =
-            COALESCE(:classificationId, CLASIFICATION_ID)
+          CLASSIFICATION_ID =
+            COALESCE(:classificationId, CLASSIFICATION_ID)
         WHERE MOVIE_ID = :id
         `,
         {
           id,
           title: dto.title ?? null,
+          synopsis: dto.synopsis ?? null,
+          posterImage: dto.posterImage ?? null,
           runningTime: dto.runningTime ?? null,
           releaseYear: dto.releaseYear ?? null,
           classificationId: dto.classificationId ?? null,
         },
+        { autoCommit: false },
       );
 
-      if (dto.languageIds) {
+      if (result.rowsAffected === 0) {
+        throw new NotFoundException(`Movie with ID ${id} was not found`);
+      }
+
+      if (dto.languageIds !== undefined) {
+        const languageIds = [...new Set(dto.languageIds)];
+
         await conn.execute(
           `
           DELETE FROM MOVIE_LANGUAGES
           WHERE MOVIE_ID = :id
           `,
           { id },
+          { autoCommit: false },
         );
 
-        if (dto.languageIds.length > 0) {
+        if (languageIds.length > 0) {
           await conn.executeMany(
             `
-            INSERT INTO MOVIE_LANGUAGES (
-              MOVIE_ID,
-              LANGUAGE_ID
-            )
-            VALUES (
-              :id,
-              :languageId
-            )
+            INSERT INTO MOVIE_LANGUAGES (MOVIE_ID, LANGUAGE_ID)
+            VALUES (:id, :languageId)
             `,
-            dto.languageIds.map((languageId) => ({
+            languageIds.map((languageId) => ({
               id,
               languageId,
             })),
+            { autoCommit: false },
           );
         }
       }
 
-      if (dto.genreIds) {
+      if (dto.genreIds !== undefined) {
+        const genreIds = [...new Set(dto.genreIds)];
+
         await conn.execute(
           `
           DELETE FROM MOVIE_GENRES
           WHERE MOVIE_ID = :id
           `,
           { id },
+          { autoCommit: false },
         );
 
-        if (dto.genreIds.length > 0) {
+        if (genreIds.length > 0) {
           await conn.executeMany(
             `
-            INSERT INTO MOVIE_GENRES (
-              MOVIE_ID,
-              GENRE_ID
-            )
-            VALUES (
-              :id,
-              :genreId
-            )
+            INSERT INTO MOVIE_GENRES (MOVIE_ID, GENRE_ID)
+            VALUES (:id, :genreId)
             `,
-            dto.genreIds.map((genreId) => ({
+            genreIds.map((genreId) => ({
               id,
               genreId,
             })),
+            { autoCommit: false },
           );
         }
       }
     });
+  }
+
+  async findClassifications() {
+    const result = await this.db.query<{
+      id: number;
+      name: string;
+    }>(`
+      SELECT
+        CLASSIFICATION_ID AS "id",
+        CLASSIFICATION_NAME AS "name"
+      FROM CLASSIFICATIONS
+      ORDER BY CLASSIFICATION_NAME
+    `);
+
+    return result.rows ?? [];
+  }
+
+  async findGenres() {
+    const result = await this.db.query<{
+      id: number;
+      name: string;
+    }>(`
+      SELECT
+        GENRE_ID AS "id",
+        NAME AS "name"
+      FROM GENRES
+      ORDER BY NAME
+    `);
+
+    return result.rows ?? [];
+  }
+
+  async findLanguages() {
+    const result = await this.db.query<{
+      id: number;
+      name: string;
+    }>(`
+      SELECT
+        LANGUAGE_ID AS "id",
+        NAME AS "name"
+      FROM LANGUAGES
+      ORDER BY NAME
+    `);
+
+    return result.rows ?? [];
   }
 
 }
