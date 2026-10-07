@@ -1,11 +1,14 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ProjectionsService } from './projections.service';
 import type { ProjectionsRepository } from './projections.repository';
 import type { CreateProjectionDto } from './dto/create-projection.dto';
 
 describe('ProjectionsService', () => {
   const repository = {
-    getSchedulingOptions: jest.fn(),
+    getCatalogs: jest.fn(),
+    getScheduledMovies: jest.fn(),
+    listProjections: jest.fn(),
+    findProjection: jest.fn(),
     findAvailableMovies: jest.fn(),
     findAvailableMovieRunningTime: jest.fn(),
     createProjections: jest.fn(),
@@ -32,7 +35,7 @@ describe('ProjectionsService', () => {
   });
 
   it('delegates the scheduling options and the movie search', async () => {
-    repository.getSchedulingOptions.mockResolvedValue({ cinemas: [], theaters: [] });
+    repository.getCatalogs.mockResolvedValue({ cinemas: [], theaters: [] });
     repository.findAvailableMovies.mockResolvedValue([]);
     await expect(service.getSchedulingOptions()).resolves.toEqual({
       cinemas: [],
@@ -43,6 +46,40 @@ describe('ProjectionsService', () => {
     await service.findAvailableMovies({ branchId: 2, search: 'spider' });
     expect(repository.findAvailableMovies).toHaveBeenNthCalledWith(1, 2, '');
     expect(repository.findAvailableMovies).toHaveBeenNthCalledWith(2, 2, 'spider');
+    expect(repository.getCatalogs).toHaveBeenCalledWith(true);
+  });
+
+  it('combines all theaters and scheduled movies for the list filters', async () => {
+    repository.getCatalogs.mockResolvedValue({ cinemas: [], theaters: [] });
+    repository.getScheduledMovies.mockResolvedValue([{ movieId: 3, title: 'Odyssey' }]);
+    await expect(service.getFilterOptions()).resolves.toEqual({
+      cinemas: [],
+      theaters: [],
+      movies: [{ movieId: 3, title: 'Odyssey' }],
+    });
+    expect(repository.getCatalogs).toHaveBeenCalledWith(false);
+  });
+
+  it('adds the page information to the list', async () => {
+    repository.listProjections.mockResolvedValue({ items: [{ movieFunctionId: 1 }], total: 21 });
+    await expect(service.list({ page: 2, pageSize: 10, status: 'ACTIVE' })).resolves.toEqual({
+      items: [{ movieFunctionId: 1 }],
+      total: 21,
+      page: 2,
+      pageSize: 10,
+      totalPages: 3,
+    });
+    repository.listProjections.mockResolvedValue({ items: [], total: 0 });
+    await expect(service.list({ page: 1, pageSize: 25 })).resolves.toMatchObject({ totalPages: 0 });
+  });
+
+  it('returns the detail or reports a projection that no longer exists', async () => {
+    repository.findProjection.mockResolvedValueOnce({ movieFunctionId: 100 });
+    await expect(service.findOne(100)).resolves.toEqual({ movieFunctionId: 100 });
+    repository.findProjection.mockResolvedValueOnce(null);
+    await expect(service.findOne(101)).rejects.toThrow(
+      new NotFoundException('Esta proyección ya no está disponible.'),
+    );
   });
 
   it('creates one active projection per day of the range', async () => {

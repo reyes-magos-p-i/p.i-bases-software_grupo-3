@@ -83,4 +83,19 @@ describe('CrudTable', () => {
     expect(wrapper.text()).toContain('Silvio')
     expect(wrapper.text()).toContain('silvio.castilo@test.com')
   })
+
+  it('lets a cell slot render a column', () => {
+    const wrapper = mount(CrudTable, {
+      props: {
+        columns: [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status' },
+        ],
+        rows: [{ id: 1, name: 'Silvio', status: 'ACTIVE' }],
+      },
+      slots: { 'cell-status': '<template #cell-status="{ value }"><b>{{ value }}!</b></template>' },
+    })
+    expect(wrapper.get('b').text()).toBe('ACTIVE!')
+    expect(wrapper.text()).toContain('Silvio')
+  })
 })

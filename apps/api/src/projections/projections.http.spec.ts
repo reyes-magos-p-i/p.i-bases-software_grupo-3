@@ -22,7 +22,10 @@ describe('Projections HTTP contracts', () => {
   const origin = 'http://localhost:5173';
   const users = { findEmployeeIdentityById: jest.fn() };
   const repository = {
-    getSchedulingOptions: jest.fn(),
+    getCatalogs: jest.fn(),
+    getScheduledMovies: jest.fn(),
+    listProjections: jest.fn(),
+    findProjection: jest.fn(),
     findAvailableMovies: jest.fn(),
     findAvailableMovieRunningTime: jest.fn(),
     createProjections: jest.fn(),
@@ -110,7 +113,7 @@ describe('Projections HTTP contracts', () => {
   });
 
   it('returns the scheduling options and the branch movie search', async () => {
-    repository.getSchedulingOptions.mockResolvedValue({ cinemas: [], theaters: [] });
+    repository.getCatalogs.mockResolvedValue({ cinemas: [], theaters: [] });
     repository.findAvailableMovies.mockResolvedValue([{ movieId: 3 }]);
     await request(app.getHttpServer())
       .get('/api/projections/options')
@@ -125,6 +128,59 @@ describe('Projections HTTP contracts', () => {
       .get('/api/projections/available-movies?branchId=abc')
       .set('Cookie', session())
       .expect(400);
+  });
+
+  const get = (path: string) =>
+    request(app.getHttpServer()).get(`/api/projections${path}`).set('Cookie', session());
+
+  it('lists projections with defaults and combined filters', async () => {
+    repository.listProjections.mockResolvedValue({ items: [], total: 0 });
+    await get('').expect(200, { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 });
+    expect(repository.listProjections).toHaveBeenLastCalledWith({ page: 1, pageSize: 10 });
+
+    await get(
+      '?page=2&pageSize=25&status=CANCELLED&branchId=2&theaterId=7&movieId=3&dateFrom=2099-07-01&dateTo=2099-07-31&timeFrom=18:00&timeTo=22:00&search=spi',
+    ).expect(200);
+    expect(repository.listProjections).toHaveBeenLastCalledWith({
+      page: 2,
+      pageSize: 25,
+      status: 'CANCELLED',
+      branchId: 2,
+      theaterId: 7,
+      movieId: 3,
+      dateFrom: '2099-07-01',
+      dateTo: '2099-07-31',
+      timeFrom: '18:00',
+      timeTo: '22:00',
+      search: 'spi',
+    });
+  });
+
+  it.each([
+    ['?status=DELETED', 'Selecciona un estado de la lista.'],
+    ['?pageSize=7', 'El tamaño de página debe ser 10, 25, 50 o 100.'],
+    ['?page=0', 'La página debe ser un número entero positivo.'],
+    ['?branchId=x', 'Selecciona una sucursal de la lista.'],
+    ['?dateFrom=2099-13-01', 'Introduce una fecha válida (AAAA-MM-DD).'],
+    ['?timeTo=25:00', 'Introduce una hora válida (HH:mm).'],
+    ['?movieName=spi', 'property movieName should not exist'],
+  ])('rejects invalid list filters %s', async (query, message) => {
+    const response = await get(query).expect(400);
+    expect(response.body.message).toContain(message);
+    expect(repository.listProjections).not.toHaveBeenCalled();
+  });
+
+  it('returns filter options and the detail of a projection', async () => {
+    repository.getCatalogs.mockResolvedValue({ cinemas: [], theaters: [] });
+    repository.getScheduledMovies.mockResolvedValue([]);
+    await get('/filter-options').expect(200, { cinemas: [], theaters: [], movies: [] });
+
+    repository.findProjection.mockResolvedValueOnce({ movieFunctionId: 100 });
+    await get('/100').expect(200, { movieFunctionId: 100 });
+    repository.findProjection.mockResolvedValueOnce(null);
+    const missing = await get('/101').expect(404);
+    expect(missing.body.message).toBe('Esta proyección ya no está disponible.');
+    await get('/abc').expect(400);
   });
 
   it.each([

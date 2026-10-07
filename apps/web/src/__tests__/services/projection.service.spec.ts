@@ -45,6 +45,24 @@ describe('projection service', () => {
     })
   })
 
+  it('loads the list, its filter options and one detail', async () => {
+    const controller = new AbortController()
+    get.mockResolvedValue({ data: 'data' })
+    const { getProjectionFilterOptions, getProjections, getProjectionDetail } = await import(
+      '@/services/projection.service'
+    )
+    const query = { page: 2, pageSize: 25, status: 'ACTIVE' as const }
+
+    await expect(getProjectionFilterOptions(controller.signal)).resolves.toBe('data')
+    await expect(getProjections(query, controller.signal)).resolves.toBe('data')
+    await expect(getProjectionDetail(100, controller.signal)).resolves.toBe('data')
+    expect(get.mock.calls).toEqual([
+      ['/projections/filter-options', { signal: controller.signal, timeout: 10000 }],
+      ['/projections', { params: query, signal: controller.signal, timeout: 10000 }],
+      ['/projections/100', { signal: controller.signal, timeout: 10000 }],
+    ])
+  })
+
   it('creates projections', async () => {
     const payload = { movieId: 3 } as CreateProjectionRequest
     const created = { status: 'ACTIVE', price: 4500, projections: [] }

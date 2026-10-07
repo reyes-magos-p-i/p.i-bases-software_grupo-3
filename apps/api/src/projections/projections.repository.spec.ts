@@ -51,19 +51,100 @@ describe('ProjectionsRepository', () => {
     respond();
   });
 
-  it('maps the scheduling options', async () => {
-    db.query
-      .mockResolvedValueOnce({ rows: [{ BRANCH_ID: 2, NAME: 'Mall Oxígeno' }] })
-      .mockResolvedValueOnce({ rows: [{ THEATER_ID: 7, BRANCH_ID: 2, NUMBER_SEATS: 80 }] });
-    await expect(repository.getSchedulingOptions()).resolves.toEqual({
-      cinemas: [{ branchId: 2, name: 'Mall Oxígeno' }],
-      theaters: [{ theaterId: 7, branchId: 2, numberOfSeats: 80 }],
-    });
+  it('loads branches with active or all theaters', async () => {
+    const cinemas = [{ branchId: 2, name: 'Mall Oxígeno' }];
+    const theaters = [{ theaterId: 7, branchId: 2, numberOfSeats: 80 }];
+    db.query.mockResolvedValueOnce({ rows: cinemas }).mockResolvedValueOnce({ rows: theaters });
+    await expect(repository.getCatalogs(true)).resolves.toEqual({ cinemas, theaters });
+    expect(db.query.mock.calls[1][0]).toContain('WHERE IS_ACTIVE = 1');
+
     db.query.mockResolvedValue({});
-    await expect(repository.getSchedulingOptions()).resolves.toEqual({
-      cinemas: [],
-      theaters: [],
+    await expect(repository.getCatalogs(false)).resolves.toEqual({ cinemas: [], theaters: [] });
+    expect(db.query.mock.calls[3][0]).not.toContain('IS_ACTIVE');
+  });
+
+  it('lists the movies that have projections', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ movieId: 3, title: 'Spider-Man' }] });
+    await expect(repository.getScheduledMovies()).resolves.toEqual([
+      { movieId: 3, title: 'Spider-Man' },
+    ]);
+    db.query.mockResolvedValueOnce({});
+    await expect(repository.getScheduledMovies()).resolves.toEqual([]);
+  });
+
+  it('pages projections without filters', async () => {
+    const item = { movieFunctionId: 100 };
+    db.query.mockResolvedValueOnce({ rows: [{ TOTAL: 31 }] }).mockResolvedValueOnce({ rows: [item] });
+    await expect(repository.listProjections({ page: 3, pageSize: 10 })).resolves.toEqual({
+      items: [item],
+      total: 31,
     });
+    expect(db.query.mock.calls[0]).toEqual([expect.stringContaining('WHERE 1 = 1'), {}]);
+    expect(db.query.mock.calls[1][1]).toEqual({ offset: 20, pageSize: 10 });
+
+    db.query.mockResolvedValue({});
+    await expect(repository.listProjections({ page: 1, pageSize: 10 })).resolves.toEqual({
+      items: [],
+      total: 0,
+    });
+  });
+
+  it('combines every filter with binds', async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    await repository.listProjections({
+      page: 1,
+      pageSize: 25,
+      search: ' 10% ',
+      status: 'ACTIVE',
+      branchId: 2,
+      theaterId: 7,
+      movieId: 3,
+      dateFrom: '2099-07-01',
+      dateTo: '2099-07-31',
+      timeFrom: '18:00',
+      timeTo: '22:00',
+    });
+    const [sql, binds] = db.query.mock.calls[0];
+    for (const condition of [
+      'mf.STATUS = :status',
+      't.BRANCH_ID = :branchId',
+      'mf.THEATER_ID = :theaterId',
+      'mf.MOVIE_ID = :movieId',
+      ':dateFrom',
+      ':dateTo',
+      ':timeFrom',
+      ':timeTo',
+      'LOWER(m.TITLE) LIKE :search',
+    ])
+      expect(sql).toContain(condition);
+    expect(binds).toEqual({
+      status: 'ACTIVE',
+      branchId: 2,
+      theaterId: 7,
+      movieId: 3,
+      dateFrom: '2099-07-01',
+      dateTo: '2099-07-31',
+      timeFrom: '18:00',
+      timeTo: '22:00',
+      search: String.raw`%10\%%`,
+    });
+  });
+
+  it('ignores a blank search', async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    await repository.listProjections({ page: 1, pageSize: 10, search: '   ' });
+    expect(db.query.mock.calls[0][1]).toEqual({});
+  });
+
+  it('finds the detail of one projection with its activities', async () => {
+    const detail = { movieFunctionId: 100, cleaningMinutes: 30 };
+    db.query.mockResolvedValueOnce({ rows: [detail] }).mockResolvedValueOnce({ rows: [] });
+    await expect(repository.findProjection(100)).resolves.toBe(detail);
+    const [sql, binds] = db.query.mock.calls[0];
+    expect(sql).toContain("a.TYPE = 'CLEANING'");
+    expect(sql).toContain("a.TYPE = 'ADVERTISEMENT'");
+    expect(binds).toEqual({ id: expect.objectContaining({ val: 100 }) });
+    await expect(repository.findProjection(101)).resolves.toBeNull();
   });
 
   it('searches available movies of a branch with an escaped pattern', async () => {

@@ -8,7 +8,15 @@ import {
 } from '@/services/employee-session.service'
 import type { CreateProjectionRequest } from '@/types/projection'
 
-const { getProjectionSchedulingOptions, createProjections, replace } = vi.hoisted(() => ({
+const {
+  getProjectionSchedulingOptions,
+  createProjections,
+  replace,
+  getProjections,
+  getProjectionFilterOptions,
+} = vi.hoisted(() => ({
+  getProjections: vi.fn(),
+  getProjectionFilterOptions: vi.fn(),
   getProjectionSchedulingOptions: vi.fn(),
   createProjections: vi.fn(),
   replace: vi.fn(),
@@ -17,6 +25,8 @@ vi.mock('@/services/projection.service', () => ({
   getProjectionSchedulingOptions,
   createProjections,
   searchAvailableMovies: vi.fn(),
+  getProjections,
+  getProjectionFilterOptions,
 }))
 vi.mock('@/services/employee-session.service', () => ({
   invalidateEmployeeSession: vi.fn(),
@@ -53,6 +63,8 @@ async function submit() {
 beforeEach(() => {
   vi.resetAllMocks()
   getProjectionSchedulingOptions.mockResolvedValue(options)
+  getProjections.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 })
+  getProjectionFilterOptions.mockResolvedValue({ cinemas: [], theaters: [], movies: [] })
   createProjections.mockResolvedValue({ status: 'ACTIVE', price: 4500, projections: [{}] })
   vi.mocked(restoreEmployeeSession).mockResolvedValue({ id: 21 } as never)
   Object.defineProperties(dialogPrototype, {
@@ -91,7 +103,7 @@ describe('ProjectionsSection', () => {
     expect(form().props('cinemas')).toEqual(options.cinemas)
     expect(form().props('theaters')).toEqual(options.theaters)
     expect(form().props('defaultPrice')).toBe(3500)
-    expect(wrapper!.get('dialog').attributes('open')).toBeDefined()
+    expect(form().get('dialog').attributes('open')).toBeDefined()
   })
 
   it.each([
@@ -128,9 +140,11 @@ describe('ProjectionsSection', () => {
     await submit()
 
     expect(createProjections).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(getProjections).toHaveBeenCalledTimes(2)
+    expect(wrapper!.find('.preview-placeholder').exists()).toBe(false)
     expect(wrapper!.get('.creation-result').text()).toBe('Se creó 1 proyección.')
     expect(document.activeElement).toBe(wrapper!.get('.creation-result').element)
-    expect(wrapper!.get('dialog').attributes('open')).toBeUndefined()
+    expect(form().get('dialog').attributes('open')).toBeUndefined()
     expect(wrapper!.emitted('busy')).toEqual([[true], [false]])
 
     createProjections.mockResolvedValueOnce({ status: 'INACTIVE', projections: [{}, {}, {}] })
@@ -153,7 +167,7 @@ describe('ProjectionsSection', () => {
     await submit()
 
     expect(form().props('submissionErrors')).toEqual(messages)
-    expect(wrapper!.get('dialog').attributes('open')).toBeDefined()
+    expect(form().get('dialog').attributes('open')).toBeDefined()
     expect(wrapper!.find('.creation-result').exists()).toBe(false)
   })
 
