@@ -21,7 +21,8 @@ Aplicar una sola vez, conectado como `PRODUCTION`:
   Si la hora fin no es posterior a la de inicio, termina al día siguiente.
 - Un rango de fechas crea una proyección por día (máximo 31) a la misma hora.
   Es todo o nada: si un día choca con otra proyección no cancelada de la misma
-  sala, no se crea ninguna y se informa el horario en conflicto.
+  sala, no se crea ninguna y se listan los horarios en conflicto (los primeros
+  5 y cuántos más hay).
 - Las horas se guardan en hora local de Costa Rica. No se aceptan inicios en el pasado.
 - Precio por persona: ₡3500 por defecto (`DEFAULT_TICKET_PRICE`, se envía en `/options`) hasta que exista la configuración global; el administrador puede cambiarlo por proyección. Si `price` se omite, se usa el valor por defecto.
 - Estado inicial `ACTIVE` o `INACTIVE`. El job pasa cada minuto `ACTIVE` →

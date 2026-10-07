@@ -208,15 +208,37 @@ describe('ProjectionsRepository', () => {
     );
   });
 
-  it('reports the first overlapping projection of the theater', async () => {
+  it('reports every overlapping projection of the theater', async () => {
     respond({
       'FROM MOVIE_FUNCTIONS mf': {
-        rows: [{ startTime: '2099-07-22T18:05', endTime: '2099-07-22T21:30' }],
+        rows: [
+          { startTime: '2099-07-21T18:05', endTime: '2099-07-21T21:30', total: 2 },
+          { startTime: '2099-07-22T20:00', endTime: '2099-07-22T23:10', total: 2 },
+        ],
       },
     });
     await expect(repository.createProjections(data, 21)).rejects.toThrow(
       new ConflictException(
-        'La sala ya tiene una proyección asignada en ese horario (22/07/2099 18:05 – 21:30).',
+        'La sala ya tiene una proyección asignada en ese horario: 21/07/2099 18:05 – 21:30, 22/07/2099 20:00 – 23:10.',
+      ),
+    );
+    const conflictQuery = connection.execute.mock.calls.find(([sql]) =>
+      sql.includes('FROM MOVIE_FUNCTIONS mf'),
+    )![0];
+    expect(conflictQuery).toContain('COUNT(*) OVER ()');
+    expect(conflictQuery).toContain('FETCH FIRST 5 ROWS ONLY');
+  });
+
+  it('summarizes conflicts beyond the reported ones', async () => {
+    const row = (day: number) => ({
+      startTime: `2099-07-${day}T18:00`,
+      endTime: `2099-07-${day}T20:00`,
+      total: 8,
+    });
+    respond({ 'FROM MOVIE_FUNCTIONS mf': { rows: [21, 22, 23, 24, 25].map(row) } });
+    await expect(repository.createProjections(data, 21)).rejects.toThrow(
+      new ConflictException(
+        'La sala ya tiene una proyección asignada en ese horario: 21/07/2099 18:00 – 20:00, 22/07/2099 18:00 – 20:00, 23/07/2099 18:00 – 20:00, 24/07/2099 18:00 – 20:00, 25/07/2099 18:00 – 20:00 y 3 más.',
       ),
     );
   });

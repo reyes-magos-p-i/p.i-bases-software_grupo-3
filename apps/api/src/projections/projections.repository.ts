@@ -22,6 +22,7 @@ const TRANSACTION = {
   autoCommit: false,
 } as const;
 const MOVIE_SEARCH_LIMIT = 10;
+const MAX_REPORTED_CONFLICTS = 5;
 const PROJECTION_COLUMNS = `mf.MOVIE_FUNCTION_ID AS "movieFunctionId", m.MOVIE_ID AS "movieId",
        m.TITLE AS "movieTitle", t.BRANCH_ID AS "branchId", c.NAME AS "branchName",
        mf.THEATER_ID AS "theaterId", TO_CHAR(mf.START_TIME, ${LOCAL_FORMAT}) AS "startTime",
@@ -241,22 +242,31 @@ export class ProjectionsRepository {
       binds[`end${index}`] = slot.endTime;
       return `(mf.START_TIME < TO_TIMESTAMP(:end${index}, ${LOCAL_FORMAT}) AND mf.END_TIME > TO_TIMESTAMP(:start${index}, ${LOCAL_FORMAT}))`;
     });
-    const conflict = await connection.execute<{ startTime: string; endTime: string }>(
+    const conflicts = await connection.execute<{
+      startTime: string;
+      endTime: string;
+      total: number;
+    }>(
       `SELECT TO_CHAR(mf.START_TIME, ${LOCAL_FORMAT}) AS "startTime",
-              TO_CHAR(mf.END_TIME, ${LOCAL_FORMAT}) AS "endTime"
+              TO_CHAR(mf.END_TIME, ${LOCAL_FORMAT}) AS "endTime",
+              COUNT(*) OVER () AS "total"
          FROM MOVIE_FUNCTIONS mf
         WHERE mf.THEATER_ID = :theaterId AND mf.STATUS <> 'CANCELLED'
           AND (${overlaps.join(' OR ')})
         ORDER BY mf.START_TIME
-        FETCH FIRST 1 ROWS ONLY`,
+        FETCH FIRST ${MAX_REPORTED_CONFLICTS} ROWS ONLY`,
       binds,
       TRANSACTION,
     );
-    const existing = conflict.rows?.[0];
-    if (existing)
-      throw new ConflictException(
-        `${PROJECTION_MESSAGES.scheduleConflict} (${formatLocal(existing.startTime)} – ${formatLocal(existing.endTime).slice(-5)}).`,
-      );
+    const rows = conflicts.rows ?? [];
+    if (!rows.length) return;
+    const listed = rows
+      .map((row) => `${formatLocal(row.startTime)} – ${formatLocal(row.endTime).slice(-5)}`)
+      .join(', ');
+    const remaining = rows[0]!.total - rows.length;
+    throw new ConflictException(
+      `${PROJECTION_MESSAGES.scheduleConflict}: ${listed}${remaining > 0 ? ` y ${remaining} más` : ''}.`,
+    );
   }
 
   private async ensureActivity(
