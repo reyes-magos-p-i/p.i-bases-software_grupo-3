@@ -216,16 +216,6 @@ const availableSections = computed(() =>
     : ['clients', 'movies'],
 )
 
-const sectionTitle = computed(() =>
-  activeSection.value === 'employees'
-    ? 'Empleados'
-    : activeSection.value === 'theaters'
-      ? 'Salas'
-      : activeSection.value === 'movies'
-        ? 'Películas'
-        : 'Clientes',
-)
-)
 const sectionTitle = computed(() => {
   switch (activeSection.value) {
     case 'employees':
@@ -237,11 +227,13 @@ const sectionTitle = computed(() => {
     case 'movies':
       return 'Películas'
 
+    case 'theaters':
+      return 'Salas'
+
     default:
       return ''
   }
 })
-
 watch(role, () => {
   if (
     role.value === 'EMPLOYEE' &&
