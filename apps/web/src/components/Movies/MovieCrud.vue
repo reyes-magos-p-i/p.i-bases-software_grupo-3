@@ -5,9 +5,9 @@ import MovieCrudView from './MovieCrudView.vue'
 
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import { deleteMovie, getMovies } from '@/services/movie.service'
-import type { Movie } from '@/types/movie'
+import type { MovieAll } from '@/types/movie'
 
-const movies = ref<Movie[]>([])
+const movies = ref<MovieAll[]>([])
 const loading = ref(false)
 const listError = ref('')
 const selectedMovieId = ref<number | null>(null)
@@ -24,11 +24,11 @@ const columns = [
 ]
 
 const rows = computed(() =>
-  movies.value.map((movie) => ({
-    ...movie,
-    runningTime: `${movie.runningTime} min`,
-    releaseYear: movie.releaseYear ?? 'Sin registrar',
-    classification: movie.classification ?? 'Sin registrar',
+  movies.value.map((MovieAll) => ({
+    ...MovieAll,
+    runningTime: `${MovieAll.runningTime} min`,
+    releaseYear: MovieAll.releaseYear ?? 'Sin registrar',
+    classification: MovieAll.classification ?? 'Sin registrar',
   })),
 )
 

@@ -1,5 +1,5 @@
 import { getApi } from '@/services/api'
-import type { Movie, MovieDetail,  } from '@/types/movie'
+import type { Movie, MovieAll, MovieDetail,  } from '@/types/movie'
 
 export interface CreateMoviePayload {
   title: string
@@ -15,8 +15,8 @@ export type UpdateMoviePayload = Partial<CreateMoviePayload>
 
 export async function getMovies(
   signal?: AbortSignal,
-): Promise<Movie[]> {
-  const response = await getApi().get<Movie[]>('/movies', {
+): Promise<MovieAll[]> {
+  const response = await getApi().get<MovieAll[]>('/movies', {
     signal,
   })
 
