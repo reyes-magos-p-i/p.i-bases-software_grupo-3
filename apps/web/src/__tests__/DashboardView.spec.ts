@@ -314,6 +314,23 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
   })
 
+  it('prevents section navigation and logout while the password change is pending', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Cambiar contraseña"]').trigger('click')
+    const passwordView = view.getComponent(ChangePasswordView)
+    passwordView.vm.$emit('submission-state', true)
+    await nextTick()
+
+    await view.get('[aria-label="Clientes"]').trigger('click')
+    await view.get('.logout-button').trigger('click')
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
+      'Cambiar contraseña',
+    )
+    expect(view.get('.logout-button').attributes('disabled')).toBeDefined()
+    expect(closeEmployeeSession).not.toHaveBeenCalled()
+  })
+
   it('shows the sala creation action only to administrators', async () => {
     const view = await renderDashboard()
 

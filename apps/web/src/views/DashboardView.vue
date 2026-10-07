@@ -34,6 +34,7 @@ const catalogsLoading = ref(false)
 const catalogsError = ref('')
 let catalogRequest: AbortController | undefined
 const submitting = ref(false)
+const passwordChanging = ref(false)
 const theaterBusy = ref(false)
 const submissionErrors = ref<string[]>([])
 const submissionBlocked = ref(false)
@@ -64,7 +65,7 @@ function userUpdated(selection: UserDetailSelection) {
 }
 
 async function logout() {
-  if (submitting.value || loggingOut.value) return
+  if (submitting.value || passwordChanging.value || loggingOut.value) return
   loggingOut.value = true
   logoutError.value = ''
   try {
@@ -235,7 +236,7 @@ watch(role, () => {
 })
 
 function navigate(section: string) {
-  if (submitting.value || theaterBusy.value || loggingOut.value) return
+  if (submitting.value || passwordChanging.value || theaterBusy.value || loggingOut.value) return
   if (
     (section === 'employees' || section === 'clients' || section === 'theaters' || section === 'password') &&
     availableSections.value.includes(section)
@@ -256,7 +257,7 @@ function returnToDashboard() {
     :user-name="identity.firstName"
     :active-section="activeSection"
     :available-sections="availableSections"
-    :can-logout="!submitting && !theaterBusy && !loggingOut"
+    :can-logout="!submitting && !passwordChanging && !theaterBusy && !loggingOut"
     @navigate="navigate"
     @logout="logout"
   >
@@ -313,6 +314,7 @@ function returnToDashboard() {
       v-else
       embedded
       account-type="employee"
+      @submission-state="passwordChanging = $event"
       @return-to-dashboard="returnToDashboard"
     />
     <CreateUserDialog

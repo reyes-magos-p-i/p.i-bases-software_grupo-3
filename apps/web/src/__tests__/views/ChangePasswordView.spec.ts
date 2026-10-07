@@ -167,6 +167,28 @@ describe('ChangePasswordView.vue', () => {
     expect(wrapper.text()).toContain('Tu contraseña se actualizó correctamente.')
   })
 
+  it('emits the submission state while an employee password change is pending', async () => {
+    let resolveChange!: () => void
+    vi.mocked(changeEmployeePassword).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveChange = resolve
+      }),
+    )
+    const wrapper = mountView({ accountType: 'employee', embedded: true })
+    await wrapper.get('#currentPassword').setValue('CurrentPassword-123!')
+    await wrapper.get('#newPassword').setValue('Secure-Password-784!')
+    await wrapper.get('#confirmNewPassword').setValue('Secure-Password-784!')
+
+    const submission = wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.emitted('submission-state')).toEqual([[true]])
+
+    resolveChange()
+    await submission
+    await flushPromises()
+    expect(wrapper.emitted('submission-state')).toEqual([[true], [false]])
+  })
+
   it('shows the four distinct backend error codes', async () => {
     vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('valid')
     vi.mocked(changeClientPassword).mockRejectedValueOnce(

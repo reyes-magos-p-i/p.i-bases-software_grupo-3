@@ -24,7 +24,10 @@ const props = withDefaults(
   }>(),
   { embedded: false, accountType: 'client' },
 )
-const emit = defineEmits<{ 'return-to-dashboard': [] }>()
+const emit = defineEmits<{
+  'return-to-dashboard': []
+  'submission-state': [loading: boolean]
+}>()
 const router = useRouter()
 const user = computed(() =>
   props.accountType === 'employee'
@@ -104,6 +107,7 @@ async function submit() {
   }
 
   loading.value = true
+  emit('submission-state', true)
   try {
     const payload: ChangeClientPasswordPayload = {
       newPassword: form.newPassword,
@@ -143,6 +147,7 @@ async function submit() {
     }
   } finally {
     loading.value = false
+    emit('submission-state', false)
   }
 }
 
