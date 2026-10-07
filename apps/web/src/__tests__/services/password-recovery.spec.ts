@@ -54,7 +54,9 @@ describe('Password recovery service', () => {
   it.each([
     'RECOVERY_INVALID',
     'TEMPORARY_PASSWORD_INCORRECT',
+    'CURRENT_PASSWORD_INCORRECT',
     'PASSWORDS_DO_NOT_MATCH',
+    'NEW_PASSWORD_SAME_AS_CURRENT',
     'PASSWORD_POLICY_VIOLATION',
   ])('maps %s without exposing server details', async (code) => {
     post.mockRejectedValue({
@@ -71,9 +73,11 @@ describe('Password recovery service', () => {
   it.each([
     [10, 10],
     [100, 60],
+    [1.5, 2],
     ['invalid', 60],
     [undefined, 60],
     [0, 60],
+    [-1, 60],
   ])('honors Retry-After %s within the configured minute', async (header, expected) => {
     post.mockRejectedValue({
       isAxiosError: true,

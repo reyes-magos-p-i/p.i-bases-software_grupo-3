@@ -189,13 +189,12 @@ export class PasswordRecoveryRepository {
         true,
       );
       const row = await this.row(connection, recovery.tokenHash, true);
+      if (!account) return false;
       if (
-        !account ||
-        !row ||
-        account.EMAIL !== row.EMAIL ||
-        account.PASSWORD_HASH !== row.CREDENTIAL_HASH ||
-        row.CREDENTIAL_HASH !== recovery.PASSWORD_HASH ||
-        row.TEMPORARY_HASH !== recovery.temporaryHash
+        account.EMAIL !== row?.EMAIL ||
+        account.PASSWORD_HASH !== row?.CREDENTIAL_HASH ||
+        row?.CREDENTIAL_HASH !== recovery.PASSWORD_HASH ||
+        row?.TEMPORARY_HASH !== recovery.temporaryHash
       )
         return false;
       const args = [
