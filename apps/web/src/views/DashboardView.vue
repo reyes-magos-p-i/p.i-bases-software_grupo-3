@@ -218,10 +218,11 @@ const sectionTitle = computed(() =>
     ? 'Empleados'
     : activeSection.value === 'clients'
       ? 'Clientes'
-      : 'Cambiar contraseña',
-    : activeSection.value === 'theaters'
-      ? 'Salas'
-      : 'Clientes',
+      : activeSection.value === 'theaters'
+        ? 'Salas'
+        : activeSection.value === 'password'
+          ? 'Cambiar contraseña'
+          : 'Clientes',
 )
 
 watch(role, () => {
