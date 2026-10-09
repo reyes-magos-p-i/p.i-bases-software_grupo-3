@@ -5,6 +5,7 @@ import UserListPanel from '@/components/users/UserListPanel.vue'
 import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
 import DeactivateUserDialog from '@/components/users/DeactivateUserDialog.vue'
 import EditUserDialog from '@/components/users/EditUserDialog.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import type { UserListResult } from '@/types/user'
 
 const { getUsers, getEmployeeListOptions } = vi.hoisted(() => ({
@@ -377,23 +378,32 @@ describe('UserListPanel', () => {
     expect(wrapper?.get('tbody').text()).toContain('Desconocida')
     expect(wrapper?.get('tbody td').text()).toBe('EMP42')
   })
-  it('shows a loading status then a retryable connection error', async () => {
-    let reject!: (error: Error) => void
-    getUsers.mockReturnValue(
-      new Promise((_, fail) => {
-        reject = fail
-      }),
-    )
-    const view = await render()
-    expect(view.get('[role="status"]').text()).toContain('Cargando clientes')
-    reject(new Error('Connection unavailable'))
-    await flushPromises()
-    expect(view.get('[role="alert"]').text()).toContain('No se pudo cargar')
-    getUsers.mockResolvedValue(clients)
-    await view.get('.feedback button').trigger('click')
-    await flushPromises()
-    expect(view.find('table').exists()).toBe(true)
-  })
+  it.each(['clients', 'employees'] as const)(
+    'shows the shared loading state for %s then a retryable error',
+    async (section) => {
+      let reject!: (error: Error) => void
+      getUsers.mockReturnValue(
+        new Promise((_, fail) => {
+          reject = fail
+        }),
+      )
+      const view = await render(section)
+      expect(view.getComponent(LoadingState).props('message')).toBe(
+        `Cargando ${section === 'clients' ? 'clientes' : 'empleados'}…`,
+      )
+      expect(view.find('table').exists()).toBe(false)
+      expect(view.get('.list-content').attributes('aria-busy')).toBe('true')
+      reject(new Error('Connection unavailable'))
+      await flushPromises()
+      expect(view.findComponent(LoadingState).exists()).toBe(false)
+      expect(view.get('[role="alert"]').text()).toContain('No se pudo cargar')
+      getUsers.mockResolvedValue(clients)
+      await view.get('.feedback button').trigger('click')
+      await flushPromises()
+      expect(view.find('table').exists()).toBe(true)
+      expect(view.get('.list-content').attributes('aria-busy')).toBe('false')
+    },
+  )
   it.each([401, 403, 400])('handles HTTP %s without retaining personal records', async (status) => {
     getUsers.mockRejectedValue(httpError(status))
     const view = await render()

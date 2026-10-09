@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useId } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import ProjectionDetailDialog from './ProjectionDetailDialog.vue'
 import ProjectionStatusBadge from './ProjectionStatusBadge.vue'
 import { getProjectionFilterOptions, getProjections } from '@/services/projection.service'
@@ -183,10 +184,7 @@ async function loadOptions() {
     if (!request.signal.aborted) options.value = loaded
   } catch (error) {
     if (request.signal.aborted) return
-    optionsError.value = handleFailure(
-      error,
-      'No se pudieron cargar las opciones de los filtros.',
-    )
+    optionsError.value = handleFailure(error, 'No se pudieron cargar las opciones de los filtros.')
   }
 }
 
@@ -266,7 +264,9 @@ defineExpose({ refresh })
         Estado
         <select v-model="filters.status" name="status" @change="filtersChanged">
           <option value="">Todos</option>
-          <option v-for="[value, label] in statuses" :key="value" :value="value">{{ label }}</option>
+          <option v-for="[value, label] in statuses" :key="value" :value="value">
+            {{ label }}
+          </option>
         </select>
       </label>
       <label>
@@ -309,7 +309,11 @@ defineExpose({ refresh })
           @change="filtersChanged"
         >
           <option value="">Todas</option>
-          <option v-for="movie in options?.movies" :key="movie.movieId" :value="String(movie.movieId)">
+          <option
+            v-for="movie in options?.movies"
+            :key="movie.movieId"
+            :value="String(movie.movieId)"
+          >
             {{ movie.title }}
           </option>
         </select>
@@ -341,7 +345,7 @@ defineExpose({ refresh })
     </div>
 
     <div class="list-content" :aria-busy="loading">
-      <p v-if="loading" class="feedback" role="status">Cargando proyecciones…</p>
+      <LoadingState v-if="loading" message="Cargando proyecciones…" />
       <div v-else-if="listError" class="feedback error" role="alert">
         {{ listError }}
         <button type="button" class="secondary-button" @click="load">Reintentar</button>
@@ -366,7 +370,11 @@ defineExpose({ refresh })
               </button>
               <button
                 type="button"
-                :title="EDITABLE_STATUSES.includes(row.status as ProjectionStatus) ? 'Modificar' : 'Solo se modifican proyecciones activas o inactivas'"
+                :title="
+                  EDITABLE_STATUSES.includes(row.status as ProjectionStatus)
+                    ? 'Modificar'
+                    : 'Solo se modifican proyecciones activas o inactivas'
+                "
                 :aria-label="`Modificar ${row.code}`"
                 :disabled="!EDITABLE_STATUSES.includes(row.status as ProjectionStatus)"
                 @click="emit('edit', row.id as number)"
@@ -375,7 +383,11 @@ defineExpose({ refresh })
               </button>
               <button
                 type="button"
-                :title="CANCELLABLE_STATUSES.includes(row.status as ProjectionStatus) ? 'Cancelar' : 'Ya está cancelada o finalizada'"
+                :title="
+                  CANCELLABLE_STATUSES.includes(row.status as ProjectionStatus)
+                    ? 'Cancelar'
+                    : 'Ya está cancelada o finalizada'
+                "
                 :aria-label="`Cancelar ${row.code}`"
                 :disabled="!CANCELLABLE_STATUSES.includes(row.status as ProjectionStatus)"
                 @click="requestCancel(row.id as number)"

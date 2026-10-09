@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
 import EditUserDialog from '@/components/users/EditUserDialog.vue'
 import DeactivateUserDialog from '@/components/users/DeactivateUserDialog.vue'
@@ -411,9 +412,10 @@ defineExpose({ refresh })
       </button>
     </div>
     <div class="list-content" :aria-busy="loading">
-      <p v-if="loading" class="feedback" role="status">
-        Cargando {{ isEmployeeList ? 'empleados' : 'clientes' }}…
-      </p>
+      <LoadingState
+        v-if="loading"
+        :message="`Cargando ${isEmployeeList ? 'empleados' : 'clientes'}…`"
+      />
       <div v-else-if="listError" class="feedback error" role="alert">
         {{ listError }}
         <button type="button" class="secondary-button" @click="load">Reintentar</button>
