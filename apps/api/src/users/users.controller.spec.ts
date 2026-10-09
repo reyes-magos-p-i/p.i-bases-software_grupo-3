@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from '../auth/notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 import {
   BadGatewayException,
   ConflictException,
@@ -26,7 +28,10 @@ import { EmailVerificationSender } from '../auth/notifications/email-verificatio
 describe('UsersController (HTTP integration)', () => {
   let app: INestApplication<App>;
   const service = { create: jest.fn(), getCreationOptions: jest.fn() };
-  const repository = { findEmployeeIdentityById: jest.fn() };
+  const repository = {
+    findEmployeeIdentityById: jest.fn(),
+    findEmployeeCredentialsStatus: jest.fn(),
+  };
   let jwt: JwtService;
   let browser: ReturnType<typeof request.agent>;
   const origin = 'http://localhost:5173';
@@ -65,6 +70,10 @@ describe('UsersController (HTTP integration)', () => {
         get: (key: string) => ({ FRONTEND_URL: origin, NODE_ENV: 'test' })[key],
         getOrThrow: () => 'controller-test-secret',
       })
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(DatabaseService)
@@ -101,6 +110,10 @@ describe('UsersController (HTTP integration)', () => {
     repository.findEmployeeIdentityById.mockReset().mockResolvedValue({
       id: 21,
       role: UserRole.ADMINISTRATOR,
+    });
+    repository.findEmployeeCredentialsStatus.mockReset().mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
     });
     service.create
       .mockReset()

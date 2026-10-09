@@ -23,6 +23,12 @@ const { AuthModule } = runtime(
 const { EmailVerificationSender } = runtime(
   '../dist/auth/notifications/email-verification-sender.js',
 ) as typeof import('../src/auth/notifications/email-verification-sender');
+const { PasswordRecoverySender } = runtime(
+  '../dist/auth/notifications/password-recovery-sender.js',
+) as typeof import('../src/auth/notifications/password-recovery-sender');
+const { PasswordRecoveryRepository } = runtime(
+  '../dist/auth/password-recovery.repository.js',
+) as typeof import('../src/auth/password-recovery.repository');
 const { UsersController } = runtime(
   '../dist/users/users.controller.js',
 ) as typeof import('../src/users/users.controller');
@@ -47,7 +53,10 @@ describe('Compiled user creation validation', () => {
   let browser: ReturnType<typeof request.agent>;
   const origin = 'http://localhost:5173';
   const service = { create: jest.fn() };
-  const repository = { findEmployeeIdentityById: jest.fn() };
+  const repository = {
+    findEmployeeIdentityById: jest.fn(),
+    findEmployeeCredentialsStatus: jest.fn(),
+  };
   const client = {
     role: 'CLIENT',
     email: 'client@example.com',
@@ -85,6 +94,10 @@ describe('Compiled user creation validation', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue({})
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(UsersRepository)
@@ -113,6 +126,9 @@ describe('Compiled user creation validation', () => {
     repository.findEmployeeIdentityById
       .mockReset()
       .mockResolvedValue({ id: 21, role: 'ADMINISTRATOR', firstName: 'Ana' });
+    repository.findEmployeeCredentialsStatus
+      .mockReset()
+      .mockResolvedValue({ setAt: new Date(), expirationDays: 90 });
     service.create
       .mockReset()
       .mockImplementation((data: CreateClientDto | CreateEmployeeDto) =>

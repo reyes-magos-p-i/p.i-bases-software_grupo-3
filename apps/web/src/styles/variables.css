@@ -10,6 +10,14 @@
   --error-color: #b42318;
   --success-color: #198754;
   --success-text: #206a3b;
+  --error-text: #9f251f;
+  --error-background: #fdf0ef;
+  --success-muted-text: #344d40;
+  --success-emphasis-color: #27814e;
+  --success-background: #e9f5ee;
+  --warning-text: var(--text-primary);
+  --warning-background: color-mix(in srgb, var(--accent-color) 12%, var(--content-background));
+  --info-background: color-mix(in srgb, var(--primary-color) 8%, var(--content-background));
 
   /* Text and controls on light surfaces */
   --text-primary: var(--page-background);

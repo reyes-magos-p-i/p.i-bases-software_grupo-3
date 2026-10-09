@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import defaultProfileImage from '@/assets/profile/profile-circle-svgrepo-com.svg'
 import type { ClientIdentity } from '@/types/client-auth'
 
 const props = defineProps<{ user: ClientIdentity }>()
-const emit = defineEmits<{ (event: 'logout'): void }>()
+const emit = defineEmits<{ (event: 'logout'): void; (event: 'change-password'): void }>()
 const menuOpen = ref(false)
 const root = ref<HTMLElement | null>(null)
 const dropdownId = useId()
@@ -45,7 +46,7 @@ onBeforeUnmount(() => {
       :aria-expanded="menuOpen"
       @click="menuOpen = !menuOpen"
     >
-      <span class="visually-hidden">Foto de perfil sin configurar</span>
+      <img :src="defaultProfileImage" alt="" aria-hidden="true" />
     </button>
     <section
       v-if="menuOpen"
@@ -72,7 +73,7 @@ onBeforeUnmount(() => {
           <i class="bi bi-gear" aria-hidden="true"></i>
           Ajustes de Cuenta
         </button>
-        <button type="button" disabled title="Próximamente">
+        <button type="button" @click="emit('change-password')">
           <i class="bi bi-key" aria-hidden="true"></i>
           Cambiar Contraseña
         </button>
@@ -112,7 +113,15 @@ onBeforeUnmount(() => {
   border: 1px solid var(--accent-color);
   border-radius: 50%;
   background: var(--primary-color);
+  overflow: hidden;
   cursor: pointer;
+}
+
+.account-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .account-avatar:hover,

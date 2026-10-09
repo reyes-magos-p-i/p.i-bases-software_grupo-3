@@ -1,3 +1,4 @@
+import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 jest.mock('oracledb', () => ({
   ...jest.requireActual('oracledb'),
   createPool: jest.fn(),
@@ -26,6 +27,7 @@ import { PasswordGenerator } from '../common/security/password-generator';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { RandomPasswordGenerator } from '../common/security/random-password-generator.service';
 import { Argon2PasswordHasher } from '../common/security/argon2-password-hasher.service';
+import { UsersRepository } from './users.repository';
 import { InitialCredentialsSender } from './notifications/initial-credentials-sender';
 import { SmtpInitialCredentialsSender } from './notifications/smtp-initial-credentials-sender';
 
@@ -67,6 +69,8 @@ describe('UsersModule (application HTTP integration)', () => {
 
   function buildModule() {
     return Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(ConfigService)
       .useValue(config)
       .compile();
@@ -102,7 +106,14 @@ describe('UsersModule (application HTTP integration)', () => {
         return Promise.resolve({ rows: [{ schema: 'TEST' }] });
       if (sql.startsWith('SELECT EMPLOYEE_ID')) {
         return Promise.resolve({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         });
       }
       if (sql.startsWith('SELECT 1')) return Promise.resolve({ rows: [] });
@@ -137,6 +148,9 @@ describe('UsersModule (application HTTP integration)', () => {
       .mocked(nodemailer.createTransport)
       .mockReturnValue({ sendMail } as unknown as Mail<SMTPSentMessageInfo>);
     const module = await buildModule();
+    jest
+      .spyOn(module.get(UsersRepository), 'findEmployeeCredentialsStatus')
+      .mockResolvedValue({ setAt: new Date(), expirationDays: 90 });
     app = module.createNestApplication({ logger: false });
     app.useGlobalPipes(
       new ValidationPipe({
@@ -163,7 +177,14 @@ describe('UsersModule (application HTTP integration)', () => {
   it('mounts partial update routes with the real service and repositories', async () => {
     connection.execute
       .mockResolvedValueOnce({
-        rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        rows: [
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: 'ADMINISTRATOR',
+            FIRST_NAME: 'Ana',
+            EMAIL: 'admin@example.com',
+          },
+        ],
       })
       .mockResolvedValueOnce({ rows: [{ EMAIL: 'old@example.com' }] })
       .mockResolvedValueOnce({ rowsAffected: 1 });
@@ -181,7 +202,12 @@ describe('UsersModule (application HTTP integration)', () => {
         connection.execute
           .mockResolvedValueOnce({
             rows: [
-              { EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' },
+              {
+                EMPLOYEE_ID: 21,
+                ROLE: 'ADMINISTRATOR',
+                FIRST_NAME: 'Ana',
+                EMAIL: 'admin@example.com',
+              },
             ],
           })
           .mockResolvedValueOnce({ rows: [] });
@@ -195,7 +221,14 @@ describe('UsersModule (application HTTP integration)', () => {
     it('mounts client and employee listing routes with the actual repositories', async () => {
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] });
       await browser.get('/users/clients').expect(200, {
@@ -207,7 +240,14 @@ describe('UsersModule (application HTTP integration)', () => {
       });
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] });
       await browser.get('/users/employees').expect(200, {
@@ -225,7 +265,14 @@ describe('UsersModule (application HTTP integration)', () => {
       const hash = jest.spyOn(app.get(PasswordHasher), 'hash');
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
         .mockResolvedValueOnce({
@@ -273,7 +320,14 @@ describe('UsersModule (application HTTP integration)', () => {
     it('does not return partial catalogs if a later query fails', async () => {
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
         .mockRejectedValueOnce(new Error('Private Oracle catalog error'));
@@ -341,12 +395,38 @@ describe('UsersModule (application HTTP integration)', () => {
     expect(connection.execute).toHaveBeenCalledTimes(calls);
   });
 
+  it('blocks expired employee passwords on protected routes but allows password recovery', async () => {
+    jest
+      .spyOn(app.get(UsersRepository), 'findEmployeeCredentialsStatus')
+      .mockResolvedValue({
+        setAt: new Date(Date.now() - 91 * 24 * 60 * 60 * 1000),
+        expirationDays: 90,
+      });
+
+    const protectedResponse = await browser.get('/users/clients').expect(403);
+    expect(protectedResponse.body).toMatchObject({
+      code: 'PASSWORD_EXPIRED',
+    });
+
+    await browser
+      .get('/auth/password-status')
+      .expect(200, { status: 'expired' });
+    await browser.patch('/auth/employees/password').send({}).expect(400);
+  });
+
   it('uses the current role rather than role claims or development flags', async () => {
     settings.DEV_ADMIN_ENABLED = 'true';
     settings.DEV_ADMIN_EMPLOYEE_ID = '21';
     const cookie = `${EMPLOYEE_SESSION_COOKIE}=${app.get(JwtService).sign({ sub: 21, type: 'employee', role: 'ADMINISTRATOR' })}`;
     connection.execute.mockResolvedValueOnce({
-      rows: [{ EMPLOYEE_ID: 21, ROLE: 'EMPLOYEE', FIRST_NAME: 'Ana' }],
+      rows: [
+        {
+          EMPLOYEE_ID: 21,
+          ROLE: 'EMPLOYEE',
+          FIRST_NAME: 'Ana',
+          EMAIL: 'employee@example.com',
+        },
+      ],
     });
     await request(app.getHttpServer())
       .post('/users')
@@ -406,7 +486,14 @@ describe('UsersModule (application HTTP integration)', () => {
 
   it('denies employees even if the requested account is an administrator', async () => {
     connection.execute.mockResolvedValueOnce({
-      rows: [{ EMPLOYEE_ID: 21, ROLE: 'EMPLOYEE', FIRST_NAME: 'Ana' }],
+      rows: [
+        {
+          EMPLOYEE_ID: 21,
+          ROLE: 'EMPLOYEE',
+          FIRST_NAME: 'Ana',
+          EMAIL: 'employee@example.com',
+        },
+      ],
     });
     await browser
       .post('/users')
@@ -427,7 +514,14 @@ describe('UsersModule (application HTTP integration)', () => {
   it('rolls back persistence failures and never sends credentials', async () => {
     connection.execute
       .mockResolvedValueOnce({
-        rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+        rows: [
+          {
+            EMPLOYEE_ID: 21,
+            ROLE: 'ADMINISTRATOR',
+            FIRST_NAME: 'Ana',
+            EMAIL: 'admin@example.com',
+          },
+        ],
       })
       .mockResolvedValueOnce({ rowsAffected: 1, outBinds: { addressId: [55] } })
       .mockRejectedValueOnce(new Error('Private Oracle details'));
@@ -458,7 +552,14 @@ describe('UsersModule (application HTTP integration)', () => {
     async (role) => {
       connection.execute
         .mockResolvedValueOnce({
-          rows: [{ EMPLOYEE_ID: 21, ROLE: 'ADMINISTRATOR', FIRST_NAME: 'Ana' }],
+          rows: [
+            {
+              EMPLOYEE_ID: 21,
+              ROLE: 'ADMINISTRATOR',
+              FIRST_NAME: 'Ana',
+              EMAIL: 'admin@example.com',
+            },
+          ],
         })
         .mockResolvedValueOnce({
           rowsAffected: 1,

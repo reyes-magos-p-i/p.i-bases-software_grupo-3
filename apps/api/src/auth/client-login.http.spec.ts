@@ -1,3 +1,5 @@
+import { PasswordRecoverySender } from './notifications/password-recovery-sender';
+import { PasswordRecoveryRepository } from './password-recovery.repository';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -43,6 +45,10 @@ describe('Client login HTTP contracts', () => {
     database.query
       .mockReset()
       .mockImplementation((sql: string, binds: { email?: string }) => {
+        if (sql.includes('PASSWORD_SET_AT'))
+          return Promise.resolve({
+            rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 90 }],
+          });
         if (sql.includes('CLIENT_EMAIL_VERIFICATIONS'))
           return Promise.resolve({ rows: pending ? [{ pending: 1 }] : [] });
         const matches =
@@ -64,6 +70,10 @@ describe('Client login HTTP contracts', () => {
       })
       .overrideProvider(DatabaseService)
       .useValue(database)
+      .overrideProvider(PasswordRecoverySender)
+      .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
+      .overrideProvider(PasswordRecoveryRepository)
+      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
       .overrideProvider(EmailVerificationSender)
       .useValue(sender)
       .compile();

@@ -29,6 +29,8 @@ const form = reactive({
 // If a field has no error, its value will be an empty string and the template will not display an error.
 const errors = reactive<Record<string, string>>({})
 const loading = ref(false)
+const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 const resendLoading = ref(false)
 const serverError = ref('') // For Backend errors that are not field-specific (network issues, server errors).
 const verificationEmail = ref('')
@@ -41,6 +43,8 @@ watch(
       verificationState.value = 'idle'
       verificationEmail.value = ''
       serverError.value = ''
+      showPassword.value = false
+      showConfirmPassword.value = false
     }
   },
 )
@@ -283,15 +287,28 @@ async function resendVerificationEmail() {
 
           <div class="col-12">
             <label class="form-label fw-bold" for="password">Contraseña</label>
-            <input
-              id="password"
-              v-model="form.password"
-              type="password"
-              class="form-control"
-              :class="{ 'is-invalid': errors.password }"
-              autocomplete="new-password"
-            />
-            <div class="invalid-feedback">{{ errors.password }}</div>
+            <div class="password-control">
+              <input
+                id="password"
+                v-model="form.password"
+                :type="showPassword ? 'text' : 'password'"
+                class="form-control"
+                :class="{ 'is-invalid': errors.password }"
+                autocomplete="new-password"
+                :aria-describedby="errors.password ? 'password-error' : undefined"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                :aria-controls="'password'"
+                :aria-label="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+                :aria-pressed="showPassword"
+                @click="showPassword = !showPassword"
+              >
+                <i :class="showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'" aria-hidden="true"></i>
+              </button>
+              <div id="password-error" class="invalid-feedback">{{ errors.password }}</div>
+            </div>
             <div class="form-text small">
               Mínimo 8 caracteres. Incluye mayúscula, minúscula, número y un carácter especial
               (!@#$%^&*_-).
@@ -299,15 +316,35 @@ async function resendVerificationEmail() {
           </div>
           <div class="col-12">
             <label class="form-label fw-bold" for="confirmPassword">Repetir contraseña</label>
-            <input
-              id="confirmPassword"
-              v-model="form.confirmPassword"
-              type="password"
-              class="form-control"
-              :class="{ 'is-invalid': errors.confirmPassword }"
-              autocomplete="new-password"
-            />
-            <div class="invalid-feedback">{{ errors.confirmPassword }}</div>
+            <div class="password-control">
+              <input
+                id="confirmPassword"
+                v-model="form.confirmPassword"
+                :type="showConfirmPassword ? 'text' : 'password'"
+                class="form-control"
+                :class="{ 'is-invalid': errors.confirmPassword }"
+                autocomplete="new-password"
+                :aria-describedby="errors.confirmPassword ? 'confirm-password-error' : undefined"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                :aria-controls="'confirmPassword'"
+                :aria-label="
+                  showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'
+                "
+                :aria-pressed="showConfirmPassword"
+                @click="showConfirmPassword = !showConfirmPassword"
+              >
+                <i
+                  :class="showConfirmPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"
+                  aria-hidden="true"
+                ></i>
+              </button>
+              <div id="confirm-password-error" class="invalid-feedback">
+                {{ errors.confirmPassword }}
+              </div>
+            </div>
           </div>
 
           <div class="col-12">
@@ -364,6 +401,28 @@ async function resendVerificationEmail() {
 </template>
 
 <style scoped>
+.password-control {
+  position: relative;
+}
+.password-control .form-control {
+  padding-right: 2.75rem;
+}
+.password-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 2.75rem;
+  height: 100%;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+}
+.password-toggle:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -3px;
+}
 .btn-brand {
   background: var(--button-confirm-background);
   color: var(--button-confirm-text);

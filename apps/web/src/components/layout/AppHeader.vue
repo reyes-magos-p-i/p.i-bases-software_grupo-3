@@ -5,7 +5,12 @@ import logo from '@/assets/logos/cinetadel-logo.png'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
 import LoginModal from '@/components/auth/LoginModal.vue'
 import AccountMenu from '@/components/common/AccountMenu.vue'
-import { EmployeeAuthError, getClientSession, loginClient } from '@/services/authService'
+import {
+  EmployeeAuthError,
+  getClientPasswordStatus,
+  getClientSession,
+  loginClient,
+} from '@/services/authService'
 import {
   authenticateEmployee,
   closeEmployeeSession,
@@ -13,6 +18,7 @@ import {
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
 import {
+  hasClientSession,
   clearClientAuth,
   clientSession,
   restoreClientSession,
@@ -20,6 +26,7 @@ import {
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
+const PASSWORD_PATH = '/account/password'
 const activeModal = ref<'register' | 'login' | null>(null)
 const clientUser = clientSession.user
 const loginMode = ref<'client' | 'employee'>('client')
@@ -45,23 +52,46 @@ function updateRetryDelay() {
   if (!retryAfterSeconds.value) clearRetryTimer()
 }
 
+async function enforceClientPasswordStatus() {
+  const user = clientUser.value
+  if (
+    !user ||
+    !hasClientSession() ||
+    route.path === PASSWORD_PATH ||
+    route.path === '/recover-password'
+  )
+    return
+
+  try {
+    const status = await getClientPasswordStatus()
+    if (disposed || clientUser.value !== user || !hasClientSession()) return
+    if (status !== 'valid') {
+      await router.replace({ path: PASSWORD_PATH, query: { reason: status } })
+    }
+  } catch {
+    if (!disposed) {
+      recoveryError.value =
+        'No se pudo comprobar el estado de tu contraseña. Puedes volver a intentarlo.'
+    }
+  }
+}
+
 async function recoverSession() {
   if (recovering.value) return
   recovering.value = true
   recoveryError.value = ''
-  try {
-    const results = await Promise.allSettled([
-      restoreEmployeeSession(true),
-      restoreClientSession(getClientSession),
-    ])
-    if (results.some((result) => result.status === 'rejected'))
-      throw new Error('Session recovery failed')
-  } catch {
+  const results = await Promise.allSettled([
+    restoreEmployeeSession(true),
+    restoreClientSession(getClientSession),
+  ])
+  if (results[1]?.status === 'fulfilled' && !disposed) {
+    await enforceClientPasswordStatus()
+  }
+  if (results.some((result) => result.status === 'rejected')) {
     if (!disposed)
       recoveryError.value = 'No se pudo comprobar tu sesión. Puedes volver a intentarlo.'
-  } finally {
-    if (!disposed) recovering.value = false
   }
+  if (!disposed) recovering.value = false
 }
 
 async function submitLogin(credentials: EmployeeLoginRequest) {
@@ -71,10 +101,18 @@ async function submitLogin(credentials: EmployeeLoginRequest) {
   loginError.value = ''
   try {
     const client = loginMode.value === 'client'
-    const identity = await (client ? loginClient(credentials) : authenticateEmployee(credentials))
-    if (!disposed && identity) {
+    if (client) {
+      const identity = await loginClient(credentials)
+      if (disposed) return
+      clientUser.value = identity
       activeModal.value = null
-      await router.push(client ? '/' : '/dashboard')
+      await router.push('/')
+      await enforceClientPasswordStatus()
+    } else {
+      const identity = await authenticateEmployee(credentials)
+      if (disposed || !identity) return
+      activeModal.value = null
+      await router.push('/dashboard')
     }
   } catch (error) {
     if (disposed) return
@@ -150,6 +188,7 @@ async function handleClientLogin(identity?: ClientIdentity) {
     clientUser.value = identity
     loginError.value = ''
     await router.push('/')
+    await enforceClientPasswordStatus()
   }
 }
 
@@ -157,6 +196,11 @@ async function logoutClient() {
   await closeEmployeeSession()
   await clearClientAuth()
   activeModal.value = null
+  await router.replace('/')
+}
+
+function goToChangePassword() {
+  void router.push('/account/password')
 }
 </script>
 
@@ -167,7 +211,12 @@ async function logoutClient() {
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
       </RouterLink>
       <div class="navbar-actions">
-        <AccountMenu v-if="clientUser" :user="clientUser" @logout="logoutClient" />
+        <AccountMenu
+          v-if="clientUser"
+          :user="clientUser"
+          @logout="logoutClient"
+          @change-password="goToChangePassword"
+        />
         <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
           >Ir al dashboard</RouterLink
         >

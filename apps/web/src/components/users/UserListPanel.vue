@@ -520,7 +520,12 @@ defineExpose({ refresh })
 <style scoped>
 .user-list-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 20px;
+}
+.list-content {
+  min-width: 0;
 }
 .search-bar,
 .filters,

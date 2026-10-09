@@ -19,6 +19,7 @@ import { UsersRepository } from '../users/users.repository';
 import type { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
 import { EmailVerificationSender } from './notifications/email-verification-sender';
+import { validatePasswordChange } from './password/password-change-validator';
 
 // This non-account hash keeps missing credentials on the password verification path.
 const LOGIN_REFERENCE_HASH =
@@ -133,6 +134,42 @@ export class AuthService {
       accessToken: this.issueToken(client).accessToken,
       client: this.clientIdentity(client),
     };
+  }
+
+  async changeEmployeePassword(
+    employeeId: number,
+    input: {
+      currentPassword: string;
+      newPassword: string;
+      confirmNewPassword: string;
+      expirationDays: number;
+    },
+  ): Promise<void> {
+    const employee =
+      await this.usersRepository.findEmployeePasswordCredentials(employeeId);
+    if (
+      !employee ||
+      !(await this.passwordHasher.verify(
+        input.currentPassword,
+        employee.passwordHash,
+      ))
+    ) {
+      throw new BadRequestException({
+        code: 'CURRENT_PASSWORD_INCORRECT',
+        message: 'Contraseña actual incorrecta.',
+      });
+    }
+    await validatePasswordChange(input, employee, () =>
+      this.passwordHasher.verify(input.newPassword, employee.passwordHash),
+    );
+
+    const credentials = await this.passwordHasher.hash(input.newPassword);
+    await this.usersRepository.saveEmployeePassword(
+      employeeId,
+      credentials.passwordHash,
+      credentials.salt,
+      input.expirationDays,
+    );
   }
 
   private createVerificationToken() {

@@ -46,6 +46,10 @@ textarea::placeholder {
   color: var(--text-secondary);
 }
 
+.password-control input[type='password']::-ms-reveal {
+  display: none;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -74,6 +78,7 @@ img {
 .form-control:disabled,
 .form-select:disabled {
   background-color: var(--input-disabled-background);
+  color: var(--text-primary);
 }
 
 .form-control:focus,
@@ -115,7 +120,8 @@ img {
   box-shadow: 0 0 0 0.25rem var(--focus-shadow);
 }
 
-.btn-primary {
+.btn-primary,
+.btn-info {
   --bs-btn-color: var(--button-confirm-text);
   --bs-btn-bg: var(--button-confirm-background);
   --bs-btn-border-color: var(--button-confirm-background);
@@ -128,6 +134,21 @@ img {
   --bs-btn-disabled-color: var(--button-confirm-text);
   --bs-btn-disabled-bg: var(--button-confirm-background);
   --bs-btn-disabled-border-color: var(--button-confirm-background);
+}
+
+.btn-warning {
+  --bs-btn-color: var(--button-text);
+  --bs-btn-bg: var(--button-background);
+  --bs-btn-border-color: var(--button-background);
+  --bs-btn-hover-color: var(--button-text);
+  --bs-btn-hover-bg: var(--button-hover-background);
+  --bs-btn-hover-border-color: var(--button-hover-background);
+  --bs-btn-active-color: var(--button-text);
+  --bs-btn-active-bg: var(--button-hover-background);
+  --bs-btn-active-border-color: var(--button-hover-background);
+  --bs-btn-disabled-color: var(--button-text);
+  --bs-btn-disabled-bg: var(--button-background);
+  --bs-btn-disabled-border-color: var(--button-background);
 }
 
 .text-dark {
