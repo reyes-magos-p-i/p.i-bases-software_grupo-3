@@ -406,11 +406,11 @@ describe('DashboardView', () => {
     await view.get('[aria-label="Salas"]').trigger('click')
     await view.get('.add-user-button').trigger('click')
     await flushPromises()
-    await view.get('[name="numberOfSeats"]').setValue('5000')
+    await view.get('[name="numberOfSeats"]').setValue('5001')
     await view.get('.theater-dialog form').trigger('submit')
 
     expect(createTheater).not.toHaveBeenCalled()
-    expect(view.get('.field-error').text()).toContain('entre 1 y 4999')
+    expect(view.get('.field-error').text()).toContain('entre 1 y 5000')
   })
 
   it('rejects theater seat counts that do not match the dimensions', async () => {

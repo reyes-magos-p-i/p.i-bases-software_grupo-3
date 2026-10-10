@@ -51,8 +51,8 @@ function validate() {
   const dimensionX = Number(draft.dimensionX)
   const dimensionY = Number(draft.dimensionY)
   const branchId = Number(draft.branchId)
-  if (!Number.isInteger(seats) || seats < 1 || seats >= 5000)
-    errors.numberOfSeats = 'Introduce un número entero entre 1 y 4999.'
+  if (!Number.isInteger(seats) || seats < 1 || seats > 5000)
+    errors.numberOfSeats = 'Introduce un número entero entre 1 y 5000.'
   if (!Number.isInteger(dimensionX) || dimensionX < 1)
     errors.dimensionX = 'Introduce una dimensión válida.'
   if (!Number.isInteger(dimensionY) || dimensionY < 1)
@@ -153,7 +153,7 @@ defineExpose({ open, complete })
       <p v-if="submissionErrors.length" class="form-error" role="alert" tabindex="-1">{{ submissionErrors.join(' ') }}</p>
 
       <label :for="id + '-seats'">Número de asientos <span class="required-marker">*</span></label>
-      <input :id="id + '-seats'" v-model="draft.numberOfSeats" name="numberOfSeats" type="number" min="1" max="4999" step="1" required :aria-invalid="!!errors.numberOfSeats" :aria-describedby="firstError('numberOfSeats')" />
+      <input :id="id + '-seats'" v-model="draft.numberOfSeats" name="numberOfSeats" type="number" min="1" max="5000" step="1" required :aria-invalid="!!errors.numberOfSeats" :aria-describedby="firstError('numberOfSeats')" />
       <small v-if="errors.numberOfSeats" :id="id + '-numberOfSeats-error'" class="field-error">{{ errors.numberOfSeats }}</small>
 
       <label :for="id + '-projector'">Tipo de proyector <span class="required-marker">*</span></label>
