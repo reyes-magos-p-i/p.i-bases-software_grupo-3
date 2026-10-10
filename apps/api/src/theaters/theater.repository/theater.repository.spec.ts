@@ -42,7 +42,7 @@ describe('TheaterRepository', () => {
         rows: [
           {
             THEATER_ID: 1,
-            BRANCH_ID: 2,
+            CINEMA: 'Cinema 2',
             NUMBER_SEATS: 120,
             DIMENSION_X: 10,
             DIMENSION_Y: 12,
@@ -55,7 +55,7 @@ describe('TheaterRepository', () => {
       await expect(repository.getAllTheaters()).resolves.toEqual([
         {
           theaterId: 1,
-          branchId: 2,
+          cinema: 'Cinema 2',
           numberOfSeats: 120,
           dimensionX: 10,
           dimensionY: 12,
@@ -74,7 +74,7 @@ describe('TheaterRepository', () => {
           rows: [
             {
               THEATER_ID: 2,
-              BRANCH_ID: 3,
+              CINEMA: 'Cinema 3',
               NUMBER_SEATS: 80,
               DIMENSION_X: 8,
               DIMENSION_Y: 10,
@@ -108,7 +108,7 @@ describe('TheaterRepository', () => {
 
   describe('createTheater', () => {
     const theaterDto = {
-      branchId: 2,
+      cinema: 'Cinema 2',
       numberOfSeats: 120,
       dimensionX: 10,
       dimensionY: 12,
@@ -120,6 +120,7 @@ describe('TheaterRepository', () => {
     it('resolves the projector and returns the created theater', async () => {
       connection.execute
         .mockResolvedValueOnce({ rows: [{ PROJECTOR_ID: 42 }] })
+        .mockResolvedValueOnce({ rows: [{ BRANCH_ID: 2 }] })
         .mockResolvedValueOnce({ outBinds: { theaterId: [7] } });
 
       await expect(repository.createTheater(theaterDto)).resolves.toEqual({
@@ -135,9 +136,15 @@ describe('TheaterRepository', () => {
       );
       expect(connection.execute).toHaveBeenNthCalledWith(
         2,
+        expect.stringContaining('SELECT branch_id FROM Cinemas'),
+        { cinema: theaterDto.cinema },
+        expect.objectContaining({ outFormat: expect.anything() }),
+      );
+      expect(connection.execute).toHaveBeenNthCalledWith(
+        3,
         expect.stringContaining('INSERT INTO Theaters'),
         expect.objectContaining({
-          branchId: theaterDto.branchId,
+          branchId: 2,
           numberOfSeats: theaterDto.numberOfSeats,
           dimensionX: theaterDto.dimensionX,
           dimensionY: theaterDto.dimensionY,
@@ -153,6 +160,7 @@ describe('TheaterRepository', () => {
 
         connection.execute
           .mockResolvedValueOnce({ rows: [{ PROJECTOR_ID: 42 }] })
+          .mockResolvedValueOnce({ rows: [{ BRANCH_ID: 2 }] })
           .mockResolvedValueOnce({ outBinds: { theaterId: [8] } });
 
         await expect(repository.createTheater(dtoWithoutActive)).resolves.toEqual({
@@ -162,7 +170,7 @@ describe('TheaterRepository', () => {
           status: 'Disponible',
         });
         expect(connection.execute).toHaveBeenNthCalledWith(
-          2,
+          3,
           expect.stringContaining('INSERT INTO Theaters'),
           expect.objectContaining({ isActive: 1 }),
         );
@@ -175,6 +183,17 @@ describe('TheaterRepository', () => {
         'Projector not found: IMAX',
       );
       expect(connection.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects when the cinema does not exist', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ PROJECTOR_ID: 42 }] })
+        .mockResolvedValueOnce({ rows: [] });
+
+      await expect(repository.createTheater(theaterDto)).rejects.toThrow(
+        'Cinema not found: Cinema 2',
+      );
+      expect(connection.execute).toHaveBeenCalledTimes(2);
     });
 
     it('propagates transaction errors', async () => {
@@ -191,7 +210,7 @@ describe('TheaterRepository', () => {
         rows: [
           {
             THEATER_ID: 7,
-            BRANCH_ID: 2,
+            CINEMA: 'Cinema 2',
             NUMBER_SEATS: 120,
             DIMENSION_X: 10,
             DIMENSION_Y: 12,
@@ -203,7 +222,7 @@ describe('TheaterRepository', () => {
 
       await expect(repository.getTheaterById(7)).resolves.toEqual({
         theaterId: 7,
-        branchId: 2,
+        cinema: 'Cinema 2',
         numberOfSeats: 120,
         dimensionX: 10,
         dimensionY: 12,
@@ -242,7 +261,7 @@ describe('TheaterRepository', () => {
         rows: [
           {
             THEATER_ID: 7,
-            BRANCH_ID: 2,
+            CINEMA: 'Cinema 2',
             NUMBER_SEATS: 120,
             DIMENSION_X: 10,
             DIMENSION_Y: 12,
@@ -254,7 +273,7 @@ describe('TheaterRepository', () => {
 
       await expect(repository.updateTheater(7, {})).resolves.toEqual({
         theaterId: 7,
-        branchId: 2,
+        cinema: 'Cinema 2',
         numberOfSeats: 120,
         dimensionX: 10,
         dimensionY: 12,
@@ -275,12 +294,14 @@ describe('TheaterRepository', () => {
     });
 
     it('updates theater fields and returns the refreshed theater', async () => {
-      connection.execute.mockResolvedValue({ rowsAffected: 1 });
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ BRANCH_ID: 3 }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
       databaseService.query.mockResolvedValue({
         rows: [
           {
             THEATER_ID: 7,
-            BRANCH_ID: 3,
+            CINEMA: 'Cinema 3',
             NUMBER_SEATS: 150,
             DIMENSION_X: 12,
             DIMENSION_Y: 14,
@@ -292,7 +313,7 @@ describe('TheaterRepository', () => {
 
       await expect(
         repository.updateTheater(7, {
-          branchId: 3,
+          cinema: 'Cinema 3',
           numberOfSeats: 150,
           dimensionX: 12,
           dimensionY: 14,
@@ -300,7 +321,7 @@ describe('TheaterRepository', () => {
         }),
       ).resolves.toEqual({
         theaterId: 7,
-        branchId: 3,
+        cinema: 'Cinema 3',
         numberOfSeats: 150,
         dimensionX: 12,
         dimensionY: 14,
@@ -329,7 +350,7 @@ describe('TheaterRepository', () => {
         rows: [
           {
             THEATER_ID: 7,
-            BRANCH_ID: 2,
+            CINEMA: 'Cinema 2',
             NUMBER_SEATS: 120,
             DIMENSION_X: 10,
             DIMENSION_Y: 12,
@@ -343,7 +364,7 @@ describe('TheaterRepository', () => {
         repository.updateTheater(7, { projectorName: 'Dolby' }),
       ).resolves.toEqual({
         theaterId: 7,
-        branchId: 2,
+        cinema: 'Cinema 2',
         numberOfSeats: 120,
         dimensionX: 10,
         dimensionY: 12,
