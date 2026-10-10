@@ -15,7 +15,7 @@ export class TheaterRepository {
     try {
       const result = await this.db.query(`
       SELECT t.theater_id,
-          c.name as "cinema",
+          c.name AS cinema,
           t.number_seats,
           t.dimension_x,
           t.dimension_y,
@@ -117,7 +117,7 @@ export class TheaterRepository {
     try {
       const result = await this.db.query(
         `SELECT t.theater_id,
-                c.name as "cinema",
+                c.name AS cinema,
                 t.number_seats,
                 t.dimension_x,
                 t.dimension_y,

@@ -4,7 +4,7 @@ import { validate } from 'class-validator';
 import { CreateTheaterDto } from './create-theater.dto';
 import { UpdateTheaterDto } from './update-theater.dto';
 
-const base = { branchId: 1, projectorName: 'IMAX' };
+const base = { cinema: 'Cinépolis Central', projectorName: 'IMAX' };
 
 const errorsFor = async (cls: any, data: object) =>
   (await validate(plainToInstance(cls, data))).map((e) => e.property);
