@@ -38,7 +38,7 @@ let theatersRequest: AbortController | undefined
 
 const columns = [
   { key: 'displayId', label: 'ID' },
-  { key: 'branchId', label: 'Sucursal' },
+  { key: 'cinema', label: 'Sucursal' },
   { key: 'numberOfSeats', label: 'Asientos' },
   { key: 'dimensions', label: 'Dimensiones' },
   { key: 'projectorName', label: 'Proyector' },

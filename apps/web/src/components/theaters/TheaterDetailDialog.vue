@@ -52,7 +52,7 @@ onBeforeUnmount(() => {
     <div v-if="theater" class="theater-detail-content">
       <div class="detail-grid">
         <div class="readonly-field"><label>ID</label><div class="readonly-input">{{ theater.theaterId }}</div></div>
-        <div class="readonly-field"><label>Sucursal</label><div class="readonly-input">{{ theater.branchId }}</div></div>
+        <div class="readonly-field"><label>Sucursal</label><div class="readonly-input">{{ theater.cinema }}</div></div>
         <div class="readonly-field"><label>Número de asientos</label><div class="readonly-input">{{ theater.numberOfSeats }}</div></div>
         <div class="dimension-grid">
           <div class="readonly-field"><label>Filas</label><div class="readonly-input">{{ theater.dimensionX }}</div></div>

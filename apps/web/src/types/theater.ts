@@ -17,7 +17,7 @@ export interface TheaterCreationOptions {
 }
 
 export interface CreateTheaterRequest {
-  branchId: number
+  cinema: string
   numberOfSeats: number
   dimensionX: number
   dimensionY: number
@@ -29,7 +29,7 @@ export type UpdateTheaterRequest = Partial<CreateTheaterRequest> & { isActive?: 
 
 export interface Theater {
   theaterId: number
-  branchId: number
+  cinema: string
   numberOfSeats: number
   dimensionX: number
   dimensionY: number
