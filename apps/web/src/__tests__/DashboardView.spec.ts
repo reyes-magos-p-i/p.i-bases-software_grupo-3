@@ -424,7 +424,7 @@ describe('DashboardView', () => {
     await view.get('.theater-dialog form').trigger('submit')
 
     expect(createTheater).not.toHaveBeenCalled()
-    expect(view.get('.field-error').text()).toContain('igual a Dimensión X por Dimensión Y')
+    expect(view.get('.field-error').text()).toContain('igual a Filas por Columnas')
   })
 
   it('shows projections to administrators only', async () => {

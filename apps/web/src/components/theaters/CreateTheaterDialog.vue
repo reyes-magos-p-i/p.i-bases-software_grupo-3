@@ -66,7 +66,7 @@ function validate() {
     dimensionY >= 1 &&
     seats !== dimensionX * dimensionY
   )
-    errors.numberOfSeats = 'El número de asientos debe ser igual a Dimensión X por Dimensión Y.'
+    errors.numberOfSeats = 'El número de asientos debe ser igual a Filas por Columnas.'
   if (
     !allowedProjectors.includes(draft.projectorName as (typeof allowedProjectors)[number]) ||
     !props.projectors.some((item) => item.name === draft.projectorName)
@@ -172,12 +172,12 @@ defineExpose({ open, complete })
 
       <div class="dimension-grid">
         <div>
-          <label :for="id + '-dimension-x'">Dimensión X <span class="required-marker">*</span></label>
+          <label :for="id + '-dimension-x'">Filas <span class="required-marker">*</span></label>
           <input :id="id + '-dimension-x'" v-model="draft.dimensionX" name="dimensionX" type="number" min="1" step="1" required :aria-invalid="!!errors.dimensionX" />
           <small v-if="errors.dimensionX" class="field-error">{{ errors.dimensionX }}</small>
         </div>
         <div>
-          <label :for="id + '-dimension-y'">Dimensión Y <span class="required-marker">*</span></label>
+          <label :for="id + '-dimension-y'">Columnas <span class="required-marker">*</span></label>
           <input :id="id + '-dimension-y'" v-model="draft.dimensionY" name="dimensionY" type="number" min="1" step="1" required :aria-invalid="!!errors.dimensionY" />
           <small v-if="errors.dimensionY" class="field-error">{{ errors.dimensionY }}</small>
         </div>

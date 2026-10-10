@@ -55,8 +55,8 @@ onBeforeUnmount(() => {
         <div class="readonly-field"><label>Sucursal</label><div class="readonly-input">{{ theater.branchId }}</div></div>
         <div class="readonly-field"><label>Número de asientos</label><div class="readonly-input">{{ theater.numberOfSeats }}</div></div>
         <div class="dimension-grid">
-          <div class="readonly-field"><label>Dimensión X</label><div class="readonly-input">{{ theater.dimensionX }}</div></div>
-          <div class="readonly-field"><label>Dimensión Y</label><div class="readonly-input">{{ theater.dimensionY }}</div></div>
+          <div class="readonly-field"><label>Filas</label><div class="readonly-input">{{ theater.dimensionX }}</div></div>
+          <div class="readonly-field"><label>Columnas</label><div class="readonly-input">{{ theater.dimensionY }}</div></div>
         </div>
         <div class="readonly-field"><label>Proyector</label><div class="readonly-input">{{ theater.projectorName }}</div></div>
         <div class="readonly-field"><label>Estado</label><div class="readonly-input">{{ theater.isActive ? theater.status : 'Inactiva' }}</div></div>
