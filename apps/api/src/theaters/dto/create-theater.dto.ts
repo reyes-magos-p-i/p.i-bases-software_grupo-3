@@ -9,6 +9,7 @@ import {
     ValidationArguments,
 } from 'class-validator';
 import type { TheaterStatus } from '../entities/theater.entity';
+import { IsCinemaName } from '../../common/validation/cinema-name.decorator';
 
 function SeatsMatchDimensions() {
     return (target: object, propertyName: string) => {
@@ -41,6 +42,7 @@ function SeatsMatchDimensions() {
 }
 
 export class CreateTheaterDto {
+    @IsCinemaName()
     cinema: string;
 
     @IsInt()
