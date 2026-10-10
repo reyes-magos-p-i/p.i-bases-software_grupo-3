@@ -11,8 +11,17 @@ defineProps<{ status: ProjectionStatus }>()
 </template>
 
 <style scoped>
-.projection-status { font-weight: 600; }
-.status-cancelled { color: var(--color-error); }
-.status-in_progress { color: #b54708; }
-.status-inactive, .status-finished { color: var(--color-gray); }
+.projection-status {
+  font-weight: 600;
+}
+.status-cancelled {
+  color: var(--error-color);
+}
+.status-in_progress {
+  color: var(--warning-text);
+}
+.status-inactive,
+.status-finished {
+  color: var(--text-secondary);
+}
 </style>

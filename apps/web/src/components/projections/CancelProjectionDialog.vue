@@ -130,41 +130,87 @@ onBeforeUnmount(() => {
 
 <style scoped>
 :global(.app-modal-backdrop:has(.projection-cancel-content)::backdrop) {
-  background: color-mix(in srgb, var(--color-black) 55%, transparent);
+  background: color-mix(in srgb, var(--page-background) 55%, transparent);
 }
 :global(.app-modal-card:has(.projection-cancel-content)) {
   width: min(640px, 100%);
   max-width: 640px;
   padding: 0;
   border-radius: var(--radius-medium);
-  background: var(--color-background);
-  color: var(--color-dark);
+  background: var(--content-background);
+  color: var(--text-primary);
   overflow: hidden;
 }
 :global(.app-modal-card:has(.projection-cancel-content) .app-modal-title) {
   margin: 0;
   padding: 24px 80px 24px 24px;
-  color: var(--color-white);
+  color: var(--text-on-dark);
   font-size: 1.25rem;
   font-style: normal;
   text-align: left;
-  background: var(--color-primary);
+  background: var(--primary-color);
 }
 :global(.app-modal-card:has(.projection-cancel-content) .app-modal-close) {
   top: 14px;
   right: 24px;
-  color: var(--color-white);
+  color: var(--text-on-dark);
 }
-.projection-cancel-content { display: grid; gap: 12px; padding: 24px; overflow-wrap: anywhere; }
-.projection-cancel-content p { margin: 0; }
-.cancel-summary { color: var(--color-gray); }
-.cancel-warning { padding: 16px; border-left: 3px solid var(--color-primary); background: var(--color-white); }
-.cancel-urgent { display: flex; gap: 10px; padding: 16px; border-left: 4px solid #b54708; background: #fffaeb; }
-.cancel-urgent .bi { color: #b54708; }
-.cancel-error { color: var(--color-error); }
-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-top: 12px; }
-button { min-height: 44px; padding: 10px 18px; border: 1px solid var(--color-primary); border-radius: var(--radius-small); font: inherit; font-weight: 600; }
-.secondary { color: var(--color-primary); background: var(--color-white); }
-.primary { color: var(--color-white); background: var(--color-primary); }
-button:disabled { opacity: .7; cursor: not-allowed; }
+.projection-cancel-content {
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+  overflow-wrap: anywhere;
+}
+.projection-cancel-content p {
+  margin: 0;
+}
+.cancel-summary {
+  color: var(--text-secondary);
+}
+.cancel-warning {
+  padding: 16px;
+  border-left: 3px solid var(--primary-color);
+  background: var(--content-background);
+  color: var(--text-primary);
+}
+.cancel-urgent {
+  display: flex;
+  gap: 10px;
+  padding: 16px;
+  border-left: 4px solid var(--accent-color);
+  background: var(--warning-background);
+}
+.cancel-urgent .bi {
+  color: var(--warning-text);
+}
+.cancel-error {
+  color: var(--error-color);
+}
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+button {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid var(--primary-color);
+  border-radius: var(--radius-small);
+  font: inherit;
+  font-weight: 600;
+}
+.secondary {
+  color: var(--text-primary);
+  background: var(--content-background);
+}
+.primary {
+  color: var(--text-on-dark);
+  background: var(--primary-color);
+}
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
 </style>

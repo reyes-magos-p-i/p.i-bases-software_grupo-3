@@ -1,17 +1,149 @@
 :root {
-  /* Brand colors */
-  --color-primary: #36080c;
-  /* Feedback colors */
-  --color-error: #b42318;
-  /* Neutral colors */
-  --color-dark: #2f2f2f;
-  --color-gray: #8c8c8c;
-  --color-medium_gray: #898989;
-  --color-light_gray: #d3d3d3;
-  --color-black: #0d0d0d;
-  --color-white: #ffffff;
-  --color-cream: #ffffed;
-  --color-background: #f7f7f7;
+  /* Palette */
+  --primary-color: #8a2be2;
+  --accent-color: #ffd700;
+  --page-background: #020617;
+  --surface-background: #0f172a;
+  --content-background: #f8f9fa;
+
+  /* Feedback is independent of the brand palette. */
+  --error-color: #b42318;
+  --success-color: #198754;
+  --success-text: #206a3b;
+  --error-text: #9f251f;
+  --error-background: #fdf0ef;
+  --success-muted-text: #344d40;
+  --success-emphasis-color: #27814e;
+  --success-background: #e9f5ee;
+  --warning-text: var(--text-primary);
+  --warning-background: color-mix(in srgb, var(--accent-color) 12%, var(--content-background));
+  --info-background: color-mix(in srgb, var(--primary-color) 8%, var(--content-background));
+
+  /* Text and controls on light surfaces */
+  --text-primary: var(--page-background);
+  --text-secondary: color-mix(in srgb, var(--page-background) 78%, var(--content-background));
+  --text-disabled: color-mix(in srgb, var(--page-background) 55%, var(--content-background));
+  --border-color: color-mix(in srgb, var(--surface-background) 20%, var(--content-background));
+  --border-strong: color-mix(in srgb, var(--surface-background) 45%, var(--content-background));
+  --input-background: var(--content-background);
+  --input-disabled-background: color-mix(
+    in srgb,
+    var(--surface-background) 8%,
+    var(--content-background)
+  );
+  --surface-hover: color-mix(in srgb, var(--primary-color) 8%, var(--content-background));
+
+  /* Text and controls on dark surfaces */
+  --text-on-dark: var(--content-background);
+  --text-on-dark-secondary: color-mix(
+    in srgb,
+    var(--content-background) 85%,
+    var(--surface-background)
+  );
+  --border-on-dark: color-mix(in srgb, var(--content-background) 25%, var(--surface-background));
+  --surface-on-dark-hover: color-mix(in srgb, var(--content-background) 12%, transparent);
+
+  /* Portal navigation */
+  --navbar-background: var(--surface-background);
+  --navbar-button-background: var(--navbar-background);
+  --navbar-button-hover-background: color-mix(
+    in srgb,
+    var(--page-background) 40%,
+    var(--navbar-background)
+  );
+  --navbar-button-text: var(--text-on-dark);
+  --navbar-separator-color: color-mix(in srgb, var(--content-background) 15%, transparent);
+
+  /* Actions and focus */
+  --button-background: var(--accent-color);
+  --button-text: var(--page-background);
+  --button-hover-background: color-mix(in srgb, var(--accent-color) 85%, var(--surface-background));
+  --button-secondary-background: var(--content-background);
+  --button-secondary-text: var(--text-primary);
+  --button-confirm-background: var(--primary-color);
+  --button-confirm-text: var(--text-on-dark);
+  --button-confirm-hover-background: color-mix(
+    in srgb,
+    var(--primary-color) 85%,
+    var(--page-background)
+  );
+  --button-social-background: var(--content-background);
+  --button-social-text: var(--text-primary);
+  --button-social-border: var(--border-strong);
+  --button-social-hover-background: color-mix(
+    in srgb,
+    var(--surface-background) 5%,
+    var(--content-background)
+  );
+  --focus-color: var(--primary-color);
+  --focus-on-dark: var(--accent-color);
+  --focus-shadow: color-mix(in srgb, var(--primary-color) 20%, transparent);
+
+  /* Sidebar, dialogs and tables */
+  --sidebar-background: var(--surface-background);
+  --sidebar-text: var(--content-background);
+  --sidebar-disabled-text: color-mix(
+    in srgb,
+    var(--content-background) 75%,
+    var(--sidebar-background)
+  );
+  --sidebar-hover-background: color-mix(
+    in srgb,
+    var(--primary-color) 20%,
+    var(--sidebar-background)
+  );
+  --sidebar-active-background: var(--accent-color);
+  --sidebar-active-text: var(--page-background);
+  --dialog-background: var(--content-background);
+  --dialog-heading-background: var(--primary-color);
+  --dialog-heading-text: var(--content-background);
+  --table-background: var(--content-background);
+  --table-heading-background: var(--surface-background);
+  --table-heading-text: var(--content-background);
+  --table-stripe-background: color-mix(in srgb, var(--primary-color) 4%, var(--content-background));
+  --table-hover-background: var(--surface-hover);
+
+  /* Overlays and shadows */
+  --overlay-background: color-mix(in srgb, var(--page-background) 55%, transparent);
+  --hero-overlay-start: color-mix(in srgb, var(--page-background) 85%, transparent);
+  --hero-overlay-end: color-mix(in srgb, var(--page-background) 30%, transparent);
+  --carousel-control-background: color-mix(in srgb, var(--page-background) 65%, transparent);
+  --shadow-color: color-mix(in srgb, var(--page-background) 15%, transparent);
+  --shadow-strong-color: color-mix(in srgb, var(--page-background) 25%, transparent);
+
+  /* Bootstrap and DaisyUI use their own token names. */
+  --bs-primary: var(--primary-color);
+  --bs-secondary: var(--surface-background);
+  --bs-body-color: var(--text-primary);
+  --bs-body-bg: var(--content-background);
+  --bs-emphasis-color: var(--text-primary);
+  --bs-secondary-color: var(--text-secondary);
+  --bs-secondary-bg: var(--input-disabled-background);
+  --bs-tertiary-color: var(--text-disabled);
+  --bs-tertiary-bg: var(--table-stripe-background);
+  --bs-border-color: var(--border-color);
+  --bs-link-color: var(--text-primary);
+  --bs-link-hover-color: var(--text-primary);
+  --color-base-100: var(--content-background);
+  --color-base-200: var(--input-disabled-background);
+  --color-base-300: var(--border-color);
+  --color-base-content: var(--text-primary);
+  --color-primary: var(--primary-color);
+  --color-primary-content: var(--text-on-dark);
+  --color-secondary: var(--accent-color);
+  --color-secondary-content: var(--button-text);
+  --color-accent: var(--accent-color);
+  --color-accent-content: var(--button-text);
+  --color-neutral: var(--surface-background);
+  --color-neutral-content: var(--text-on-dark);
+  --color-info: var(--primary-color);
+  --color-info-content: var(--text-on-dark);
+  --color-success: var(--success-color);
+  --color-success-content: var(--text-on-dark);
+  --color-warning: var(--accent-color);
+  --color-warning-content: var(--button-text);
+  --color-error: var(--error-color);
+  --color-error-content: var(--text-on-dark);
 
   /* Border radius */
   --radius-small: 6px;

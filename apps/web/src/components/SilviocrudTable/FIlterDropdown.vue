@@ -34,3 +34,10 @@ function handleChange(event: Event) {
 
   </select>
 </template>
+<style scoped>
+.select {
+  background: var(--input-background);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+</style>

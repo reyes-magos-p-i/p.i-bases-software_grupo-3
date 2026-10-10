@@ -69,17 +69,94 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.theater-dialog { position: fixed; top: 50%; left: 50%; width: min(calc(100% - 32px), 620px); max-height: min(90dvh, 760px); margin: 0; padding: 0; border: 0; border-radius: var(--radius-medium); color: var(--color-dark); background: var(--color-white); transform: translate(-50%, -50%); }
-.theater-dialog::backdrop { background: color-mix(in srgb, var(--color-black) 55%, transparent); }
-.dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 24px; color: var(--color-white); background: var(--color-primary); }
-.dialog-heading h2 { margin: 0; font-size: 1.25rem; }
-.close-button { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: var(--radius-small); color: inherit; background: transparent; }
-.theater-detail-content { display: grid; gap: 8px; padding: 24px; overflow-y: auto; font: inherit; }
-.detail-grid { display: grid; gap: 8px; }
-.dimension-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
-.readonly-field { display: grid; gap: 8px; }
-.readonly-input { min-height: 42px; padding: 8px 10px; border: 1px solid #a9adb5; border-radius: var(--radius-small); font: inherit; background: #f7f7f8; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
-.secondary-button { min-height: 42px; padding: 9px 16px; border: 1px solid var(--color-primary); border-radius: var(--radius-small); color: var(--color-primary); background: var(--color-white); font: inherit; }
-@media (max-width: 520px) { .dimension-grid { grid-template-columns: 1fr; } }
+.theater-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(calc(100% - 32px), 620px);
+  max-height: min(90dvh, 760px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-medium);
+  color: var(--text-primary);
+  background: var(--content-background);
+  transform: translate(-50%, -50%);
+}
+.theater-dialog::backdrop {
+  background: color-mix(in srgb, var(--page-background) 55%, transparent);
+}
+.dialog-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  color: var(--text-on-dark);
+  background: var(--primary-color);
+}
+.dialog-heading h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.close-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-small);
+  color: inherit;
+  background: transparent;
+}
+.theater-detail-content {
+  display: grid;
+  gap: 8px;
+  padding: 24px;
+  overflow-y: auto;
+  font: inherit;
+}
+.detail-grid {
+  display: grid;
+  gap: 8px;
+}
+.dimension-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+.readonly-field {
+  display: grid;
+  gap: 8px;
+}
+.readonly-input {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-small);
+  font: inherit;
+  background: var(--content-background);
+  color: var(--text-primary);
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+.secondary-button {
+  min-height: 42px;
+  padding: 9px 16px;
+  border: 1px solid var(--primary-color);
+  border-radius: var(--radius-small);
+  color: var(--text-primary);
+  background: var(--content-background);
+  font: inherit;
+}
+@media (max-width: 520px) {
+  .dimension-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

@@ -85,12 +85,12 @@ const emit = defineEmits<{
 <style scoped>
 .table-scroll {
   overflow-x: auto;
-  border: 1px solid #e3e5e8;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-medium);
-  background: var(--color-white);
+  background: var(--table-background);
 }
 .table-scroll:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 .crud-table {
@@ -98,7 +98,7 @@ const emit = defineEmits<{
   min-width: 680px;
   margin: 0;
   border-collapse: collapse;
-  color: var(--color-dark);
+  color: var(--text-primary);
 }
 caption {
   position: absolute;
@@ -109,9 +109,10 @@ caption {
 }
 th {
   padding: 16px;
-  background: #f5f3f3;
+  background: var(--table-heading-background);
   font-size: 0.8125rem;
   white-space: nowrap;
+  color: var(--table-heading-text);
 }
 td {
   padding: 16px;
@@ -121,10 +122,10 @@ td {
   max-width: 280px;
 }
 tbody tr:nth-child(even) td {
-  background: #f0f5f8;
+  background: var(--table-stripe-background);
 }
 tbody tr:hover td {
-  background: #e8eef2;
+  background: var(--table-hover-background);
 }
 .actions {
   white-space: nowrap;
@@ -132,7 +133,7 @@ tbody tr:hover td {
 .actions button {
   border: 0;
   background: transparent;
-  color: var(--color-primary);
+  color: var(--text-primary);
   padding: 6px;
   text-decoration: underline;
 }
@@ -141,50 +142,51 @@ tbody tr:hover td {
   text-align: center;
 }
 
-  button {
-    padding: 10px 16px;
-    border: 1px solid var(--color-primary);
-    cursor: pointer;
-  }
+button {
+  padding: 10px 16px;
+  border: 1px solid var(--primary-color);
+  cursor: pointer;
+}
 
-  .primary-button {
-    background: var(--color-primary);
-    color: var(--color-white);
-  }
-  .secondary-button {
-    background: var(--color-white);
-    color: var(--color-primary);
-  }
-  button:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
+.primary-button {
+  background: var(--primary-color);
+  color: var(--text-on-dark);
+}
+.secondary-button {
+  background: var(--content-background);
+  color: var(--text-primary);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 
-  .movie-actions {
-    display: flex;
-    gap: 4px;
-  }
-  .movie-actions button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px;
-    text-decoration: none;
-    justify-content: center;
-    width: 36px;
-    min-height: 36px;
-    background: transparent;
-    border: 0;
-    color: var(--color-primary);
-    font-size: 1.125rem;
-  }
-  .movie-actions button:disabled {
-    pointer-events: none;
-  }
-  .movie-actions button:not(:disabled):hover {
-    background: var(--color-light_gray);
-  }
-  .action-hint {
-    display: inline-flex;
-  }
+.movie-actions {
+  display: flex;
+  gap: 4px;
+}
+.movie-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  text-decoration: none;
+  justify-content: center;
+  width: 36px;
+  min-height: 36px;
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  font-size: 1.125rem;
+}
+.movie-actions button:disabled {
+  pointer-events: none;
+}
+.movie-actions button:not(:disabled):hover {
+  background: var(--input-disabled-background);
+  color: var(--text-primary);
+}
+.action-hint {
+  display: inline-flex;
+}
 </style>

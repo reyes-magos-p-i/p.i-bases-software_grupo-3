@@ -263,6 +263,15 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.edit-feedback { margin: 0 0 16px; padding: 12px 16px; border-radius: var(--radius-medium); background: var(--color-white); }
-.edit-error { color: var(--color-error); border-left: 4px solid var(--color-error); }
+.edit-feedback {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius-medium);
+  background: var(--content-background);
+  color: var(--text-primary);
+}
+.edit-error {
+  color: var(--error-color);
+  border-left: 4px solid var(--error-color);
+}
 </style>

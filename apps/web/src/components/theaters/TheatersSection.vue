@@ -5,6 +5,7 @@ import CreateTheaterDialog from './CreateTheaterDialog.vue'
 import TheaterDetailDialog from './TheaterDetailDialog.vue'
 import DeactivateTheaterDialog from './DeactivateTheaterDialog.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import {
   createTheater,
@@ -206,14 +207,15 @@ onBeforeUnmount(() => {
       </button>
     </div>
     <div class="list-content" :aria-busy="theatersLoading">
-      <p v-if="theatersLoading" class="feedback" role="status">Cargando salas…</p>
+      <LoadingState v-if="theatersLoading" message="Cargando salas…" />
       <div v-else-if="theatersError" class="feedback error" role="alert">
         {{ theatersError }}
         <button type="button" class="secondary-button" @click="retryTheaters">Reintentar</button>
       </div>
       <template v-else-if="theaters.length">
         <p class="result-count" role="status">
-          {{ theaters.length }} {{ theaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
+          {{ theaters.length }}
+          {{ theaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
         </p>
         <CrudTable :columns="columns" :rows="rows()" caption="Salas">
           <template #actions="{ row }">
@@ -229,11 +231,7 @@ onBeforeUnmount(() => {
                 </button>
               </span>
               <span title="Desactivar" class="action-hint">
-                <button
-                  type="button"
-                  aria-label="Desactivar sala"
-                  @click="deactivateTheater(row)"
-                >
+                <button type="button" aria-label="Desactivar sala" @click="deactivateTheater(row)">
                   <i class="bi bi-trash3" aria-hidden="true"></i>
                 </button>
               </span>
@@ -292,16 +290,16 @@ onBeforeUnmount(() => {
   min-height: 36px;
   padding: 8px;
   border: 0;
-  color: var(--color-primary);
+  color: var(--text-primary);
   background: transparent;
   font-size: 1.125rem;
   text-decoration: none;
 }
 .user-actions button:not(:disabled):hover {
-  background: var(--color-light_gray);
+  background: var(--input-disabled-background);
+  color: var(--text-primary);
 }
 .action-hint {
   display: inline-flex;
 }
 </style>
-

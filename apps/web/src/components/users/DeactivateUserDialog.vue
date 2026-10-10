@@ -106,22 +106,22 @@ onBeforeUnmount(() => {
 
 <style scoped>
 :global(.app-modal-backdrop:has(.user-deactivation-content)::backdrop) {
-  background: color-mix(in srgb, var(--color-black) 55%, transparent);
+  background: var(--overlay-background);
 }
 :global(.app-modal-card:has(.user-deactivation-content)) {
   width: min(640px, 100%);
   max-width: 640px;
   padding: 0;
   border-radius: var(--radius-medium);
-  background: var(--color-background);
-  color: var(--color-dark);
+  background: var(--dialog-background);
+  color: var(--text-primary);
   overflow: hidden;
 }
 :global(.app-modal-card:has(.user-deactivation-content) .app-modal-title) {
   margin: 0;
   padding: 24px 80px 24px 24px;
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--primary-color);
+  color: var(--content-background);
   text-align: left;
   font-style: normal;
   font-size: 1.25rem;
@@ -129,7 +129,7 @@ onBeforeUnmount(() => {
 :global(.app-modal-card:has(.user-deactivation-content) .app-modal-close) {
   top: 14px;
   right: 24px;
-  color: var(--color-white);
+  color: var(--content-background);
 }
 .user-deactivation-content {
   padding: 24px;
@@ -137,11 +137,11 @@ onBeforeUnmount(() => {
 }
 .deactivation-warning {
   padding: 16px;
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-white);
+  border-left: 3px solid var(--primary-color);
+  background: var(--content-background);
 }
 .deactivation-error {
-  color: var(--color-error);
+  color: var(--error-color);
 }
 footer {
   display: flex;
@@ -153,24 +153,29 @@ footer {
 button {
   min-height: 44px;
   padding: 10px 16px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--primary-color);
   border-radius: var(--radius-small);
   font: inherit;
 }
 .primary {
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--button-confirm-background);
+  color: var(--button-confirm-text);
+  border-color: var(--button-confirm-background);
+}
+.primary:not(:disabled):hover {
+  background: var(--button-confirm-hover-background);
+  border-color: var(--button-confirm-hover-background);
 }
 .secondary {
-  background: var(--color-white);
-  color: var(--color-primary);
+  background: var(--content-background);
+  color: var(--button-secondary-text);
 }
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 @media (max-width: 575px) {

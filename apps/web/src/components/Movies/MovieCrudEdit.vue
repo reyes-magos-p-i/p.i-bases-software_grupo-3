@@ -411,11 +411,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 :global(.app-modal-backdrop:has(.movie-detail-content)::backdrop) {
-  background: color-mix(
-    in srgb,
-    var(--color-black) 55%,
-    transparent
-  );
+  background: color-mix(in srgb, var(--page-background) 55%, transparent);
 }
 
 :global(.app-modal-card:has(.movie-detail-content)) {
@@ -423,8 +419,8 @@ onBeforeUnmount(() => {
   max-width: 880px;
   padding: 0;
   border-radius: var(--radius-medium);
-  background: var(--color-background);
-  color: var(--color-dark);
+  background: var(--content-background);
+  color: var(--text-primary);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -434,8 +430,8 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   margin: 0;
   padding: 24px 80px 24px 24px;
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--primary-color);
+  color: var(--text-on-dark);
   text-align: left;
   font-style: normal;
   font-size: 1.25rem;
@@ -444,7 +440,7 @@ onBeforeUnmount(() => {
 :global(.app-modal-card:has(.movie-detail-content) .app-modal-close) {
   top: 14px;
   right: 24px;
-  color: var(--color-white);
+  color: var(--text-on-dark);
   border-radius: var(--radius-small);
 }
 
@@ -489,13 +485,14 @@ dd {
 
 .detail-feedback {
   padding: 16px;
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-white);
+  border-left: 3px solid var(--primary-color);
+  background: var(--content-background);
+  color: var(--text-primary);
 }
 
 .detail-error {
-  border-color: var(--color-error);
-  color: var(--color-error);
+  border-color: var(--error-color);
+  color: var(--error-color);
 }
 
 .detail-footer {
@@ -507,14 +504,15 @@ dd {
 .detail-button {
   min-height: 44px;
   padding: 10px 20px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--primary-color);
   border-radius: var(--radius-small);
-  background: var(--color-white);
-  color: var(--color-primary);
+  background: var(--content-background);
+  color: var(--text-primary);
 }
 
 .detail-button:hover {
-  background: var(--color-light_gray);
+  background: var(--input-disabled-background);
+  color: var(--text-primary);
 }
 
 @media (max-width: 575px) {
@@ -560,10 +558,10 @@ dd {
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--primary-color);
   border-radius: var(--radius-small);
-  background: var(--color-white);
-  color: var(--color-dark);
+  background: var(--content-background);
+  color: var(--text-primary);
   font: inherit;
 }
 
@@ -588,12 +586,12 @@ textarea.edit-input {
 }
 
 .save-button {
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--primary-color);
+  color: var(--text-on-dark);
 }
 
 .save-button:hover {
-  background: var(--color-primary);
+  background: var(--primary-color);
   filter: brightness(0.95);
 }
 
