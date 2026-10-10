@@ -5,7 +5,7 @@ export class Theater {
     branchId: number;
     @IsInt()
     @Min(1)
-    @Max(4999)
+    @Max(5000)
     numberOfSeats: number;
     @IsInt()
     @Min(1)

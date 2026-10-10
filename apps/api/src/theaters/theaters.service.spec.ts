@@ -70,7 +70,8 @@ describe('TheatersService', () => {
   it('rejects non-positive or out-of-range seat dimensions on creation', async () => {
     const invalidTheaters = [
       { numberOfSeats: 0, dimensionX: 0, dimensionY: 5 },
-      { numberOfSeats: 5000, dimensionX: 100, dimensionY: 50 },
+      { numberOfSeats: 5001, dimensionX: 1, dimensionY: 5001 },
+      { numberOfSeats: -4, dimensionX: -2, dimensionY: 2 },
       { numberOfSeats: 6, dimensionX: 2.5, dimensionY: 2.4 },
     ];
 
@@ -85,6 +86,19 @@ describe('TheatersService', () => {
     }
 
     expect(repository.createTheater).not.toHaveBeenCalled();
+  });
+
+  it('accepts exactly 5000 seats', async () => {
+    const theaterDto = {
+      branchId: 2,
+      numberOfSeats: 5000,
+      dimensionX: 100,
+      dimensionY: 50,
+      projectorName: 'IMAX',
+    };
+    repository.createTheater.mockResolvedValue({ theaterId: 8, ...theaterDto });
+
+    await expect(service.create(theaterDto)).resolves.toMatchObject({ theaterId: 8 });
   });
 
   it('returns all theaters from the repository', async () => {
@@ -151,5 +165,37 @@ describe('TheatersService', () => {
 
     await expect(service.remove(4)).resolves.toBeUndefined();
     expect(repository.deleteTheater).toHaveBeenCalledWith(4);
+  });
+
+  const validCases = [
+    [1, 1, 1],
+    [1, 5000, 5000],
+    [5000, 1, 5000],
+    [25, 200, 5000],
+    [10, 10, 100],
+  ];
+  const invalidCases = [
+    [2, 3, 5],
+    [0, 5, 0],
+    [-1, 5, 5],
+    [5, 0, 0],
+    [5, -1, 5],
+    [1, 1, 0],
+    [1, 1, -1],
+    [1, 5001, 5001],
+    [2, 2500, 5001],
+    [0, 0, 5001],
+  ];
+
+  it.each(validCases)('service accepts %i x %i = %i', async (x, y, seats) => {
+    const dto = { branchId: 2, dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' };
+    repository.createTheater.mockResolvedValue({ theaterId: 1, ...dto });
+    await expect(service.create(dto)).resolves.toMatchObject({ theaterId: 1 });
+  });
+
+  it.each(invalidCases)('service rejects %i x %i, seats %i', async (x, y, seats) => {
+    await expect(
+      service.create({ branchId: 2, dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' }),
+    ).rejects.toThrow('Invalid theater seat dimensions');
   });
 });
