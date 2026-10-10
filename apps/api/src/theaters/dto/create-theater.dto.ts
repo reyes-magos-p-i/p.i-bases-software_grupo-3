@@ -41,8 +41,7 @@ function SeatsMatchDimensions() {
 }
 
 export class CreateTheaterDto {
-    @IsInt()
-    branchId: number;
+    cinema: string;
 
     @IsInt()
     @Min(1)

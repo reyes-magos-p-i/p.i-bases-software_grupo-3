@@ -14,26 +14,27 @@ export class TheaterRepository {
   async getAllTheaters(): Promise<Theater[]> {
     try {
       const result = await this.db.query(`
-        SELECT t.theater_id,
-            t.branch_id,
-            t.number_seats,
-            t.dimension_x,
-            t.dimension_y,
-            p.name AS projector_name,
-            t.is_active,
-            t.status
-        FROM Theaters t
-        JOIN Projectors p ON p.projector_id = t.projector_id
-        ORDER BY t.theater_id
+      SELECT t.theater_id,
+          c.name as "cinema",
+          t.number_seats,
+          t.dimension_x,
+          t.dimension_y,
+          p.name AS projector_name,
+          t.is_active,
+          t.status
+      FROM Theaters t
+      JOIN Cinemas c ON c.branch_id = t.branch_id
+      JOIN Projectors p ON p.projector_id = t.projector_id
+      ORDER BY t.theater_id
       `);
       this.logger.log(`Fetched ${result.rows?.length ?? 0} theaters from the database.`);
       this.logger.debug(`Database query result: ${JSON.stringify(result)}`);
 
-      const rows = (result.rows ?? []) as { THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number; STATUS: TheaterStatus }[];
+      const rows = (result.rows ?? []) as { THEATER_ID: number; CINEMA: string; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number; STATUS: TheaterStatus }[];
 
       return rows.map((row) => ({
         theaterId: row.THEATER_ID,
-        branchId: row.BRANCH_ID,
+        cinema: row.CINEMA,
         numberOfSeats: row.NUMBER_SEATS,
         dimensionX: row.DIMENSION_X,
         dimensionY: row.DIMENSION_Y,
@@ -49,11 +50,12 @@ export class TheaterRepository {
 
   async createTheater(dto: CreateTheaterDto): Promise<Theater> {
     try {
-        const { branchId, numberOfSeats, dimensionX, dimensionY, projectorName } = dto;
+        const { cinema, numberOfSeats, dimensionX, dimensionY, projectorName } = dto;
         const isActive = dto.isActive ?? true;
         const status = dto.status ?? 'Disponible';
 
         const theaterId = await this.db.transaction(async (conn) => {
+          // Hacemos join de projectores
           const projectorResult = await conn.execute(
             `SELECT projector_id FROM Projectors WHERE name = :projectorName`,
             { projectorName },
@@ -64,6 +66,18 @@ export class TheaterRepository {
 
           if (projectorId == null) {
             throw new Error(`Projector not found: ${projectorName}`);
+          }
+          // Hacemos join de cinemas
+          const cinemasResult = await conn.execute(
+            `SELECT branch_id FROM Cinemas WHERE name = :cinema`,
+            { cinema },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT },
+          );
+
+          const branchId = (cinemasResult.rows as { BRANCH_ID: number }[] | undefined)?.[0]?.BRANCH_ID;
+
+          if (branchId == null) {
+            throw new Error(`Cinema not found: ${cinema}`);
           }
 
           const theaterResult = await conn.execute(
@@ -85,7 +99,7 @@ export class TheaterRepository {
         });
         return {
           theaterId,
-          branchId,
+          cinema,
           numberOfSeats,
           dimensionX,
           dimensionY,
@@ -103,21 +117,22 @@ export class TheaterRepository {
     try {
       const result = await this.db.query(
         `SELECT t.theater_id,
-                t.branch_id,
+                c.name as "cinema",
                 t.number_seats,
                 t.dimension_x,
                 t.dimension_y,
                 p.name AS projector_name,
                 t.is_active,
                 t.status
-         FROM Theaters t
-         JOIN Projectors p ON p.projector_id = t.projector_id
-         WHERE t.theater_id = :id`,
+        FROM Theaters t
+        JOIN Cinemas c ON c.branch_id = t.branch_id
+        JOIN Projectors p ON p.projector_id = t.projector_id
+        WHERE t.theater_id = :id`,
         { id },
         { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
 
-      const rows = (result.rows ?? []) as { THEATER_ID: number; BRANCH_ID: number; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number; STATUS: TheaterStatus }[];
+      const rows = (result.rows ?? []) as { THEATER_ID: number; CINEMA: string; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number; STATUS: TheaterStatus }[];
 
       if (rows.length === 0) {
         return null;
@@ -126,7 +141,7 @@ export class TheaterRepository {
       const row = rows[0];
       return {
         theaterId: row.THEATER_ID,
-        branchId: row.BRANCH_ID,
+        cinema: row.CINEMA,
         numberOfSeats: row.NUMBER_SEATS,
         dimensionX: row.DIMENSION_X,
         dimensionY: row.DIMENSION_Y,
@@ -145,9 +160,8 @@ export class TheaterRepository {
       const setClauses: string[] = [];
       const binds: oracledb.BindParameters = { id };
 
-      if (updateTheaterDto.branchId !== undefined) {
+      if (updateTheaterDto.cinema !== undefined) {
         setClauses.push('branch_id = :branchId');
-        binds.branchId = updateTheaterDto.branchId;
       }
       if (updateTheaterDto.numberOfSeats !== undefined) {
         setClauses.push('number_seats = :numberOfSeats');
@@ -195,6 +209,21 @@ export class TheaterRepository {
           }
 
           binds.projectorId = projectorId;
+        }
+
+        if (updateTheaterDto.cinema !== undefined) {
+          const cinemaResult = await connection.execute(
+            `SELECT branch_id FROM Cinemas WHERE name = :cinema`,
+            { cinema: updateTheaterDto.cinema },
+            { outFormat: oracledb.OUT_FORMAT_OBJECT },
+          );
+          const branchId = (cinemaResult.rows as { BRANCH_ID: number }[] | undefined)?.[0]?.BRANCH_ID;
+
+          if (branchId == null) {
+            throw new Error(`Projector not found: ${updateTheaterDto.projectorName}`);
+          }
+
+          binds.branchId = branchId;
         }
 
         return connection.execute(

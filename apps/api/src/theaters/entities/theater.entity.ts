@@ -2,7 +2,7 @@ import { IsInt, Max, Min } from 'class-validator';
 
 export class Theater {
     theaterId: number;
-    branchId: number;
+    cinema: string;
     @IsInt()
     @Min(1)
     @Max(5000)
