@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 import CreateTheaterDialog from './CreateTheaterDialog.vue'
+import ModifyTheaterDialog from './ModifyTheaterDialog.vue'
 import TheaterDetailDialog from './TheaterDetailDialog.vue'
 import DeactivateTheaterDialog from './DeactivateTheaterDialog.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
@@ -12,12 +13,13 @@ import {
   getTheaters,
   updateTheater,
 } from '@/services/theater.service'
-import type { CreateTheaterRequest, Theater, TheaterCreationOptions } from '@/types/theater'
+import type { CreateTheaterRequest, Theater, TheaterCreationOptions, UpdateTheaterRequest } from '@/types/theater'
 
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
 const { state, sessionExpired, refreshPermissions } = useEmployeeSessionRecovery()
-const dialog = useTemplateRef<InstanceType<typeof CreateTheaterDialog>>('dialog')
+const createDialog = useTemplateRef<InstanceType<typeof CreateTheaterDialog>>('create-dialog')
+const modifyDialog = useTemplateRef<InstanceType<typeof ModifyTheaterDialog>>('modify-dialog')
 const resultNotice = useTemplateRef<HTMLElement>('result-notice')
 const options = ref<TheaterCreationOptions | null>(null)
 const optionsLoading = ref(false)
@@ -104,57 +106,72 @@ async function loadTheaters() {
   }
 }
 
-function open(theater: Theater | null = null) {
+function openCreate() {
   if (props.disabled || optionsLoading.value) return
-  editingTheater.value = theater
   theaterSubmissionErrors.value = []
-  dialog.value?.open()
+  createDialog.value?.open()
   void loadOptions()
 }
 
-function openCreate() {
-  open()
-}
-
-async function submit(data: CreateTheaterRequest) {
+async function doSubmit(
+  action: 'crear' | 'modificar',
+  participio: 'creada' | 'modificada',
+  apiCall: () => Promise<Theater>,
+  onComplete: () => void,
+) {
   if (submitting.value || props.disabled) return
   submitting.value = true
   emit('busy', true)
   theaterSubmissionErrors.value = []
   creationResult.value = ''
   try {
-    const theater = editingTheater.value
-      ? await updateTheater(editingTheater.value.theaterId, data)
-      : await createTheater(data)
+    const theater = await apiCall()
     if (state.disposed) return
     await loadTheaters()
-    creationResult.value = editingTheater.value
-      ? `Sala ${theater.theaterId} modificada exitosamente.`
-      : `Sala ${theater.theaterId} creada exitosamente.`
+    creationResult.value = `Sala ${theater.theaterId} ${participio} exitosamente.`
     theaterSubmissionErrors.value = []
-    editingTheater.value = null
-    dialog.value?.complete()
+    onComplete()
     await nextTick()
     resultNotice.value?.focus()
   } catch (error) {
     if (state.disposed) return
     if (isAxiosError(error) && error.response?.status === 401) sessionExpired()
     else if (isAxiosError(error) && error.response?.status === 403) {
-      theaterSubmissionErrors.value = [
-        `No tienes permiso para ${editingTheater.value ? 'modificar' : 'crear'} salas.`,
-      ]
+      theaterSubmissionErrors.value = [`No tienes permiso para ${action} salas.`]
       void refreshPermissions()
     } else if (isAxiosError(error) && error.response?.status === 400) {
       theaterSubmissionErrors.value = ['Revisa los datos de la sala e inténtalo nuevamente.']
     } else {
       theaterSubmissionErrors.value = [
-        `El resultado no pudo ser confirmado. Verifica si la sala fue ${editingTheater.value ? 'modificada' : 'creada'} antes de intentarlo de nuevo.`,
+        `El resultado no pudo ser confirmado. Verifica si la sala fue ${participio} antes de intentarlo de nuevo.`,
       ]
     }
   } finally {
     submitting.value = false
     emit('busy', false)
   }
+}
+
+async function submitCreate(data: CreateTheaterRequest) {
+  await doSubmit(
+    'crear',
+    'creada',
+    () => createTheater(data),
+    () => createDialog.value?.complete(),
+  )
+}
+
+async function submitModify(data: UpdateTheaterRequest) {
+  const theater = editingTheater.value!
+  await doSubmit(
+    'modificar',
+    'modificada',
+    () => updateTheater(theater.theaterId, data),
+    () => {
+      editingTheater.value = null
+      modifyDialog.value?.complete()
+    },
+  )
 }
 
 function retryOptions() {
@@ -165,8 +182,13 @@ function retryTheaters() {
   void loadTheaters()
 }
 
-function editTheater(row: { theater?: Theater }) {
-  if (row.theater) open(row.theater)
+async function editTheater(row: { theater?: Theater }) {
+  if (!row.theater || props.disabled || optionsLoading.value) return
+  editingTheater.value = row.theater
+  theaterSubmissionErrors.value = []
+  await nextTick()
+  modifyDialog.value?.open()
+  void loadOptions()
 }
 
 function viewTheater(row: { theater?: Theater }) {
@@ -257,7 +279,18 @@ onBeforeUnmount(() => {
       {{ creationResult }}
     </p>
     <CreateTheaterDialog
-      ref="dialog"
+      ref="create-dialog"
+      :projectors="options?.projectors"
+      :cinemas="options?.cinemas"
+      :options-loading="optionsLoading"
+      :options-error="optionsError"
+      :submitting="submitting"
+      :submission-errors="theaterSubmissionErrors"
+      @retry-options="retryOptions"
+      @submit="submitCreate"
+    />
+    <ModifyTheaterDialog
+      ref="modify-dialog"
       :theater="editingTheater"
       :projectors="options?.projectors"
       :cinemas="options?.cinemas"
@@ -266,7 +299,7 @@ onBeforeUnmount(() => {
       :submitting="submitting"
       :submission-errors="theaterSubmissionErrors"
       @retry-options="retryOptions"
-      @submit="submit"
+      @submit="submitModify"
     />
     <TheaterDetailDialog :theater="selectedTheater" @close="selectedTheater = null" />
     <DeactivateTheaterDialog

@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { nextTick, reactive, useId, useTemplateRef } from 'vue'
 import type {
-  CreateTheaterRequest,
   TheaterCinema,
   TheaterProjector,
   TheaterStatus,
+  UpdateTheaterRequest,
+  Theater,
 } from '@/types/theater'
 
 const props = withDefaults(
   defineProps<{
+    theater?: Theater | null
     projectors?: readonly TheaterProjector[]
     cinemas?: readonly TheaterCinema[]
     optionsLoading?: boolean
@@ -17,6 +19,7 @@ const props = withDefaults(
     submissionErrors?: readonly string[]
   }>(),
   {
+    theater: null,
     projectors: () => [],
     cinemas: () => [],
     optionsLoading: false,
@@ -27,7 +30,7 @@ const props = withDefaults(
 )
 const emit = defineEmits<{
   retryOptions: []
-  submit: [data: CreateTheaterRequest]
+  submit: [data: UpdateTheaterRequest]
 }>()
 
 const id = useId()
@@ -109,9 +112,25 @@ function reset() {
   for (const key of Object.keys(errors)) delete errors[key]
 }
 
+function populate() {
+  if (!props.theater) {
+    reset()
+    return
+  }
+  Object.assign(draft, {
+    numberOfSeats: String(props.theater.numberOfSeats),
+    dimensionX: String(props.theater.dimensionX),
+    dimensionY: String(props.theater.dimensionY),
+    projectorName: props.theater.projectorName,
+    branchId: String(props.theater.branchId),
+    status: props.theater.status,
+  })
+  for (const key of Object.keys(errors)) delete errors[key]
+}
+
 function open() {
   if (!dialog.value || dialog.value.open) return
-  reset()
+  populate()
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
   dialog.value.showModal()
   dialog.value.querySelector<HTMLInputElement>('[name="numberOfSeats"]')?.focus()
@@ -141,7 +160,7 @@ defineExpose({ open, complete })
 <template>
   <dialog ref="dialog" class="theater-dialog" :aria-labelledby="id + '-title'" @cancel.prevent="close">
     <header class="dialog-heading">
-      <h2 :id="id + '-title'">Crear sala</h2>
+      <h2 :id="id + '-title'">Modificar sala</h2>
       <button type="button" class="close-button" aria-label="Cerrar formulario" :disabled="submitting" @click="close">
         <i class="bi bi-x-lg" aria-hidden="true"></i>
       </button>
@@ -192,7 +211,7 @@ defineExpose({ open, complete })
 
       <footer class="dialog-actions">
         <button type="button" class="secondary-button" :disabled="submitting" @click="close">Cancelar</button>
-        <button type="submit" class="create-button" :disabled="submitting || optionsLoading">{{ submitting ? 'Creando…' : 'Crear sala' }}</button>
+        <button type="submit" class="create-button" :disabled="submitting || optionsLoading">{{ submitting ? 'Guardando…' : 'Guardar cambios' }}</button>
       </footer>
     </form>
   </dialog>
