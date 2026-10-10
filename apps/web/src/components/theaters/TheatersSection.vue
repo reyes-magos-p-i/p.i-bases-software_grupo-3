@@ -336,5 +336,21 @@ onBeforeUnmount(() => {
 .action-hint {
   display: inline-flex;
 }
+.empty-state {
+  padding: 24px;
+  border-radius: var(--radius-medium);
+  background: var(--color-white);
+  text-align: center;
+}
+.empty-state i {
+  font-size: 2rem;
+}
+.empty-state h2 {
+  margin: 12px 0;
+  font-size: 1.125rem;
+}
+.empty-state p {
+  margin: 0;
+}
 </style>
 
