@@ -50,9 +50,13 @@ onMounted(() => {
             @error="handleImageError"
           />
 
-          <h3 class="movie-title">
-            {{ movie.title }}
-          </h3>
+          <div class="movie-overlay">
+            <h3 class="movie-title">
+              {{ movie.title }}
+            </h3>
+
+            <button type="button" class="buy-button">Comprar boletos</button>
+          </div>
         </article>
       </div>
 
@@ -113,40 +117,65 @@ onMounted(() => {
   opacity: 1;
 }
 
-.movie-title {
+.movie-overlay {
   position: absolute;
   z-index: 1;
 
   display: flex;
+  flex-direction: column;
 
   align-items: center;
   justify-content: center;
 
   inset: 0;
 
-  margin: 0;
+  gap: 16px;
+
   padding: 16px;
+
+  opacity: 0;
+
+  transition: opacity var(--transition-normal);
+  pointer-events: none;
+}
+
+.movie-card:hover .movie-overlay,
+.movie-card:focus-within .movie-overlay {
+  opacity: 1;
+
+  pointer-events: auto;
+}
+
+.movie-title {
+  margin: 0;
 
   font-size: 1.25rem;
   font-weight: 500;
 
   text-align: center;
-
-  opacity: 0;
-
-  transition: opacity var(--transition-normal);
   color: #fff;
-  pointer-events: none;
 }
 
-.movie-card:hover .movie-title {
-  opacity: 1;
+.buy-button {
+  position: absolute;
+  bottom: 16px;
+
+  padding: 4px 96px;
+
+  border: 0;
+  border-radius: 6px;
+
+  font-weight: 700;
+
+  cursor: pointer;
+  color: #1a1a1a;
+  background-color: #ffd60a;
+
+  transition: background-color var(--transition-fast);
 }
 
-.movie-card:hover {
-  transform: translateY(-4px);
-
-  box-shadow: 0 10px 24px var(--shadow-color);
+.buy-button:hover {
+  background-color: #ffe14d;
 }
 
 .movie-poster {
