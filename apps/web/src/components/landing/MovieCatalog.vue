@@ -69,6 +69,8 @@ onMounted(() => {
 }
 
 .movie-card {
+  position: relative;
+
   overflow: hidden;
 
   border-radius: var(--radius-medium);
@@ -79,6 +81,27 @@ onMounted(() => {
     transform var(--transition-normal),
     box-shadow var(--transition-normal);
   color: var(--text-primary);
+}
+
+.movie-card::after {
+  position: absolute;
+
+  inset: 0;
+
+  border-radius: inherit;
+
+  background-color: rgb(0 0 0 / 50%);
+
+  opacity: 0;
+
+  transition: opacity var(--transition-normal);
+
+  content: '';
+  pointer-events: none;
+}
+
+.movie-card:hover::after {
+  opacity: 1;
 }
 
 .movie-card:hover {
