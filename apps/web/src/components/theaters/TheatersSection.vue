@@ -338,7 +338,7 @@ onBeforeUnmount(() => {
 .empty-state {
   padding: 24px;
   border-radius: var(--radius-medium);
-  background: var(--color-white);
+  background: var(--content-background);
   text-align: center;
 }
 .empty-state i {

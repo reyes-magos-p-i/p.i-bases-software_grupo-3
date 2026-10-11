@@ -102,7 +102,7 @@ defineExpose({ reset: form.reset, fill: form.fill })
 form { display: grid; gap: 8px; padding: 24px; overflow-y: auto; }
 .required-note { margin: 0 0 4px; font-size: .9rem; }
 .required-marker { color: var(--color-error); font-weight: 700; }
-input, select { min-height: 42px; padding: 8px 10px; border: 1px solid #a9adb5; border-radius: var(--radius-small); font: inherit; background: var(--color-white); }
+input, select { min-height: 42px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-small); font: inherit; color: var(--text-primary); background: var(--input-background); }
 input[type='number'] { color-scheme: light; }
 input[type='number']::-webkit-inner-spin-button,
 input[type='number']::-webkit-outer-spin-button { filter: invert(0.55); }
@@ -112,7 +112,7 @@ input:focus, select:focus { outline: 2px solid var(--color-primary); outline-off
 .dimension-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
 .secondary-button, .create-button { min-height: 42px; padding: 9px 16px; border: 1px solid var(--color-primary); border-radius: var(--radius-small); font: inherit; }
-.secondary-button { color: var(--color-primary); background: var(--color-white); }
-.create-button { color: var(--color-white); background: var(--color-primary); }
+.secondary-button { color: var(--primary-color); background: var(--button-secondary-background); }
+.create-button { color: var(--dialog-heading-text); background: var(--dialog-heading-background); }
 @media (max-width: 520px) { .dimension-grid { grid-template-columns: 1fr; } form { padding: 20px 16px; } }
 </style>
