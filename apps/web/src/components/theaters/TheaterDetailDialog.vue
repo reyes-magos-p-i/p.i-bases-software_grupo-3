@@ -1,54 +1,23 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, useId, useTemplateRef, watch } from 'vue'
+import { onMounted, useTemplateRef, watch } from 'vue'
+import TheaterDialogShell from './TheaterDialogShell.vue'
 import type { Theater } from '@/types/theater'
 
 const props = defineProps<{ theater: Theater | null }>()
 const emit = defineEmits<{ close: [] }>()
-const id = useId()
-const dialog = useTemplateRef<HTMLDialogElement>('dialog')
-let opener: HTMLElement | null = null
-
-function close() {
-  if (dialog.value?.open) dialog.value.close()
-  if (opener?.isConnected) opener.focus()
-  opener = null
-  emit('close')
-}
+const shell = useTemplateRef('shell')
 
 function syncDialog() {
-  const element = dialog.value
-  if (!element) return
-  if (props.theater && !element.open) {
-    opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    element.showModal()
-    element.querySelector<HTMLElement>('button:not([disabled])')?.focus()
-  } else if (!props.theater && element.open) {
-    element.close()
-    opener = null
-  }
+  if (props.theater) shell.value?.open()
+  else shell.value?.close()
 }
 
 onMounted(syncDialog)
 watch(() => props.theater, syncDialog, { flush: 'post' })
-onBeforeUnmount(() => {
-  if (dialog.value?.open) dialog.value.close()
-  if (opener?.isConnected) opener.focus()
-})
 </script>
 
 <template>
-  <dialog
-    ref="dialog"
-    class="theater-dialog"
-    :aria-labelledby="id + '-title'"
-    @cancel.prevent="close"
-  >
-    <header class="dialog-heading">
-      <h2 :id="id + '-title'">Detalle de sala</h2>
-      <button type="button" class="close-button" aria-label="Cerrar" @click="close">
-        <i class="bi bi-x-lg" aria-hidden="true"></i>
-      </button>
-    </header>
+  <TheaterDialogShell ref="shell" title="Detalle de sala" close-label="Cerrar" @close="emit('close')">
     <div v-if="theater" class="theater-detail-content">
       <div class="detail-grid">
         <div class="readonly-field"><label>ID</label><div class="readonly-input">{{ theater.theaterId }}</div></div>
@@ -62,18 +31,13 @@ onBeforeUnmount(() => {
         <div class="readonly-field"><label>Estado</label><div class="readonly-input">{{ theater.isActive ? theater.status : 'Inactiva' }}</div></div>
       </div>
       <footer class="dialog-actions">
-        <button type="button" class="secondary-button" @click="close">Cerrar</button>
+        <button type="button" class="secondary-button" @click="shell?.close(); emit('close')">Cerrar</button>
       </footer>
     </div>
-  </dialog>
+  </TheaterDialogShell>
 </template>
 
 <style scoped>
-.theater-dialog { position: fixed; top: 50%; left: 50%; width: min(calc(100% - 32px), 620px); max-height: min(90dvh, 760px); margin: 0; padding: 0; border: 0; border-radius: var(--radius-medium); color: var(--color-dark); background: var(--color-white); transform: translate(-50%, -50%); }
-.theater-dialog::backdrop { background: color-mix(in srgb, var(--color-black) 55%, transparent); }
-.dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 24px; color: var(--color-white); background: var(--color-primary); }
-.dialog-heading h2 { margin: 0; font-size: 1.25rem; }
-.close-button { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: var(--radius-small); color: inherit; background: transparent; }
 .theater-detail-content { display: grid; gap: 8px; padding: 24px; overflow-y: auto; font: inherit; }
 .detail-grid { display: grid; gap: 8px; }
 .dimension-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }

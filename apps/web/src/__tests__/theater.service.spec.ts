@@ -13,7 +13,7 @@ vi.mock('axios', () => ({ default: { create } }))
 
 describe('theater service', () => {
   const payload: CreateTheaterRequest = {
-    branchId: 4,
+    cinema: 'Centro',
     numberOfSeats: 120,
     dimensionX: 12,
     dimensionY: 10,

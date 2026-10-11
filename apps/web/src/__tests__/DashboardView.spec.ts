@@ -89,7 +89,7 @@ const catalogs: UserCreationOptions = {
     { id: 102, label: 'Curridabat', cantonId: 19 },
     { id: 200, label: 'Heredia', cantonId: 40 },
   ],
-  branches: [{ id: 1, label: 'Cinépolis Multiplaza del Este' }],
+  branches: [{ id: 1, label: 'Cinetadel Multiplaza del Este' }],
 }
 
 function pendingCatalogs() {
@@ -134,11 +134,11 @@ beforeEach(() => {
       { projectorId: 1, name: 'IMAX' },
       { projectorId: 2, name: '70mm' },
     ],
-    cinemas: [{ branchId: 3, name: 'Cinépolis Central', companyId: 1 }],
+    cinemas: [{ branchId: 3, name: 'Cinetadel Central', companyId: 1 }],
   })
   createTheater.mockReset().mockResolvedValue({
     theaterId: 4,
-    branchId: 3,
+    cinema: 'Cinetadel Central',
     numberOfSeats: 250,
     dimensionX: 20,
     dimensionY: 12,
@@ -383,7 +383,7 @@ describe('DashboardView', () => {
 
     await view.get('[name="numberOfSeats"]').setValue('240')
     await view.get('[name="projectorName"]').setValue('IMAX')
-    await view.get('[name="branchId"]').setValue('3')
+    await view.get('[name="cinema"]').setValue('Cinetadel Central')
     await view.get('[name="dimensionX"]').setValue('20')
     await view.get('[name="dimensionY"]').setValue('12')
     await view.get('.theater-dialog form').trigger('submit')
@@ -394,7 +394,7 @@ describe('DashboardView', () => {
       dimensionX: 20,
       dimensionY: 12,
       projectorName: 'IMAX',
-      branchId: 3,
+      cinema: 'Cinetadel Central',
       status: 'Disponible',
     })
     expect(view.get('.creation-result').text()).toContain('Sala 4 creada exitosamente')
