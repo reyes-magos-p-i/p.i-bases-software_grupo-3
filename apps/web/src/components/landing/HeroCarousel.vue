@@ -105,10 +105,6 @@ function handleImageError(): void {
         <div class="hero-overlay"></div>
 
         <div class="hero-carousel-content">
-          <h1>
-            {{ currentSlide.title }}
-          </h1>
-
           <p>
             {{ currentSlide.description }}
           </p>
