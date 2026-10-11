@@ -67,7 +67,7 @@ onMounted(() => {
 .movie-grid {
   display: grid;
 
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
 
   gap: 28px 24px;
 }
