@@ -7,7 +7,6 @@ interface CarouselSlide {
   image: string
   alt: string
   title: string
-  description: string
 }
 
 const slides = ref<CarouselSlide[]>([])
@@ -34,7 +33,6 @@ function setPlaceholderSlides(): void {
       image: placeholderImage,
       alt: 'Cinetadel',
       title: 'Cinetadel',
-      description: 'Disponible en Cinetadel',
     },
   ]
 }
@@ -50,7 +48,6 @@ onMounted(async () => {
         image: `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image/${movie.posterImage}`,
         alt: movie.title,
         title: movie.title,
-        description: 'Disponible en Cinetadel',
       }))
     }
   } catch {
@@ -105,10 +102,6 @@ function handleImageError(): void {
         <div class="hero-overlay"></div>
 
         <div class="hero-carousel-content">
-          <p>
-            {{ currentSlide.description }}
-          </p>
-
           <button type="button" class="purchase-button">Comprar boletos</button>
         </div>
       </div>
