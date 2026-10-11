@@ -34,30 +34,35 @@ onMounted(() => {
 
 <template>
   <section class="movie-catalog">
-    <p v-if="isLoading" class="status-message">Cargando películas...</p>
+    <div class="landing-container">
+      <p v-if="isLoading" class="status-message">Cargando películas...</p>
 
-    <p v-else-if="errorMessage" class="status-message error-message">
-      {{ errorMessage }}
-    </p>
+      <p v-else-if="errorMessage" class="status-message error-message">
+        {{ errorMessage }}
+      </p>
 
-    <div v-else-if="movies.length" class="movie-grid">
-      <article v-for="movie in movies" :key="movie.title" class="movie-card">
-        <img
-          :src="`${imagesBaseUrl}/${movie.posterImage}`"
-          :alt="movie.title"
-          class="movie-poster"
-          @error="handleImageError"
-        />
-      </article>
+      <div v-else-if="movies.length" class="movie-grid">
+        <article v-for="movie in movies" :key="movie.title" class="movie-card">
+          <img
+            :src="`${imagesBaseUrl}/${movie.posterImage}`"
+            :alt="movie.title"
+            class="movie-poster"
+            @error="handleImageError"
+          />
+        </article>
+      </div>
+
+      <p v-else class="status-message">No hay películas disponibles.</p>
     </div>
-
-    <p v-else class="status-message">No hay películas disponibles.</p>
   </section>
 </template>
 
 <style scoped>
 .movie-catalog {
-  margin-top: 32px;
+  margin: 32px 0 24px;
+  padding: 32px 0;
+
+  background-color: #808080;
 }
 
 .movie-grid {

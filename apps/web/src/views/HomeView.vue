@@ -13,19 +13,11 @@ import MovieCatalog from '@/components/landing/MovieCatalog.vue'
 
   <main>
     <HeroCarousel />
-    <div class="landing-container home-content">
-      <MovieCatalog />
-    </div>
+    <MovieCatalog />
     <Movie/>
   </main>
   <AppFooter />
 </template>
 
 <style scoped>
-
-
-.home-content {
-  padding-top: 32px;
-  padding-bottom: 24px;
-}
 </style>
