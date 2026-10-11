@@ -5,16 +5,24 @@ import CreateTheaterDialog from './CreateTheaterDialog.vue'
 import ModifyTheaterDialog from './ModifyTheaterDialog.vue'
 import TheaterDetailDialog from './TheaterDetailDialog.vue'
 import DeactivateTheaterDialog from './DeactivateTheaterDialog.vue'
+import TheaterSearchBar from './TheaterSearchBar.vue'
+import TheaterFilters from './TheaterFilters.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
+import { displayStatus, useTheaterFilters } from '@/composables/useTheaterFilters'
 import {
   createTheater,
   getTheaterCreationOptions,
   getTheaters,
   updateTheater,
 } from '@/services/theater.service'
-import type { CreateTheaterRequest, Theater, TheaterCreationOptions, UpdateTheaterRequest } from '@/types/theater'
+import type {
+  CreateTheaterRequest,
+  Theater,
+  TheaterCreationOptions,
+  UpdateTheaterRequest,
+} from '@/types/theater'
 
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
@@ -34,6 +42,20 @@ const selectedTheater = ref<Theater | null>(null)
 const editingTheater = ref<Theater | null>(null)
 const deactivatingTheater = ref<Theater | null>(null)
 const theaterSubmissionErrors = ref<string[]>([])
+const {
+  search,
+  selectedCinemas,
+  selectedProjectors,
+  selectedStatuses,
+  sortBy,
+  sortDirection,
+  cinemaOptions,
+  projectorOptions,
+  statusOptions,
+  hasFilters,
+  visibleTheaters,
+  clearFilters,
+} = useTheaterFilters(theaters)
 let request: AbortController | undefined
 let theatersRequest: AbortController | undefined
 
@@ -47,13 +69,13 @@ const columns = [
 ]
 
 const rows = () =>
-  theaters.value.map((theater) => ({
+  visibleTheaters.value.map((theater) => ({
     ...theater,
     theater,
     id: theater.theaterId,
     displayId: String(theater.theaterId),
     dimensions: `${theater.dimensionX} x ${theater.dimensionY}`,
-    status: theater.isActive ? theater.status : 'Inactiva',
+    status: displayStatus(theater),
   }))
 
 async function loadOptions() {
@@ -228,6 +250,21 @@ onBeforeUnmount(() => {
         Crear sala
       </button>
     </div>
+    <template v-if="theaters.length">
+      <TheaterSearchBar v-model="search" />
+      <TheaterFilters
+        v-model:cinemas="selectedCinemas"
+        v-model:projectors="selectedProjectors"
+        v-model:statuses="selectedStatuses"
+        v-model:sort-by="sortBy"
+        v-model:sort-direction="sortDirection"
+        :cinema-options="cinemaOptions"
+        :projector-options="projectorOptions"
+        :status-options="statusOptions"
+        :has-filters="hasFilters"
+        @clear="clearFilters"
+      />
+    </template>
     <div class="list-content" :aria-busy="theatersLoading">
       <LoadingState v-if="theatersLoading" message="Cargando salas…" />
       <div v-else-if="theatersError" class="feedback error" role="alert">
@@ -236,8 +273,11 @@ onBeforeUnmount(() => {
       </div>
       <template v-else-if="theaters.length">
         <p class="result-count" role="status">
-          {{ theaters.length }}
-          {{ theaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
+          {{ visibleTheaters.length }}
+          {{ visibleTheaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
+        </p>
+        <p v-if="!visibleTheaters.length" class="feedback">
+          Ninguna sala coincide con los filtros seleccionados.
         </p>
         <CrudTable :columns="columns" :rows="rows()" caption="Salas">
           <template #actions="{ row }">

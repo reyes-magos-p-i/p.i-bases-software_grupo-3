@@ -45,7 +45,15 @@ function pendingTheaters() {
 
 function render() {
   wrapper = shallowMount(TheatersSection, {
-    global: { stubs: { LoadingState: false, CrudTable: false } },
+    global: {
+      stubs: {
+        LoadingState: false,
+        CrudTable: false,
+        TheaterSearchBar: false,
+        TheaterFilters: false,
+        TheaterFilterPicker: false,
+      },
+    },
   })
   return wrapper
 }
@@ -100,5 +108,37 @@ describe('TheatersSection loading presentation', () => {
     expect(view.findComponent(LoadingState).exists()).toBe(false)
     expect(view.get('tbody').text()).toContain(theater.projectorName)
     expect(getTheaters).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('TheatersSection search', () => {
+  const theaters = [
+    { ...theater, theaterId: 1, cinema: 'Sucursal Cartago', projectorName: 'Proyector láser' },
+    { ...theater, theaterId: 2, cinema: 'Sucursal Heredia', projectorName: 'Proyector digital' },
+  ] as unknown as Theater[]
+
+  async function renderLoaded() {
+    vi.mocked(getTheaters).mockResolvedValue(theaters)
+    const view = render()
+    await flushPromises()
+    return view
+  }
+
+  it('filters by text ignoring accents and case', async () => {
+    const view = await renderLoaded()
+    await view.get('#theater-search').setValue('LASER')
+
+    expect(view.get('tbody').text()).toContain('Cartago')
+    expect(view.get('tbody').text()).not.toContain('Heredia')
+  })
+
+  it('shows a message when nothing matches and restores rows on clear', async () => {
+    const view = await renderLoaded()
+    await view.get('#theater-search').setValue('zzz')
+    expect(view.text()).toContain('Ninguna sala coincide')
+
+    await view.get('.filters .secondary-button').trigger('click')
+    expect((view.get('#theater-search').element as HTMLInputElement).value).toBe('')
+    expect(view.get('tbody').text()).toContain('Heredia')
   })
 })
