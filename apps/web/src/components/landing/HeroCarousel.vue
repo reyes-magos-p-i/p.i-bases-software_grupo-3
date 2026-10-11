@@ -100,10 +100,6 @@ function handleImageError(): void {
         />
 
         <div class="hero-overlay"></div>
-
-        <div class="hero-carousel-content">
-          <button type="button" class="purchase-button">Comprar boletos</button>
-        </div>
       </div>
     </Transition>
 
@@ -169,51 +165,6 @@ function handleImageError(): void {
     var(--hero-overlay-end) 60%,
     transparent 100%
   );
-}
-
-.hero-carousel-content {
-  position: absolute;
-
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-
-  left: clamp(24px, 6vw, 72px);
-  bottom: clamp(38px, 7vw, 72px);
-
-  max-width: 620px;
-
-  color: var(--content-background);
-}
-
-.hero-carousel-content h1 {
-  margin-bottom: 12px;
-
-  font-size: clamp(1.6rem, 4vw, 3rem);
-  font-weight: 700;
-}
-
-.hero-carousel-content p {
-  margin-bottom: 20px;
-
-  font-size: clamp(0.95rem, 2vw, 1.15rem);
-}
-
-.purchase-button {
-  padding: 10px 20px;
-
-  color: var(--button-text);
-
-  border: 0;
-  border-radius: var(--radius-small);
-
-  background-color: var(--button-background);
-
-  transition: background-color var(--transition-fast);
-}
-
-.purchase-button:hover {
-  background-color: var(--button-hover-background);
 }
 
 .carousel-control {
