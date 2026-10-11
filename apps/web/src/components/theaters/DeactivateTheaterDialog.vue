@@ -73,14 +73,51 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-:global(.app-modal-card:has(.theater-deactivation-content)) { width: min(640px, 100%); max-width: 640px; }
-.theater-deactivation-content { padding: 8px 0 0; }
-.deactivation-warning { padding: 16px; border-left: 3px solid var(--color-primary); background: var(--color-white); }
-.deactivation-error { color: var(--color-error); }
-footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
-button { min-height: 42px; padding: 9px 16px; border: 1px solid var(--color-primary); border-radius: var(--radius-small); font: inherit; }
-.primary { color: var(--color-white); background: var(--color-primary); }
-.secondary { color: var(--color-primary); background: var(--color-white); }
-button:disabled { opacity: .6; cursor: not-allowed; }
-@media (max-width: 575px) { footer button { flex: 1; } }
+:global(.app-modal-card:has(.theater-deactivation-content)) {
+  width: min(640px, 100%);
+  max-width: 640px;
+}
+.theater-deactivation-content {
+  padding: 8px 0 0;
+}
+.deactivation-warning {
+  padding: 16px;
+  border-left: 3px solid var(--primary-color);
+  background: var(--content-background);
+  color: var(--text-primary);
+}
+.deactivation-error {
+  color: var(--error-color);
+}
+footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+button {
+  min-height: 42px;
+  padding: 9px 16px;
+  border: 1px solid var(--primary-color);
+  border-radius: var(--radius-small);
+  font: inherit;
+}
+.primary {
+  color: var(--text-on-dark);
+  background: var(--primary-color);
+}
+.secondary {
+  color: var(--text-primary);
+  background: var(--content-background);
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+@media (max-width: 575px) {
+  footer button {
+    flex: 1;
+  }
+}
 </style>

@@ -104,19 +104,20 @@ onMounted(() => {
   border: 1px solid transparent;
   border-radius: 999px;
 
-  background-color: #e5e5e5;
+  background-color: var(--input-background);
 
   outline: none;
 
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
+  color: var(--text-primary);
 }
 
 .search-container input:focus {
-  border-color: var(--color-secondary);
+  border-color: var(--focus-color);
 
-  box-shadow: 0 0 0 3px rgba(115, 47, 59, 0.15);
+  box-shadow: 0 0 0 3px var(--focus-shadow);
 }
 
 .search-container i {
@@ -128,6 +129,7 @@ onMounted(() => {
   font-size: 1.2rem;
 
   transform: translateY(-50%);
+  color: var(--text-secondary);
 }
 
 .movie-grid {
@@ -143,17 +145,18 @@ onMounted(() => {
 
   border-radius: var(--radius-medium);
 
-  background-color: var(--color-white);
+  background-color: var(--content-background);
 
   transition:
     transform var(--transition-normal),
     box-shadow var(--transition-normal);
+  color: var(--text-primary);
 }
 
 .movie-card:hover {
   transform: translateY(-4px);
 
-  box-shadow: 0 10px 24px rgba(13, 13, 13, 0.15);
+  box-shadow: 0 10px 24px var(--shadow-color);
 }
 
 .movie-poster {
@@ -177,12 +180,13 @@ onMounted(() => {
 .status-message {
   margin: 48px 0;
 
-  color: var(--color-gray);
+  color: var(--text-on-dark-secondary);
 
   text-align: center;
 }
 
 .error-message {
-  color: var(--color-primary);
+  color: var(--error-color);
+  background-color: var(--content-background);
 }
 </style>

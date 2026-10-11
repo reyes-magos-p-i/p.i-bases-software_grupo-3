@@ -1,26 +1,23 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
-import { useRouter } from 'vue-router'
 import CreateTheaterDialog from './CreateTheaterDialog.vue'
 import TheaterDetailDialog from './TheaterDetailDialog.vue'
 import DeactivateTheaterDialog from './DeactivateTheaterDialog.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
+import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import {
   createTheater,
   getTheaterCreationOptions,
   getTheaters,
   updateTheater,
 } from '@/services/theater.service'
-import {
-  invalidateEmployeeSession,
-  restoreEmployeeSession,
-} from '@/services/employee-session.service'
 import type { CreateTheaterRequest, Theater, TheaterCreationOptions } from '@/types/theater'
 
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
-const router = useRouter()
+const { state, sessionExpired, refreshPermissions } = useEmployeeSessionRecovery()
 const dialog = useTemplateRef<InstanceType<typeof CreateTheaterDialog>>('dialog')
 const resultNotice = useTemplateRef<HTMLElement>('result-notice')
 const options = ref<TheaterCreationOptions | null>(null)
@@ -37,7 +34,6 @@ const deactivatingTheater = ref<Theater | null>(null)
 const theaterSubmissionErrors = ref<string[]>([])
 let request: AbortController | undefined
 let theatersRequest: AbortController | undefined
-let disposed = false
 
 const columns = [
   { key: 'displayId', label: 'ID' },
@@ -57,21 +53,6 @@ const rows = () =>
     dimensions: `${theater.dimensionX} x ${theater.dimensionY}`,
     status: theater.isActive ? theater.status : 'Inactiva',
   }))
-
-function sessionExpired() {
-  invalidateEmployeeSession()
-  void router.replace({ path: '/', query: { login: 'employee', reason: 'expired' } })
-}
-
-async function refreshPermissions() {
-  try {
-    const current = await restoreEmployeeSession(true)
-    if (!disposed && !current) sessionExpired()
-  } catch {
-    if (!disposed)
-      void router.replace({ path: '/', query: { login: 'employee', reason: 'unavailable' } })
-  }
-}
 
 async function loadOptions() {
   if (optionsLoading.value || options.value) return
@@ -104,11 +85,11 @@ async function loadTheaters() {
   theatersError.value = ''
   try {
     const result = await getTheaters(currentRequest.signal)
-    if (!currentRequest.signal.aborted && !disposed) {
+    if (!currentRequest.signal.aborted && !state.disposed) {
       theaters.value = result.filter((theater) => theater.isActive)
     }
   } catch (error) {
-    if (currentRequest.signal.aborted || disposed) return
+    if (currentRequest.signal.aborted || state.disposed) return
     if (isAxiosError(error) && error.response?.status === 401) sessionExpired()
     else if (isAxiosError(error) && error.response?.status === 403) {
       theatersError.value = 'No tienes permiso para consultar las salas.'
@@ -146,7 +127,7 @@ async function submit(data: CreateTheaterRequest) {
     const theater = editingTheater.value
       ? await updateTheater(editingTheater.value.theaterId, data)
       : await createTheater(data)
-    if (disposed) return
+    if (state.disposed) return
     await loadTheaters()
     creationResult.value = editingTheater.value
       ? `Sala ${theater.theaterId} modificada exitosamente.`
@@ -157,7 +138,7 @@ async function submit(data: CreateTheaterRequest) {
     await nextTick()
     resultNotice.value?.focus()
   } catch (error) {
-    if (disposed) return
+    if (state.disposed) return
     if (isAxiosError(error) && error.response?.status === 401) sessionExpired()
     else if (isAxiosError(error) && error.response?.status === 403) {
       theaterSubmissionErrors.value = [
@@ -206,7 +187,6 @@ function theaterDeactivated() {
 void loadTheaters()
 
 onBeforeUnmount(() => {
-  disposed = true
   request?.abort()
   theatersRequest?.abort()
 })
@@ -227,14 +207,15 @@ onBeforeUnmount(() => {
       </button>
     </div>
     <div class="list-content" :aria-busy="theatersLoading">
-      <p v-if="theatersLoading" class="feedback" role="status">Cargando salas…</p>
+      <LoadingState v-if="theatersLoading" message="Cargando salas…" />
       <div v-else-if="theatersError" class="feedback error" role="alert">
         {{ theatersError }}
         <button type="button" class="secondary-button" @click="retryTheaters">Reintentar</button>
       </div>
       <template v-else-if="theaters.length">
         <p class="result-count" role="status">
-          {{ theaters.length }} {{ theaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
+          {{ theaters.length }}
+          {{ theaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
         </p>
         <CrudTable :columns="columns" :rows="rows()" caption="Salas">
           <template #actions="{ row }">
@@ -250,11 +231,7 @@ onBeforeUnmount(() => {
                 </button>
               </span>
               <span title="Desactivar" class="action-hint">
-                <button
-                  type="button"
-                  aria-label="Desactivar sala"
-                  @click="deactivateTheater(row)"
-                >
+                <button type="button" aria-label="Desactivar sala" @click="deactivateTheater(row)">
                   <i class="bi bi-trash3" aria-hidden="true"></i>
                 </button>
               </span>
@@ -313,16 +290,16 @@ onBeforeUnmount(() => {
   min-height: 36px;
   padding: 8px;
   border: 0;
-  color: var(--color-primary);
+  color: var(--text-primary);
   background: transparent;
   font-size: 1.125rem;
   text-decoration: none;
 }
 .user-actions button:not(:disabled):hover {
-  background: var(--color-light_gray);
+  background: var(--input-disabled-background);
+  color: var(--text-primary);
 }
 .action-hint {
   display: inline-flex;
 }
 </style>
-

@@ -224,28 +224,136 @@ defineExpose({ open, complete })
 </template>
 
 <style scoped>
-.theater-dialog { position: fixed; top: 50%; left: 50%; width: min(calc(100% - 32px), 620px); max-height: min(90dvh, 760px); margin: 0; padding: 0; border: 0; border-radius: var(--radius-medium); color: var(--color-dark); background: var(--color-white); transform: translate(-50%, -50%); }
-.theater-dialog::backdrop { background: color-mix(in srgb, var(--color-black) 55%, transparent); }
-.dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 24px; color: var(--color-white); background: var(--color-primary); }
-.dialog-heading h2 { margin: 0; font-size: 1.25rem; }
-.close-button { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: var(--radius-small); color: inherit; background: transparent; }
-form { display: grid; gap: 8px; padding: 24px; overflow-y: auto; }
-.required-note { margin: 0 0 4px; font-size: .9rem; }
-.required-marker { color: #b42318; font-weight: 700; }
-input, select { min-height: 42px; padding: 8px 10px; border: 1px solid #a9adb5; border-radius: var(--radius-small); font: inherit; background: var(--color-white); }
-input[type='number'] { color-scheme: light; }
+.theater-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(calc(100% - 32px), 620px);
+  max-height: min(90dvh, 760px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-medium);
+  color: var(--text-primary);
+  background: var(--content-background);
+  transform: translate(-50%, -50%);
+}
+.theater-dialog::backdrop {
+  background: color-mix(in srgb, var(--page-background) 55%, transparent);
+}
+.dialog-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  color: var(--text-on-dark);
+  background: var(--primary-color);
+}
+.dialog-heading h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.close-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-small);
+  color: inherit;
+  background: transparent;
+}
+form {
+  display: grid;
+  gap: 8px;
+  padding: 24px;
+  overflow-y: auto;
+}
+.required-note {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+}
+.required-marker {
+  color: var(--error-color);
+  font-weight: 700;
+}
+input,
+select {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-small);
+  font: inherit;
+  background: var(--content-background);
+  color: var(--text-primary);
+}
+input[type='number'] {
+  color-scheme: light;
+}
 input[type='number']::-webkit-inner-spin-button,
-input[type='number']::-webkit-outer-spin-button { filter: invert(0.55); }
-input:focus, select:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
-.field-error, .form-error { color: #b42318; }
-.field-error { margin-bottom: 4px; }
-.form-error { margin: 0; }
-.form-error button { border: 0; color: var(--color-primary); background: transparent; text-decoration: underline; }
-.dimension-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
-.dimension-grid > div { display: grid; gap: 8px; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
-.secondary-button, .create-button { min-height: 42px; padding: 9px 16px; border: 1px solid var(--color-primary); border-radius: var(--radius-small); font: inherit; }
-.secondary-button { color: var(--color-primary); background: var(--color-white); }
-.create-button { color: var(--color-white); background: var(--color-primary); }
-@media (max-width: 520px) { .dimension-grid { grid-template-columns: 1fr; } form { padding: 20px 16px; } }
+input[type='number']::-webkit-outer-spin-button {
+  filter: invert(0.55);
+}
+input:focus,
+select:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 1px;
+}
+.field-error,
+.form-error {
+  color: var(--error-color);
+}
+.field-error {
+  margin-bottom: 4px;
+}
+.form-error {
+  margin: 0;
+}
+.form-error button {
+  border: 0;
+  color: var(--text-primary);
+  background: transparent;
+  text-decoration: underline;
+}
+.dimension-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+.dimension-grid > div {
+  display: grid;
+  gap: 8px;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.secondary-button,
+.create-button {
+  min-height: 42px;
+  padding: 9px 16px;
+  border: 1px solid var(--primary-color);
+  border-radius: var(--radius-small);
+  font: inherit;
+}
+.secondary-button {
+  color: var(--text-primary);
+  background: var(--content-background);
+}
+.create-button {
+  color: var(--text-on-dark);
+  background: var(--primary-color);
+}
+@media (max-width: 520px) {
+  .dimension-grid {
+    grid-template-columns: 1fr;
+  }
+  form {
+    padding: 20px 16px;
+  }
+}
 </style>

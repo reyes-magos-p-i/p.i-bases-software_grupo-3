@@ -149,8 +149,8 @@ onUnmounted(() => viewport.removeEventListener('change', updateViewport))
   display: grid;
   grid-template-columns: 16rem minmax(0, 1fr);
   min-height: 100dvh;
-  color: var(--color-dark);
-  background: var(--color-light_gray);
+  color: var(--text-on-dark);
+  background: var(--page-background);
 }
 
 .dashboard-layout.is-collapsed {
@@ -180,8 +180,8 @@ onUnmounted(() => viewport.removeEventListener('change', updateViewport))
   z-index: 10;
   padding: 12px 16px;
   border-radius: var(--radius-small);
-  color: var(--color-primary);
-  background: var(--color-white);
+  color: var(--text-primary);
+  background: var(--content-background);
   transform: translateY(calc(-100% - 16px));
 }
 
@@ -191,8 +191,12 @@ onUnmounted(() => viewport.removeEventListener('change', updateViewport))
 
 .skip-link:focus-visible,
 .dashboard-content:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--focus-color);
   outline-offset: -2px;
+}
+
+.dashboard-content:focus-visible {
+  outline-color: var(--focus-on-dark);
 }
 
 .mobile-menu {
@@ -205,11 +209,11 @@ onUnmounted(() => viewport.removeEventListener('change', updateViewport))
   margin: 0;
   padding: 0;
   border: 0;
-  background: var(--color-primary);
+  background: var(--sidebar-background);
 }
 
 .mobile-menu::backdrop {
-  background: color-mix(in srgb, var(--color-black) 50%, transparent);
+  background: var(--overlay-background);
 }
 
 @media (max-width: 767px) {

@@ -28,6 +28,8 @@ const config: Config = {
   ],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
+  // Argon2 hashing and full HTTP apps exceed 5 s on loaded machines.
+  testTimeout: 20000,
 };
 
 export default config;

@@ -23,3 +23,17 @@ function handleSearch() {
     </button>
   </div>
 </template>
+<style scoped>
+.input {
+  background: var(--input-background);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+button {
+  background: var(--button-background);
+  color: var(--button-text);
+}
+button:hover {
+  background: var(--button-hover-background);
+}
+</style>
