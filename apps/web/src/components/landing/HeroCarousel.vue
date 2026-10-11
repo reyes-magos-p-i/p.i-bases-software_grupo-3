@@ -34,7 +34,7 @@ function setPlaceholderSlides(): void {
       image: placeholderImage,
       alt: 'Cinetadel',
       title: 'Cinetadel',
-      description: 'Disponible próximamente en Cinetadel',
+      description: 'Disponible en Cinetadel',
     },
   ]
 }
@@ -50,7 +50,7 @@ onMounted(async () => {
         image: `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image/${movie.posterImage}`,
         alt: movie.title,
         title: movie.title,
-        description: 'Disponible próximamente en Cinetadel',
+        description: 'Disponible en Cinetadel',
       }))
     }
   } catch {
