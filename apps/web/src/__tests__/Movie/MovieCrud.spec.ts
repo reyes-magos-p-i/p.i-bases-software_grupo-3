@@ -6,6 +6,8 @@ import MovieCrud from '@/components/Movies/MovieCrud.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import MovieCrudView from '@/components/Movies/MovieCrudView.vue'
 import MovieCrudEdit from '@/components/Movies/MovieCrudEdit.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
+import type { MovieAll } from '@/types/movie'
 
 import {
   getMovies,
@@ -30,16 +32,39 @@ describe('MovieCrud', () => {
     vi.mocked(getMovies).mockResolvedValue([])
     vi.mocked(deleteMovie).mockResolvedValue(undefined)
 
-    vi.mocked(getClassifications).mockResolvedValue([
-      { id: 1, name: 'TP' },
-    ])
-    vi.mocked(getGenres).mockResolvedValue([
-      { id: 3, name: 'Drama' },
-    ])
-    vi.mocked(getLanguages).mockResolvedValue([
-      { id: 1, name: 'English' },
-    ])
+    vi.mocked(getClassifications).mockResolvedValue([{ id: 1, name: 'TP' }])
+    vi.mocked(getGenres).mockResolvedValue([{ id: 3, name: 'Drama' }])
+    vi.mocked(getLanguages).mockResolvedValue([{ id: 1, name: 'English' }])
   })
+
+  it.each(['success', 'failure'])(
+    'shows the shared indicator until the movie request ends in %s',
+    async (outcome) => {
+      let resolve!: (value: MovieAll[]) => void
+      let reject!: (error: Error) => void
+      vi.mocked(getMovies).mockReturnValue(
+        new Promise<MovieAll[]>((done, fail) => {
+          resolve = done
+          reject = fail
+        }),
+      )
+      const wrapper = shallowMount(MovieCrud, { global: { stubs: { LoadingState: false } } })
+      await flushPromises()
+      expect(wrapper.get('[role="status"]').text()).toBe('Cargando películas…')
+      expect(wrapper.attributes('aria-busy')).toBe('true')
+      expect(wrapper.findComponent(CrudTable).exists()).toBe(false)
+
+      if (outcome === 'success') resolve([])
+      else reject(new Error('Connection unavailable'))
+      await flushPromises()
+
+      expect(wrapper.findComponent(LoadingState).exists()).toBe(false)
+      expect(wrapper.attributes('aria-busy')).toBe('false')
+      expect(wrapper.findComponent(CrudTable).exists()).toBe(outcome === 'success')
+      expect(wrapper.find('[role="alert"]').exists()).toBe(outcome === 'failure')
+      wrapper.unmount()
+    },
+  )
 
   it('loads movies and passes catalog options to the edit modal', async () => {
     const wrapper = shallowMount(MovieCrud)
@@ -51,15 +76,9 @@ describe('MovieCrud', () => {
 
     const editModal = wrapper.findComponent(MovieCrudEdit)
 
-    expect(editModal.props('classifications')).toEqual([
-      { id: 1, name: 'TP' },
-    ])
-    expect(editModal.props('genres')).toEqual([
-      { id: 3, name: 'Drama' },
-    ])
-    expect(editModal.props('languages')).toEqual([
-      { id: 1, name: 'English' },
-    ])
+    expect(editModal.props('classifications')).toEqual([{ id: 1, name: 'TP' }])
+    expect(editModal.props('genres')).toEqual([{ id: 3, name: 'Drama' }])
+    expect(editModal.props('languages')).toEqual([{ id: 1, name: 'English' }])
 
     wrapper.unmount()
   })
@@ -74,9 +93,7 @@ describe('MovieCrud', () => {
     const viewModal = wrapper.findComponent(MovieCrudView)
 
     expect(viewModal.props('movieId')).toBe(24)
-    expect(
-      wrapper.findComponent(MovieCrudEdit).props('movieId'),
-    ).toBeNull()
+    expect(wrapper.findComponent(MovieCrudEdit).props('movieId')).toBeNull()
 
     viewModal.vm.$emit('close')
     await nextTick()
@@ -96,9 +113,7 @@ describe('MovieCrud', () => {
     const editModal = wrapper.findComponent(MovieCrudEdit)
 
     expect(editModal.props('movieId')).toBe(24)
-    expect(
-      wrapper.findComponent(MovieCrudView).props('movieId'),
-    ).toBeNull()
+    expect(wrapper.findComponent(MovieCrudView).props('movieId')).toBeNull()
 
     editModal.vm.$emit('close')
     await nextTick()

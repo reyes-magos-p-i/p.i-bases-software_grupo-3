@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
 import EditUserDialog from '@/components/users/EditUserDialog.vue'
 import DeactivateUserDialog from '@/components/users/DeactivateUserDialog.vue'
@@ -411,9 +412,10 @@ defineExpose({ refresh })
       </button>
     </div>
     <div class="list-content" :aria-busy="loading">
-      <p v-if="loading" class="feedback" role="status">
-        Cargando {{ isEmployeeList ? 'empleados' : 'clientes' }}…
-      </p>
+      <LoadingState
+        v-if="loading"
+        :message="`Cargando ${isEmployeeList ? 'empleados' : 'clientes'}…`"
+      />
       <div v-else-if="listError" class="feedback error" role="alert">
         {{ listError }}
         <button type="button" class="secondary-button" @click="load">Reintentar</button>
@@ -553,7 +555,7 @@ label {
   position: absolute;
   left: 14px;
   top: 14px;
-  color: var(--color-gray);
+  color: var(--text-secondary);
 }
 input,
 select,
@@ -564,9 +566,9 @@ button {
 }
 input,
 select {
-  border: 1px solid var(--color-light_gray);
-  background: var(--color-white);
-  color: var(--color-dark);
+  border: 1px solid var(--border-color);
+  background: var(--content-background);
+  color: var(--text-primary);
   padding: 10px 12px;
 }
 input {
@@ -574,7 +576,7 @@ input {
   padding-left: 40px;
 }
 input[aria-invalid='true'] {
-  border-color: var(--color-error);
+  border-color: var(--error-color);
 }
 .filters label {
   flex: 1;
@@ -595,20 +597,21 @@ input[aria-invalid='true'] {
 }
 .filter-picker summary {
   min-height: 44px;
-  border: 1px solid var(--color-light_gray);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background: var(--color-white);
+  background: var(--content-background);
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 600;
+  color: var(--text-primary);
 }
 .filter-picker summary span {
   margin-left: 8px;
-  color: var(--color-gray);
+  color: var(--text-secondary);
   font-weight: 400;
 }
 .filter-picker summary:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 .checkbox-options {
@@ -622,10 +625,11 @@ input[aria-invalid='true'] {
   overflow-y: auto;
   margin: 0;
   padding: 8px;
-  border: 1px solid var(--color-light_gray);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background: var(--color-white);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-black) 8%, transparent);
+  background: var(--content-background);
+  box-shadow: 0 4px 12px var(--shadow-color);
+  color: var(--text-primary);
 }
 .filter-picker[open] .checkbox-options {
   animation: filter-open 160ms ease-out;
@@ -660,7 +664,7 @@ input[aria-invalid='true'] {
   height: 18px;
   padding: 0;
   flex-shrink: 0;
-  accent-color: var(--color-primary);
+  accent-color: var(--primary-color);
 }
 .checkbox-options p {
   margin: 8px;
@@ -681,14 +685,14 @@ input[aria-invalid='true'] {
   min-height: 36px;
   background: transparent;
   border: 0;
-  color: var(--color-primary);
+  color: var(--text-primary);
   font-size: 1.125rem;
 }
 .user-actions button:disabled {
   pointer-events: none;
 }
 .user-actions button:not(:disabled):hover {
-  background: var(--color-light_gray);
+  background: var(--surface-hover);
 }
 .action-hint {
   display: inline-flex;
@@ -701,16 +705,17 @@ input[aria-invalid='true'] {
 }
 button {
   padding: 10px 16px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--primary-color);
   cursor: pointer;
 }
 .primary-button {
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--button-background);
+  color: var(--button-text);
+  border-color: var(--button-background);
 }
 .secondary-button {
-  background: var(--color-white);
-  color: var(--color-primary);
+  background: var(--content-background);
+  color: var(--button-secondary-text);
 }
 button:disabled {
   opacity: 0.5;
@@ -719,23 +724,24 @@ button:disabled {
 input:focus-visible,
 select:focus-visible,
 button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 .feedback,
 .empty-state {
   padding: 24px;
   border-radius: var(--radius-medium);
-  background: var(--color-white);
+  background: var(--content-background);
+  color: var(--text-primary);
 }
 .error {
-  color: var(--color-error);
-  border-left: 4px solid var(--color-error);
+  color: var(--error-color);
+  border-left: 4px solid var(--error-color);
 }
 .result-count {
   margin: 0 0 12px;
   font-size: 0.875rem;
-  color: var(--color-gray);
+  color: var(--text-on-dark-secondary);
 }
 .empty-state {
   text-align: center;

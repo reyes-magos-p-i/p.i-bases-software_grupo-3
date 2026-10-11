@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useId } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import ProjectionDetailDialog from './ProjectionDetailDialog.vue'
 import ProjectionStatusBadge from './ProjectionStatusBadge.vue'
 import { getProjectionFilterOptions, getProjections } from '@/services/projection.service'
@@ -183,10 +184,7 @@ async function loadOptions() {
     if (!request.signal.aborted) options.value = loaded
   } catch (error) {
     if (request.signal.aborted) return
-    optionsError.value = handleFailure(
-      error,
-      'No se pudieron cargar las opciones de los filtros.',
-    )
+    optionsError.value = handleFailure(error, 'No se pudieron cargar las opciones de los filtros.')
   }
 }
 
@@ -266,7 +264,9 @@ defineExpose({ refresh })
         Estado
         <select v-model="filters.status" name="status" @change="filtersChanged">
           <option value="">Todos</option>
-          <option v-for="[value, label] in statuses" :key="value" :value="value">{{ label }}</option>
+          <option v-for="[value, label] in statuses" :key="value" :value="value">
+            {{ label }}
+          </option>
         </select>
       </label>
       <label>
@@ -309,7 +309,11 @@ defineExpose({ refresh })
           @change="filtersChanged"
         >
           <option value="">Todas</option>
-          <option v-for="movie in options?.movies" :key="movie.movieId" :value="String(movie.movieId)">
+          <option
+            v-for="movie in options?.movies"
+            :key="movie.movieId"
+            :value="String(movie.movieId)"
+          >
             {{ movie.title }}
           </option>
         </select>
@@ -341,7 +345,7 @@ defineExpose({ refresh })
     </div>
 
     <div class="list-content" :aria-busy="loading">
-      <p v-if="loading" class="feedback" role="status">Cargando proyecciones…</p>
+      <LoadingState v-if="loading" message="Cargando proyecciones…" />
       <div v-else-if="listError" class="feedback error" role="alert">
         {{ listError }}
         <button type="button" class="secondary-button" @click="load">Reintentar</button>
@@ -366,7 +370,11 @@ defineExpose({ refresh })
               </button>
               <button
                 type="button"
-                :title="EDITABLE_STATUSES.includes(row.status as ProjectionStatus) ? 'Modificar' : 'Solo se modifican proyecciones activas o inactivas'"
+                :title="
+                  EDITABLE_STATUSES.includes(row.status as ProjectionStatus)
+                    ? 'Modificar'
+                    : 'Solo se modifican proyecciones activas o inactivas'
+                "
                 :aria-label="`Modificar ${row.code}`"
                 :disabled="!EDITABLE_STATUSES.includes(row.status as ProjectionStatus)"
                 @click="emit('edit', row.id as number)"
@@ -375,7 +383,11 @@ defineExpose({ refresh })
               </button>
               <button
                 type="button"
-                :title="CANCELLABLE_STATUSES.includes(row.status as ProjectionStatus) ? 'Cancelar' : 'Ya está cancelada o finalizada'"
+                :title="
+                  CANCELLABLE_STATUSES.includes(row.status as ProjectionStatus)
+                    ? 'Cancelar'
+                    : 'Ya está cancelada o finalizada'
+                "
                 :aria-label="`Cancelar ${row.code}`"
                 :disabled="!CANCELLABLE_STATUSES.includes(row.status as ProjectionStatus)"
                 @click="requestCancel(row.id as number)"
@@ -455,42 +467,191 @@ defineExpose({ refresh })
 </template>
 
 <style scoped>
-.projection-list-panel { display: grid; gap: 16px; }
-.search-bar, .pagination-bar, .pagination-bar nav { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.projection-list-panel {
+  display: grid;
+  gap: 16px;
+}
+.search-bar,
+.pagination-bar,
+.pagination-bar nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
 /* Fixed-width columns: a long option never pushes a field over its neighbour. */
-.filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
-label { display: grid; gap: 6px; font-size: .875rem; font-weight: 600; }
-.search-field { flex: 1; min-width: min(100%, 280px); }
-.search-input { position: relative; }
-.search-input i { position: absolute; top: 14px; left: 14px; color: var(--color-gray); }
-.search-input input { width: 100%; padding-left: 40px; }
-input, select, button { min-height: 44px; border-radius: var(--radius-small); font: inherit; }
-input, select { padding: 10px 12px; border: 1px solid var(--color-light_gray); color: var(--color-dark); background: var(--color-white); }
-input[aria-invalid='true'] { border-color: var(--color-error); }
-.filters label { min-width: 0; }
-.format-hint { color: var(--color-gray); font-size: .75rem; font-weight: 400; }
-.filters input, .filters select { width: 100%; min-width: 0; }
-.filters select { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-button { padding: 10px 16px; border: 1px solid var(--color-primary); cursor: pointer; }
-.primary-button { color: var(--color-white); background: var(--color-primary); }
-.secondary-button { color: var(--color-primary); background: var(--color-white); }
-button:disabled, fieldset:disabled select, fieldset:disabled input { opacity: .5; cursor: default; }
-input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-.row-actions button { display: inline-grid; place-items: center; width: 36px; min-height: 36px; padding: 0; border: 0; color: var(--color-primary); font-size: 1.125rem; background: transparent; }
-.row-actions { display: flex; gap: 4px; }
-.row-actions button:not(:disabled):hover { background: var(--color-light_gray); }
-.row-actions button:disabled { opacity: .35; cursor: not-allowed; }
-.feedback, .empty-state { margin: 0; padding: 24px; border-radius: var(--radius-medium); background: var(--color-white); }
-.error { color: var(--color-error); border-left: 4px solid var(--color-error); }
-.result-count { margin: 0 0 12px; color: var(--color-gray); font-size: .875rem; }
-.empty-state { text-align: center; }
-.empty-state i { font-size: 2rem; }
-.empty-state h2 { margin: 12px 0; font-size: 1.125rem; }
-.empty-state p { margin: 0; }
-.pagination-bar { justify-content: center; align-items: center; margin-top: 16px; font-size: .875rem; }
-.page-size { display: flex; align-items: center; gap: 8px; }
-.pagination-bar nav { align-items: center; gap: 6px; }
-.page-button { min-width: 40px; padding: 8px 12px; border-color: transparent; color: var(--color-dark); background: transparent; }
-.page-button.is-current { color: var(--color-white); background: var(--color-dark); }
-.page-gap { padding: 0 4px; }
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.search-field {
+  flex: 1;
+  min-width: min(100%, 280px);
+}
+.search-input {
+  position: relative;
+}
+.search-input i {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  color: var(--text-secondary);
+}
+.search-input input {
+  width: 100%;
+  padding-left: 40px;
+}
+input,
+select,
+button {
+  min-height: 44px;
+  border-radius: var(--radius-small);
+  font: inherit;
+}
+input,
+select {
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  background: var(--content-background);
+}
+input[aria-invalid='true'] {
+  border-color: var(--error-color);
+}
+.filters label {
+  min-width: 0;
+}
+.format-hint {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.filters input,
+.filters select {
+  width: 100%;
+  min-width: 0;
+}
+.filters select {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+button {
+  padding: 10px 16px;
+  border: 1px solid var(--primary-color);
+  cursor: pointer;
+}
+.primary-button {
+  color: var(--button-text);
+  background: var(--button-background);
+}
+.secondary-button {
+  color: var(--text-primary);
+  background: var(--content-background);
+}
+button:disabled,
+fieldset:disabled select,
+fieldset:disabled input {
+  opacity: 0.5;
+  cursor: default;
+}
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+.row-actions button {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  color: var(--text-primary);
+  font-size: 1.125rem;
+  background: transparent;
+}
+.row-actions {
+  display: flex;
+  gap: 4px;
+}
+.row-actions button:not(:disabled):hover {
+  background: var(--input-disabled-background);
+  color: var(--text-primary);
+}
+.row-actions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.feedback,
+.empty-state {
+  margin: 0;
+  padding: 24px;
+  border-radius: var(--radius-medium);
+  background: var(--content-background);
+  color: var(--text-primary);
+}
+.error {
+  color: var(--error-color);
+  border-left: 4px solid var(--error-color);
+}
+.result-count {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+.empty-state {
+  text-align: center;
+}
+.empty-state i {
+  font-size: 2rem;
+}
+.empty-state h2 {
+  margin: 12px 0;
+  font-size: 1.125rem;
+}
+.empty-state p {
+  margin: 0;
+}
+.pagination-bar {
+  justify-content: center;
+  align-items: center;
+  margin-top: 16px;
+  font-size: 0.875rem;
+}
+.page-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pagination-bar nav {
+  align-items: center;
+  gap: 6px;
+}
+.page-button {
+  min-width: 40px;
+  padding: 8px 12px;
+  border-color: transparent;
+  color: var(--text-primary);
+  background: transparent;
+}
+.page-button.is-current {
+  color: var(--text-on-dark);
+  background: var(--surface-background);
+}
+.page-gap {
+  padding: 0 4px;
+}
 </style>
