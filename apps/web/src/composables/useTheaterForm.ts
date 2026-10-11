@@ -8,7 +8,6 @@ import type {
 } from '@/types/theater'
 
 export const MAX_SEATS = 5000
-export const ALLOWED_PROJECTORS: readonly string[] = ['IMAX', '70mm']
 export const ALLOWED_STATUSES: readonly TheaterStatus[] = ['Disponible', 'En función']
 
 const isPositiveInt = (value: number) => Number.isInteger(value) && value >= 1
@@ -64,10 +63,7 @@ export function useTheaterForm() {
     if (seatsMessage) errors.numberOfSeats = seatsMessage
     if (!isPositiveInt(rows)) errors.dimensionX = 'Introduce una dimensión válida.'
     if (!isPositiveInt(columns)) errors.dimensionY = 'Introduce una dimensión válida.'
-    if (
-      !ALLOWED_PROJECTORS.includes(draft.projectorName) ||
-      !projectors.some((item) => item.name === draft.projectorName)
-    )
+    if (!projectors.some((item) => item.name === draft.projectorName))
       errors.projectorName = 'Selecciona un proyector válido.'
     if (!cinemas.some((item) => item.name === draft.cinema))
       errors.cinema = 'Selecciona una sucursal.'
