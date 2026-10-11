@@ -164,7 +164,8 @@ function handleImageError(): void {
   display: block;
 
   width: 100%;
-  height: clamp(300px, 45vw, 540px);
+  aspect-ratio: 21 / 7.7;
+  height: auto;
 
   object-fit: cover;
 }
