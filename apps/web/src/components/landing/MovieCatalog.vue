@@ -49,6 +49,10 @@ onMounted(() => {
             class="movie-poster"
             @error="handleImageError"
           />
+
+          <h3 class="movie-title">
+            {{ movie.title }}
+          </h3>
         </article>
       </div>
 
@@ -106,6 +110,36 @@ onMounted(() => {
 }
 
 .movie-card:hover::after {
+  opacity: 1;
+}
+
+.movie-title {
+  position: absolute;
+  z-index: 1;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  inset: 0;
+
+  margin: 0;
+  padding: 16px;
+
+  font-size: 1.25rem;
+  font-weight: 500;
+
+  text-align: center;
+
+  opacity: 0;
+
+  transition: opacity var(--transition-normal);
+  color: #fff;
+  pointer-events: none;
+}
+
+.movie-card:hover .movie-title {
   opacity: 1;
 }
 
