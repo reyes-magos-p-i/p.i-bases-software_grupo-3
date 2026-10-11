@@ -48,10 +48,6 @@ onMounted(() => {
           class="movie-poster"
           @error="handleImageError"
         />
-
-        <h3>
-          {{ movie.title }}
-        </h3>
       </article>
     </div>
 
@@ -98,15 +94,6 @@ onMounted(() => {
   aspect-ratio: 2 / 3;
 
   object-fit: cover;
-}
-
-.movie-card h3 {
-  margin: 12px;
-
-  font-size: 1rem;
-  font-weight: 500;
-
-  text-align: center;
 }
 
 .status-message {
