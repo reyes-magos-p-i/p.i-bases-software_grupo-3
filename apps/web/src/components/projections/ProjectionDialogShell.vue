@@ -53,12 +53,61 @@ defineExpose({ open, close, element: dialog })
 </template>
 
 <style scoped>
-.projection-dialog { position: fixed; top: 50%; left: 50%; width: min(calc(100% - 32px), 1200px); max-height: 94dvh; margin: 0; padding: 0; border: 0; border-radius: var(--radius-medium); color: var(--color-dark); background: #e4e4e4; transform: translate(-50%, -50%); overflow: hidden; }
-.projection-dialog[open] { display: flex; flex-direction: column; }
-.projection-dialog::backdrop { background: color-mix(in srgb, var(--color-black) 55%, transparent); }
-.dialog-heading { display: flex; flex-shrink: 0; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 32px; color: var(--color-white); background: var(--color-primary); }
-.dialog-heading h2 { margin: 0; font-size: 1.4rem; font-weight: 700; }
-.close-button { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: var(--radius-small); font-size: 1.5rem; color: inherit; background: transparent; }
-.close-button:focus-visible { outline: 2px solid var(--color-cream); outline-offset: 2px; }
-@media (max-width: 640px) { .dialog-heading { padding: 16px; } }
+.projection-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(calc(100% - 32px), 1200px);
+  max-height: 94dvh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-medium);
+  color: var(--text-primary);
+  background: var(--content-background);
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+}
+.projection-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.projection-dialog::backdrop {
+  background: color-mix(in srgb, var(--page-background) 55%, transparent);
+}
+.dialog-heading {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 32px;
+  color: var(--text-on-dark);
+  background: var(--primary-color);
+}
+.dialog-heading h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.close-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-small);
+  font-size: 1.5rem;
+  color: inherit;
+  background: transparent;
+}
+.close-button:focus-visible {
+  outline: 2px solid var(--focus-on-dark);
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .dialog-heading {
+    padding: 16px;
+  }
+}
 </style>

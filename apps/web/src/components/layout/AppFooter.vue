@@ -44,16 +44,15 @@
 
   padding: 48px 0;
 
-  color: var(--color-white);
+  color: var(--text-on-dark);
 
-  background-color: var(--color-dark);
+  background-color: var(--surface-background);
 }
 
 .footer-grid {
   display: grid;
 
-  grid-template-columns:
-    repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 
   gap: 40px;
 }
@@ -76,18 +75,18 @@
 .footer-grid a {
   margin: 0;
 
-  color: #d5d5d5;
+  color: var(--text-on-dark-secondary);
 
   font-size: 0.9rem;
 }
 
 .footer-grid a:hover {
-  color: var(--color-white);
+  color: var(--accent-color);
 }
 
 .footer-grid i {
   margin-right: 7px;
 
-  color: var(--color-secondary);
+  color: var(--accent-color);
 }
 </style>

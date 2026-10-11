@@ -417,18 +417,21 @@ async function resendVerificationEmail() {
   place-items: center;
   border: 0;
   background: transparent;
-  color: var(--color-dark);
+  color: var(--text-primary);
 }
 .password-toggle:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: -3px;
 }
 .btn-brand {
-  background: var(--color-brand, #3d0a0a);
-  color: #fff;
+  background: var(--button-confirm-background);
+  color: var(--button-confirm-text);
   border: 0;
   border-radius: 6px;
   padding: 0.6rem 3rem;
+}
+.btn-brand:not(:disabled):hover {
+  background: var(--button-confirm-hover-background);
 }
 .btn-brand:disabled {
   opacity: 0.6;

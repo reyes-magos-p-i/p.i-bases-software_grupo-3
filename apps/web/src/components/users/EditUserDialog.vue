@@ -704,15 +704,15 @@ onBeforeUnmount(() => {
 
 <style scoped>
 :global(.app-modal-backdrop:has(.user-edit-content)::backdrop) {
-  background: color-mix(in srgb, var(--color-black) 55%, transparent);
+  background: var(--overlay-background);
 }
 :global(.app-modal-card:has(.user-edit-content)) {
   width: min(880px, 100%);
   max-width: 880px;
   padding: 0;
   border-radius: var(--radius-medium);
-  background: var(--color-background);
-  color: var(--color-dark);
+  background: var(--dialog-background);
+  color: var(--text-primary);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -721,8 +721,8 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   margin: 0;
   padding: 24px 80px 24px 24px;
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--primary-color);
+  color: var(--content-background);
   text-align: left;
   font-style: normal;
   font-size: 1.25rem;
@@ -730,11 +730,11 @@ onBeforeUnmount(() => {
 :global(.app-modal-card:has(.user-edit-content) .app-modal-close) {
   top: 14px;
   right: 24px;
-  color: var(--color-white);
+  color: var(--content-background);
   border-radius: var(--radius-small);
 }
 :global(.app-modal-card:has(.user-edit-content) .app-modal-close:focus-visible) {
-  outline-color: var(--color-cream);
+  outline-color: var(--focus-on-dark);
 }
 .user-edit-content {
   min-height: 0;
@@ -786,15 +786,15 @@ textarea {
   min-height: 44px;
   margin: 0;
   padding: 10px 12px;
-  border: 1px solid var(--color-light_gray);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background: var(--color-white);
-  color: var(--color-dark);
+  background: var(--content-background);
+  color: var(--text-primary);
   font: inherit;
 }
 dd {
   margin: 0;
-  color: var(--color-dark);
+  color: var(--text-primary);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -814,30 +814,30 @@ textarea {
   width: 18px;
   height: 18px;
   min-height: 18px;
-  accent-color: var(--color-primary);
+  accent-color: var(--primary-color);
 }
 .field-error {
-  color: var(--color-error);
+  color: var(--error-color);
   margin: 6px 0 0;
   font-size: 0.875rem;
 }
 .field-hint {
-  color: var(--color-gray);
+  color: var(--text-secondary);
   margin: 6px 0 0;
   font-size: 0.875rem;
 }
 [aria-invalid='true'] {
-  border-color: var(--color-error);
+  border-color: var(--error-color);
 }
 .edit-feedback {
   padding: 16px;
   margin-bottom: 20px;
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-white);
+  border-left: 3px solid var(--primary-color);
+  background: var(--content-background);
 }
 .edit-error {
-  color: var(--color-error);
-  border-color: var(--color-error);
+  color: var(--error-color);
+  border-color: var(--error-color);
 }
 footer {
   display: flex;
@@ -849,21 +849,26 @@ footer {
 button {
   min-height: 44px;
   padding: 10px 20px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--primary-color);
   border-radius: var(--radius-small);
   font: inherit;
   cursor: pointer;
 }
 .primary {
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--button-confirm-background);
+  color: var(--button-confirm-text);
+  border-color: var(--button-confirm-background);
+}
+.primary:not(:disabled):hover {
+  background: var(--button-confirm-hover-background);
+  border-color: var(--button-confirm-hover-background);
 }
 .secondary {
-  background: var(--color-white);
-  color: var(--color-primary);
+  background: var(--content-background);
+  color: var(--button-secondary-text);
 }
 .secondary:hover {
-  background: var(--color-light_gray);
+  background: var(--surface-hover);
 }
 button:disabled {
   opacity: 0.5;
@@ -874,7 +879,7 @@ select:focus-visible,
 textarea:focus-visible,
 button:focus-visible,
 [tabindex='-1']:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 @media (max-width: 575px) {
