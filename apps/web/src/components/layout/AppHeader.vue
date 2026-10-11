@@ -260,7 +260,7 @@ function goToChangePassword() {
 <style scoped>
 .site-header {
   width: 100%;
-  background-color: var(--navbar-background);
+  background-color: transparent;
   color: var(--text-on-dark);
 }
 
