@@ -26,6 +26,8 @@ import {
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
+defineProps<{ overlay?: boolean }>()
+
 const PASSWORD_PATH = '/account/password'
 const activeModal = ref<'register' | 'login' | null>(null)
 const clientUser = clientSession.user
@@ -205,7 +207,7 @@ function goToChangePassword() {
 </script>
 
 <template>
-  <header class="site-header">
+  <header class="site-header" :class="{ 'site-header-overlay': overlay }">
     <nav class="landing-container navbar-content">
       <RouterLink to="/" class="brand" aria-label="Ir a la página principal de Cinetadel">
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
@@ -262,6 +264,13 @@ function goToChangePassword() {
   width: 100%;
   background-color: transparent;
   color: var(--text-on-dark);
+}
+
+.site-header-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
 }
 
 .dashboard-link {

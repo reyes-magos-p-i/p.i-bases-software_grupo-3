@@ -9,7 +9,7 @@ import MovieCatalog from '@/components/landing/MovieCatalog.vue'
 </script>
 
 <template>
-  <AppHeader />
+  <AppHeader overlay />
 
   <main>
     <HeroCarousel />
