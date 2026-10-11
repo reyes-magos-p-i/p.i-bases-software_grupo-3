@@ -157,8 +157,6 @@ function handleImageError(): void {
   width: 100%;
   overflow: hidden;
 
-  border-radius: var(--radius-large);
-
   background-color: var(--surface-background);
 }
 

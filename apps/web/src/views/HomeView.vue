@@ -12,10 +12,8 @@ import MovieCatalog from '@/components/landing/MovieCatalog.vue'
   <AppHeader />
 
   <main>
+    <HeroCarousel />
     <div class="landing-container home-content">
-      <HeroCarousel />
-
-
       <MovieCatalog />
     </div>
     <Movie/>
@@ -24,11 +22,10 @@ import MovieCatalog from '@/components/landing/MovieCatalog.vue'
 </template>
 
 <style scoped>
-main {
-  padding-top: 32px;
-}
+
 
 .home-content {
+  padding-top: 32px;
   padding-bottom: 24px;
 }
 </style>
