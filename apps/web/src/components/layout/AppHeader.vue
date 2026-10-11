@@ -311,7 +311,7 @@ function goToChangePassword() {
 .register-button,
 .login-button {
   color: var(--navbar-button-text);
-  background-color: var(--navbar-button-background);
+  background-color: transparent;
   border: none;
   box-sizing: border-box;
   padding: 24px 30px;
