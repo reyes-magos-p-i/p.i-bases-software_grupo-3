@@ -91,9 +91,9 @@ onMounted(() => {
 .search-container {
   position: relative;
 
-  width: min(100%, 900px);
+  width: 100%;
 
-  margin: 0 auto 28px;
+  margin: 0 0 28px;
 }
 
 .search-container input {
