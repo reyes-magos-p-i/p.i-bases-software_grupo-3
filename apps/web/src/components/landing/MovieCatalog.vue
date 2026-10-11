@@ -52,7 +52,7 @@ onMounted(() => {
         id="movie-search"
         v-model="search"
         type="search"
-        placeholder="Busca tu película favorita..."
+        placeholder="Busca una película..."
       />
 
       <i class="bi bi-search" aria-hidden="true"></i>
