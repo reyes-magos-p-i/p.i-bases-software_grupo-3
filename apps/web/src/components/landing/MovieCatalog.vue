@@ -55,7 +55,7 @@ onMounted(() => {
               {{ movie.title }}
             </h3>
 
-            <button type="button" class="buy-button">Comprar boletos</button>
+            <router-link to="/buy-tickets" class="buy-button">Comprar boletos</router-link>
           </div>
         </article>
       </div>
@@ -168,6 +168,8 @@ onMounted(() => {
   border-radius: 6px;
 
   font-weight: 700;
+
+  text-decoration: none;
 
   cursor: pointer;
   color: #1a1a1a;
