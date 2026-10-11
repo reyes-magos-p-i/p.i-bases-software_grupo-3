@@ -103,7 +103,7 @@ onMounted(() => {
 
   border-radius: inherit;
 
-  background-color: rgb(0 0 0 / 50%);
+  background-color: rgb(0 0 0 / 65%);
 
   opacity: 0;
 
@@ -149,10 +149,12 @@ onMounted(() => {
 .movie-title {
   margin: 0;
 
-  font-size: 1.25rem;
-  font-weight: 500;
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
 
   text-align: center;
+  text-shadow: 0 2px 6px rgb(0 0 0 / 80%);
   color: #fff;
 }
 
