@@ -2,12 +2,18 @@
 import { useTemplateRef } from 'vue'
 import TheaterDialogShell from './TheaterDialogShell.vue'
 import TheaterForm from './TheaterForm.vue'
-import type { CreateTheaterRequest, TheaterCinema, TheaterProjector } from '@/types/theater'
+import type {
+  CreateTheaterRequest,
+  TheaterCinema,
+  TheaterProjector,
+  TheaterStatusOption,
+} from '@/types/theater'
 
 const props = withDefaults(
   defineProps<{
     projectors?: readonly TheaterProjector[]
     cinemas?: readonly TheaterCinema[]
+    statuses?: readonly TheaterStatusOption[]
     optionsLoading?: boolean
     optionsError?: string
     submitting?: boolean
@@ -16,6 +22,7 @@ const props = withDefaults(
   {
     projectors: () => [],
     cinemas: () => [],
+    statuses: () => [],
     optionsLoading: false,
     optionsError: '',
     submitting: false,
@@ -55,6 +62,7 @@ defineExpose({ open, complete })
       submitting-label="Creando…"
       :projectors="projectors"
       :cinemas="cinemas"
+      :statuses="statuses"
       :options-loading="optionsLoading"
       :options-error="optionsError"
       :submitting="submitting"

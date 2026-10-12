@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 import CreateTheaterDialog from './CreateTheaterDialog.vue'
 import ModifyTheaterDialog from './ModifyTheaterDialog.vue'
@@ -55,7 +55,10 @@ const {
   hasFilters,
   visibleTheaters,
   clearFilters,
-} = useTheaterFilters(theaters)
+} = useTheaterFilters(
+  theaters,
+  computed(() => options.value?.statuses.map((status) => status.name) ?? []),
+)
 let request: AbortController | undefined
 let theatersRequest: AbortController | undefined
 
@@ -229,6 +232,7 @@ function theaterDeactivated() {
 }
 
 void loadTheaters()
+void loadOptions()
 
 onBeforeUnmount(() => {
   request?.abort()
@@ -320,6 +324,7 @@ onBeforeUnmount(() => {
       ref="create-dialog"
       :projectors="options?.projectors"
       :cinemas="options?.cinemas"
+      :statuses="options?.statuses"
       :options-loading="optionsLoading"
       :options-error="optionsError"
       :submitting="submitting"
@@ -332,6 +337,7 @@ onBeforeUnmount(() => {
       :theater="editingTheater"
       :projectors="options?.projectors"
       :cinemas="options?.cinemas"
+      :statuses="options?.statuses"
       :options-loading="optionsLoading"
       :options-error="optionsError"
       :submitting="submitting"

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { nextTick, useTemplateRef } from 'vue'
+import { nextTick, useTemplateRef, watch } from 'vue'
 import FormField from './FormField.vue'
 import { MAX_SEATS, useTheaterForm } from '@/composables/useTheaterForm'
 import type {
   CreateTheaterRequest,
   TheaterCinema,
   TheaterProjector,
+  TheaterStatusOption,
 } from '@/types/theater'
 
 const props = withDefaults(
@@ -14,6 +15,7 @@ const props = withDefaults(
     submittingLabel: string
     projectors?: readonly TheaterProjector[]
     cinemas?: readonly TheaterCinema[]
+    statuses?: readonly TheaterStatusOption[]
     optionsLoading?: boolean
     optionsError?: string
     submitting?: boolean
@@ -22,6 +24,7 @@ const props = withDefaults(
   {
     projectors: () => [],
     cinemas: () => [],
+    statuses: () => [],
     optionsLoading: false,
     optionsError: '',
     submitting: false,
@@ -40,20 +43,32 @@ const element = useTemplateRef<HTMLFormElement>('form')
 
 function submit() {
   if (props.submitting || props.optionsLoading) return
-  if (!form.validate(props.projectors, props.cinemas)) {
+  if (!form.validate(props.projectors, props.cinemas, props.statuses)) {
     void nextTick(() => element.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus())
     return
   }
   emit('submit', form.toRequest())
 }
 
-defineExpose({ reset: form.reset, fill: form.fill })
+function applyDefaultStatus() {
+  const first = props.statuses[0]
+  if (!draft.status && first) draft.status = first.name
+}
+
+function reset() {
+  form.reset()
+  applyDefaultStatus()
+}
+
+watch(() => props.statuses, applyDefaultStatus, { immediate: true })
+
+defineExpose({ reset, fill: form.fill })
 </script>
 
 <template>
   <form ref="form" novalidate :aria-busy="submitting" @submit.prevent="submit">
     <p class="required-note">Los campos con <span class="required-marker">*</span> son obligatorios.</p>
-    <p v-if="optionsLoading" role="status">Cargando proyectores y sucursales…</p>
+    <p v-if="optionsLoading" role="status">Cargando proyectores, sucursales y estados…</p>
     <p v-if="optionsError" class="form-error" role="alert">{{ optionsError }} <button type="button" @click="emit('retryOptions')">Reintentar</button></p>
     <p v-if="submissionErrors.length" class="form-error" role="alert" tabindex="-1">{{ submissionErrors.join(' ') }}</p>
 
@@ -86,8 +101,8 @@ defineExpose({ reset: form.reset, fill: form.fill })
 
     <FormField v-slot="{ id, invalid, describedby }" label="Estado" :error="errors.status">
       <select :id="id" v-model="draft.status" name="status" :aria-invalid="invalid" :aria-describedby="describedby">
-        <option value="Disponible">Disponible</option>
-        <option value="En función">En función</option>
+        <option v-if="!statuses.length && !optionsLoading" value="" disabled>No hay estados</option>
+        <option v-for="status in statuses" :key="status.theaterStatusId" :value="status.name">{{ status.name }}</option>
       </select>
     </FormField>
 

@@ -41,7 +41,10 @@ function compareBy(key: TheaterSortKey, a: Theater, b: Theater) {
   }
 }
 
-export function useTheaterFilters(theaters: Ref<Theater[]>) {
+export function useTheaterFilters(
+  theaters: Ref<Theater[]>,
+  knownStatuses: Ref<readonly string[]> = ref([]),
+) {
   const search = ref('')
   const selectedCinemas = ref<string[]>([])
   const selectedProjectors = ref<string[]>([])
@@ -51,7 +54,9 @@ export function useTheaterFilters(theaters: Ref<Theater[]>) {
 
   const cinemaOptions = computed(() => uniqueSorted(theaters.value.map((t) => t.cinema)))
   const projectorOptions = computed(() => uniqueSorted(theaters.value.map((t) => t.projectorName)))
-  const statusOptions = computed(() => uniqueSorted(theaters.value.map(displayStatus)))
+  const statusOptions = computed(() =>
+    uniqueSorted([...knownStatuses.value, 'Inactiva', ...theaters.value.map(displayStatus)]),
+  )
 
   const hasFilters = computed(
     () =>

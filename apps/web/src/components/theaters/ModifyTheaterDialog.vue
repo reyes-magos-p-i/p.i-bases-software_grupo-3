@@ -6,6 +6,7 @@ import type {
   Theater,
   TheaterCinema,
   TheaterProjector,
+  TheaterStatusOption,
   UpdateTheaterRequest,
 } from '@/types/theater'
 
@@ -14,6 +15,7 @@ const props = withDefaults(
     theater?: Theater | null
     projectors?: readonly TheaterProjector[]
     cinemas?: readonly TheaterCinema[]
+    statuses?: readonly TheaterStatusOption[]
     optionsLoading?: boolean
     optionsError?: string
     submitting?: boolean
@@ -23,6 +25,7 @@ const props = withDefaults(
     theater: null,
     projectors: () => [],
     cinemas: () => [],
+    statuses: () => [],
     optionsLoading: false,
     optionsError: '',
     submitting: false,
@@ -63,6 +66,7 @@ defineExpose({ open, complete })
       submitting-label="Guardando…"
       :projectors="projectors"
       :cinemas="cinemas"
+      :statuses="statuses"
       :options-loading="optionsLoading"
       :options-error="optionsError"
       :submitting="submitting"

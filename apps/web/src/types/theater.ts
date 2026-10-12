@@ -1,4 +1,9 @@
-export type TheaterStatus = 'Disponible' | 'En función'
+export type TheaterStatus = string
+
+export interface TheaterStatusOption {
+  theaterStatusId: number
+  name: TheaterStatus
+}
 
 export interface TheaterProjector {
   projectorId: number
@@ -14,6 +19,7 @@ export interface TheaterCinema {
 export interface TheaterCreationOptions {
   projectors: TheaterProjector[]
   cinemas: TheaterCinema[]
+  statuses: TheaterStatusOption[]
 }
 
 export interface CreateTheaterRequest {

@@ -5,10 +5,10 @@ import type {
   TheaterCinema,
   TheaterProjector,
   TheaterStatus,
+  TheaterStatusOption,
 } from '@/types/theater'
 
 export const MAX_SEATS = 5000
-export const ALLOWED_STATUSES: readonly TheaterStatus[] = ['Disponible', 'En función']
 
 const isPositiveInt = (value: number) => Number.isInteger(value) && value >= 1
 
@@ -25,7 +25,7 @@ const emptyDraft = () => ({
   dimensionY: '',
   projectorName: '',
   cinema: '',
-  status: 'Disponible' as TheaterStatus,
+  status: '' as TheaterStatus,
 })
 
 export function useTheaterForm() {
@@ -53,7 +53,11 @@ export function useTheaterForm() {
     clearErrors()
   }
 
-  function validate(projectors: readonly TheaterProjector[], cinemas: readonly TheaterCinema[]) {
+  function validate(
+    projectors: readonly TheaterProjector[],
+    cinemas: readonly TheaterCinema[],
+    statuses: readonly TheaterStatusOption[],
+  ) {
     clearErrors()
     const seats = Number(draft.numberOfSeats)
     const rows = Number(draft.dimensionX)
@@ -67,7 +71,7 @@ export function useTheaterForm() {
       errors.projectorName = 'Selecciona un proyector válido.'
     if (!cinemas.some((item) => item.name === draft.cinema))
       errors.cinema = 'Selecciona una sucursal.'
-    if (!ALLOWED_STATUSES.includes(draft.status)) errors.status = 'Selecciona un estado válido.'
+    if (!statuses.some((item) => item.name === draft.status)) errors.status = 'Selecciona un estado válido.'
     return Object.keys(errors).length === 0
   }
 
