@@ -121,6 +121,7 @@ describe('TheaterRepository', () => {
       connection.execute
         .mockResolvedValueOnce({ rows: [{ PROJECTOR_ID: 42 }] })
         .mockResolvedValueOnce({ rows: [{ BRANCH_ID: 2 }] })
+        .mockResolvedValueOnce({ rows: [{ THEATER_STATUS_ID: 1 }] })
         .mockResolvedValueOnce({ outBinds: { theaterId: [7] } });
 
       await expect(repository.createTheater(theaterDto)).resolves.toEqual({
@@ -142,8 +143,15 @@ describe('TheaterRepository', () => {
       );
       expect(connection.execute).toHaveBeenNthCalledWith(
         3,
+        expect.stringContaining('SELECT theater_status_id FROM TheaterStatuses'),
+        { name: 'Disponible' },
+        expect.objectContaining({ outFormat: expect.anything() }),
+      );
+      expect(connection.execute).toHaveBeenNthCalledWith(
+        4,
         expect.stringContaining('INSERT INTO Theaters'),
         expect.objectContaining({
+          theaterStatusId: 1,
           branchId: 2,
           numberOfSeats: theaterDto.numberOfSeats,
           dimensionX: theaterDto.dimensionX,
@@ -161,7 +169,8 @@ describe('TheaterRepository', () => {
         connection.execute
           .mockResolvedValueOnce({ rows: [{ PROJECTOR_ID: 42 }] })
           .mockResolvedValueOnce({ rows: [{ BRANCH_ID: 2 }] })
-          .mockResolvedValueOnce({ outBinds: { theaterId: [8] } });
+          .mockResolvedValueOnce({ rows: [{ THEATER_STATUS_ID: 1 }] })
+        .mockResolvedValueOnce({ outBinds: { theaterId: [8] } });
 
         await expect(repository.createTheater(dtoWithoutActive)).resolves.toEqual({
           theaterId: 8,
@@ -170,7 +179,7 @@ describe('TheaterRepository', () => {
           status: 'Disponible',
         });
         expect(connection.execute).toHaveBeenNthCalledWith(
-          3,
+          4,
           expect.stringContaining('INSERT INTO Theaters'),
           expect.objectContaining({ isActive: 1 }),
         );
@@ -194,6 +203,18 @@ describe('TheaterRepository', () => {
         'Cinema not found: Cinema 2',
       );
       expect(connection.execute).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects when the status does not exist', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ PROJECTOR_ID: 42 }] })
+        .mockResolvedValueOnce({ rows: [{ BRANCH_ID: 2 }] })
+        .mockResolvedValueOnce({ rows: [] });
+
+      await expect(
+        repository.createTheater({ ...theaterDto, status: 'Roto' }),
+      ).rejects.toThrow('Theater status not found: Roto');
+      expect(connection.execute).toHaveBeenCalledTimes(3);
     });
 
     it('propagates transaction errors', async () => {
@@ -339,6 +360,29 @@ describe('TheaterRepository', () => {
           dimensionY: 14,
           isActive: 0,
         }),
+      );
+    });
+
+    it('resolves the status id when updating status', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ THEATER_STATUS_ID: 2 }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+      databaseService.query.mockResolvedValue({ rows: [] });
+
+      await repository.updateTheater(7, { status: 'En función' }).catch(() => undefined);
+
+      expect(connection.execute).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('UPDATE Theaters SET theater_status_id = :theaterStatusId'),
+        expect.objectContaining({ id: 7, theaterStatusId: 2 }),
+      );
+    });
+
+    it('rejects an update with an unknown status', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [] });
+
+      await expect(repository.updateTheater(7, { status: 'Roto' })).rejects.toThrow(
+        'Theater status not found: Roto',
       );
     });
 
