@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, NotFoundException, Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { Theater, TheaterStatus, TheaterStatusOption } from '../entities/theater.entity';
 import { CreateTheaterDto } from '../dto/create-theater.dto';
@@ -220,7 +220,7 @@ export class TheaterRepository {
       if (setClauses.length === 0) {
         const theater = await this.getTheaterById(id);
         if (!theater) {
-          throw new Error(`Theater not found: ${id}`);
+          throw new NotFoundException(`Theater not found: ${id}`);
         }
         return theater;
       }
@@ -267,12 +267,12 @@ export class TheaterRepository {
       });
 
       if (result.rowsAffected === 0) {
-        throw new Error(`Theater not found: ${id}`);
+        throw new NotFoundException(`Theater not found: ${id}`);
       }
 
       const theater = await this.getTheaterById(id);
       if (!theater) {
-        throw new Error(`Theater not found: ${id}`);
+        throw new NotFoundException(`Theater not found: ${id}`);
       }
 
       return theater;
@@ -290,7 +290,7 @@ export class TheaterRepository {
       );
 
       if (result.rowsAffected === 0) {
-        throw new Error(`Theater not found: ${id}`);
+        throw new NotFoundException(`Theater not found: ${id}`);
       }
     } catch (error) {
       this.logger.error('Error deleting theater', error as Error);
