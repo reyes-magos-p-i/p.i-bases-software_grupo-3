@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
-import { Theater, TheaterStatus } from '../entities/theater.entity';
+import { Theater, TheaterStatus, TheaterStatusOption } from '../entities/theater.entity';
 import { CreateTheaterDto } from '../dto/create-theater.dto';
 import { UpdateTheaterDto } from '../dto/update-theater.dto';
 import oracledb from 'oracledb';
@@ -8,6 +8,19 @@ import oracledb from 'oracledb';
 @Injectable()
 export class TheaterRepository {
   private readonly logger = new Logger(TheaterRepository.name);
+
+  private async findStatusId(conn: oracledb.Connection, name: TheaterStatus): Promise<number> {
+    const result = await conn.execute(
+      `SELECT theater_status_id FROM TheaterStatuses WHERE name = :name`,
+      { name },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
+    );
+    const id = (result.rows as { THEATER_STATUS_ID: number }[] | undefined)?.[0]?.THEATER_STATUS_ID;
+    if (id == null) {
+      throw new BadRequestException(`Theater status not found: ${name}`);
+    }
+    return id;
+  }
 
   constructor(private readonly db: DatabaseService) {}
 
@@ -21,8 +34,9 @@ export class TheaterRepository {
           t.dimension_y,
           p.name AS projector_name,
           t.is_active,
-          t.status
+          ts.name AS status
       FROM Theaters t
+      JOIN TheaterStatuses ts ON ts.theater_status_id = t.theater_status_id
       JOIN Cinemas c ON c.branch_id = t.branch_id
       JOIN Projectors p ON p.projector_id = t.projector_id
       ORDER BY t.theater_id
@@ -44,6 +58,19 @@ export class TheaterRepository {
       }));
     } catch (error) {
       this.logger.error('Error fetching theaters', error as Error);
+      throw error;
+    }
+  }
+
+  async getTheaterStatuses(): Promise<TheaterStatusOption[]> {
+    try {
+      const result = await this.db.query(
+        `SELECT theater_status_id, name FROM TheaterStatuses ORDER BY theater_status_id`,
+      );
+      const rows = (result.rows ?? []) as { THEATER_STATUS_ID: number; NAME: TheaterStatus }[];
+      return rows.map((row) => ({ theaterStatusId: row.THEATER_STATUS_ID, name: row.NAME }));
+    } catch (error) {
+      this.logger.error('Error fetching theater statuses', error as Error);
       throw error;
     }
   }
@@ -80,9 +107,12 @@ export class TheaterRepository {
             throw new Error(`Cinema not found: ${cinema}`);
           }
 
+          const theaterStatusId = await this.findStatusId(conn, status);
+
           const theaterResult = await conn.execute(
-            `INSERT INTO Theaters (branch_id, number_seats, dimension_x, dimension_y, projector_id, is_active, status)
-            VALUES (:branchId, :numberOfSeats, :dimensionX, :dimensionY, :projectorId, :isActive, :status)
+            `INSERT INTO Theaters (branch_id, number_seats, dimension_x, dimension_y, projector_id, is_active, theater_status_id)
+            VALUES (:branchId, :numberOfSeats, :dimensionX, :dimensionY, :projectorId, :isActive,
+              :theaterStatusId)
             RETURNING theater_id INTO :theaterId`,
             {
                 branchId,
@@ -91,7 +121,7 @@ export class TheaterRepository {
                 dimensionY,
                 projectorId,
                 isActive: isActive ? 1 : 0,
-                status,
+                theaterStatusId,
                 theaterId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
             },
           );
@@ -123,8 +153,9 @@ export class TheaterRepository {
                 t.dimension_y,
                 p.name AS projector_name,
                 t.is_active,
-                t.status
+                ts.name AS status
         FROM Theaters t
+        JOIN TheaterStatuses ts ON ts.theater_status_id = t.theater_status_id
         JOIN Cinemas c ON c.branch_id = t.branch_id
         JOIN Projectors p ON p.projector_id = t.projector_id
         WHERE t.theater_id = :id`,
@@ -183,8 +214,7 @@ export class TheaterRepository {
         binds.isActive = updateTheaterDto.isActive ? 1 : 0;
       }
       if (updateTheaterDto.status !== undefined) {
-        setClauses.push('status = :status');
-        binds.status = updateTheaterDto.status;
+        setClauses.push('theater_status_id = :theaterStatusId');
       }
 
       if (setClauses.length === 0) {
@@ -224,6 +254,10 @@ export class TheaterRepository {
           }
 
           binds.branchId = branchId;
+        }
+
+        if (updateTheaterDto.status !== undefined) {
+          binds.theaterStatusId = await this.findStatusId(connection, updateTheaterDto.status);
         }
 
         return connection.execute(

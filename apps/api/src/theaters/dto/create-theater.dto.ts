@@ -2,7 +2,9 @@ import {
     IsBoolean,
     IsIn,
     IsInt,
+    IsNotEmpty,
     IsOptional,
+    IsString,
     Max,
     Min,
     registerDecorator,
@@ -67,6 +69,7 @@ export class CreateTheaterDto {
     isActive?: boolean;
 
     @IsOptional()
-    @IsIn(['Disponible', 'En función'])
+    @IsString()
+    @IsNotEmpty()
     status?: TheaterStatus;
 }

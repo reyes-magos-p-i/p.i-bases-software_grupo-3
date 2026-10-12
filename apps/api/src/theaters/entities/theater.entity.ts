@@ -18,4 +18,9 @@ export class Theater {
     status: TheaterStatus;
 }
 
-export type TheaterStatus = 'Disponible' | 'En función';
+export type TheaterStatus = string;
+
+export interface TheaterStatusOption {
+    theaterStatusId: number;
+    name: TheaterStatus;
+}

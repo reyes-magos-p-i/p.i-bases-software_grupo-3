@@ -35,6 +35,10 @@ export class TheatersService {
     return this.theatersRepository.getAllTheaters();
   }
 
+  findStatuses() {
+    return this.theatersRepository.getTheaterStatuses();
+  }
+
   findOne(id: number) {
     return this.theatersRepository.getTheaterById(id);
   }
