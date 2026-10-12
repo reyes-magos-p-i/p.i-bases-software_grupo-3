@@ -79,6 +79,7 @@ defineExpose({ reset, fill: form.fill })
     <FormField v-slot="{ id, invalid, describedby }" label="Tipo de proyector" required :error="errors.projectorName">
       <select :id="id" v-model="draft.projectorName" name="projectorName" required :aria-invalid="invalid" :aria-describedby="describedby">
         <option value="">Selecciona un proyector</option>
+        <option v-if="!projectors.length && !optionsLoading" value="" disabled>No hay proyectores</option>
         <option v-for="projector in projectors" :key="projector.projectorId" :value="projector.name">{{ projector.name }}</option>
       </select>
     </FormField>

@@ -4,6 +4,24 @@ import TheaterForm from '@/components/theaters/TheaterForm.vue'
 
 const props = { submitLabel: 'Guardar', submittingLabel: 'Guardando…' }
 
+describe('TheaterForm projector select', () => {
+  it('shows "No hay proyectores" when there are no projectors', () => {
+    const select = mount(TheaterForm, { props }).get('[name="projectorName"]')
+
+    expect(select.text()).toContain('No hay proyectores')
+  })
+
+  it('does not show it while options are loading or when projectors exist', () => {
+    const loading = mount(TheaterForm, { props: { ...props, optionsLoading: true } })
+    const loaded = mount(TheaterForm, {
+      props: { ...props, projectors: [{ projectorId: 1, name: 'IMAX' }] },
+    })
+
+    expect(loading.get('[name="projectorName"]').text()).not.toContain('No hay proyectores')
+    expect(loaded.get('[name="projectorName"]').text()).not.toContain('No hay proyectores')
+  })
+})
+
 describe('TheaterForm status select', () => {
   it('shows "No hay estados" when there are no statuses', () => {
     const select = mount(TheaterForm, { props }).get('[name="status"]')
