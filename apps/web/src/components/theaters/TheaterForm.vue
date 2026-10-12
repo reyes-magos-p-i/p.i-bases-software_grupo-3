@@ -87,6 +87,7 @@ defineExpose({ reset, fill: form.fill })
     <FormField v-slot="{ id, invalid, describedby }" label="Sucursal" required :error="errors.cinema">
       <select :id="id" v-model="draft.cinema" name="cinema" required :aria-invalid="invalid" :aria-describedby="describedby">
         <option value="">Selecciona una sucursal</option>
+        <option v-if="!cinemas.length && !optionsLoading" value="" disabled>No hay sucursales</option>
         <option v-for="cinema in cinemas" :key="cinema.branchId" :value="cinema.name">{{ cinema.name }}</option>
       </select>
     </FormField>

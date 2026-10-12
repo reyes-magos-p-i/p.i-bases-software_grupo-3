@@ -22,6 +22,24 @@ describe('TheaterForm projector select', () => {
   })
 })
 
+describe('TheaterForm cinema select', () => {
+  it('shows "No hay sucursales" when there are no cinemas', () => {
+    const select = mount(TheaterForm, { props }).get('[name="cinema"]')
+
+    expect(select.text()).toContain('No hay sucursales')
+  })
+
+  it('does not show it while options are loading or when cinemas exist', () => {
+    const loading = mount(TheaterForm, { props: { ...props, optionsLoading: true } })
+    const loaded = mount(TheaterForm, {
+      props: { ...props, cinemas: [{ branchId: 1, name: 'Centro', companyId: 1 }] },
+    })
+
+    expect(loading.get('[name="cinema"]').text()).not.toContain('No hay sucursales')
+    expect(loaded.get('[name="cinema"]').text()).not.toContain('No hay sucursales')
+  })
+})
+
 describe('TheaterForm status select', () => {
   it('shows "No hay estados" when there are no statuses', () => {
     const select = mount(TheaterForm, { props }).get('[name="status"]')
