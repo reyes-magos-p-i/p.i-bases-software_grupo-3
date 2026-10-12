@@ -135,6 +135,10 @@ beforeEach(() => {
       { projectorId: 2, name: '70mm' },
     ],
     cinemas: [{ branchId: 3, name: 'Cinetadel Central', companyId: 1 }],
+    statuses: [
+      { theaterStatusId: 1, name: 'Disponible' },
+      { theaterStatusId: 2, name: 'En función' },
+    ],
   })
   createTheater.mockReset().mockResolvedValue({
     theaterId: 4,
