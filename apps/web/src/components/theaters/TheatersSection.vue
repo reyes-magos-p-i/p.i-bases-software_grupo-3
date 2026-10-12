@@ -39,6 +39,7 @@ const theaters = ref<Theater[]>([])
 const theatersLoading = ref(false)
 const theatersError = ref('')
 const selectedTheater = ref<Theater | null>(null)
+const detailError = ref('')
 const editingTheater = ref<Theater | null>(null)
 const deactivatingTheater = ref<Theater | null>(null)
 const theaterSubmissionErrors = ref<string[]>([])
@@ -218,7 +219,18 @@ async function editTheater(row: { theater?: Theater }) {
 }
 
 function viewTheater(row: { theater?: Theater }) {
-  if (row.theater) selectedTheater.value = row.theater
+  if (row.theater) {
+    detailError.value = ''
+    selectedTheater.value = row.theater
+  } else {
+    selectedTheater.value = null
+    detailError.value = 'No se pudo mostrar el detalle de la sala.'
+  }
+}
+
+function closeDetail() {
+  selectedTheater.value = null
+  detailError.value = ''
 }
 
 function deactivateTheater(row: { theater?: Theater }) {
@@ -345,7 +357,11 @@ onBeforeUnmount(() => {
       @retry-options="retryOptions"
       @submit="submitModify"
     />
-    <TheaterDetailDialog :theater="selectedTheater" @close="selectedTheater = null" />
+    <TheaterDetailDialog
+      :theater="selectedTheater"
+      :error="detailError"
+      @close="closeDetail"
+    />
     <DeactivateTheaterDialog
       :theater="deactivatingTheater"
       @close="deactivatingTheater = null"

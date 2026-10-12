@@ -3,23 +3,26 @@ import { onMounted, useTemplateRef, watch } from 'vue'
 import TheaterDialogShell from './TheaterDialogShell.vue'
 import type { Theater } from '@/types/theater'
 
-const props = defineProps<{ theater: Theater | null }>()
+const props = withDefaults(defineProps<{ theater: Theater | null; error?: string }>(), {
+  error: '',
+})
 const emit = defineEmits<{ close: [] }>()
 const shell = useTemplateRef('shell')
 
 function syncDialog() {
-  if (props.theater) shell.value?.open()
+  if (props.theater || props.error) shell.value?.open()
   else shell.value?.close()
 }
 
 onMounted(syncDialog)
-watch(() => props.theater, syncDialog, { flush: 'post' })
+watch(() => [props.theater, props.error], syncDialog, { flush: 'post' })
 </script>
 
 <template>
   <TheaterDialogShell ref="shell" title="Detalle de sala" close-label="Cerrar" @close="emit('close')">
-    <div v-if="theater" class="theater-detail-content">
-      <div class="detail-grid">
+    <div v-if="theater || error" class="theater-detail-content">
+      <p v-if="!theater" class="detail-error" role="alert">{{ error }}</p>
+      <div v-else class="detail-grid">
         <div class="readonly-field"><label>ID</label><div class="readonly-input">{{ theater.theaterId }}</div></div>
         <div class="readonly-field"><label>Sucursal</label><div class="readonly-input">{{ theater.cinema }}</div></div>
         <div class="readonly-field"><label>Número de asientos</label><div class="readonly-input">{{ theater.numberOfSeats }}</div></div>
@@ -44,6 +47,10 @@ watch(() => props.theater, syncDialog, { flush: 'post' })
   padding: 24px;
   overflow-y: auto;
   font: inherit;
+}
+.detail-error {
+  margin: 0;
+  color: var(--color-error);
 }
 .detail-grid {
   display: grid;
