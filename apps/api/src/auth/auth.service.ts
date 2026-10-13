@@ -286,9 +286,11 @@ export class AuthService {
   async googleLogin(authCode: string) {
     //Google clinet inizialitation
     const googleClient = new OAuth2Client(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      'postmessage',
+      {
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirectUri: process.env.GOOGLE_REDIRECT_URI
+      }
     );
 
     try {
