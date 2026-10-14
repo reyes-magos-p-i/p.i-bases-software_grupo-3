@@ -23,6 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        id: setup-node
         with:
           node-version: "^24.15.0"
           cache: npm
@@ -30,13 +31,35 @@ jobs:
       - name: Verify backend runtime
         if: matrix.app == 'api'
         run: node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major !== 24 || minor < 15 || typeof require('node:crypto').argon2 !== 'function') { console.error('The API requires Node ^24.15.0 with crypto.argon2.'); process.exit(1); }"
-      - run: npm ci --ignore-scripts
-      - run: npm run lint
-      - run: npm run test:cov
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/${{ matrix.app }}/node_modules
+            !apps/${{ matrix.app }}/node_modules/.tmp
+            !apps/${{ matrix.app }}/node_modules/.vite
+          key: node-modules-${{ runner.os }}-node${{ steps.setup-node.outputs.node-version }}-${{ matrix.app }}-${{ hashFiles(format('apps/{0}/package-lock.json', matrix.app)) }}
+      - if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts
+      - name: Cache build state
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/${{ matrix.app }}/.cache
+            apps/api/dist
+            apps/web/node_modules/.tmp
+            apps/web/node_modules/.vite/vitest
+          key: build-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles(format('apps/{0}/package-lock.json', matrix.app)) }}-${{ github.sha }}
+          restore-keys: |
+            build-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles(format('apps/{0}/package-lock.json', matrix.app)) }}-
+            build-${{ runner.os }}-${{ matrix.app }}-
+      - run: npm run lint -- --cache --cache-location .cache/eslint/ --cache-strategy content
+      - run: npm run test:cov ${{ matrix.app == 'api' && '-- --cacheDirectory=.cache/jest' || '' }}
       - name: Typecheck
         if: matrix.app == 'web'
         run: npm run type-check
-      - run: npm run build
+      - run: npm run ${{ matrix.app == 'web' && 'build-only' || 'build' }}
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
