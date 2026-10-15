@@ -93,12 +93,12 @@ export function restoreClientSession(
       error.value = ''
       return user.value
     })
-    .catch((failure: unknown) => {
+    .catch((error_: unknown) => {
       if (current !== revision) return user.value
       user.value = null
       status.value = 'error'
-      reportClientSessionError(failure)
-      throw failure
+      reportClientSessionError(error_)
+      throw error_
     })
     .finally(() => {
       if (restoration === pending) restoration = undefined

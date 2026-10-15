@@ -19,7 +19,7 @@ export function computePasswordStatus(
     !(credentials.setAt instanceof Date) ||
     !Number.isFinite(credentials.setAt.getTime())
   ) {
-    throw new Error('Invalid password credentials status.');
+    throw new TypeError('Invalid password credentials status.');
   }
   const expiresAt =
     credentials.setAt.getTime() + credentials.expirationDays * MS_PER_DAY;

@@ -14,14 +14,20 @@ describe('computePasswordStatus', () => {
   });
 
   it.each([
-    { setAt: new Date('invalid'), expirationDays: 90 },
-    { setAt: new Date(), expirationDays: 45 },
-    { setAt: '2026-10-15', expirationDays: 90 },
-  ])('rejects invalid credential metadata: %p', (credentials) => {
-    expect(() => computePasswordStatus(credentials as never)).toThrow(
-      'Invalid password credentials status.',
-    );
-  });
+    [{ setAt: new Date('invalid'), expirationDays: 90 }, TypeError],
+    [{ setAt: new Date(), expirationDays: 45 }, Error],
+    [{ setAt: '2026-10-15', expirationDays: 90 }, TypeError],
+  ] as const)(
+    'rejects invalid credential metadata: %p',
+    (credentials, errorType) => {
+      expect(() => computePasswordStatus(credentials as never)).toThrow(
+        errorType,
+      );
+      expect(() => computePasswordStatus(credentials as never)).toThrow(
+        'Invalid password credentials status.',
+      );
+    },
+  );
 
   it.each([
     ['2026-10-15T11:59:59.999Z', 'expired'],
