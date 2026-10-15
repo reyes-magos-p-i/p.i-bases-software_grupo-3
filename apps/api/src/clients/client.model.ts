@@ -18,6 +18,7 @@ export interface Client {
 
 export interface ClientWithPassword extends Client {
   passwordHash: string;
+  sessionVersion: string | null;
 }
 
 export interface NewClient {

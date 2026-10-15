@@ -70,7 +70,10 @@ describe('UsersModule (application HTTP integration)', () => {
   function buildModule() {
     return Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PasswordRecoveryRepository)
-      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
+      .useValue({
+        sessionRevoked: jest.fn().mockResolvedValue(false),
+        currentSessionVersion: jest.fn().mockResolvedValue(null),
+      })
       .overrideProvider(ConfigService)
       .useValue(config)
       .compile();
@@ -629,5 +632,59 @@ describe('UsersModule (application HTTP integration)', () => {
     );
     expect(pool.getConnection).not.toHaveBeenCalled();
     expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('authenticates a newly created employee using the password sent by email', async () => {
+    const created = await browser.post('/users').send(employee).expect(201);
+    expect(created.body.id).toBe(42);
+    const credentialsCall = connection.execute.mock.calls.find(([sql]) =>
+      sql.startsWith('INSERT INTO EMPLOYEE_LOCAL_CREDENTIALS'),
+    );
+    expect(credentialsCall?.[0]).toContain('PASSWORD_SET_AT, EXPIRATION_DAYS');
+    expect(credentialsCall?.[1].expirationDays.val).toBe(120);
+    const storedHash = credentialsCall?.[1].passwordHash.val;
+    const text = sendMail.mock.calls[0][0].text as string;
+    const emailedPassword = /Contraseña inicial: ([^\r\n]+)/u.exec(text)?.[1];
+    expect(emailedPassword).toBeDefined();
+    jest.restoreAllMocks();
+    connection.execute.mockImplementation((sql: string) => {
+      if (sql.includes('PASSWORD_SET_AT'))
+        return Promise.resolve({
+          rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 120 }],
+        });
+      return Promise.resolve({
+        rows: [
+          {
+            EMPLOYEE_ID: 42,
+            ROLE: employee.role,
+            EMAIL: employee.email.toLowerCase(),
+            FIRST_NAME: employee.firstName,
+            SECOND_NAME: null,
+            FIRST_SURNAME: employee.firstSurname,
+            SECOND_SURNAME: employee.secondSurname,
+            CREDENTIALS_EMPLOYEE_ID: 42,
+            PASSWORD_HASH: storedHash,
+            SESSION_VERSION: null,
+          },
+        ],
+      });
+    });
+    const login = await request(app.getHttpServer())
+      .post('/auth/employees/login')
+      .set('Origin', origin)
+      .send({ email: employee.email, password: emailedPassword })
+      .expect(200);
+    expect(login.body.user.id).toBe(42);
+    const cookie = login.headers['set-cookie'][0].split(';')[0];
+    const me = await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(me.body).toEqual({ id: 42, role: 'EMPLOYEE', firstName: 'Ana' });
+    const status = await request(app.getHttpServer())
+      .get('/auth/password-status')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(status.body).toEqual({ status: 'valid' });
   });
 });

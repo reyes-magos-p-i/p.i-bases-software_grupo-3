@@ -374,10 +374,13 @@ export class UsersRepository {
       SECOND_SURNAME: string;
       CREDENTIALS_EMPLOYEE_ID: number | null;
       PASSWORD_HASH: string | null;
+      SESSION_VERSION: string | null;
     }>(
       `SELECT e.EMPLOYEE_ID, e.ROLE, e.EMAIL, e.FIRST_NAME, e.SECOND_NAME,
               e.FIRST_SURNAME, e.SECOND_SURNAME,
-              c.EMPLOYEE_ID AS CREDENTIALS_EMPLOYEE_ID, c.PASSWORD_HASH
+               c.EMPLOYEE_ID AS CREDENTIALS_EMPLOYEE_ID, c.PASSWORD_HASH,
+               (SELECT TO_CHAR(r.RESET_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF9')
+                  FROM PASSWORD_RECOVERIES r WHERE r.EMPLOYEE_ID = e.EMPLOYEE_ID) AS SESSION_VERSION
        FROM EMPLOYEES e
        LEFT JOIN EMPLOYEE_LOCAL_CREDENTIALS c ON c.EMPLOYEE_ID = e.EMPLOYEE_ID
        WHERE LOWER(TRIM(e.EMAIL)) = :email AND e.STATUS = 'ACTIVE'
@@ -416,6 +419,7 @@ export class UsersRepository {
       firstSurname: row.FIRST_SURNAME,
       secondSurname: row.SECOND_SURNAME,
       passwordHash: row.PASSWORD_HASH,
+      sessionVersion: row.SESSION_VERSION ?? null,
     };
   }
 
@@ -570,12 +574,13 @@ export class UsersRepository {
 
         const credentialsResult = await connection.execute(
           `INSERT INTO EMPLOYEE_LOCAL_CREDENTIALS (
-          EMPLOYEE_ID, PASSWORD_HASH, SALT
-        ) VALUES (:employeeId, :passwordHash, :salt)`,
+          EMPLOYEE_ID, PASSWORD_HASH, SALT, PASSWORD_SET_AT, EXPIRATION_DAYS
+        ) VALUES (:employeeId, :passwordHash, :salt, SYSTIMESTAMP, :expirationDays)`,
           {
             employeeId: { val: employeeId, type: oracle.NUMBER },
             passwordHash: { val: data.passwordHash, type: oracle.STRING },
             salt: { val: data.salt, type: oracle.STRING },
+            expirationDays: { val: 120, type: oracle.NUMBER },
           },
           { autoCommit: false },
         );
@@ -638,9 +643,9 @@ export class UsersRepository {
 
   async findEmployeeCredentialsStatus(
     employeeId: number,
-  ): Promise<{ setAt: Date; expirationDays: number } | null> {
+  ): Promise<{ setAt: Date | null; expirationDays: number } | null> {
     const result = await this.db.query<{
-      PASSWORD_SET_AT: Date;
+      PASSWORD_SET_AT: Date | null;
       EXPIRATION_DAYS: number;
     }>(
       `SELECT PASSWORD_SET_AT, EXPIRATION_DAYS FROM EMPLOYEE_LOCAL_CREDENTIALS WHERE EMPLOYEE_ID = :employeeId`,
@@ -653,8 +658,9 @@ export class UsersRepository {
       throw new Error(`Employee ${employeeId} is missing local credentials.`);
     }
     if (
-      !(row.PASSWORD_SET_AT instanceof Date) ||
-      Number.isNaN(row.PASSWORD_SET_AT.getTime()) ||
+      (row.PASSWORD_SET_AT !== null &&
+        (!(row.PASSWORD_SET_AT instanceof Date) ||
+          Number.isNaN(row.PASSWORD_SET_AT.getTime()))) ||
       ![30, 60, 90, 120].includes(row.EXPIRATION_DAYS)
     ) {
       throw new Error('Oracle returned invalid employee password status.');
