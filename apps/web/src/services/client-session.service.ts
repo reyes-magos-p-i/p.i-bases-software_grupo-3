@@ -1,15 +1,17 @@
 import { readonly, ref, shallowRef } from 'vue'
 import { fbAuth, logoutFromFacebook } from '@/facebook-auth'
 import type { ClientIdentity, ClientSessionStatus } from '@/types/client-auth'
+import { AuthResponseError, authErrorMessage } from '@/utils/auth-errors'
 
 export const CLIENT_ACCESS_TOKEN_KEY = 'accessToken'
 
 const user = shallowRef<ClientIdentity | null>(null)
 const status = ref<ClientSessionStatus>('unknown')
+const error = ref('')
 let revision = 0
 let restoration: Promise<ClientIdentity | null> | undefined
 
-export const clientSession = { user, status: readonly(status) }
+export const clientSession = { user, status: readonly(status), error: readonly(error) }
 
 export function clientIdentityFromResponse(value: unknown): ClientIdentity {
   if (
@@ -27,26 +29,25 @@ export function clientIdentityFromResponse(value: unknown): ClientIdentity {
     !value.firstName.trim() ||
     'role' in value
   )
-    throw new Error('No se pudo verificar la sesión del cliente.')
+    throw new AuthResponseError()
   const lastName = 'lastName' in value ? value.lastName : (Reflect.get(value, 'firstSurname') ?? '')
-  if (lastName !== null && typeof lastName !== 'string')
-    throw new Error('No se pudo verificar la sesión del cliente.')
+  if (lastName !== null && typeof lastName !== 'string') throw new AuthResponseError()
   return { id: value.id, email: value.email, firstName: value.firstName, lastName: lastName ?? '' }
 }
 
 export function hasClientSession(): boolean {
-  return Boolean(localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)) || fbAuth.status === 'connected'
+  return Boolean(localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY))
 }
 
 export function establishClientSession(identity: ClientIdentity, accessToken: string): void {
   const verifiedIdentity = clientIdentityFromResponse(identity)
-  if (typeof accessToken !== 'string' || !accessToken.trim())
-    throw new Error('No se pudo verificar la sesión del cliente.')
+  if (typeof accessToken !== 'string' || !accessToken.trim()) throw new AuthResponseError()
   localStorage.setItem(CLIENT_ACCESS_TOKEN_KEY, accessToken)
   revision++
   restoration = undefined
   user.value = verifiedIdentity
   status.value = 'authenticated'
+  error.value = ''
 }
 
 export function clearClientSession(): void {
@@ -55,6 +56,11 @@ export function clearClientSession(): void {
   restoration = undefined
   user.value = null
   status.value = 'anonymous'
+  error.value = ''
+}
+
+export function reportClientSessionError(failure: unknown) {
+  error.value = authErrorMessage(failure, 'No se pudo comprobar la sesión. Inténtalo nuevamente.')
 }
 
 export function restoreClientSession(
@@ -67,7 +73,11 @@ export function restoreClientSession(
       if (current !== revision) return user.value
       const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
       if (!token) {
-        clearClientSession()
+        if (user.value) clearClientSession()
+        else {
+          status.value = 'anonymous'
+          error.value = ''
+        }
         return null
       }
       status.value = 'loading'
@@ -80,13 +90,15 @@ export function restoreClientSession(
       }
       user.value = clientIdentityFromResponse(identity)
       status.value = 'authenticated'
+      error.value = ''
       return user.value
     })
-    .catch((error: unknown) => {
+    .catch((failure: unknown) => {
       if (current !== revision) return user.value
       user.value = null
       status.value = 'error'
-      throw error
+      reportClientSessionError(failure)
+      throw failure
     })
     .finally(() => {
       if (restoration === pending) restoration = undefined
@@ -96,6 +108,16 @@ export function restoreClientSession(
 }
 
 export async function clearClientAuth(): Promise<void> {
-  if (fbAuth.status === 'connected') await logoutFromFacebook()
+  // Local logout must not depend on a third-party SDK being available.
   clearClientSession()
+  if (fbAuth.status === 'connected') await logoutFromFacebook()
+}
+
+export function clientSessionRevision(): number {
+  return revision
+}
+
+export function beginClientSessionChange(): number {
+  restoration = undefined
+  return ++revision
 }
