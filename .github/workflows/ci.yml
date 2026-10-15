@@ -1,9 +1,10 @@
 name: CI
+
 on:
   push:
-    branches: ["main", "dev"]
+    branches: [main, dev]
   pull_request:
-    branches: ["main", "dev"]
+    branches: [main, dev]
   workflow_dispatch:
 
 concurrency:
@@ -11,26 +12,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect changed apps
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      apps: ${{ github.event_name == 'workflow_dispatch' && '["api","web"]' || steps.filter.outputs.changes }}
+    steps:
+      - name: Checkout
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+              - '.github/workflows/ci.yml'
+            web:
+              - 'apps/web/**'
+              - '.github/workflows/ci.yml'
+
   ci:
+    name: CI (${{ matrix.app }})
+    needs: [changes]
+    if: needs.changes.outputs.apps != '[]'
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        app: [api, web]
+        app: ${{ fromJSON(needs.changes.outputs.apps) }}
     defaults:
       run:
         working-directory: apps/${{ matrix.app }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
         id: setup-node
+        uses: actions/setup-node@v4
         with:
           node-version: "^24.15.0"
           cache: npm
           cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
+
       - name: Verify backend runtime
         if: matrix.app == 'api'
         run: node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major !== 24 || minor < 15 || typeof require('node:crypto').argon2 !== 'function') { console.error('The API requires Node ^24.15.0 with crypto.argon2.'); process.exit(1); }"
+
       - name: Cache node_modules
         id: node-modules
         uses: actions/cache@v4
@@ -40,8 +75,11 @@ jobs:
             !apps/${{ matrix.app }}/node_modules/.tmp
             !apps/${{ matrix.app }}/node_modules/.vite
           key: node-modules-${{ runner.os }}-node${{ steps.setup-node.outputs.node-version }}-${{ matrix.app }}-${{ hashFiles(format('apps/{0}/package-lock.json', matrix.app)) }}
-      - if: steps.node-modules.outputs.cache-hit != 'true'
+
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
+
       - name: Cache build state
         uses: actions/cache@v4
         with:
@@ -54,12 +92,20 @@ jobs:
           restore-keys: |
             build-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles(format('apps/{0}/package-lock.json', matrix.app)) }}-
             build-${{ runner.os }}-${{ matrix.app }}-
-      - run: npm run lint -- --cache --cache-location .cache/eslint/ --cache-strategy content
-      - run: npm run test:cov ${{ matrix.app == 'api' && '-- --cacheDirectory=.cache/jest' || '' }}
+
+      - name: Lint
+        run: npm run lint -- --cache --cache-location .cache/eslint/ --cache-strategy content
+
+      - name: Test with coverage
+        run: npm run test:cov ${{ matrix.app == 'api' && '-- --cacheDirectory=.cache/jest' || '' }}
+
       - name: Typecheck
         if: matrix.app == 'web'
         run: npm run type-check
-      - run: npm run ${{ matrix.app == 'web' && 'build-only' || 'build' }}
+
+      - name: Build
+        run: npm run ${{ matrix.app == 'web' && 'build-only' || 'build' }}
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,23 +115,46 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  sonarqube:
-    name: SonarQube
-    needs: [ci]
+  ci-result:
+    name: CI result
+    needs: [changes, ci]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Check CI outcome
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CI_RESULT: ${{ needs.ci.result }}
+        run: |
+          echo "changes: $CHANGES_RESULT, ci: $CI_RESULT"
+          if [ "$CHANGES_RESULT" != "success" ]; then exit 1; fi
+          if [ "$CI_RESULT" != "success" ] && [ "$CI_RESULT" != "skipped" ]; then exit 1; fi
+
+  sonarqube:
+    name: SonarQube
+    needs: [changes, ci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
-      - uses: actions/download-artifact@v4
+
+      - name: Download api coverage
+        if: contains(fromJSON(needs.changes.outputs.apps), 'api')
+        uses: actions/download-artifact@v4
         with:
           name: coverage-api
           path: apps/api/coverage
-      - uses: actions/download-artifact@v4
+
+      - name: Download web coverage
+        if: contains(fromJSON(needs.changes.outputs.apps), 'web')
+        uses: actions/download-artifact@v4
         with:
           name: coverage-web
           path: apps/web/coverage
-      - name: SonarQube Scan
+
+      - name: SonarQube scan
         uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
