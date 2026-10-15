@@ -121,4 +121,3 @@ jobs:
 
             sudo systemctl restart cinetadel-api.service
             sudo systemctl --no-pager --full status cinetadel-api.service
-
