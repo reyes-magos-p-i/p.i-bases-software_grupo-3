@@ -152,3 +152,46 @@ logout y creación posterior al login. No escriben en Oracle ni envían mensajes
 Los specs del frontend prueban Axios, recuperación concurrente, descarte de
 respuestas antiguas, rutas protegidas, mensajes, espera de reintento y continuidad
 del flujo de creación. La comprobación en navegador complementa esas pruebas.
+
+## Correcciones de continuidad de sesión
+
+La creación de empleados guarda explícitamente `PASSWORD_SET_AT = SYSTIMESTAMP`
+y `EXPIRATION_DAYS = 120` junto con el hash, dentro de la transacción existente.
+Una contraseña con fecha desconocida en una cuenta anterior se considera vencida:
+la sesión puede comprobarse y el dashboard solicita cambiarla usando la contraseña
+actual. No se inventan fechas históricas ni se modifican registros automáticamente.
+
+`?login=employee&reason=unavailable` significa que falló la comprobación de sesión;
+no equivale a credenciales incorrectas. Para diagnosticarlo, revisar primero
+`POST /api/auth/employees/login` y después `GET /api/auth/me`. El código anterior
+permitía crear credenciales sin fecha y rechazaba ese valor durante `/auth/me`,
+por lo que podía producir login 200 seguido de 500. La URL por sí sola no confirma
+que esa haya sido la causa de un incidente concreto.
+
+Los mensajes habituales de validación, credenciales incorrectas, sesión vencida y
+límite de intentos no muestran códigos técnicos. Los fallos excepcionales muestran
+el HTTP real, como `Error 404` o `Error 503`, y una explicación segura. Conexión,
+timeout y respuesta inválida utilizan `AUTH_NETWORK`, `AUTH_TIMEOUT` y
+`AUTH_RESPONSE_INVALID`; no se presentan como una respuesta HTTP inexistente.
+
+Un token de cliente almacenado se verifica antes de bloquear el acceso del
+personal. Si venció o fue revocado, se elimina; si la verificación falla por
+conexión, se conserva para permitir reintentar.
+
+### Verificación local del 15 de octubre de 2026
+
+| Área | Pruebas aprobadas   | Líneas globales | Líneas nuevas/modificadas | Ramas nuevas/modificadas |
+| ---- | ------------------- | --------------- | ------------------------- | ------------------------ |
+| API  | 1.704, en 76 suites | 97,57 %         | 95,45 % (21/22)           | 100 % (38/38)            |
+| Web  | 837, en 48 suites   | 95,21 %         | 94,21 % (114/121)         | 88,34 % (144/163)        |
+
+La medición del incremento cruza LCOV con las líneas añadidas/modificadas respecto
+del HEAD anterior a estos cambios e incluye el nuevo módulo de mensajes. SonarQube
+calculará sus métricas respecto de la base del PR; no se ejecutó el análisis remoto.
+Compilación, ESLint y Prettier pasan en los archivos afectados.
+
+Las regresiones verifican creación de empleado y uso de la contraseña del correo
+simulado, vigencia desconocida, recuperación seguida de login y consulta de estado,
+tokens rechazados, separación de cookie/Bearer, errores con y sin código y respuestas
+tardías del proveedor. Oracle, SMTP y proveedores se simulan: esta ejecución no
+confirma el incidente histórico ni la configuración de producción.
