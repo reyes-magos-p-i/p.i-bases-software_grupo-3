@@ -287,8 +287,8 @@ export class AuthService {
     //Google clinet inizialitation
     const googleClient = new OAuth2Client(
       {
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         redirectUri: process.env.GOOGLE_REDIRECT_URI
       }
     );
