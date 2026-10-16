@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   facebookLogin: vi.fn(),
   getEmployeeSession: vi.fn(),
   clearClientAuth: vi.fn(),
+  clientSessionRevision: vi.fn(),
 }))
 vi.mock('vue', () => ({ createApp: () => ({ use: mocks.use, mount: mocks.mount }) }))
 vi.mock('../App.vue', () => ({ default: {} }))
@@ -19,12 +20,18 @@ vi.mock('../services/authService', () => ({
   facebookLogin: mocks.facebookLogin,
   getEmployeeSession: mocks.getEmployeeSession,
 }))
-vi.mock('../services/client-session.service', () => ({ clearClientAuth: mocks.clearClientAuth }))
+vi.mock('../services/client-session.service', () => ({
+  clearClientAuth: mocks.clearClientAuth,
+  clientSessionRevision: mocks.clientSessionRevision,
+  CLIENT_ACCESS_TOKEN_KEY: 'accessToken',
+}))
 
 describe('Application startup with Facebook', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.resetAllMocks()
+    localStorage.clear()
+    mocks.clientSessionRevision.mockReturnValue(0)
     mocks.getEmployeeSession.mockResolvedValue(null)
   })
 
@@ -62,6 +69,17 @@ describe('Application startup with Facebook', () => {
     expect(mocks.mount).toHaveBeenCalledExactlyOnceWith('#app')
     expect(log).toHaveBeenCalledWith('Facebook SDK failed', failure)
     expect(mocks.apply).not.toHaveBeenCalled()
+  })
+
+  it('preserves local authentication when Facebook cannot initialize', async () => {
+    localStorage.setItem('accessToken', 'local-token')
+    mocks.load.mockRejectedValueOnce(new Error('SDK unavailable'))
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    await import('../main')
+    await flushPromises()
+    expect(mocks.mount).toHaveBeenCalledExactlyOnceWith('#app')
+    expect(localStorage.getItem('accessToken')).toBe('local-token')
+    expect(mocks.clearClientAuth).not.toHaveBeenCalled()
   })
 
   it('keeps the portal mounted when SDK loading throws synchronously', async () => {

@@ -58,7 +58,10 @@ describe('Employee authentication (HTTP integration)', () => {
       .overrideProvider(PasswordRecoverySender)
       .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
       .overrideProvider(PasswordRecoveryRepository)
-      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
+      .useValue({
+        sessionRevoked: jest.fn().mockResolvedValue(false),
+        currentSessionVersion: jest.fn().mockResolvedValue(null),
+      })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(ConfigService)
@@ -442,6 +445,7 @@ describe('Employee authentication (HTTP integration)', () => {
       expect(jwt.verify<Record<string, unknown>>(token)).toEqual({
         sub: 21,
         type: 'employee',
+        sessionVersion: null,
         iat: expect.any(Number),
         exp: expect.any(Number),
       });
@@ -650,7 +654,7 @@ describe('Employee authentication (HTTP integration)', () => {
       return Promise.resolve({ rows: [client] });
     });
 
-    const { accessToken } = app.get(AuthService).issueToken(client);
+    const { accessToken } = await app.get(AuthService).issueToken(client);
     await request(app.getHttpServer())
       .get('/api/auth/me')
       .auth(accessToken, { type: 'bearer' })
@@ -669,5 +673,32 @@ describe('Employee authentication (HTTP integration)', () => {
       expect.stringContaining("c.status = 'ACTIVE'"),
       { id: 21 },
     );
+  });
+
+  it('keeps an employee with an unknown password date authenticated and requires a password change', async () => {
+    db.query.mockImplementation((sql: string) =>
+      Promise.resolve({
+        rows: sql.includes('PASSWORD_SET_AT')
+          ? [{ PASSWORD_SET_AT: null, EXPIRATION_DAYS: 120 }]
+          : [employeeRow()],
+      }),
+    );
+    const login = await request(app.getHttpServer())
+      .post('/api/auth/employees/login')
+      .set('Origin', origin)
+      .send({ email: profile.email, password })
+      .expect(200);
+    expect(login.body.user.id).toBe(21);
+    const cookie = login.headers['set-cookie'][0].split(';')[0];
+    const me = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(me.body.firstName).toBe(profile.firstName);
+    const status = await request(app.getHttpServer())
+      .get('/api/auth/password-status')
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(status.body).toEqual({ status: 'expired' });
   });
 });

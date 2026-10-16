@@ -13,7 +13,6 @@ import {
 } from '@/services/authService'
 import {
   authenticateEmployee,
-  closeEmployeeSession,
   employeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
@@ -22,7 +21,9 @@ import {
   clearClientAuth,
   clientSession,
   restoreClientSession,
+  clearClientSession,
 } from '@/services/client-session.service'
+import { authErrorMessage, authErrorStatus } from '@/utils/auth-errors'
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
@@ -68,10 +69,17 @@ async function enforceClientPasswordStatus() {
     if (status !== 'valid') {
       await router.replace({ path: PASSWORD_PATH, query: { reason: status } })
     }
-  } catch {
-    if (!disposed) {
-      recoveryError.value =
-        'No se pudo comprobar el estado de tu contraseña. Puedes volver a intentarlo.'
+  } catch (error) {
+    if (!disposed && clientUser.value === user && hasClientSession()) {
+      if (authErrorStatus(error) === 401) {
+        clearClientSession()
+        await router.replace({ path: '/', query: { login: 'client', reason: 'expired' } })
+      } else {
+        recoveryError.value = authErrorMessage(
+          error,
+          'No se pudo comprobar el estado de tu contraseña. Puedes volver a intentarlo.',
+        )
+      }
     }
   }
 }
@@ -87,9 +95,16 @@ async function recoverSession() {
   if (results[1]?.status === 'fulfilled' && !disposed) {
     await enforceClientPasswordStatus()
   }
-  if (results.some((result) => result.status === 'rejected')) {
+  const failure = results.find((result) => result.status === 'rejected')
+  if (failure?.status === 'rejected') {
     if (!disposed)
-      recoveryError.value = 'No se pudo comprobar tu sesión. Puedes volver a intentarlo.'
+      recoveryError.value =
+        failure.reason instanceof EmployeeAuthError
+          ? failure.reason.message
+          : authErrorMessage(
+              failure.reason,
+              'No se pudo comprobar tu sesión. Puedes volver a intentarlo.',
+            )
   }
   if (!disposed) recovering.value = false
 }
@@ -139,7 +154,7 @@ function closeLogin() {
   if (submitting.value) return
   activeModal.value = null
   loginError.value = ''
-  if (route.query.login === 'employee') {
+  if (route.query.login === 'employee' || route.query.login === 'client') {
     const query = { ...route.query }
     delete query.login
     delete query.reason
@@ -150,12 +165,13 @@ function closeLogin() {
 watch(
   () => route.query,
   (query) => {
-    if (query.login !== 'employee') return
-    loginMode.value = 'employee'
+    if (query.login !== 'employee' && query.login !== 'client') return
+    loginMode.value = query.login
     activeModal.value = 'login'
     loginError.value =
       route.query.reason === 'unavailable'
-        ? 'No se pudo comprobar la sesión. Inténtalo nuevamente.'
+        ? (query.login === 'employee' ? employeeSession.error.value : clientSession.error.value) ||
+          'No se pudo comprobar la sesión. Inténtalo nuevamente.'
         : route.query.reason === 'expired'
           ? 'Tu sesión terminó. Inicia sesión nuevamente.'
           : ''
@@ -165,7 +181,8 @@ watch(
 
 onMounted(() => {
   if (employeeSession.status.value === 'error') {
-    recoveryError.value = 'No se pudo comprobar tu sesión. Puedes volver a intentarlo.'
+    recoveryError.value =
+      employeeSession.error.value || 'No se pudo comprobar tu sesión. Puedes volver a intentarlo.'
   } else {
     void recoverSession()
   }
@@ -193,10 +210,16 @@ async function handleClientLogin(identity?: ClientIdentity) {
 }
 
 async function logoutClient() {
-  await closeEmployeeSession()
-  await clearClientAuth()
-  activeModal.value = null
-  await router.replace('/')
+  try {
+    await clearClientAuth()
+    activeModal.value = null
+    await router.replace('/')
+  } catch (error) {
+    recoveryError.value = authErrorMessage(
+      error,
+      'Se cerró la sesión local, pero no se pudo confirmar el cierre con el proveedor.',
+    )
+  }
 }
 
 function goToChangePassword() {
