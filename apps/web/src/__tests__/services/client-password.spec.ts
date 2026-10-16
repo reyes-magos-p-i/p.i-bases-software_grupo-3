@@ -16,7 +16,7 @@ describe('client password service', () => {
   const patch = vi.fn()
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     localStorage.setItem('accessToken', 'token-123')
     vi.mocked(getApi).mockReturnValue({ get, patch } as unknown as ReturnType<typeof getApi>)
   })
@@ -31,12 +31,11 @@ describe('client password service', () => {
     )
   })
 
-  it('allows the password status request without an Authorization header when no client token exists', async () => {
+  it('rejects password status requests without a client token', async () => {
     localStorage.removeItem('accessToken')
-    get.mockResolvedValueOnce({ data: { status: 'must_set' } })
 
-    await expect(getClientPasswordStatus()).resolves.toBe('must_set')
-    expect(get).toHaveBeenCalledWith('/auth/password-status', { headers: {} })
+    await expect(getClientPasswordStatus()).rejects.toMatchObject({ status: 401 })
+    expect(get).not.toHaveBeenCalled()
   })
 
   it('maps password status request failures to a safe typed error', async () => {
@@ -117,5 +116,42 @@ describe('client password service', () => {
         expirationDays: 90,
       }),
     ).rejects.toThrowError('No se pudo actualizar la contraseña, intenta de nuevo.')
+  })
+
+  it('omits staff cookies on client password requests and sets a timeout', async () => {
+    get.mockResolvedValueOnce({ data: { status: 'valid' } })
+    patch.mockResolvedValueOnce({})
+    await getClientPasswordStatus()
+    const payload = {
+      newPassword: 'Replacement9!',
+      confirmNewPassword: 'Replacement9!',
+      expirationDays: 90 as const,
+    }
+    await changeClientPassword(payload)
+    const options = {
+      headers: { Authorization: 'Bearer token-123' },
+      adapter: 'fetch',
+      withCredentials: false,
+      timeout: 10000,
+    }
+    expect(get).toHaveBeenCalledWith('/auth/password-status', options)
+    expect(patch).toHaveBeenCalledWith('/auth/clients/password', payload, options)
+  })
+
+  it.each([null, {}, { status: 'unknown' }, { status: null }])(
+    'rejects an invalid password status response: %p',
+    async (data) => {
+      get.mockResolvedValueOnce({ data })
+      await expect(getClientPasswordStatus()).rejects.toThrow('AUTH_RESPONSE_INVALID')
+    },
+  )
+
+  it('preserves HTTP status for session recovery and identifies server failures', async () => {
+    get.mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } })
+    await expect(getClientPasswordStatus()).rejects.toMatchObject({ status: 401 })
+    patch.mockRejectedValueOnce({ isAxiosError: true, response: { status: 503 } })
+    await expect(
+      changeClientPassword({ newPassword: 'new', confirmNewPassword: 'new', expirationDays: 90 }),
+    ).rejects.toThrow('Error 503:')
   })
 })

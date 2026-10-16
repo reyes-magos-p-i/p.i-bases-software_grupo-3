@@ -1201,4 +1201,15 @@ describe('ClientsRepository', () => {
     );
     expect(connection.commit).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { PASSWORD_SET_AT: null, EXPIRATION_DAYS: 90 },
+    { PASSWORD_SET_AT: new Date('invalid'), EXPIRATION_DAYS: 90 },
+    { PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 45 },
+  ])('rejects malformed client password metadata: %p', async (row) => {
+    connection.execute.mockResolvedValueOnce({ rows: [row] });
+    await expect(repository.findPasswordStatus(7)).rejects.toThrow(
+      'Oracle returned invalid client password status.',
+    );
+  });
 });

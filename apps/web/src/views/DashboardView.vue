@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
+import { authErrorMessage } from '@/utils/auth-errors'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
@@ -20,10 +21,7 @@ import {
 import MovieCrud from '@/components/Movies/MovieCrud.vue'
 
 import { clearClientAuth } from '@/services/client-session.service'
-import {
-  EmployeeAuthError,
-  getEmployeePasswordStatus,
-} from '@/services/authService'
+import { EmployeeAuthError, getEmployeePasswordStatus } from '@/services/authService'
 
 const router = useRouter()
 const identity = employeeSession.user
@@ -76,8 +74,10 @@ async function checkPasswordStatus() {
     if (error instanceof EmployeeAuthError && error.status === 401) {
       sessionExpired()
     } else {
-      passwordStatusError.value =
-        'No se pudo comprobar el estado de tu contraseña. Algunas funciones pueden no estar disponibles.'
+      passwordStatusError.value = authErrorMessage(
+        error,
+        'No se pudo comprobar el estado de tu contraseña. Algunas funciones pueden no estar disponibles.',
+      )
     }
   }
 }
@@ -106,9 +106,12 @@ async function logout() {
     await closeEmployeeSession()
     await clearClientAuth()
     if (!disposed) await router.replace('/')
-  } catch {
+  } catch (error) {
     if (!disposed)
-      logoutError.value = 'No se pudo confirmar el cierre de sesión. Vuelve a intentarlo.'
+      logoutError.value = authErrorMessage(
+        error,
+        'No se pudo confirmar el cierre de sesión. Vuelve a intentarlo.',
+      )
   } finally {
     if (!disposed) loggingOut.value = false
   }
@@ -229,7 +232,8 @@ async function loadCatalogs() {
 }
 
 function openMovieDialog() {
-  if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters') return
+  if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters')
+    return
   //userDialog.value?.open()
 }
 
@@ -267,11 +271,10 @@ const sectionTitle = computed(() =>
         ? 'Salas'
         : activeSection.value === 'password'
           ? 'Cambiar contraseña'
-            : activeSection.value === 'movies'
-              ? 'Peliculas'
-                : 'Clientes',
+          : activeSection.value === 'movies'
+            ? 'Peliculas'
+            : 'Clientes',
 )
-
 
 watch(role, () => {
   if (role.value === 'EMPLOYEE' && ADMINISTRATOR_SECTIONS.includes(activeSection.value)) {
@@ -338,8 +341,10 @@ function returnToDashboard() {
       <div class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
-          v-if="role === 'ADMINISTRATOR'&&
-          (activeSection === 'employees' || activeSection === 'clients')"
+          v-if="
+            role === 'ADMINISTRATOR' &&
+            (activeSection === 'employees' || activeSection === 'clients')
+          "
           type="button"
           class="add-user-button"
           :disabled="loggingOut"
@@ -372,9 +377,7 @@ function returnToDashboard() {
         @forbidden="refreshPermissions"
         @user-updated="userUpdated"
       />
-      <MovieCrud
-        v-if="activeSection === 'movies'"
-      />
+      <MovieCrud v-if="activeSection === 'movies'" />
     </section>
     <ChangePasswordView
       v-else

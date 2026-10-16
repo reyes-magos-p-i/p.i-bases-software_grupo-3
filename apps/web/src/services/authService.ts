@@ -6,10 +6,14 @@ import {
   clientIdentityFromResponse,
   establishClientSession,
   hasClientSession,
+  restoreClientSession,
+  clientSessionRevision,
+  beginClientSessionChange,
+  CLIENT_ACCESS_TOKEN_KEY,
 } from '@/services/client-session.service'
 import { googleAuthCodeLogin } from 'vue3-google-login'
 import type { EmployeeIdentity, EmployeeLoginRequest } from '@/types/employee-auth'
-import { CLIENT_ACCESS_TOKEN_KEY } from './client-session.service'
+import { AuthResponseError, authErrorMessage, authErrorStatus } from '@/utils/auth-errors'
 import type {
   PasswordRecoveryRequest,
   PasswordRecoveryStatus,
@@ -21,7 +25,14 @@ interface ClientAuthResponse {
   client: ClientIdentity
 }
 
-export async function facebookLogin(accessToken: string): Promise<ClientAuthResponse> {
+export async function facebookLogin(
+  accessToken: string,
+  expectedRevision?: number,
+): Promise<ClientAuthResponse> {
+  const revision = expectedRevision ?? beginClientSessionChange()
+  if (revision !== clientSessionRevision()) {
+    throw new ClientAuthError('La sesión cambió durante la solicitud. Inténtalo nuevamente.')
+  }
   const employee = await getEmployeeSession()
   if (employee) {
     throw new Error('Cierra la sesión del personal antes de iniciar sesión con Facebook.')
@@ -30,7 +41,7 @@ export async function facebookLogin(accessToken: string): Promise<ClientAuthResp
   const response = await api.post<ClientAuthResponse>('/auth/facebook', {
     accessToken,
   })
-  establishClientSession(response.data.client, response.data.accessToken)
+  acceptClientSession(response.data, revision)
   return response.data
 }
 
@@ -100,13 +111,17 @@ export async function confirmEmailVerification(token: string): Promise<ClientIde
 }
 
 export async function loginWithGoogle(): Promise<ClientIdentity> {
+  const revision = beginClientSessionChange()
   const api = getApi()
   const googleResponse = await googleAuthCodeLogin()
+  if (await getEmployeeSession()) {
+    throw new ClientAuthError('Cierra la sesión del personal antes de iniciar sesión como cliente.')
+  }
 
   const response = await api.post<ClientAuthResponse>('/auth/google', {
     code: googleResponse.code,
   })
-  establishClientSession(response.data.client, response.data.accessToken)
+  acceptClientSession(response.data, revision)
   return response.data.client
 }
 
@@ -136,7 +151,7 @@ function identityFromResponse(value: unknown): EmployeeIdentity {
     !value.firstName.trim()
   ) {
     throw new EmployeeAuthError(
-      'No se pudo verificar la sesión del personal. Inténtalo nuevamente.',
+      'La respuesta de la sesión del personal no es válida. Inténtalo nuevamente. (AUTH_RESPONSE_INVALID)',
     )
   }
   const email = 'email' in value && typeof value.email === 'string' ? value.email : undefined
@@ -150,9 +165,16 @@ export class ClientAuthError extends EmployeeAuthError {
   }
 }
 
-function employeeAuthError(error: unknown, client = false): EmployeeAuthError {
+function authRetryDelay(error: unknown): number {
+  const header = isAxiosError(error) ? error.response?.headers?.['retry-after'] : undefined
+  const seconds = Number(header)
+  return Number.isFinite(seconds) && seconds > 0 ? Math.min(60, Math.ceil(seconds)) : 60
+}
+
+function employeeAuthError(error: unknown, client = false, login = false): EmployeeAuthError {
   if (error instanceof EmployeeAuthError) return error
   const ErrorType = client ? ClientAuthError : EmployeeAuthError
+  if (error instanceof ChangePasswordError) return new ErrorType(error.message, error.status)
   const status = isAxiosError(error) ? error.response?.status : undefined
   if (
     client &&
@@ -163,37 +185,54 @@ function employeeAuthError(error: unknown, client = false): EmployeeAuthError {
     return new ClientAuthError('Confirma tu correo electrónico antes de iniciar sesión.', status)
   }
   if (status === 429) {
-    const header = isAxiosError(error) ? error.response?.headers?.['retry-after'] : undefined
-    const seconds = Number(header)
-    const delay = Number.isFinite(seconds) && seconds > 0 ? Math.min(60, Math.ceil(seconds)) : 60
     return new ErrorType(
       'Se alcanzó el límite de intentos. Espera antes de volver a intentarlo.',
       status,
-      delay,
+      authRetryDelay(error),
     )
   }
   const messages: Record<number, string> = {
     400: 'Revisa el correo y la contraseña introducidos.',
-    401: 'Correo o contraseña incorrectos.',
+    401: login
+      ? 'Correo o contraseña incorrectos.'
+      : 'Tu sesión terminó. Inicia sesión nuevamente.',
     403: 'No se pudo autorizar la solicitud. Si el problema persiste, contacta con asistencia.',
   }
   return new ErrorType(
-    (status && messages[status]) ||
-      'No se pudo conectar con el servicio de autenticación. Inténtalo nuevamente.',
+    authErrorMessage(
+      error,
+      (status && messages[status]) ||
+        'No se pudo completar la solicitud de autenticación. Inténtalo nuevamente.',
+    ),
     status,
   )
 }
 
 export async function loginClient(payload: ClientLoginRequest): Promise<ClientIdentity> {
+  const revision = beginClientSessionChange()
   try {
+    if (await getEmployeeSession()) {
+      throw new ClientAuthError(
+        'Cierra la sesión del personal antes de iniciar sesión como cliente.',
+      )
+    }
     const response = await getApi().post<ClientAuthResponse>('/auth/clients/login', payload, {
       timeout: 15000,
+      adapter: 'fetch',
+      withCredentials: false,
     })
-    establishClientSession(response.data?.client, response.data?.accessToken)
+    acceptClientSession(response.data, revision)
     return response.data.client
   } catch (error) {
-    throw employeeAuthError(error, true)
+    throw employeeAuthError(error, true, true)
   }
+}
+
+function acceptClientSession(response: ClientAuthResponse, revision: number) {
+  if (revision !== clientSessionRevision()) {
+    throw new ClientAuthError('La sesión cambió durante la solicitud. Inténtalo nuevamente.')
+  }
+  establishClientSession(response?.client, response?.accessToken)
 }
 
 export async function getClientSession(token: string): Promise<ClientIdentity | null> {
@@ -213,18 +252,19 @@ export async function getClientSession(token: string): Promise<ClientIdentity | 
 }
 
 export async function loginEmployee(payload: EmployeeLoginRequest): Promise<EmployeeIdentity> {
-  if (hasClientSession()) {
+  if (hasClientSession() && (await restoreClientSession(getClientSession))) {
     throw new EmployeeAuthError(
       'Cierra la sesión de cliente antes de iniciar sesión como personal.',
     )
   }
   try {
+    beginClientSessionChange()
     const response = await getApi().post<{ user: unknown }>('/auth/employees/login', payload, {
       timeout: 15000,
     })
     return identityFromResponse(response.data?.user)
   } catch (error) {
-    throw employeeAuthError(error)
+    throw employeeAuthError(error, false, true)
   }
 }
 
@@ -243,7 +283,7 @@ export async function getEmployeePasswordStatus(): Promise<ClientPasswordStatus>
     const { data } = await getApi().get<{ status: ClientPasswordStatus }>('/auth/password-status', {
       timeout: 10000,
     })
-    return data.status
+    return passwordStatusFromResponse(data)
   } catch (error) {
     throw employeeAuthError(error)
   }
@@ -257,9 +297,30 @@ export async function logoutEmployee(): Promise<void> {
   }
 }
 
-function clientAuthHeader(): Record<string, string> {
+function clientRequestOptions() {
   const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
-  return token ? { Authorization: `Bearer ${token}` } : {}
+  if (!token)
+    throw new ChangePasswordError(
+      'Tu sesión terminó. Inicia sesión nuevamente.',
+      undefined,
+      undefined,
+      401,
+    )
+  return {
+    headers: { Authorization: `Bearer ${token}` },
+    adapter: 'fetch' as const,
+    withCredentials: false,
+    timeout: 10000,
+  }
+}
+
+function passwordStatusFromResponse(data: unknown): ClientPasswordStatus {
+  const status =
+    typeof data === 'object' && data !== null && 'status' in data ? data.status : undefined
+  if (status !== 'valid' && status !== 'expired' && status !== 'must_set') {
+    throw new AuthResponseError()
+  }
+  return status
 }
 
 export type ClientPasswordStatus = 'valid' | 'expired' | 'must_set'
@@ -269,7 +330,12 @@ export class ChangePasswordError extends Error {
   violations?: string[]
   retryAfterSeconds?: number
 
-  constructor(message: string, code?: string, violations?: string[]) {
+  constructor(
+    message: string,
+    code?: string,
+    violations?: string[],
+    readonly status?: number,
+  ) {
     super(message)
     this.name = 'ChangePasswordError'
     this.code = code
@@ -306,7 +372,10 @@ async function recoveryRequest<T>(action: string, input: object): Promise<T> {
 
 function mapPasswordRecoveryError(error: unknown): ChangePasswordError {
   const fallback = new ChangePasswordError(
-    'No se pudo completar la recuperación. Inténtalo nuevamente.',
+    authErrorMessage(error, 'No se pudo completar la recuperación. Inténtalo nuevamente.'),
+    undefined,
+    undefined,
+    authErrorStatus(error),
   )
   if (!isAxiosError(error)) return fallback
 
@@ -315,9 +384,7 @@ function mapPasswordRecoveryError(error: unknown): ChangePasswordError {
       'Se alcanzó el límite de intentos. Espera un minuto antes de volver a intentarlo.',
       'RECOVERY_THROTTLED',
     )
-    const seconds = Number(error.response.headers?.['retry-after'])
-    failure.retryAfterSeconds =
-      Number.isFinite(seconds) && seconds > 0 ? Math.min(60, Math.ceil(seconds)) : 60
+    failure.retryAfterSeconds = authRetryDelay(error)
     return failure
   }
 
@@ -341,11 +408,22 @@ function mapPasswordRecoveryError(error: unknown): ChangePasswordError {
 export async function getClientPasswordStatus(): Promise<ClientPasswordStatus> {
   try {
     const { data } = await getApi().get<{ status: ClientPasswordStatus }>('/auth/password-status', {
-      headers: clientAuthHeader(),
+      ...clientRequestOptions(),
     })
-    return data.status
-  } catch {
-    throw new ChangePasswordError('No se pudo comprobar el estado de la contraseña.')
+    return passwordStatusFromResponse(data)
+  } catch (error) {
+    if (error instanceof ChangePasswordError) throw error
+    throw new ChangePasswordError(
+      authErrorMessage(
+        error,
+        authErrorStatus(error) === 401
+          ? 'Tu sesión terminó. Inicia sesión nuevamente.'
+          : 'No se pudo comprobar el estado de la contraseña.',
+      ),
+      undefined,
+      undefined,
+      authErrorStatus(error),
+    )
   }
 }
 
@@ -400,11 +478,22 @@ function mapPasswordChangeError(error: unknown): ChangePasswordError {
     const mapper = body?.code ? passwordChangeErrorMappers.get(body.code) : undefined
     if (mapper) return mapper(body)
   }
-  return new ChangePasswordError('No se pudo actualizar la contraseña, intenta de nuevo.')
+  if (error instanceof ChangePasswordError) return error
+  return new ChangePasswordError(
+    authErrorMessage(
+      error,
+      authErrorStatus(error) === 401
+        ? 'Tu sesión terminó. Inicia sesión nuevamente.'
+        : 'No se pudo actualizar la contraseña, intenta de nuevo.',
+    ),
+    undefined,
+    undefined,
+    authErrorStatus(error),
+  )
 }
 
 export async function changeClientPassword(payload: ChangeClientPasswordPayload): Promise<void> {
-  await changePassword('/auth/clients/password', payload, clientAuthHeader())
+  await changePassword('/auth/clients/password', payload, true)
 }
 
 export async function changeEmployeePassword(
@@ -416,10 +505,10 @@ export async function changeEmployeePassword(
 async function changePassword(
   endpoint: string,
   payload: ChangeClientPasswordPayload,
-  headers?: Record<string, string>,
+  client = false,
 ): Promise<void> {
   try {
-    await getApi().patch(endpoint, payload, { headers })
+    await getApi().patch(endpoint, payload, client ? clientRequestOptions() : { timeout: 15000 })
   } catch (error) {
     throw mapPasswordChangeError(error)
   }

@@ -60,7 +60,10 @@ describe('AuthModule', () => {
       .overrideProvider(PasswordRecoverySender)
       .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
       .overrideProvider(PasswordRecoveryRepository)
-      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
+      .useValue({
+        sessionRevoked: jest.fn().mockResolvedValue(false),
+        currentSessionVersion: jest.fn().mockResolvedValue(null),
+      })
       .overrideProvider(EmailVerificationSender)
       .useValue({ send: jest.fn() })
       .overrideProvider(DatabaseService)
@@ -155,6 +158,7 @@ describe('AuthModule', () => {
         expect(payload).toEqual({
           sub: 21,
           type: 'employee',
+          sessionVersion: null,
           iat: expect.any(Number),
           exp: expect.any(Number),
         });

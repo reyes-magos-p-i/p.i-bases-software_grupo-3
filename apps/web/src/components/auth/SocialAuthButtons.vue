@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { loginWithFacebook } from '@/facebook-auth'
 import { facebookLogin, loginWithGoogle } from '@/services/authService'
 import type { ClientIdentity } from '@/types/client-auth'
+import { authErrorMessage } from '@/utils/auth-errors'
 
 const emit = defineEmits<{
   (e: 'authenticated', identity: ClientIdentity): void
@@ -25,8 +26,11 @@ async function onGoogle() {
   setPending(true)
   try {
     emit('authenticated', await loginWithGoogle())
-  } catch {
-    emit('error', 'No se pudo iniciar sesión con Google. Inténtalo nuevamente.')
+  } catch (error) {
+    emit(
+      'error',
+      authErrorMessage(error, 'No se pudo iniciar sesión con Google. Inténtalo nuevamente.'),
+    )
   } finally {
     setPending(false)
   }
@@ -43,8 +47,11 @@ async function onFacebook() {
       return
     }
     emit('error', 'No se pudo conectar con Facebook. Inténtalo nuevamente.')
-  } catch {
-    emit('error', 'No se pudo conectar con Facebook. Inténtalo nuevamente.')
+  } catch (error) {
+    emit(
+      'error',
+      authErrorMessage(error, 'No se pudo conectar con Facebook. Inténtalo nuevamente.'),
+    )
   } finally {
     setPending(false)
   }

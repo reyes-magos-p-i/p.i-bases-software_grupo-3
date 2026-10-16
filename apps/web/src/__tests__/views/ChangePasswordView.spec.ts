@@ -492,6 +492,21 @@ describe('ChangePasswordView.vue', () => {
     expect(wrapper.text()).toContain('Contraseña actual incorrecta')
     expect(wrapper.find('.success-state').exists()).toBe(false)
   })
+  it('shows exceptional password status failures with their code', async () => {
+    vi.mocked(getClientPasswordStatus).mockRejectedValueOnce(
+      new ChangePasswordError(
+        'Error 503: El servicio no está disponible.',
+        undefined,
+        undefined,
+        503,
+      ),
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('Error 503:')
+    expect(wrapper.find('form').exists()).toBe(false)
+    wrapper.unmount()
+  })
 })
 
 function flushPromises() {
