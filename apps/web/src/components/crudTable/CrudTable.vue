@@ -54,24 +54,26 @@ const emit = defineEmits<{
             </slot>
           </td>
 
-          <td v-if="showActions" class="movie-actions" data-test="actions" >
-            <slot name="actions" :row="row">
-              <span title="Ver" class="action-hint">
-              <button type="button" @click="emit('view', row)">
-                <i class="bi bi-eye" aria-hidden="true"></i>
-              </button>
-            </span>
-             <span title="Modificar" class="action-hint">
-              <button type="button" @click="emit('edit', row)">
-                <i class="bi bi-pencil-square" aria-hidden="true"></i>
-              </button>
-              </span>
-               <span title="Desactivar" class="action-hint">
-              <button type="button" @click="emit('delete', row)">
-                <i class="bi bi-person-slash" aria-hidden="true"></i>
-              </button>
-              </span>
-            </slot>
+          <td v-if="showActions" class="actions-cell" data-test="actions">
+            <div class="movie-actions">
+              <slot name="actions" :row="row">
+                <span title="Ver" class="action-hint">
+                  <button type="button" @click="emit('view', row)">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
+                  </button>
+                </span>
+                <span title="Modificar" class="action-hint">
+                  <button type="button" @click="emit('edit', row)">
+                    <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                  </button>
+                </span>
+                <span title="Desactivar" class="action-hint">
+                  <button type="button" @click="emit('delete', row)">
+                    <i class="bi bi-person-slash" aria-hidden="true"></i>
+                  </button>
+                </span>
+              </slot>
+            </div>
           </td>
         </tr>
         <tr v-if="rows.length === 0">
@@ -161,8 +163,12 @@ button:disabled {
   cursor: default;
 }
 
+.actions-cell {
+  white-space: nowrap;
+}
 .movie-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
 }
 .movie-actions button {
