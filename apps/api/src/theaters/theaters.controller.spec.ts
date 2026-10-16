@@ -39,7 +39,7 @@ describe('TheatersController', () => {
 
   it('creates a theater through the service', async () => {
     const theaterDto = {
-      branchId: 2,
+      cinema: 'Cinema Test',
       numberOfSeats: 120,
       dimensionX: 10,
       dimensionY: 12,

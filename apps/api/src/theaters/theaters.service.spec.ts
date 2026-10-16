@@ -41,7 +41,7 @@ describe('TheatersService', () => {
 
   it('creates a theater through the repository', async () => {
     const theaterDto = {
-      branchId: 2,
+      cinema: 'Cinema Test',
       numberOfSeats: 120,
       dimensionX: 10,
       dimensionY: 12,
@@ -56,7 +56,7 @@ describe('TheatersService', () => {
 
   it('rejects a theater whose seat count does not match its dimensions', async () => {
     const theaterDto = {
-      branchId: 2,
+      cinema: 'Cinema Test',
       numberOfSeats: 121,
       dimensionX: 10,
       dimensionY: 12,
@@ -78,7 +78,7 @@ describe('TheatersService', () => {
     for (const dimensions of invalidTheaters) {
       await expect(
         service.create({
-          branchId: 2,
+          cinema: 'Cinema Test',
           ...dimensions,
           projectorName: 'IMAX',
         }),
@@ -90,7 +90,7 @@ describe('TheatersService', () => {
 
   it('accepts exactly 5000 seats', async () => {
     const theaterDto = {
-      branchId: 2,
+      cinema: 'Cinema Test',
       numberOfSeats: 5000,
       dimensionX: 100,
       dimensionY: 50,
@@ -188,14 +188,14 @@ describe('TheatersService', () => {
   ];
 
   it.each(validCases)('service accepts %i x %i = %i', async (x, y, seats) => {
-    const dto = { branchId: 2, dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' };
+    const dto = { cinema: 'Cinema Test', dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' };
     repository.createTheater.mockResolvedValue({ theaterId: 1, ...dto });
     await expect(service.create(dto)).resolves.toMatchObject({ theaterId: 1 });
   });
 
   it.each(invalidCases)('service rejects %i x %i, seats %i', async (x, y, seats) => {
     await expect(
-      service.create({ branchId: 2, dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' }),
+      service.create({ cinema: 'Cinema Test', dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' }),
     ).rejects.toThrow('Invalid theater seat dimensions');
   });
 });

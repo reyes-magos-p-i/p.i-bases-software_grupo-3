@@ -23,7 +23,7 @@ vi.mock('@/composables/useEmployeeSessionRecovery', () => ({
 
 const theater: Theater = {
   theaterId: 42,
-  branchId: 1,
+  cinema: 'Cinema Test',
   numberOfSeats: 80,
   dimensionX: 8,
   dimensionY: 10,
