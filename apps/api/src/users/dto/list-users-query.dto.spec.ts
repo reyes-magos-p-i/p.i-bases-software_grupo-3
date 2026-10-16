@@ -105,6 +105,35 @@ describe('User list queries', () => {
       await validate(plainToInstance(ListEmployeesQueryDto, payload)),
     ).not.toEqual([]);
   });
+  it.each(['ACTIVE', 'INACTIVE', 'ACTIVE, INACTIVE', ['ACTIVE', 'INACTIVE']])(
+    'accepts validated status selection %p for clients and staff',
+    async (status) => {
+      for (const dto of [ListClientsQueryDto, ListEmployeesQueryDto]) {
+        const query = plainToInstance(dto, { status, sortBy: 'status' });
+        expect(await validate(query)).toEqual([]);
+        expect(query.status).toEqual(
+          typeof status === 'string'
+            ? status.split(',').map((value) => value.trim())
+            : status,
+        );
+      }
+    },
+  );
+  it.each([
+    '',
+    'active',
+    'UNKNOWN',
+    'ACTIVE,ACTIVE',
+    'ACTIVE,',
+    [],
+    1,
+    ['ACTIVE', 'INACTIVE', 'ACTIVE'],
+  ])('rejects invalid status selection %p', async (status) => {
+    expect(
+      await validate(plainToInstance(ListClientsQueryDto, { status })),
+    ).not.toEqual([]);
+  });
+
   it('preserves literal wildcards and names accepted by the creation contract', async () => {
     expect(
       await validate(

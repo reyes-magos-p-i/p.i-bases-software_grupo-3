@@ -1,3 +1,4 @@
+import type { UserStatus } from '../types/user-status.type';
 import type { UserRole } from '../enums/user-role.enum';
 
 export interface UserAddressDto {
@@ -12,6 +13,7 @@ export interface UserAddressDto {
 }
 
 interface UserDetailBaseDto {
+  status: UserStatus;
   id: number;
   firstName: string;
   secondName: string | null;
