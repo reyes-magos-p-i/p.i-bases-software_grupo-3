@@ -9,26 +9,15 @@ import MovieCatalog from '@/components/landing/MovieCatalog.vue'
 </script>
 
 <template>
-  <AppHeader />
+  <AppHeader overlay />
 
   <main>
-    <div class="landing-container home-content">
-      <HeroCarousel />
-
-
-      <MovieCatalog />
-    </div>
+    <HeroCarousel />
+    <MovieCatalog />
     <Movie/>
   </main>
   <AppFooter />
 </template>
 
 <style scoped>
-main {
-  padding-top: 32px;
-}
-
-.home-content {
-  padding-bottom: 24px;
-}
 </style>
