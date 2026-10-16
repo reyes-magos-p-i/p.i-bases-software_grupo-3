@@ -1195,7 +1195,6 @@ describe('UsersRepository', () => {
       address: { districtId: 71, details: 'Casa azul' },
       branchId: 3,
       passwordHash: 'test-password-hash',
-      sessionVersion: null,
       salt: 'test-salt',
     };
     const insertedEmployee = {
