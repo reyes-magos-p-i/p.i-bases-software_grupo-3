@@ -96,18 +96,16 @@ jobs:
       - name: Lint
         run: npm run lint -- --cache --cache-location .cache/eslint/ --cache-strategy content
 
-      - name: Test with coverage
-        run: npm run test:cov ${{ matrix.app == 'api' && '-- --cacheDirectory=.cache/jest' || '' }}
-
       - name: Typecheck
-        if: matrix.app == 'web'
         run: npm run type-check
 
       - name: Build
         run: npm run ${{ matrix.app == 'web' && 'build-only' || 'build' }}
 
+      - name: Test with coverage
+        run: npm run test:cov ${{ matrix.app == 'api' && '-- --cacheDirectory=.cache/jest' || '' }}
+
       - name: Upload coverage
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.app }}
@@ -132,7 +130,8 @@ jobs:
 
   sonarqube:
     name: SonarQube
-    needs: [changes, ci]
+    needs: [changes, ci-result]
+    if: success() && needs.changes.outputs.apps != '[]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -161,7 +160,7 @@ jobs:
 
   deploy:
     name: Deploy
-    needs: [ci, sonarqube]
+    needs: [sonarqube]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
