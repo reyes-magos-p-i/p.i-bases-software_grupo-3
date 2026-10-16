@@ -25,6 +25,7 @@ const originalClose = Object.getOwnPropertyDescriptor(prototype, 'close')
 let wrapper: VueWrapper<InstanceType<typeof EditUserDialog>> | undefined
 const client: ClientDetail = {
   id: 42,
+  status: 'ACTIVE',
   role: 'CLIENT',
   firstName: 'Ana',
   secondName: null,
@@ -137,6 +138,27 @@ afterEach(() => {
 })
 
 describe('EditUserDialog', () => {
+  it('blocks inactive details before displaying an editable form', async () => {
+    getUserDetail.mockResolvedValueOnce({ ...client, status: 'INACTIVE' })
+    await render()
+    expect(page.text()).toContain('No se puede modificar un usuario inactivo')
+    expect(page.find('form').exists()).toBe(false)
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+  it('blocks a concurrent deactivation conflict without marking the email as duplicated', async () => {
+    const rejection = failure(409, 'No se puede modificar un usuario inactivo.')
+    if (rejection.response) rejection.response.data = { code: 'USER_INACTIVE' }
+    updateUser.mockRejectedValueOnce(rejection)
+    const view = await render()
+    await prepareEmail()
+    await confirm()
+    expect(page.text()).toContain('El usuario fue desactivado')
+    expect(button('Guardar cambios').attributes('disabled')).toBeDefined()
+    expect(page.get('input[name="email"]').attributes('aria-invalid')).toBe('false')
+    expect(view.emitted('updated')).toBeUndefined()
+    expect(updateUser).toHaveBeenCalledTimes(1)
+  })
+
   it('waits for a selection without querying', async () => {
     await render(null)
     expect(getUserDetail).not.toHaveBeenCalled()
