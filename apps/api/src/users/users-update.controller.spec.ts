@@ -8,7 +8,9 @@ import { UserRole } from './enums/user-role.enum';
 describe('UsersUpdateController', () => {
   const service = {
     deactivateClient: jest.fn(),
+    activateClient: jest.fn(),
     deactivateEmployee: jest.fn(),
+    activateEmployee: jest.fn(),
     getEditOptions: jest.fn(),
     updateClient: jest.fn(),
     updateEmployee: jest.fn(),
@@ -17,6 +19,29 @@ describe('UsersUpdateController', () => {
     service as unknown as UsersService,
   );
   beforeEach(() => jest.resetAllMocks());
+  it('activates the selected client and obtains the staff actor from the session', async () => {
+    await controller.activateClient({ id: 42 }, {});
+    await controller.activateEmployee(
+      { id: 43 },
+      { user: { id: 21 } } as Request & { user: UserIdentity },
+      undefined,
+    );
+    expect(service.activateClient).toHaveBeenCalledWith(42);
+    expect(service.activateEmployee).toHaveBeenCalledWith(43, 21);
+  });
+  it.each([
+    null,
+    [],
+    { role: 'ADMINISTRATOR' },
+    { actorId: 99 },
+    { status: 'ACTIVE' },
+  ])('rejects activation data %p', (body) => {
+    expect(() => controller.activateClient({ id: 42 }, body)).toThrow(
+      BadRequestException,
+    );
+    expect(service.activateClient).not.toHaveBeenCalled();
+  });
+
   it('deactivates the selected client without returning personal data', async () => {
     await controller.deactivateClient({ id: 42 }, {});
     expect(service.deactivateClient).toHaveBeenCalledWith(42);
