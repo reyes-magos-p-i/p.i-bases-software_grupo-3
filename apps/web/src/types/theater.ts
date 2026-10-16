@@ -1,8 +1,6 @@
-export type TheaterStatus = string
-
 export interface TheaterStatusOption {
   theaterStatusId: number
-  name: TheaterStatus
+  name: string
 }
 
 export interface TheaterProjector {
@@ -28,7 +26,7 @@ export interface CreateTheaterRequest {
   dimensionX: number
   dimensionY: number
   projectorName: string
-  status?: TheaterStatus
+  status?: string
 }
 
 export type UpdateTheaterRequest = Partial<CreateTheaterRequest> & { isActive?: boolean }
@@ -41,5 +39,5 @@ export interface Theater {
   dimensionY: number
   projectorName: string
   isActive: boolean
-  status: TheaterStatus
+  status: string
 }

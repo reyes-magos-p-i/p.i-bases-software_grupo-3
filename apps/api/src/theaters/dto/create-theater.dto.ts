@@ -10,7 +10,6 @@ import {
     registerDecorator,
     ValidationArguments,
 } from 'class-validator';
-import type { TheaterStatus } from '../entities/theater.entity';
 import { IsCinemaName } from '../../common/validation/cinema-name.decorator';
 
 function SeatsMatchDimensions() {
@@ -71,5 +70,5 @@ export class CreateTheaterDto {
     @IsOptional()
     @IsString()
     @IsNotEmpty()
-    status?: TheaterStatus;
+    status?: string;
 }

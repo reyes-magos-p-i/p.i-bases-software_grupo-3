@@ -4,7 +4,6 @@ import type {
   Theater,
   TheaterCinema,
   TheaterProjector,
-  TheaterStatus,
   TheaterStatusOption,
 } from '@/types/theater'
 
@@ -25,7 +24,7 @@ const emptyDraft = () => ({
   dimensionY: '',
   projectorName: '',
   cinema: '',
-  status: '' as TheaterStatus,
+  status: '',
 })
 
 export function useTheaterForm() {

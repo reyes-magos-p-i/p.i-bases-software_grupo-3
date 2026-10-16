@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException, Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
-import { Theater, TheaterStatus, TheaterStatusOption } from '../entities/theater.entity';
+import { Theater, TheaterStatusOption } from '../entities/theater.entity';
 import { CreateTheaterDto } from '../dto/create-theater.dto';
 import { UpdateTheaterDto } from '../dto/update-theater.dto';
 import oracledb from 'oracledb';
@@ -9,7 +9,7 @@ import oracledb from 'oracledb';
 export class TheaterRepository {
   private readonly logger = new Logger(TheaterRepository.name);
 
-  private async findStatusId(conn: oracledb.Connection, name: TheaterStatus): Promise<number> {
+  private async findStatusId(conn: oracledb.Connection, name: string): Promise<number> {
     const result = await conn.execute(
       `SELECT theater_status_id FROM TheaterStatuses WHERE name = :name`,
       { name },
@@ -44,7 +44,7 @@ export class TheaterRepository {
       this.logger.log(`Fetched ${result.rows?.length ?? 0} theaters from the database.`);
       this.logger.debug(`Database query result: ${JSON.stringify(result)}`);
 
-      const rows = (result.rows ?? []) as { THEATER_ID: number; CINEMA: string; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number; STATUS: TheaterStatus }[];
+      const rows = (result.rows ?? []) as { THEATER_ID: number; CINEMA: string; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number; STATUS: string }[];
 
       return rows.map((row) => ({
         theaterId: row.THEATER_ID,
@@ -67,7 +67,7 @@ export class TheaterRepository {
       const result = await this.db.query(
         `SELECT theater_status_id, name FROM TheaterStatuses ORDER BY theater_status_id`,
       );
-      const rows = (result.rows ?? []) as { THEATER_STATUS_ID: number; NAME: TheaterStatus }[];
+      const rows = (result.rows ?? []) as { THEATER_STATUS_ID: number; NAME: string }[];
       return rows.map((row) => ({ theaterStatusId: row.THEATER_STATUS_ID, name: row.NAME }));
     } catch (error) {
       this.logger.error('Error fetching theater statuses', error as Error);
@@ -163,7 +163,7 @@ export class TheaterRepository {
         { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
 
-      const rows = (result.rows ?? []) as { THEATER_ID: number; CINEMA: string; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number; STATUS: TheaterStatus }[];
+      const rows = (result.rows ?? []) as { THEATER_ID: number; CINEMA: string; NUMBER_SEATS: number; DIMENSION_X: number; DIMENSION_Y: number; PROJECTOR_NAME: string; IS_ACTIVE: number; STATUS: string }[];
 
       if (rows.length === 0) {
         return null;

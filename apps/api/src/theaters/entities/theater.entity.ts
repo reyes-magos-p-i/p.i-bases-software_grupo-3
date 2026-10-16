@@ -15,12 +15,10 @@ export class Theater {
     dimensionY: number;
     projectorName: string;
     isActive: boolean;
-    status: TheaterStatus;
+    status: string;
 }
-
-export type TheaterStatus = string;
 
 export interface TheaterStatusOption {
     theaterStatusId: number;
-    name: TheaterStatus;
+    name: string;
 }
