@@ -73,7 +73,10 @@ describe('Client login HTTP contracts', () => {
       .overrideProvider(PasswordRecoverySender)
       .useValue({ send: jest.fn(), notifyChanged: jest.fn() })
       .overrideProvider(PasswordRecoveryRepository)
-      .useValue({ sessionRevoked: jest.fn().mockResolvedValue(false) })
+      .useValue({
+        sessionRevoked: jest.fn().mockResolvedValue(false),
+        currentSessionVersion: jest.fn().mockResolvedValue(null),
+      })
       .overrideProvider(EmailVerificationSender)
       .useValue(sender)
       .compile();

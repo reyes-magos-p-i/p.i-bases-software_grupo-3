@@ -218,16 +218,45 @@ export class PasswordRecoveryRepository {
     });
   }
 
+  private async sessionState(type: RecoveryAccountType, id: number) {
+    const result = await this.db.query<{
+      RESET_AT: Date | null;
+      SESSION_VERSION: string | null;
+    }>(
+      `SELECT RESET_AT,
+              TO_CHAR(RESET_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF9') AS SESSION_VERSION
+         FROM PASSWORD_RECOVERIES WHERE ${ACCOUNT_TABLES[type].id} = :accountId`,
+      { accountId: id },
+    );
+    const row = result.rows?.[0];
+    return {
+      resetAt: row?.RESET_AT ?? null,
+      version: row?.SESSION_VERSION ?? null,
+    };
+  }
+
+  async currentSessionVersion(type: RecoveryAccountType, id: number) {
+    return (await this.sessionState(type, id)).version;
+  }
+
   async sessionRevoked(
     type: RecoveryAccountType,
     id: number,
     issuedAt: unknown,
+    version?: unknown,
   ): Promise<boolean> {
-    const result = await this.db.query<{ RESET_AT: Date | null }>(
-      `SELECT RESET_AT FROM PASSWORD_RECOVERIES WHERE ${ACCOUNT_TABLES[type].id} = :accountId`,
-      { accountId: id },
+    const { resetAt, version: currentVersion } = await this.sessionState(
+      type,
+      id,
     );
-    const resetAt = result.rows?.[0]?.RESET_AT;
+    // A credential snapshot and its reset version share one Oracle read-consistent query.
+    // Comparing versions avoids second-resolution JWT timestamps rejecting a fresh login.
+    if (version !== undefined) {
+      return (
+        (version !== null && typeof version !== 'string') ||
+        version !== currentVersion
+      );
+    }
     return (
       !!resetAt &&
       (typeof issuedAt !== 'number' ||

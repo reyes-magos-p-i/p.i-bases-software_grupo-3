@@ -273,4 +273,44 @@ describe('PasswordRecoveryRepository', () => {
       false,
     );
   });
+
+  it.each(['client', 'employee'] as const)(
+    'accepts a fresh %s version in the same second and rejects older versions',
+    async (type) => {
+      const version = '2026-10-15T12:00:00.500000000';
+      db.query.mockResolvedValue({
+        rows: [
+          {
+            RESET_AT: new Date('2026-10-15T12:00:00.500Z'),
+            SESSION_VERSION: version,
+          },
+        ],
+      });
+      await expect(repository.currentSessionVersion(type, 7)).resolves.toBe(
+        version,
+      );
+      await expect(
+        repository.sessionRevoked(type, 7, 1792065600, version),
+      ).resolves.toBe(false);
+      await expect(
+        repository.sessionRevoked(type, 7, 1792065600, null),
+      ).resolves.toBe(true);
+      await expect(
+        repository.sessionRevoked(type, 7, 1792065600, 'older-version'),
+      ).resolves.toBe(true);
+    },
+  );
+
+  it.each([null, 1, {}, []])(
+    'validates the signed session version before any recovery: %p',
+    async (version) => {
+      db.query.mockResolvedValue({ rows: [] });
+      await expect(
+        repository.currentSessionVersion('client', 7),
+      ).resolves.toBeNull();
+      await expect(
+        repository.sessionRevoked('client', 7, 123, version),
+      ).resolves.toBe(version !== null);
+    },
+  );
 });

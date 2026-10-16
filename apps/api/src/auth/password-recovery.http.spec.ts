@@ -39,6 +39,7 @@ describe('Password recovery HTTP flow', () => {
     failAttempt: jest.fn(),
     invalidate: jest.fn(),
     sessionRevoked: jest.fn(),
+    currentSessionVersion: jest.fn(),
   };
   const identity = {
     id: 7,
@@ -59,6 +60,9 @@ describe('Password recovery HTTP flow', () => {
     pending = null;
     attempts = 0;
     resetAt = 0;
+    repository.currentSessionVersion.mockImplementation(() =>
+      Promise.resolve(resetAt ? String(resetAt) : null),
+    );
     repository.request.mockImplementation(
       (
         accountType: 'client' | 'employee',
@@ -106,8 +110,12 @@ describe('Password recovery HTTP flow', () => {
       return Promise.resolve();
     });
     repository.sessionRevoked.mockImplementation(
-      (_type: string, _id: number, iat: number) =>
-        Promise.resolve(resetAt > 0 && iat * 1000 <= resetAt),
+      (_type: string, _id: number, iat: number, version?: unknown) =>
+        Promise.resolve(
+          version === undefined
+            ? resetAt > 0 && iat * 1000 <= resetAt
+            : version !== (resetAt ? String(resetAt) : null),
+        ),
     );
     const module = await Test.createTestingModule({
       imports: [
@@ -132,7 +140,11 @@ describe('Password recovery HTTP flow', () => {
       .overrideProvider(ClientsService)
       .useValue({
         findWithLocalCredentials: () =>
-          Promise.resolve({ ...identity, passwordHash: currentHash }),
+          Promise.resolve({
+            ...identity,
+            passwordHash: currentHash,
+            sessionVersion: resetAt ? String(resetAt) : null,
+          }),
         findById: () => Promise.resolve(identity),
         isEmailVerificationPending: () => Promise.resolve(false),
         findPasswordStatus: () => Promise.resolve(null),
@@ -140,7 +152,11 @@ describe('Password recovery HTTP flow', () => {
       .overrideProvider(UsersRepository)
       .useValue({
         findEmployeeWithLocalCredentialsByEmail: () =>
-          Promise.resolve({ ...identity, passwordHash: currentHash }),
+          Promise.resolve({
+            ...identity,
+            passwordHash: currentHash,
+            sessionVersion: resetAt ? String(resetAt) : null,
+          }),
         findEmployeeIdentityById: () => Promise.resolve(identity),
         findEmployeeCredentialsStatus: () =>
           Promise.resolve({ setAt: new Date(), expirationDays: 90 }),
@@ -216,6 +232,19 @@ describe('Password recovery HTTP flow', () => {
         .send({ email, password: newPassword });
       expect(oldLogin.status).toBe(401);
       expect(newLogin.status).toBe(200);
+      const session = request(app.getHttpServer()).get(
+        '/api/auth/password-status',
+      );
+      if (accountType === 'client') {
+        session.set('Authorization', `Bearer ${newLogin.body.accessToken}`);
+      } else {
+        session.set('Cookie', newLogin.headers['set-cookie'][0].split(';')[0]);
+      }
+      const status = await session;
+      expect(status.status).toBe(200);
+      expect(status.body.status).toBe(
+        accountType === 'client' ? 'must_set' : 'valid',
+      );
       expect(sender.notifyChanged).toHaveBeenCalledWith(email);
     },
   );
