@@ -1,12 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TheatersController } from './theaters.controller';
 import { TheatersService } from './theaters.service';
+import { AdministratorGuard } from '../users/guards/administrator.guard';
+import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 
 describe('TheatersController', () => {
   let controller: TheatersController;
   let service: {
     create: jest.Mock;
     findAll: jest.Mock;
+    findStatuses: jest.Mock;
     findOne: jest.Mock;
     update: jest.Mock;
     remove: jest.Mock;
@@ -16,6 +19,7 @@ describe('TheatersController', () => {
     service = {
       create: jest.fn(),
       findAll: jest.fn(),
+      findStatuses: jest.fn(),
       findOne: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
@@ -82,5 +86,26 @@ describe('TheatersController', () => {
 
     expect(controller.remove('4')).toBe('removed');
     expect(service.remove).toHaveBeenCalledWith(4);
+  });
+
+  it('returns theater statuses from the service', async () => {
+    const statuses = [{ theaterStatusId: 1, name: 'Disponible' }];
+    service.findStatuses.mockResolvedValue(statuses);
+
+    await expect(controller.findStatuses()).resolves.toEqual(statuses);
+    expect(service.findStatuses).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates service errors', async () => {
+    service.findAll.mockRejectedValue(new Error('boom'));
+
+    await expect(controller.findAll()).rejects.toThrow('boom');
+  });
+
+  it('protects the controller with the admin and password status guards', () => {
+    const guards: unknown[] = Reflect.getMetadata('__guards__', TheatersController);
+
+    expect(guards).toHaveLength(3);
+    expect(guards).toEqual(expect.arrayContaining([AdministratorGuard, PasswordStatusGuard]));
   });
 });
