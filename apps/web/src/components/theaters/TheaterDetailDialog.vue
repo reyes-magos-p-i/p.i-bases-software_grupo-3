@@ -1,120 +1,56 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, useId, useTemplateRef, watch } from 'vue'
+import { onMounted, useTemplateRef, watch } from 'vue'
+import TheaterDialogShell from './TheaterDialogShell.vue'
 import type { Theater } from '@/types/theater'
 
-const props = defineProps<{ theater: Theater | null }>()
+const props = withDefaults(defineProps<{ theater: Theater | null; error?: string }>(), {
+  error: '',
+})
 const emit = defineEmits<{ close: [] }>()
-const id = useId()
-const dialog = useTemplateRef<HTMLDialogElement>('dialog')
-let opener: HTMLElement | null = null
-
-function close() {
-  if (dialog.value?.open) dialog.value.close()
-  if (opener?.isConnected) opener.focus()
-  opener = null
-  emit('close')
-}
+const shell = useTemplateRef('shell')
 
 function syncDialog() {
-  const element = dialog.value
-  if (!element) return
-  if (props.theater && !element.open) {
-    opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    element.showModal()
-    element.querySelector<HTMLElement>('button:not([disabled])')?.focus()
-  } else if (!props.theater && element.open) {
-    element.close()
-    opener = null
-  }
+  if (props.theater || props.error) shell.value?.open()
+  else shell.value?.close()
 }
 
 onMounted(syncDialog)
-watch(() => props.theater, syncDialog, { flush: 'post' })
-onBeforeUnmount(() => {
-  if (dialog.value?.open) dialog.value.close()
-  if (opener?.isConnected) opener.focus()
-})
+watch(() => [props.theater, props.error], syncDialog, { flush: 'post' })
 </script>
 
 <template>
-  <dialog
-    ref="dialog"
-    class="theater-dialog"
-    :aria-labelledby="id + '-title'"
-    @cancel.prevent="close"
-  >
-    <header class="dialog-heading">
-      <h2 :id="id + '-title'">Detalle de sala</h2>
-      <button type="button" class="close-button" aria-label="Cerrar" @click="close">
-        <i class="bi bi-x-lg" aria-hidden="true"></i>
-      </button>
-    </header>
-    <div v-if="theater" class="theater-detail-content">
-      <div class="detail-grid">
+  <TheaterDialogShell ref="shell" title="Detalle de sala" close-label="Cerrar" @close="emit('close')">
+    <div v-if="theater || error" class="theater-detail-content">
+      <p v-if="!theater" class="detail-error" role="alert">{{ error }}</p>
+      <div v-else class="detail-grid">
         <div class="readonly-field"><label>ID</label><div class="readonly-input">{{ theater.theaterId }}</div></div>
-        <div class="readonly-field"><label>Sucursal</label><div class="readonly-input">{{ theater.branchId }}</div></div>
+        <div class="readonly-field"><label>Sucursal</label><div class="readonly-input">{{ theater.cinema }}</div></div>
         <div class="readonly-field"><label>Número de asientos</label><div class="readonly-input">{{ theater.numberOfSeats }}</div></div>
         <div class="dimension-grid">
-          <div class="readonly-field"><label>Dimensión X</label><div class="readonly-input">{{ theater.dimensionX }}</div></div>
-          <div class="readonly-field"><label>Dimensión Y</label><div class="readonly-input">{{ theater.dimensionY }}</div></div>
+          <div class="readonly-field"><label>Filas</label><div class="readonly-input">{{ theater.dimensionX }}</div></div>
+          <div class="readonly-field"><label>Columnas</label><div class="readonly-input">{{ theater.dimensionY }}</div></div>
         </div>
         <div class="readonly-field"><label>Proyector</label><div class="readonly-input">{{ theater.projectorName }}</div></div>
         <div class="readonly-field"><label>Estado</label><div class="readonly-input">{{ theater.isActive ? theater.status : 'Inactiva' }}</div></div>
       </div>
       <footer class="dialog-actions">
-        <button type="button" class="secondary-button" @click="close">Cerrar</button>
+        <button type="button" class="secondary-button" @click="shell?.close(); emit('close')">Cerrar</button>
       </footer>
     </div>
-  </dialog>
+  </TheaterDialogShell>
 </template>
 
 <style scoped>
-.theater-dialog {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  width: min(calc(100% - 32px), 620px);
-  max-height: min(90dvh, 760px);
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-medium);
-  color: var(--text-primary);
-  background: var(--content-background);
-  transform: translate(-50%, -50%);
-}
-.theater-dialog::backdrop {
-  background: color-mix(in srgb, var(--page-background) 55%, transparent);
-}
-.dialog-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 20px 24px;
-  color: var(--text-on-dark);
-  background: var(--primary-color);
-}
-.dialog-heading h2 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-.close-button {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border: 0;
-  border-radius: var(--radius-small);
-  color: inherit;
-  background: transparent;
-}
 .theater-detail-content {
   display: grid;
   gap: 8px;
   padding: 24px;
   overflow-y: auto;
   font: inherit;
+}
+.detail-error {
+  margin: 0;
+  color: var(--color-error);
 }
 .detail-grid {
   display: grid;
