@@ -13,7 +13,7 @@ import { initializeFacebook } from './services/facebook-initialization.service'
 const app = createApp(App)
 
 app.use(vue3GoogleLogin, {
-  clientId: '913566706796-cg960qafeugmdcti1dnp8q95j1jo98lt.apps.googleusercontent.com'
+  clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID
 })
 
 

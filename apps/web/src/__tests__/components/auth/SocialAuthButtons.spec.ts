@@ -129,4 +129,22 @@ describe('SocialAuthButtons.vue', () => {
       ['No se pudo conectar con Facebook. Inténtalo nuevamente.'],
     ])
   })
+
+  it.each(['google', 'facebook'] as const)(
+    'identifies a %s server failure with its HTTP code',
+    async (provider) => {
+      const action = provider === 'google' ? loginWithGoogle : facebookLogin
+      action.mockRejectedValueOnce({
+        isAxiosError: true,
+        response: { status: 503, data: { message: 'private provider details' } },
+      })
+      const wrapper = mount(SocialAuthButtons)
+      await wrapper.findAll('button')[provider === 'google' ? 0 : 1]!.trigger('click')
+      await flushPromises()
+      expect(wrapper.emitted('error')?.[0]?.[0]).toContain('Error 503:')
+      expect(wrapper.emitted('error')?.[0]?.[0]).not.toContain('private')
+      expect(wrapper.emitted('authenticated')).toBeUndefined()
+      wrapper.unmount()
+    },
+  )
 })

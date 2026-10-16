@@ -170,3 +170,22 @@ La prueba E2E general `app.e2e-spec.ts` falla porque conserva la expectativa ini
 `GET /` → `200 Hello World!`, pero el `AppModule` actual no registra esa ruta y
 responde 404. Se confirmó con acceso a Oracle; el fallo no procede del flujo de
 recuperación. Esa prueba y la configuración de CI/SonarQube no se modificaron.
+
+## Sesiones emitidas después de una recuperación
+
+Los JWT nuevos incluyen `sessionVersion`, derivado de `RESET_AT` en la tabla
+existente `PASSWORD_RECOVERIES`, normalizado a UTC y conservando la precisión de
+Oracle. El login local obtiene esa versión en la misma consulta que el hash de
+credenciales para evitar que una recuperación concurrente autorice una contraseña
+anterior con la versión nueva.
+
+La validación compara la versión firmada con la vigente. Una recuperación revoca
+las sesiones anteriores, pero permite usar la nueva contraseña inmediatamente,
+incluso durante el mismo segundo. Los JWT anteriores sin esta propiedad conservan
+la comprobación conservadora por `iat`. No cambia el tiempo de vida de los tokens
+ni se necesita una migración de esquema.
+
+Las regresiones HTTP con persistencia y correo simulados comprueban recuperación,
+rechazo de la contraseña anterior, nuevo login y consulta autenticada de
+`/auth/password-status`. Las pruebas del repositorio comprueban versiones distintas,
+ausentes e inválidas y la compatibilidad con sesiones anteriores.

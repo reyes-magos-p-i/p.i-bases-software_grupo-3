@@ -435,9 +435,15 @@ export class ClientsRepository {
       { outFormat: oracle.OUT_FORMAT_OBJECT },
     );
     const row = result.rows?.[0];
-    return row
-      ? { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS }
-      : null;
+    if (!row) return null;
+    if (
+      !(row.PASSWORD_SET_AT instanceof Date) ||
+      !Number.isFinite(row.PASSWORD_SET_AT.getTime()) ||
+      ![30, 60, 90, 120].includes(row.EXPIRATION_DAYS)
+    ) {
+      throw new Error('Oracle returned invalid client password status.');
+    }
+    return { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS };
   }
 
   async findPasswordHash(

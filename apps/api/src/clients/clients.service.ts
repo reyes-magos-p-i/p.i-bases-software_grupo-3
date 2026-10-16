@@ -78,7 +78,9 @@ export class ClientsService {
     email: string,
   ): Promise<ClientWithPassword | null> {
     const r = await this.db.query<ClientWithPassword>(
-      `SELECT ${CLIENT_COLUMNS}, l.password_hash AS "passwordHash"
+      `SELECT ${CLIENT_COLUMNS}, l.password_hash AS "passwordHash",
+              (SELECT TO_CHAR(r.RESET_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF9')
+                 FROM PASSWORD_RECOVERIES r WHERE r.CLIENT_ID = c.CLIENT_ID) AS "sessionVersion"
          FROM Clients c
          JOIN Client_local_credentials l ON l.client_id = c.client_id
         WHERE c.email = :email AND c.status = 'ACTIVE'`,

@@ -120,7 +120,12 @@ describe('JwtStrategy', () => {
     await expect(
       strategy.validate(request, { sub: 7, type: 'client', iat: 123 }),
     ).rejects.toThrow(UnauthorizedException);
-    expect(recovery.sessionRevoked).toHaveBeenCalledWith('client', 7, 123);
+    expect(recovery.sessionRevoked).toHaveBeenCalledWith(
+      'client',
+      7,
+      123,
+      undefined,
+    );
     expect(clients.findById).not.toHaveBeenCalled();
   });
 
@@ -253,4 +258,29 @@ describe('JwtStrategy', () => {
       );
     },
   );
+
+  it('checks the signed reset version and preserves unknown employee password dates as expired', async () => {
+    users.findEmployeeIdentityById.mockResolvedValue({
+      id: 21,
+      role: UserRole.EMPLOYEE,
+      firstName: 'Ana',
+    });
+    users.findEmployeeCredentialsStatus.mockResolvedValue({
+      setAt: null,
+      expirationDays: 120,
+    });
+    await strategy.validate(request, {
+      sub: 21,
+      type: 'employee',
+      iat: 123,
+      sessionVersion: 'reset-version',
+    });
+    expect(recovery.sessionRevoked).toHaveBeenCalledWith(
+      'employee',
+      21,
+      123,
+      'reset-version',
+    );
+    expect(request.passwordStatus).toBe('expired');
+  });
 });

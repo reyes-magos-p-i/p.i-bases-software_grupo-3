@@ -19,6 +19,7 @@ jest.mock('google-auth-library', () => ({
 }));
 
 import { OAuth2Client } from 'google-auth-library';
+import { PasswordRecoveryRepository } from './password-recovery.repository';
 import { UsersRepository } from '../users/users.repository';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { EmployeeWithLocalCredentials } from '../users/types/employee-with-local-credentials.type';
@@ -48,6 +49,7 @@ describe('AuthService', () => {
   };
   let config: { getOrThrow: jest.Mock; get: jest.Mock };
   let verificationSender: { send: jest.Mock };
+  const recovery = { currentSessionVersion: jest.fn() };
 
   const registerDto: RegisterDto = {
     email: 'user@example.com',
@@ -62,6 +64,7 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
+    recovery.currentSessionVersion.mockReset().mockResolvedValue(null);
     clients = {
       findByEmail: jest.fn(),
       findWithLocalCredentials: jest.fn(),
@@ -100,6 +103,10 @@ describe('AuthService', () => {
         { provide: ConfigService, useValue: config },
         { provide: UsersRepository, useValue: users },
         { provide: EmailVerificationSender, useValue: verificationSender },
+        {
+          provide: PasswordRecoveryRepository,
+          useValue: recovery,
+        },
       ],
     }).compile();
 
@@ -142,6 +149,7 @@ describe('AuthService', () => {
         sub: 7,
         email: credentials.email,
         type: 'client',
+        sessionVersion: null,
       });
       expect(
         users.findEmployeeWithLocalCredentialsByEmail,
@@ -490,6 +498,7 @@ describe('AuthService', () => {
         sub: 8,
         email: 'ana@example.com',
         type: 'client',
+        sessionVersion: null,
       });
     });
 
@@ -555,6 +564,7 @@ describe('AuthService', () => {
       firstSurname: 'Solano',
       secondSurname: 'Rojas',
       passwordHash: 'stored-password-hash',
+      sessionVersion: null,
     };
 
     it.each([UserRole.EMPLOYEE, UserRole.ADMINISTRATOR])(
@@ -593,6 +603,7 @@ describe('AuthService', () => {
         expect(jwt.signAsync).toHaveBeenCalledWith({
           sub: 21,
           type: 'employee',
+          sessionVersion: null,
         });
         expect(hasher.hash).not.toHaveBeenCalled();
         expect(clients.findByEmail).not.toHaveBeenCalled();
@@ -700,8 +711,8 @@ describe('AuthService', () => {
     expect(clients.createWithLocalCredentials).not.toHaveBeenCalled();
   });
   describe('issueToken', () => {
-    it('signs a payload with type: client', () => {
-      const result = service.issueToken({
+    it('signs a payload with type: client', async () => {
+      const result = await service.issueToken({
         id: 9,
         email: 'x@y.com',
         status: 'ACTIVE',
@@ -711,21 +722,22 @@ describe('AuthService', () => {
         sub: 9,
         email: 'x@y.com',
         type: 'client',
+        sessionVersion: null,
       });
       expect(result).toEqual({ accessToken: 'signed-token' });
     });
-    it('rejects inactive clients before signing a token', () => {
-      expect(() =>
+    it('rejects inactive clients before signing a token', async () => {
+      await expect(
         service.issueToken({ id: 9, status: 'INACTIVE' } as never),
-      ).toThrow(UnauthorizedException);
+      ).rejects.toThrow(UnauthorizedException);
       expect(jwt.sign).not.toHaveBeenCalled();
     });
     it.each(['UNKNOWN', '', null, undefined, 1])(
       'rejects invalid client status %p without exposing its value',
-      (status) => {
-        expect(() => service.issueToken({ id: 9, status } as never)).toThrow(
-          'Invalid client status.',
-        );
+      async (status) => {
+        await expect(
+          service.issueToken({ id: 9, status } as never),
+        ).rejects.toThrow('Invalid client status.');
         expect(jwt.sign).not.toHaveBeenCalled();
       },
     );
@@ -805,6 +817,7 @@ describe('AuthService', () => {
         sub: 12,
         email: 'facebook@example.com',
         type: 'client',
+        sessionVersion: null,
       });
     });
 
@@ -816,5 +829,28 @@ describe('AuthService', () => {
       );
       expect(fetchMock).not.toHaveBeenCalled();
     });
+  });
+
+  it('signs the local credential snapshot version instead of a later recovery version', async () => {
+    clients.findWithLocalCredentials.mockResolvedValue({
+      id: 7,
+      email: 'client@example.com',
+      firstName: 'Ana',
+      status: 'ACTIVE',
+      passwordHash: 'old-hash',
+      sessionVersion: 'before-reset',
+    });
+    recovery.currentSessionVersion.mockResolvedValue('after-reset');
+    await service.loginClient({
+      email: 'client@example.com',
+      password: 'secret',
+    });
+    expect(jwt.sign).toHaveBeenCalledWith({
+      sub: 7,
+      email: 'client@example.com',
+      type: 'client',
+      sessionVersion: 'before-reset',
+    });
+    expect(recovery.currentSessionVersion).not.toHaveBeenCalled();
   });
 });

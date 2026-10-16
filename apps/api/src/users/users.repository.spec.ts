@@ -675,6 +675,7 @@ describe('UsersRepository', () => {
           firstSurname: 'Solano',
           secondSurname: 'Rojas',
           passwordHash: 'test-password-hash',
+          sessionVersion: null,
         });
         expect(connection.execute).toHaveBeenCalledTimes(1);
         const [sql, binds, options] = connection.execute.mock.calls[0];
@@ -1277,7 +1278,7 @@ describe('UsersRepository', () => {
         );
         const credentialsSql: string = connection.execute.mock.calls[2][0];
         expect(credentialsSql.replace(/\s+/gu, ' ').trim()).toBe(
-          'INSERT INTO EMPLOYEE_LOCAL_CREDENTIALS ( EMPLOYEE_ID, PASSWORD_HASH, SALT ) VALUES (:employeeId, :passwordHash, :salt)',
+          'INSERT INTO EMPLOYEE_LOCAL_CREDENTIALS ( EMPLOYEE_ID, PASSWORD_HASH, SALT, PASSWORD_SET_AT, EXPIRATION_DAYS ) VALUES (:employeeId, :passwordHash, :salt, SYSTIMESTAMP, :expirationDays)',
         );
         expect(connection.execute).toHaveBeenNthCalledWith(
           3,
@@ -1286,6 +1287,7 @@ describe('UsersRepository', () => {
             employeeId: { val: 84, type: oracle.NUMBER },
             passwordHash: { val: data.passwordHash, type: oracle.STRING },
             salt: { val: data.salt, type: oracle.STRING },
+            expirationDays: { val: 120, type: oracle.NUMBER },
           },
           { autoCommit: false },
         );
@@ -1528,6 +1530,7 @@ describe('UsersRepository', () => {
           address: { districtId: 999 },
           branchId: 999,
           passwordHash: 'test-password-hash',
+          sessionVersion: null,
           salt: 'test-salt',
         };
         const creation = repository.createEmployee({
@@ -1746,5 +1749,43 @@ describe('UsersRepository', () => {
       { autoCommit: false },
     );
     expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('returns an unknown employee password date without inventing history', async () => {
+    connection.execute.mockResolvedValueOnce({
+      rows: [{ PASSWORD_SET_AT: null, EXPIRATION_DAYS: 120 }],
+    });
+    await expect(repository.findEmployeeCredentialsStatus(42)).resolves.toEqual(
+      { setAt: null, expirationDays: 120 },
+    );
+  });
+
+  it('returns the recovery version from the same query as the employee password hash', async () => {
+    connection.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          EMPLOYEE_ID: 21,
+          ROLE: UserRole.EMPLOYEE,
+          EMAIL: 'staff@example.com',
+          FIRST_NAME: 'Ana',
+          SECOND_NAME: null,
+          FIRST_SURNAME: 'Solano',
+          SECOND_SURNAME: 'Rojas',
+          CREDENTIALS_EMPLOYEE_ID: 21,
+          PASSWORD_HASH: 'hash',
+          SESSION_VERSION: 'reset-version',
+        },
+      ],
+    });
+    await expect(
+      repository.findEmployeeWithLocalCredentialsByEmail('staff@example.com'),
+    ).resolves.toMatchObject({
+      passwordHash: 'hash',
+      sessionVersion: 'reset-version',
+    });
+    expect(connection.execute).toHaveBeenCalledTimes(1);
+    expect(connection.execute.mock.calls[0][0]).toContain(
+      "r.RESET_AT AT TIME ZONE 'UTC'",
+    );
   });
 });

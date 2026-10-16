@@ -19,6 +19,7 @@ import { clientSession } from '@/services/client-session.service'
 import { employeeSession } from '@/services/employee-session.service'
 import type { EmployeeIdentity } from '@/types/employee-auth'
 import { checkPasswordPolicy, isPasswordPolicySatisfied } from '@/utils/password-policy'
+import { authErrorMessage } from '@/utils/auth-errors'
 
 const props = withDefaults(
   defineProps<{
@@ -104,10 +105,10 @@ async function loadStatus() {
   } catch (error) {
     recoveryExpired.value =
       error instanceof ChangePasswordError && error.code === 'RECOVERY_INVALID'
-    statusError.value =
-      props.recovery && error instanceof ChangePasswordError
-        ? error.message
-        : 'No se pudo comprobar el estado de tu contraseña. Intenta de nuevo.'
+    statusError.value = authErrorMessage(
+      error,
+      'No se pudo comprobar el estado de tu contraseña. Intenta de nuevo.',
+    )
   } finally {
     statusLoading.value = false
   }

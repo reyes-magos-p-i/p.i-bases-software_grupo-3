@@ -20,6 +20,7 @@ import type { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
 import { EmailVerificationSender } from './notifications/email-verification-sender';
 import { validatePasswordChange } from './password/password-change-validator';
+import { PasswordRecoveryRepository } from './password-recovery.repository';
 
 // This non-account hash keeps missing credentials on the password verification path.
 const LOGIN_REFERENCE_HASH =
@@ -34,6 +35,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly usersRepository: UsersRepository,
     private readonly verificationSender: EmailVerificationSender,
+    private readonly recovery: PasswordRecoveryRepository,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -131,7 +133,7 @@ export class AuthService {
       });
     }
     return {
-      accessToken: this.issueToken(client).accessToken,
+      accessToken: (await this.issueToken(client)).accessToken,
       client: this.clientIdentity(client),
     };
   }
@@ -246,6 +248,7 @@ export class AuthService {
     const accessToken = await this.jwt.signAsync({
       sub: employee.id,
       type: 'employee',
+      sessionVersion: employee.sessionVersion ?? null,
     });
     return {
       accessToken,
@@ -277,7 +280,7 @@ export class AuthService {
       });
     }
     return {
-      ...this.issueToken(client),
+      ...(await this.issueToken(client, client.sessionVersion ?? null)),
       client: this.clientIdentity(client),
     };
   }
@@ -285,11 +288,11 @@ export class AuthService {
   //google auth SIlvio
   async googleLogin(authCode: string) {
     //Google clinet inizialitation
-    const googleClient = new OAuth2Client(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      'postmessage',
-    );
+    const googleClient = new OAuth2Client({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri: process.env.GOOGLE_REDIRECT_URI,
+    });
 
     try {
       //rxchange auth code for token from google
@@ -322,7 +325,7 @@ export class AuthService {
       };
 
       const client = await this.clients.findOrCreateSocial(googleUser);
-      const tokensPayload = this.issueToken(client);
+      const tokensPayload = await this.issueToken(client);
 
       return {
         message: 'authentication success',
@@ -348,7 +351,7 @@ export class AuthService {
     }
   }
 
-  issueToken(client: Client) {
+  async issueToken(client: Client, version?: string | null) {
     if (client.status !== 'ACTIVE' && client.status !== 'INACTIVE') {
       throw new Error('Invalid client status.');
     }
@@ -357,11 +360,16 @@ export class AuthService {
         'No se pudo iniciar sesión con esta cuenta.',
       );
     }
+    const sessionVersion =
+      version === undefined
+        ? await this.recovery.currentSessionVersion('client', client.id)
+        : version;
     return {
       accessToken: this.jwt.sign({
         sub: client.id,
         email: client.email,
         type: 'client',
+        sessionVersion,
       }),
     };
   }
@@ -431,7 +439,7 @@ export class AuthService {
     const client = await this.clients.findOrCreateSocial(socialProfile);
 
     return {
-      ...this.issueToken(client),
+      ...(await this.issueToken(client)),
       client: {
         id: client.id,
         email: client.email,

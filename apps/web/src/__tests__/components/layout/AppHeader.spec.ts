@@ -186,7 +186,7 @@ describe('AppHeader authentication navigation', () => {
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
     await flushPromises()
     expect(localStorage.getItem('accessToken')).toBeNull()
-    expect(closeEmployeeSession).toHaveBeenCalledExactlyOnceWith()
+    expect(closeEmployeeSession).not.toHaveBeenCalled()
     expect(wrapper.find('.account-avatar').exists()).toBe(false)
     expect(wrapper.find('.register-button').exists()).toBe(true)
   })
@@ -452,5 +452,62 @@ describe('AppHeader authentication navigation', () => {
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/recover-password')
     expect(getClientPasswordStatus).not.toHaveBeenCalled()
+  })
+
+  it('opens and clears the client login requested by a redirect', async () => {
+    await router.push('/?login=client&reason=expired')
+    await flushPromises()
+    expect(page.get('dialog[open] h2').text()).toBe('Iniciar sesión')
+    expect(page.get('[role="alert"]').text()).toContain('Tu sesión terminó')
+    await page.get('.app-modal-close').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('preserves the exceptional session error when returning to staff login', async () => {
+    Object.assign(employeeSession.error, {
+      value: 'Error 500: Ocurrió un problema en el servidor.',
+    })
+    await router.push('/?login=employee&reason=unavailable')
+    await flushPromises()
+    expect(page.get('[role="alert"]').text()).toContain('Error 500:')
+    Object.assign(employeeSession.error, { value: '' })
+  })
+
+  it('ignores a password-status failure after client logout', async () => {
+    let reject!: (error: Error) => void
+    vi.mocked(getClientPasswordStatus).mockReturnValueOnce(
+      new Promise((_, fail) => {
+        reject = fail
+      }),
+    )
+    localStorage.setItem('accessToken', 'client-token')
+    await wrapper.get('.login-button').trigger('click')
+    await page.get('[name="email"]').setValue('ana@example.com')
+    await page.get('[name="password"]').setValue('ValidPassword1!')
+    await page.get('form').trigger('submit')
+    await vi.waitFor(() => expect(getClientPasswordStatus).toHaveBeenCalled())
+    await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
+    await flushPromises()
+    reject(new Error('stale failure'))
+    await flushPromises()
+    expect(wrapper.find('.session-feedback').exists()).toBe(false)
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('returns an unauthorized client to login without a technical error code', async () => {
+    const { ChangePasswordError } = await import('@/services/authService')
+    vi.mocked(getClientPasswordStatus).mockRejectedValueOnce(
+      new ChangePasswordError('Tu sesión terminó.', undefined, undefined, 401),
+    )
+    localStorage.setItem('accessToken', 'client-token')
+    wrapper
+      .findComponent(LoginModal)
+      .vm.$emit('submit', { email: 'ana@example.com', password: 'secret' })
+    await flushPromises()
+    expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(router.currentRoute.value.query).toEqual({ login: 'client', reason: 'expired' })
+    expect(page.get('[role="alert"]').text()).toContain('Tu sesión terminó')
+    expect(page.get('[role="alert"]').text()).not.toContain('401')
   })
 })
