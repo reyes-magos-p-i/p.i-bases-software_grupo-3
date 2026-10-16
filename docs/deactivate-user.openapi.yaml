@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Cinema - Desactivar un usuario
-  version: 1.0.0
-  description: Conserva datos históricos y bloquea acceso y gestión de cuentas inactivas.
+  title: Cinema - Activar y desactivar usuarios
+  version: 1.1.0
+  description: Conserva datos históricos y bloquea acceso y edición de cuentas inactivas. Ambas transiciones revocan sesiones y recuperaciones anteriores.
 servers:
   - url: /api
 security:
@@ -13,7 +13,7 @@ paths:
     patch:
       operationId: deactivateClient
       summary: Desactivar un cliente
-      description: Empleados y administradores. No elimina datos ni permite reactivar cuentas.
+      description: Empleados y administradores. No elimina datos. Los usuarios inactivos siguen disponibles para consulta de gestión.
       parameters:
         - $ref: "#/components/parameters/UserId"
         - $ref: "#/components/parameters/Origin"
@@ -61,6 +61,64 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: El empleado ya está desactivado, no puedes desactivar tu propia cuenta o debe permanecer al menos un administrador activo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /users/clients/{id}/activate:
+    patch:
+      operationId: activateClient
+      summary: Activar un cliente
+      description: Empleados y administradores. Conserva credenciales y fechas, revoca sesiones antiguas y recuperaciones pendientes. No confirma correos ni renueva contraseñas.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        $ref: "#/components/requestBodies/Empty"
+      responses:
+        "204":
+          description: Usuario activado. Requiere iniciar sesión nuevamente.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: El usuario ya está activo.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /users/employees/{id}/activate:
+    patch:
+      operationId: activateEmployee
+      summary: Activar personal
+      description: Solo administradores. Conserva credenciales y fechas, revoca sesiones antiguas y recuperaciones pendientes. No confirma correos ni renueva contraseñas.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        $ref: "#/components/requestBodies/Empty"
+      responses:
+        "204":
+          description: Usuario activado. Requiere iniciar sesión nuevamente.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: El usuario ya está activo.
           content:
             application/json:
               schema:
