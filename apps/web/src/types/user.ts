@@ -12,6 +12,8 @@ export interface UserCreationOptions {
   branches: BranchOption[]
 }
 
+export type UserStatus = 'ACTIVE' | 'INACTIVE'
+
 export type UserRole = 'CLIENT' | 'EMPLOYEE' | 'ADMINISTRATOR'
 
 interface CreateUserBase {
@@ -61,6 +63,7 @@ export interface UserApiError {
 }
 
 export interface ListedClient {
+  status: UserStatus
   id: number
   name: string
   email: string
@@ -77,6 +80,7 @@ export interface ListedEmployee extends ListedClient {
 
 export interface UserListQuery {
   search?: string
+  status?: UserStatus[]
   page: number
   pageSize: number
   sortBy: string
@@ -105,6 +109,7 @@ export interface UserDetailAddress {
 }
 
 interface UserDetailBase {
+  status: UserStatus
   id: number
   firstName: string
   secondName: string | null
@@ -163,7 +168,8 @@ export type UpdateUserRequest = UpdateClientRequest | UpdateEmployeeRequest
 export type UpdatedUser = CreatedUser
 export type UserEditOptions = Omit<UserCreationOptions, 'branches'>
 
-export interface UserDeactivationSelection extends UserDetailSelection {
+export interface UserStatusSelection extends UserDetailSelection {
+  status: UserStatus
   name: string
   displayId: string
 }
