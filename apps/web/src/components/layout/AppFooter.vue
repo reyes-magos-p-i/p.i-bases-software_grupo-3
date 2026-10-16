@@ -46,7 +46,7 @@
 
   color: var(--text-on-dark);
 
-  background-color: var(--surface-background);
+  background-color: transparent;
 }
 
 .footer-grid {

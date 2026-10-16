@@ -42,6 +42,11 @@ const router = createRouter({
       component: HomeView,
     },
     {
+      path: '/buy-tickets',
+      name: 'buy-tickets',
+      component: PlaceHolder,
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'NotFound',
       component: PlaceHolder,

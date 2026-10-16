@@ -7,7 +7,6 @@ interface CarouselSlide {
   image: string
   alt: string
   title: string
-  description: string
 }
 
 const slides = ref<CarouselSlide[]>([])
@@ -34,7 +33,6 @@ function setPlaceholderSlides(): void {
       image: placeholderImage,
       alt: 'Cinetadel',
       title: 'Cinetadel',
-      description: 'Disponible próximamente en Cinetadel',
     },
   ]
 }
@@ -50,7 +48,6 @@ onMounted(async () => {
         image: `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image/${movie.posterImage}`,
         alt: movie.title,
         title: movie.title,
-        description: 'Disponible próximamente en Cinetadel',
       }))
     }
   } catch {
@@ -103,18 +100,6 @@ function handleImageError(): void {
         />
 
         <div class="hero-overlay"></div>
-
-        <div class="hero-carousel-content">
-          <h1>
-            {{ currentSlide.title }}
-          </h1>
-
-          <p>
-            {{ currentSlide.description }}
-          </p>
-
-          <button type="button" class="purchase-button">Comprar boletos</button>
-        </div>
       </div>
     </Transition>
 
@@ -157,8 +142,6 @@ function handleImageError(): void {
   width: 100%;
   overflow: hidden;
 
-  border-radius: var(--radius-large);
-
   background-color: var(--surface-background);
 }
 
@@ -166,7 +149,8 @@ function handleImageError(): void {
   display: block;
 
   width: 100%;
-  height: clamp(300px, 45vw, 540px);
+  aspect-ratio: 21 / 7.7;
+  height: auto;
 
   object-fit: cover;
 }
@@ -181,51 +165,6 @@ function handleImageError(): void {
     var(--hero-overlay-end) 60%,
     transparent 100%
   );
-}
-
-.hero-carousel-content {
-  position: absolute;
-
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-
-  left: clamp(24px, 6vw, 72px);
-  bottom: clamp(38px, 7vw, 72px);
-
-  max-width: 620px;
-
-  color: var(--content-background);
-}
-
-.hero-carousel-content h1 {
-  margin-bottom: 12px;
-
-  font-size: clamp(1.6rem, 4vw, 3rem);
-  font-weight: 700;
-}
-
-.hero-carousel-content p {
-  margin-bottom: 20px;
-
-  font-size: clamp(0.95rem, 2vw, 1.15rem);
-}
-
-.purchase-button {
-  padding: 10px 20px;
-
-  color: var(--button-text);
-
-  border: 0;
-  border-radius: var(--radius-small);
-
-  background-color: var(--button-background);
-
-  transition: background-color var(--transition-fast);
-}
-
-.purchase-button:hover {
-  background-color: var(--button-hover-background);
 }
 
 .carousel-control {
