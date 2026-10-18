@@ -54,23 +54,25 @@ const emit = defineEmits<{
             </slot>
           </td>
 
-          <td v-if="showActions" class="movie-actions" data-test="actions" >
+          <td v-if="showActions" class="movie-actions" data-test="actions">
             <slot name="actions" :row="row">
-              <span title="Ver" class="action-hint">
-              <button type="button" @click="emit('view', row)">
-                <i class="bi bi-eye" aria-hidden="true"></i>
-              </button>
-            </span>
-             <span title="Modificar" class="action-hint">
-              <button type="button" @click="emit('edit', row)">
-                <i class="bi bi-pencil-square" aria-hidden="true"></i>
-              </button>
-              </span>
-               <span title="Desactivar" class="action-hint">
-              <button type="button" @click="emit('delete', row)">
-                <i class="bi bi-person-slash" aria-hidden="true"></i>
-              </button>
-              </span>
+              <div class="default-actions">
+                <span title="Ver" class="action-hint">
+                  <button type="button" @click="emit('view', row)">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
+                  </button>
+                </span>
+                <span title="Modificar" class="action-hint">
+                  <button type="button" @click="emit('edit', row)">
+                    <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                  </button>
+                </span>
+                <span title="Desactivar" class="action-hint">
+                  <button type="button" @click="emit('delete', row)">
+                    <i class="bi bi-person-slash" aria-hidden="true"></i>
+                  </button>
+                </span>
+              </div>
             </slot>
           </td>
         </tr>
@@ -161,7 +163,12 @@ button:disabled {
   cursor: default;
 }
 
+/* The cell must stay display: table-cell; flex on a <td> takes it out of the
+   row, so it stops matching the row height and its background shifts. */
 .movie-actions {
+  white-space: nowrap;
+}
+.default-actions {
   display: flex;
   gap: 4px;
 }
