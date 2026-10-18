@@ -93,25 +93,21 @@ const validationError = computed(() => {
 const hasFilters = computed(
   () => !!appliedSearch.value || Object.values(filters).some((value) => value !== ''),
 )
+// Columns and order of the design; the date cell also shows the start time.
 const columns = [
-  { key: 'number', label: 'No.' },
   { key: 'movieTitle', label: 'Película' },
   { key: 'code', label: 'ID Proyección' },
-  { key: 'branchName', label: 'Sucursal' },
   { key: 'theater', label: 'Sala' },
   { key: 'date', label: 'Fecha' },
-  { key: 'time', label: 'Hora' },
   { key: 'duration', label: 'Duración' },
   { key: 'price', label: 'Precio' },
   { key: 'status', label: 'Estado' },
 ]
 const rows = computed(() =>
-  (result.value?.items ?? []).map((item, index) => ({
+  (result.value?.items ?? []).map((item) => ({
     id: item.movieFunctionId,
-    number: (result.value!.page - 1) * result.value!.pageSize + index + 1,
     movieTitle: item.movieTitle,
     code: projectionCode('MF', item.movieFunctionId),
-    branchName: item.branchName,
     theater: `Sala ${item.theaterId}`,
     date: formatProjectionDate(item.startTime),
     time: formatProjectionTime(item.startTime),
@@ -355,6 +351,17 @@ defineExpose({ refresh })
           {{ result.total }} {{ result.total === 1 ? 'proyección' : 'proyecciones' }}
         </p>
         <CrudTable v-if="rows.length" :columns="columns" :rows="rows" caption="Proyecciones">
+          <template #cell-code="{ value }">
+            <strong>{{ value }}</strong>
+          </template>
+          <template #cell-date="{ row, value }">
+            <span class="date-cell">
+              <strong>{{ value }}</strong> <span>{{ row.time }}</span>
+            </span>
+          </template>
+          <template #cell-price="{ value }">
+            <strong>{{ value }}</strong>
+          </template>
           <template #cell-status="{ value }">
             <ProjectionStatusBadge :status="value as ProjectionStatus" />
           </template>
@@ -586,6 +593,10 @@ button:focus-visible {
 .row-actions {
   display: flex;
   gap: 4px;
+}
+.date-cell {
+  display: grid;
+  white-space: nowrap;
 }
 .row-actions button:not(:disabled):hover {
   background: var(--input-disabled-background);
