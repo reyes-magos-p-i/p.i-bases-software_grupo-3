@@ -6,7 +6,6 @@ import MovieCrudView from './MovieCrudView.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import {
-  deleteMovie,
   getMovies,
   getClassifications,
   getGenres,
