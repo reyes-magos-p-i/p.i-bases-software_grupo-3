@@ -32,3 +32,10 @@ y fecha de creación (hora de Costa Rica). Si la proyección ya no existe respon
 
 Las proyecciones creadas antes de la migración pueden no tener precio ni
 actividades; se muestran como «Sin precio» y «Sin registrar».
+
+## Tabla del listado
+
+Columnas en el orden del diseño de Figma: Película, ID Proyección, Sala, Fecha,
+Duración, Precio, Estado y Acciones (ver, modificar y cancelar). La celda Fecha
+muestra la fecha en negrita con la hora de inicio debajo. La sucursal no es una
+columna; se consulta en el detalle o con el filtro «Sucursal».
