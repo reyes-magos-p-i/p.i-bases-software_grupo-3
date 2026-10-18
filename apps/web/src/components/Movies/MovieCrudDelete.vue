@@ -16,8 +16,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   deleted: []
-  'session-expired': []
-  forbidden: []
 }>()
 
 const deleting = ref(false)
@@ -47,10 +45,9 @@ async function confirmDelete() {
       const status = failure.response?.status
 
       if (status === 401) {
-        emit('session-expired')
+
         error.value = 'La sesión ha expirado.'
       } else if (status === 403) {
-        emit('forbidden')
         error.value = 'No tienes permiso para eliminar esta película.'
       } else if (status === 404) {
         error.value = 'La película ya no existe.'

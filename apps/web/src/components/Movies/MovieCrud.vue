@@ -223,8 +223,6 @@ defineExpose({ refresh })
       :movie="movieToDelete"
       @close="closeDelete"
       @deleted="load"
-      @session-expired="emit('session-expired')"
-      @forbidden="emit('forbidden')"
     />
   </div>
 </template>
