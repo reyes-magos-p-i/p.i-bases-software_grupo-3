@@ -14,12 +14,14 @@ import {
 } from '@/services/movie.service'
 import type { MovieAll, MovieOption } from '@/types/movie'
 import MovieCrudEdit from './MovieCrudEdit.vue'
+import MovieCrudCreate from './MovieCrudCreate.vue'
 
 const movies = ref<MovieAll[]>([])
 const loading = ref(false)
 const listError = ref('')
 const selectedMovieId = ref<number | null>(null)
 const editingMovieId = ref<number | null>(null)
+const creatingMovie = ref(false)
 
 const classifications = ref<MovieOption[]>([])
 const languages = ref<MovieOption[]>([])
@@ -28,6 +30,14 @@ const catalogsError = ref('')
 
 let request: AbortController | undefined
 let disposed = false
+
+function openCreate() {
+  creatingMovie.value = true
+}
+
+function closeCreate() {
+  creatingMovie.value = false
+}
 
 const columns = [
   { key: 'id', label: 'ID' },
@@ -161,6 +171,12 @@ defineExpose({ refresh })
 
 <template>
   <div class="movie-list-panel" :aria-busy="loading">
+    <button type="button"
+    @click="openCreate"
+    class="add-user-button"
+    >
+      Agregar película
+    </button>
     <LoadingState v-if="loading" message="Cargando películas…" />
 
     <div v-else-if="listError" role="alert">
@@ -184,6 +200,15 @@ defineExpose({ refresh })
     <p v-if="catalogsError" role="alert">
       {{ catalogsError }}
     </p>
+
+    <MovieCrudCreate
+      v-if="creatingMovie"
+      :classifications="classifications"
+      :languages="languages"
+      :genres="genres"
+      @close="closeCreate"
+      @saved="load"
+    />
 
     <MovieCrudEdit
       :movie-id="editingMovieId"
