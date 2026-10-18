@@ -144,17 +144,7 @@ export class UsersRepository {
           data.role === UserRole.EMPLOYEE
         )
           await this.requireAnotherAdministrator(connection);
-        if (data.email !== undefined) {
-          const duplicate = await connection.execute(
-            'SELECT 1 FROM EMPLOYEES WHERE LOWER(TRIM(EMAIL)) = :email AND EMPLOYEE_ID <> :id AND ROWNUM = 1',
-            { email: data.email, id },
-            { autoCommit: false },
-          );
-          if (duplicate.rows?.length)
-            throw new ConflictException(
-              'El correo electrónico ya está registrado para otro empleado.',
-            );
-        }
+        await this.requireUniqueEmployeeEmail(connection, id, data.email);
         const changes: string[] = [];
         const binds: oracle.BindParameters = {
           id: { val: id, type: oracle.NUMBER },
@@ -218,6 +208,23 @@ export class UsersRepository {
         throw new BadRequestException('El distrito de la dirección no existe.');
       throw error;
     }
+  }
+
+  private async requireUniqueEmployeeEmail(
+    connection: oracle.Connection,
+    id: number,
+    email: string | undefined,
+  ): Promise<void> {
+    if (email === undefined) return;
+    const duplicate = await connection.execute(
+      'SELECT 1 FROM EMPLOYEES WHERE LOWER(TRIM(EMAIL)) = :email AND EMPLOYEE_ID <> :id AND ROWNUM = 1',
+      { email, id },
+      { autoCommit: false },
+    );
+    if (duplicate.rows?.length)
+      throw new ConflictException(
+        'El correo electrónico ya está registrado para otro empleado.',
+      );
   }
 
   async findEmployeeDetailById(id: number): Promise<EmployeeDetailDto | null> {
