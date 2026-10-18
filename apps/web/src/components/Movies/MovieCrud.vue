@@ -15,10 +15,12 @@ import {
 import type { MovieAll, MovieOption } from '@/types/movie'
 import MovieCrudEdit from './MovieCrudEdit.vue'
 import MovieCrudCreate from './MovieCrudCreate.vue'
+import MovieCrudDelete from './MovieCrudDelete.vue'
 
 const movies = ref<MovieAll[]>([])
 const loading = ref(false)
 const listError = ref('')
+const movieToDelete = ref<MovieAll | null>(null)
 const selectedMovieId = ref<number | null>(null)
 const editingMovieId = ref<number | null>(null)
 const creatingMovie = ref(false)
@@ -37,6 +39,17 @@ function openCreate() {
 
 function closeCreate() {
   creatingMovie.value = false
+}
+
+function openDelete(row: Record<string, unknown>) {
+  if (typeof row.id !== 'number') return
+
+  movieToDelete.value =
+    movies.value.find(movie => movie.id === row.id) ?? null
+}
+
+function closeDelete() {
+  movieToDelete.value = null
 }
 
 const columns = [
@@ -192,7 +205,7 @@ defineExpose({ refresh })
       caption="Películas"
       @view="viewMovie"
       @edit="editMovie"
-      @delete="removeMovie"
+      @delete="openDelete"
     />
 
     <MovieCrudView :movie-id="selectedMovieId" @close="selectedMovieId = null" />
@@ -217,6 +230,14 @@ defineExpose({ refresh })
       :genres="genres"
       @close="editingMovieId = null"
       @saved="load"
+    />
+
+    <MovieCrudDelete
+      :movie="movieToDelete"
+      @close="closeDelete"
+      @deleted="load"
+      @session-expired="emit('session-expired')"
+      @forbidden="emit('forbidden')"
     />
   </div>
 </template>
