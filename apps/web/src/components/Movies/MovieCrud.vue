@@ -153,18 +153,6 @@ function editMovie(row: Record<string, unknown>) {
   editingMovieId.value = id
 }
 
-async function removeMovie(row: Record<string, unknown>) {
-  const id = Number(row.id)
-
-  if (Number.isNaN(id)) return
-
-  try {
-    await deleteMovie(id)
-    await load()
-  } catch (error) {
-    console.error('Error deleting movie:', error)
-  }
-}
 
 function refresh() {
   void load()
