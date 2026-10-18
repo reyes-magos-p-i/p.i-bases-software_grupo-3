@@ -54,9 +54,9 @@ const emit = defineEmits<{
             </slot>
           </td>
 
-          <td v-if="showActions" class="actions-cell" data-test="actions">
-            <div class="movie-actions">
-              <slot name="actions" :row="row">
+          <td v-if="showActions" class="movie-actions" data-test="actions">
+            <slot name="actions" :row="row">
+              <div class="default-actions">
                 <span title="Ver" class="action-hint">
                   <button type="button" @click="emit('view', row)">
                     <i class="bi bi-eye" aria-hidden="true"></i>
@@ -72,8 +72,8 @@ const emit = defineEmits<{
                     <i class="bi bi-person-slash" aria-hidden="true"></i>
                   </button>
                 </span>
-              </slot>
-            </div>
+              </div>
+            </slot>
           </td>
         </tr>
         <tr v-if="rows.length === 0">
@@ -163,12 +163,13 @@ button:disabled {
   cursor: default;
 }
 
-.actions-cell {
+/* The cell must stay display: table-cell; flex on a <td> takes it out of the
+   row, so it stops matching the row height and its background shifts. */
+.movie-actions {
   white-space: nowrap;
 }
-.movie-actions {
+.default-actions {
   display: flex;
-  align-items: center;
   gap: 4px;
 }
 .movie-actions button {

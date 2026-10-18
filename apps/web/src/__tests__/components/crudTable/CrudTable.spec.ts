@@ -16,9 +16,9 @@ describe('CrudTable', () => {
     for (const row of view.findAll('tbody tr')) {
       const cells = row.findAll('td')
       expect(cells).toHaveLength(2)
-      expect(cells[1]!.classes()).toContain('actions-cell')
-      expect(cells[1]!.classes()).not.toContain('movie-actions')
-      expect(cells[1]!.get('div.movie-actions').findAll('button')).toHaveLength(3)
+      expect(cells[1]!.element.tagName).toBe('TD')
+      expect(cells[1]!.element.children).toHaveLength(1)
+      expect(cells[1]!.get('div.default-actions').findAll('button')).toHaveLength(3)
     }
     view.unmount()
   })
@@ -43,6 +43,16 @@ describe('CrudTable', () => {
       await wrapper.findAll('button')[index]!.trigger('click')
       expect(wrapper.emitted(event)).toEqual([[row]])
     }
+    wrapper.unmount()
+  })
+  it('keeps the actions cell a table cell and lays out the buttons inside it', () => {
+    const wrapper = mount(CrudTable, {
+      props: { columns: [{ key: 'name', label: 'Nombre' }], rows: [{ id: 1, name: 'Ana' }] },
+    })
+    // A flex <td> leaves the table row and its background shifts out of the row.
+    const cell = wrapper.get('td[data-test="actions"]')
+    expect(cell.element.children).toHaveLength(1)
+    expect(cell.get('.default-actions').findAll('button')).toHaveLength(3)
     wrapper.unmount()
   })
   it('supports read-only lists without changing the default actions', () => {
