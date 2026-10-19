@@ -4,6 +4,7 @@ import ProjectionListPanel from '@/components/projections/ProjectionListPanel.vu
 import ProjectionDetailDialog from '@/components/projections/ProjectionDetailDialog.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import type { ListedProjection, ProjectionList } from '@/types/projection'
+import { formatPrice } from '@/utils/projection-format'
 
 const { getProjections, getProjectionFilterOptions } = vi.hoisted(() => ({
   getProjections: vi.fn(),
@@ -111,30 +112,30 @@ describe('ProjectionListPanel', () => {
     await render()
     expect(lastQuery()).toEqual({ page: 1, pageSize: 10 })
     expect(wrapper!.findAll('th').map((th) => th.text())).toEqual([
-      'No.',
       'Película',
       'ID Proyección',
-      'Sucursal',
       'Sala',
       'Fecha',
-      'Hora',
       'Duración',
       'Precio',
       'Estado',
       'Acciones',
     ])
-    const cells = wrapper!.findAll('tbody td').map((td) => td.text())
-    expect(cells.slice(0, 8)).toEqual([
-      '1',
+    const cells = wrapper!.findAll('tbody td')
+    expect(cells.slice(0, 7).map((td) => td.text())).toEqual([
       'The Odyssey',
       'MF-007',
-      'Mall Oxígeno',
       'Sala 4',
-      '14/09/2099',
-      '1:00 pm',
+      '14/09/2099 1:00 pm',
       '2 horas 2 minutos',
+      formatPrice(3500),
+      'Cancelada',
     ])
-    expect(cells[9]).toBe('Cancelada')
+    // The date cell shows the date in bold and the start time below it.
+    expect(cells[3]!.get('strong').text()).toBe('14/09/2099')
+    expect(cells[3]!.findAll('.date-cell > span').map((span) => span.text())).toEqual(['1:00 pm'])
+    expect(cells[1]!.get('strong').text()).toBe('MF-007')
+    expect(cells[5]!.get('strong').text()).toBe(formatPrice(3500))
     expect(wrapper!.get('.result-count').text()).toBe('1 proyección')
   })
 
@@ -248,7 +249,6 @@ describe('ProjectionListPanel', () => {
       'Siguiente',
     ])
     expect(wrapper!.get('[aria-current="page"]').text()).toBe('5')
-    expect(wrapper!.get('tbody td').text()).toBe('41')
 
     await wrapper!.get('[aria-label="Página 6"]').trigger('click')
     expect(lastQuery().page).toBe(6)
