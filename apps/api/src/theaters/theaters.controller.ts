@@ -21,6 +21,11 @@ export class TheatersController {
     return this.theatersService.findAll();
   }
 
+  @Get('statuses')
+  findStatuses() {
+    return this.theatersService.findStatuses();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.theatersService.findOne(+id);
