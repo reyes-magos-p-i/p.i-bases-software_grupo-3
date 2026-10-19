@@ -28,11 +28,18 @@ de datos: usa `PASSWORD_SET_AT` y `EXPIRATION_DAYS` de
 - `expiresInDays` solo tiene valor si la contraseña es válida y faltan 72 horas
   o menos. Se calcula como horas restantes ÷ 24, redondeado hacia arriba: con
   72 h exactas es 3 y con 1 minuto es 1. Con 72 h y 1 minuto es `null`.
-- La interfaz muestra una notificación en la esquina inferior derecha al
-  ingresar al sistema: el cliente al iniciar sesión o restaurar su sesión, y el
-  empleado al abrir el dashboard. Dura 10 segundos y se pausa al pasar el
-  cursor encima. El texto es «Tu contraseña vence en {N} días. Cámbiala en
-  Perfil > Cambiar contraseña.», en singular con 1 día.
+- La interfaz muestra una notificación en la esquina inferior derecha **solo
+  justo después de iniciar sesión**:
+  - el cliente, con correo, Google o Facebook;
+  - el empleado, al llegar al dashboard desde el login.
+
+  Al refrescar la página o restaurar la sesión no aparece. El login marca una
+  bandera en memoria que consume la primera consulta de estado; un refresh la
+  borra. Cerrar sesión oculta el aviso.
+
+- La notificación dura 10 segundos y se pausa al pasar el cursor encima. El
+  texto es «Tu contraseña vence en {N} días. Cámbiala en Perfil > Cambiar
+  contraseña.», en singular con 1 día.
 - El cálculo ocurre en la API, así que las pruebas que ajustan el reloj del
   servidor (UT-080 a UT-084) no dependen del reloj del navegador.
 
