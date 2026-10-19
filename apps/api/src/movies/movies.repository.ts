@@ -141,7 +141,7 @@ import * as oracledb from 'oracledb';
         RELEASE_YEAR,
         SYNOPSIS,
         POSTER_IMAGE,
-        CLASIFICATION_ID
+        CLASSIFICATION_ID
       )
       VALUES (
         :title,
@@ -222,6 +222,8 @@ import * as oracledb from 'oracledb';
 
   async remove(id: number) {
   return this.db.transaction(async (conn) => {
+     await conn.execute('ALTER SESSION DISABLE PARALLEL DML');
+
     await conn.execute(
       `
       DELETE FROM MOVIE_GENRES
@@ -240,7 +242,8 @@ import * as oracledb from 'oracledb';
 
     await conn.execute(
       `
-      DELETE FROM MOVIES
+      DELETE
+      FROM MOVIES
       WHERE MOVIE_ID = :id
       `,
       { id },
