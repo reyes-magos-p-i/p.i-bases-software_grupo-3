@@ -250,7 +250,7 @@ export class TheaterRepository {
           const branchId = (cinemaResult.rows as { BRANCH_ID: number }[] | undefined)?.[0]?.BRANCH_ID;
 
           if (branchId == null) {
-            throw new Error(`Projector not found: ${updateTheaterDto.projectorName}`);
+            throw new Error(`Cinema not found: ${updateTheaterDto.cinema}`);
           }
 
           binds.branchId = branchId;
