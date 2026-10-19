@@ -86,6 +86,8 @@ export class AuthController {
   @Get('me')
   @Header('Cache-Control', 'no-store')
   @UseGuards(AuthGuard('jwt'))
+  // The web app restores the session with this route before redirecting to the password change.
+  @AllowExpiredPassword()
   me(@Req() req: Request) {
     const user = req.user as
       | { id?: number; role?: string; firstName?: string; email?: string }

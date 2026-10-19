@@ -15,8 +15,9 @@ import { CreateMovieDto } from './dto/createMovie.dto/createMovie.dto';
 import { UpdateMovieDto } from './dto/createMovie.dto/updateMovie.dto';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { AuthGuard } from '@nestjs/passport';
+import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 
-@UseGuards(AuthGuard('jwt'), AdministratorGuard)
+@UseGuards(AuthGuard('jwt'), AdministratorGuard, PasswordStatusGuard)
 @Controller('movies')
 export class MoviesController {
   constructor(
