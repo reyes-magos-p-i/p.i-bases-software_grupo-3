@@ -13,11 +13,37 @@ de datos: usa `PASSWORD_SET_AT` y `EXPIRATION_DAYS` de
   días, una contraseña creada el 01/10/2026 08:00 vence el 31/10/2026 08:00; a
   las 07:59 aún es válida.
 - Una contraseña de empleado sin fecha conocida se trata como vencida.
-- Con la contraseña vencida, las rutas protegidas responden `403`
-  `PASSWORD_EXPIRED` y la interfaz redirige a la pantalla de cambio con
-  «Tu contraseña venció. Define una nueva para continuar.».
 - Al cambiarla, se guarda la fecha nueva y el periodo elegido, y se muestra
   «Contraseña actualizada con éxito».
+
+## Bloqueo con contraseña vencida
+
+Con la contraseña vencida (o sin configurar), todo queda restringido hasta
+cambiarla (CA-05 y CA-08). La pantalla muestra «Tu contraseña venció. Define una
+nueva para continuar.».
+
+- **API:**
+  - Toda ruta autenticada con JWT usa `PasswordStatusGuard` y responde `403`
+    `PASSWORD_EXPIRED` o `PASSWORD_MUST_SET`.
+  - Solo se exceptúan, con `@AllowExpiredPassword()`, las rutas necesarias para
+    recuperarse: `/auth/me`, `/auth/password-status` y el cambio de contraseña.
+  - `password-guard-coverage.spec.ts` recorre todos los controladores y falla si
+    una ruta con JWT no cumple esta regla.
+- **Dashboard (personal):**
+  - Se puede pulsar cualquier sección de la barra lateral, pero solo se muestra
+    «Cambiar contraseña».
+  - El bloqueo se levanta al volver al tablero, cuando el servidor confirma la
+    contraseña vigente.
+- **Cliente:**
+  - El guard de rutas restaura la sesión guardada antes de cualquier ruta, no
+    solo las de cliente.
+  - Así redirige a `/account/password` incluso en una carga directa de página,
+    sin mostrarla antes.
+- **En ambos casos:**
+  - Si un endpoint responde `403 PASSWORD_EXPIRED` o `PASSWORD_MUST_SET` durante
+    la sesión (por ejemplo, porque la contraseña venció con la página abierta),
+    un interceptor de axios (`onPasswordBlocked` en `services/api.ts`) lleva a
+    la pantalla de cambio.
 
 ## Aviso de vencimiento próximo
 
