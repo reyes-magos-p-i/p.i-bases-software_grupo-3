@@ -24,7 +24,11 @@ import {
   clearClientSession,
 } from '@/services/client-session.service'
 import { authErrorMessage, authErrorStatus } from '@/utils/auth-errors'
-import { announcePasswordExpiry } from '@/services/password-expiry-notice'
+import {
+  announcePasswordExpiry,
+  dismissPasswordExpiry,
+  expectPasswordExpiryNotice,
+} from '@/services/password-expiry-notice'
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
@@ -69,10 +73,9 @@ async function enforceClientPasswordStatus() {
   try {
     const expiry = await getClientPasswordStatus()
     if (disposed || clientUser.value !== user || !hasClientSession()) return
+    announcePasswordExpiry(expiry)
     if (expiry.status !== 'valid') {
       await router.replace({ path: PASSWORD_PATH, query: { reason: expiry.status } })
-    } else {
-      announcePasswordExpiry(expiry)
     }
   } catch (error) {
     if (!disposed && clientUser.value === user && hasClientSession()) {
@@ -126,12 +129,15 @@ async function submitLogin(credentials: EmployeeLoginRequest) {
       if (disposed) return
       clientUser.value = identity
       activeModal.value = null
+      expectPasswordExpiryNotice()
       await router.push('/')
       await enforceClientPasswordStatus()
     } else {
       const identity = await authenticateEmployee(credentials)
       if (disposed || !identity) return
       activeModal.value = null
+      // The dashboard checks the password status when it opens.
+      expectPasswordExpiryNotice()
       await router.push('/dashboard')
     }
   } catch (error) {
@@ -209,12 +215,14 @@ async function handleClientLogin(identity?: ClientIdentity) {
   if (identity) {
     clientUser.value = identity
     loginError.value = ''
+    expectPasswordExpiryNotice()
     await router.push('/')
     await enforceClientPasswordStatus()
   }
 }
 
 async function logoutClient() {
+  dismissPasswordExpiry()
   try {
     await clearClientAuth()
     activeModal.value = null

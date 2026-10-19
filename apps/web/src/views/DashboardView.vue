@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, wa
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import { authErrorMessage } from '@/utils/auth-errors'
-import { announcePasswordExpiry } from '@/services/password-expiry-notice'
+import { announcePasswordExpiry, dismissPasswordExpiry } from '@/services/password-expiry-notice'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
@@ -70,8 +70,8 @@ async function checkPasswordStatus() {
   try {
     const expiry = await getEmployeePasswordStatus()
     if (disposed) return
+    announcePasswordExpiry(expiry)
     if (expiry.status !== 'valid') activeSection.value = 'password'
-    else announcePasswordExpiry(expiry)
   } catch (error) {
     if (disposed) return
     if (error instanceof EmployeeAuthError && error.status === 401) {
@@ -105,6 +105,7 @@ async function logout() {
   if (submitting.value || passwordChanging.value || loggingOut.value) return
   loggingOut.value = true
   logoutError.value = ''
+  dismissPasswordExpiry()
   try {
     await closeEmployeeSession()
     await clearClientAuth()
