@@ -48,7 +48,9 @@ let saveRequest: AbortController | undefined
 const isFormValid = computed(() => {
   return (
     form.title.trim().length > 0 &&
+    form.title.length <= 100 &&
     form.synopsis.trim().length > 0 &&
+    form.synopsis.length <= 1000 &&
     Number.isInteger(form.runningTime) &&
     form.runningTime !== null &&
     form.runningTime > 0 &&

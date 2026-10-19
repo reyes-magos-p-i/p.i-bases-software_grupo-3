@@ -32,6 +32,11 @@ const catalogsError = ref('')
 let request: AbortController | undefined
 let disposed = false
 
+const emit = defineEmits<{
+  'session-expired': []
+  forbidden: []
+}>()
+
 function openCreate() {
   creatingMovie.value = true
 }
@@ -171,12 +176,16 @@ defineExpose({ refresh })
 
 <template>
   <div class="movie-list-panel" :aria-busy="loading">
-    <button type="button"
-    @click="openCreate"
-    class="add-user-button"
-    >
+    <div class="section-heading">
+        <h1>Peliculas</h1>
+      <button type="button"
+        @click="openCreate"
+        class="add-user-button"
+        >
+         <i class="bi bi-plus-lg" aria-hidden="true"></i>
       Agregar película
-    </button>
+      </button>
+    </div>
     <LoadingState v-if="loading" message="Cargando películas…" />
 
     <div v-else-if="listError" role="alert">
@@ -208,6 +217,8 @@ defineExpose({ refresh })
       :genres="genres"
       @close="closeCreate"
       @saved="load"
+      @session-expired="emit('session-expired')"
+      @forbidden="emit('forbidden')"
     />
 
     <MovieCrudEdit
@@ -217,6 +228,8 @@ defineExpose({ refresh })
       :genres="genres"
       @close="editingMovieId = null"
       @saved="load"
+      @session-expired="emit('session-expired')"
+      @forbidden="emit('forbidden')"
     />
 
     <MovieCrudDelete
