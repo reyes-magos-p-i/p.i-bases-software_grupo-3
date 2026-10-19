@@ -411,9 +411,11 @@ describe('UsersModule (application HTTP integration)', () => {
       code: 'PASSWORD_EXPIRED',
     });
 
-    await browser
-      .get('/auth/password-status')
-      .expect(200, { status: 'expired' });
+    await browser.get('/auth/password-status').expect(200, {
+      status: 'expired',
+      expirationDays: 90,
+      expiresInDays: null,
+    });
     await browser.patch('/auth/employees/password').send({}).expect(400);
   });
 
@@ -685,6 +687,10 @@ describe('UsersModule (application HTTP integration)', () => {
       .get('/auth/password-status')
       .set('Cookie', cookie)
       .expect(200);
-    expect(status.body).toEqual({ status: 'valid' });
+    expect(status.body).toEqual({
+      status: 'valid',
+      expirationDays: 120,
+      expiresInDays: null,
+    });
   });
 });

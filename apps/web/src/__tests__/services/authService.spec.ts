@@ -110,9 +110,13 @@ describe('Client local authentication', () => {
 
   it('checks employee password expiration through the session cookie', async () => {
     const { getEmployeePasswordStatus } = await import('@/services/authService')
-    get.mockResolvedValue({ data: { status: 'expired' } })
+    get.mockResolvedValue({ data: { status: 'expired', expirationDays: 120, expiresInDays: null } })
 
-    await expect(getEmployeePasswordStatus()).resolves.toBe('expired')
+    await expect(getEmployeePasswordStatus()).resolves.toEqual({
+      status: 'expired',
+      expirationDays: 120,
+      expiresInDays: null,
+    })
     expect(get).toHaveBeenCalledExactlyOnceWith('/auth/password-status', {
       timeout: 10000,
     })

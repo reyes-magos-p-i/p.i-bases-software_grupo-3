@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { requireClientSession } from '@/router/client-session.guard'
 import { clientSession, clearClientSession } from '@/services/client-session.service'
 import { getClientPasswordStatus, getClientSession } from '@/services/authService'
+import type { PasswordExpiry } from '@/services/authService'
 
 vi.mock('@/services/authService', () => ({
   getClientPasswordStatus: vi.fn(),
@@ -11,6 +12,12 @@ vi.mock('@/services/authService', () => ({
 function route(path: string, requiresClient = false) {
   return { path, meta: { requiresClient } } as unknown as Parameters<typeof requireClientSession>[0]
 }
+
+const expiry = (
+  status: PasswordExpiry['status'],
+  expirationDays: number | null = 120,
+  expiresInDays: number | null = null,
+): PasswordExpiry => ({ status, expirationDays, expiresInDays })
 
 describe('requireClientSession', () => {
   beforeEach(() => {
@@ -31,7 +38,7 @@ describe('requireClientSession', () => {
 
   it('keeps recovery accessible even when an existing session has an expired password', async () => {
     clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
-    vi.mocked(getClientPasswordStatus).mockResolvedValue('expired')
+    vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))
     await expect(
       requireClientSession(route('/recover-password'), route('/'), vi.fn()),
     ).resolves.toBe(true)
@@ -45,7 +52,7 @@ describe('requireClientSession', () => {
 
   it('forces a redirect to /account/password when the password is expired', async () => {
     clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
-    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('expired')
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('expired'))
     const result = await requireClientSession(route('/'), route('/', false), vi.fn())
     expect(result).toEqual({ path: '/account/password', query: { reason: 'expired' } })
   })

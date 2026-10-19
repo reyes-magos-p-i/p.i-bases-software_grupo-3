@@ -14,6 +14,12 @@ import {
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
 import type { UserCreationOptions } from '@/types/user'
+import type { PasswordExpiry } from '@/services/authService'
+import {
+  dismissPasswordExpiry,
+  passwordExpiryMessage,
+  passwordExpiryNotice,
+} from '@/services/password-expiry-notice'
 
 const {
   getUsers,
@@ -114,7 +120,7 @@ beforeEach(() => {
   getUsers
     .mockReset()
     .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 })
-  getEmployeePasswordStatus.mockReset().mockResolvedValue('valid')
+  getEmployeePasswordStatus.mockReset().mockResolvedValue(expiry('valid'))
   getEmployeeListOptions.mockReset().mockResolvedValue({ branches: [] })
   Object.assign(employeeSession.user, {
     value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana', email: 'ana@example.com' },
@@ -203,6 +209,12 @@ async function renderDashboard() {
   wrapper = mount(DashboardView, { attachTo: document.body, global: { plugins: [router] } })
   return wrapper
 }
+
+const expiry = (
+  status: PasswordExpiry['status'],
+  expirationDays: number | null = 120,
+  expiresInDays: number | null = null,
+): PasswordExpiry => ({ status, expirationDays, expiresInDays })
 
 describe('DashboardView', () => {
   it('shows the password section to administrators and returns from its embedded view', async () => {
@@ -330,10 +342,22 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
   })
 
+  it('warns an employee entering the dashboard during the last day of the password (UT-082)', async () => {
+    getEmployeePasswordStatus.mockResolvedValueOnce(expiry('valid', 120, 1))
+    const view = await renderDashboard()
+    await flushPromises()
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).not.toBe(
+      'Cambiar contraseña',
+    )
+    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(1))
+    dismissPasswordExpiry()
+  })
+
   it('opens the password form when the employee password has expired', async () => {
     getEmployeePasswordStatus
-      .mockResolvedValueOnce('expired')
-      .mockResolvedValueOnce('expired')
+      .mockResolvedValueOnce(expiry('expired'))
+      .mockResolvedValueOnce(expiry('expired'))
     const view = await renderDashboard()
     await flushPromises()
 

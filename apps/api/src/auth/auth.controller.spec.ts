@@ -185,9 +185,14 @@ describe('AuthController', () => {
   });
 
   describe('passwordStatus()', () => {
-    it('returns the status attached to the request', () => {
-      const req = { passwordStatus: 'valid' } as never;
-      expect(controller.passwordStatus(req)).toEqual({ status: 'valid' });
+    it('returns the expiry attached to the request', () => {
+      const passwordExpiry = {
+        status: 'valid',
+        expirationDays: 30,
+        expiresInDays: 3,
+      };
+      const req = { passwordStatus: 'valid', passwordExpiry } as never;
+      expect(controller.passwordStatus(req)).toEqual(passwordExpiry);
     });
 
     it('throws when the status was never computed', () => {
