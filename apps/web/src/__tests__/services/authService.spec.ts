@@ -8,6 +8,9 @@ const { create, post, get, patch, googleAuthCodeLogin } = vi.hoisted(() => ({
   patch: vi.fn(),
   googleAuthCodeLogin: vi.fn(),
 }))
+// api.ts registers a response interceptor when it is first imported.
+const interceptors = { response: { use: vi.fn() } }
+
 vi.mock('axios', () => ({
   default: { create },
   isAxiosError: (error: { isAxiosError?: boolean }) => error?.isAxiosError === true,
@@ -24,7 +27,7 @@ describe('Client local authentication', () => {
     get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
-    create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
+    create.mockImplementation((defaults) => ({ defaults, interceptors, post, get, patch }))
   })
   afterEach(() => {
     vi.unstubAllEnvs()
@@ -154,7 +157,7 @@ describe('registerUser', () => {
     vi.resetAllMocks()
     get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     vi.stubEnv('VITE_API_BASE_URL', '/api')
-    create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
+    create.mockImplementation((defaults) => ({ defaults, interceptors, post, get, patch }))
   })
 
   afterEach(() => vi.unstubAllEnvs())
@@ -220,7 +223,7 @@ describe('email verification API', () => {
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
     get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
-    create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
+    create.mockImplementation((defaults) => ({ defaults, interceptors, post, get, patch }))
   })
 
   afterEach(() => {
@@ -305,7 +308,7 @@ describe('facebook authentication API', () => {
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
     get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
-    create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
+    create.mockImplementation((defaults) => ({ defaults, interceptors, post, get, patch }))
   })
 
   afterEach(() => {
@@ -366,7 +369,7 @@ describe('employee authentication API', () => {
     get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
-    create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
+    create.mockImplementation((defaults) => ({ defaults, interceptors, post, get, patch }))
   })
   afterEach(() => {
     vi.unstubAllEnvs()
