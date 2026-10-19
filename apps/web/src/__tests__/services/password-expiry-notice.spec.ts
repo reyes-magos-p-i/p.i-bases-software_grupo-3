@@ -2,9 +2,17 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   announcePasswordExpiry,
   dismissPasswordExpiry,
+  expectPasswordExpiryNotice,
   passwordExpiryMessage,
   passwordExpiryNotice,
 } from '@/services/password-expiry-notice'
+import type { PasswordExpiry } from '@/services/authService'
+
+const expiringIn = (days: number | null): PasswordExpiry => ({
+  status: 'valid',
+  expirationDays: 30,
+  expiresInDays: days,
+})
 
 afterEach(dismissPasswordExpiry)
 
@@ -17,20 +25,52 @@ describe('password expiry notice', () => {
     expect(passwordExpiryMessage(days)).toBe(text)
   })
 
-  it('announces only valid passwords inside the warning window', () => {
-    announcePasswordExpiry({ status: 'valid', expirationDays: 30, expiresInDays: 3 })
+  it('warns after a login inside the warning window', () => {
+    expectPasswordExpiryNotice()
+    announcePasswordExpiry(expiringIn(3))
     expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(3))
+  })
 
-    announcePasswordExpiry({ status: 'valid', expirationDays: 30, expiresInDays: null })
-    expect(passwordExpiryNotice.message.value).toBe('')
-
-    announcePasswordExpiry({ status: 'expired', expirationDays: 30, expiresInDays: 2 })
+  it('ignores password checks that do not follow a login, such as a page refresh', () => {
+    announcePasswordExpiry(expiringIn(3))
     expect(passwordExpiryNotice.message.value).toBe('')
   })
 
-  it('hides the warning when dismissed', () => {
-    announcePasswordExpiry({ status: 'valid', expirationDays: 30, expiresInDays: 1 })
+  it('warns only once per login', () => {
+    expectPasswordExpiryNotice()
+    announcePasswordExpiry(expiringIn(2))
     dismissPasswordExpiry()
+    announcePasswordExpiry(expiringIn(2))
+    expect(passwordExpiryNotice.message.value).toBe('')
+  })
+
+  it.each([
+    ['outside the warning window', expiringIn(null)],
+    ['with an expired password', { status: 'expired', expirationDays: 30, expiresInDays: null }],
+  ] as const)('consumes the login without warning %s', (_, expiry) => {
+    expectPasswordExpiryNotice()
+    announcePasswordExpiry(expiry)
+    expect(passwordExpiryNotice.message.value).toBe('')
+    announcePasswordExpiry(expiringIn(1))
+    expect(passwordExpiryNotice.message.value).toBe('')
+  })
+
+  it('keeps a visible warning when a later check does not follow a login', () => {
+    expectPasswordExpiryNotice()
+    announcePasswordExpiry(expiringIn(1))
+    announcePasswordExpiry(expiringIn(null))
+    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(1))
+  })
+
+  it('hides the warning and forgets an unfinished login when dismissed', () => {
+    expectPasswordExpiryNotice()
+    announcePasswordExpiry(expiringIn(1))
+    dismissPasswordExpiry()
+    expect(passwordExpiryNotice.message.value).toBe('')
+
+    expectPasswordExpiryNotice()
+    dismissPasswordExpiry()
+    announcePasswordExpiry(expiringIn(1))
     expect(passwordExpiryNotice.message.value).toBe('')
   })
 })

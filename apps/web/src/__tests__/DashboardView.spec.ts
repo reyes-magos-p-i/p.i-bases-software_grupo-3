@@ -17,6 +17,7 @@ import type { UserCreationOptions } from '@/types/user'
 import type { PasswordExpiry } from '@/services/authService'
 import {
   dismissPasswordExpiry,
+  expectPasswordExpiryNotice,
   passwordExpiryMessage,
   passwordExpiryNotice,
 } from '@/services/password-expiry-notice'
@@ -180,6 +181,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  dismissPasswordExpiry()
   wrapper?.unmount()
   wrapper = undefined
   for (const history of routeHistories.splice(0)) history.destroy()
@@ -342,8 +344,19 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
   })
 
-  it('warns an employee entering the dashboard during the last day of the password (UT-082)', async () => {
+  it('does not warn an employee who refreshes the dashboard', async () => {
     getEmployeePasswordStatus.mockResolvedValueOnce(expiry('valid', 120, 1))
+    await renderDashboard()
+    await flushPromises()
+
+    expect(getEmployeePasswordStatus).toHaveBeenCalled()
+    expect(passwordExpiryNotice.message.value).toBe('')
+  })
+
+  it('warns an employee who just logged in during the last day of the password (UT-082)', async () => {
+    getEmployeePasswordStatus.mockResolvedValueOnce(expiry('valid', 120, 1))
+    // The header login marks the session as new before opening the dashboard.
+    expectPasswordExpiryNotice()
     const view = await renderDashboard()
     await flushPromises()
 

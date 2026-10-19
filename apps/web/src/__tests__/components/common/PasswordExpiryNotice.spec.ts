@@ -6,6 +6,7 @@ import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import {
   announcePasswordExpiry,
   dismissPasswordExpiry,
+  expectPasswordExpiryNotice,
   passwordExpiryMessage,
   passwordExpiryNotice,
 } from '@/services/password-expiry-notice'
@@ -21,6 +22,7 @@ describe('PasswordExpiryNotice', () => {
 
   it('shows the warning as an alert popup and hides it when the popup closes', async () => {
     const wrapper = mount(PasswordExpiryNotice)
+    expectPasswordExpiryNotice()
     announcePasswordExpiry({ status: 'valid', expirationDays: 30, expiresInDays: 2 })
     await nextTick()
 

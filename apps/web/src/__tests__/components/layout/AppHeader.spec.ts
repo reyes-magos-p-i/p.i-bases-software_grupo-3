@@ -103,6 +103,7 @@ describe('AppHeader authentication navigation', () => {
   })
 
   afterEach(() => {
+    dismissPasswordExpiry()
     wrapper.unmount()
     router.options.history.destroy()
     vi.useRealTimers()
@@ -257,7 +258,11 @@ describe('AppHeader authentication navigation', () => {
 
     expect(router.currentRoute.value.fullPath).toBe('/')
     expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(3))
-    dismissPasswordExpiry()
+
+    // Logging out removes a warning that is still on screen.
+    await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
+    await flushPromises()
+    expect(passwordExpiryNotice.message.value).toBe('')
   })
 
   it('forces a client with an expired password to the password update page after login', async () => {
@@ -296,6 +301,24 @@ describe('AppHeader authentication navigation', () => {
     expect(router.currentRoute.value.path).toBe('/')
     expect(wrapper.find('.account-avatar').exists()).toBe(false)
     expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+
+  it('does not warn a client whose session is restored by a page refresh', async () => {
+    wrapper.unmount()
+    localStorage.setItem('accessToken', 'saved-token')
+    vi.mocked(getClientSession).mockResolvedValue({
+      id: 7,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Rojas',
+    })
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('valid', 30, 3))
+    wrapper = renderHeader()
+    await flushPromises()
+
+    expect(getClientPasswordStatus).toHaveBeenCalled()
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(passwordExpiryNotice.message.value).toBe('')
   })
 
   it('forces a restored client with an expired password to the password update page', async () => {
