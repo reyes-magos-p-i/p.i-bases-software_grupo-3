@@ -41,6 +41,8 @@ async function confirm() {
       error.value = 'No tienes permiso para desactivar esta sala.'
     } else if (status === 404) {
       error.value = 'La sala seleccionada no existe. Cierra y actualiza el listado.'
+    } else if (status === 409) {
+      error.value = 'No se puede desactivar la sala porque tiene proyecciones programadas.'
     } else {
       error.value = 'No se pudo confirmar la desactivación. Cierra y actualiza el listado antes de intentarlo nuevamente.'
     }

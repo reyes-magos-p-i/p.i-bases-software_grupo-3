@@ -11,7 +11,7 @@ export class TheatersService {
     if (
       !Number.isInteger(numberOfSeats) ||
       numberOfSeats < 1 ||
-      numberOfSeats >= 5000 ||
+      numberOfSeats > 5000 ||
       !Number.isInteger(dimensionX) ||
       dimensionX < 1 ||
       !Number.isInteger(dimensionY) ||
@@ -33,6 +33,10 @@ export class TheatersService {
 
   findAll() {
     return this.theatersRepository.getAllTheaters();
+  }
+
+  findStatuses() {
+    return this.theatersRepository.getTheaterStatuses();
   }
 
   findOne(id: number) {
