@@ -11,6 +11,7 @@ import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
 import type { EmployeeDetailDto } from './dto/user-detail.dto';
 import { DatabaseService } from '../database/database.service';
+import { DEFAULT_PASSWORD_EXPIRATION_DAYS } from '../auth/password/password-status';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import type { CreateAddressDto } from './dto/create-address.dto';
 import type { UpdateEmployeeDto, UpdatedUserDto } from './dto/update-user.dto';
@@ -580,7 +581,10 @@ export class UsersRepository {
             employeeId: { val: employeeId, type: oracle.NUMBER },
             passwordHash: { val: data.passwordHash, type: oracle.STRING },
             salt: { val: data.salt, type: oracle.STRING },
-            expirationDays: { val: 120, type: oracle.NUMBER },
+            expirationDays: {
+              val: DEFAULT_PASSWORD_EXPIRATION_DAYS,
+              type: oracle.NUMBER,
+            },
           },
           { autoCommit: false },
         );
