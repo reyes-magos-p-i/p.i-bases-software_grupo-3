@@ -24,6 +24,7 @@ import {
   clearClientSession,
 } from '@/services/client-session.service'
 import { authErrorMessage, authErrorStatus } from '@/utils/auth-errors'
+import { announcePasswordExpiry } from '@/services/password-expiry-notice'
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
@@ -66,10 +67,12 @@ async function enforceClientPasswordStatus() {
     return
 
   try {
-    const status = await getClientPasswordStatus()
+    const expiry = await getClientPasswordStatus()
     if (disposed || clientUser.value !== user || !hasClientSession()) return
-    if (status !== 'valid') {
-      await router.replace({ path: PASSWORD_PATH, query: { reason: status } })
+    if (expiry.status !== 'valid') {
+      await router.replace({ path: PASSWORD_PATH, query: { reason: expiry.status } })
+    } else {
+      announcePasswordExpiry(expiry)
     }
   } catch (error) {
     if (!disposed && clientUser.value === user && hasClientSession()) {

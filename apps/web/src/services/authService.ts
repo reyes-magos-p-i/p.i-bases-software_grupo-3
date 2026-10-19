@@ -278,12 +278,12 @@ export async function getEmployeeSession(): Promise<EmployeeIdentity | null> {
   }
 }
 
-export async function getEmployeePasswordStatus(): Promise<ClientPasswordStatus> {
+export async function getEmployeePasswordStatus(): Promise<PasswordExpiry> {
   try {
-    const { data } = await getApi().get<{ status: ClientPasswordStatus }>('/auth/password-status', {
+    const { data } = await getApi().get<unknown>('/auth/password-status', {
       timeout: 10000,
     })
-    return passwordStatusFromResponse(data)
+    return passwordExpiryFromResponse(data)
   } catch (error) {
     throw employeeAuthError(error)
   }
@@ -314,16 +314,32 @@ function clientRequestOptions() {
   }
 }
 
-function passwordStatusFromResponse(data: unknown): ClientPasswordStatus {
-  const status =
-    typeof data === 'object' && data !== null && 'status' in data ? data.status : undefined
+function passwordExpiryFromResponse(data: unknown): PasswordExpiry {
+  const field = (name: string): unknown =>
+    typeof data === 'object' && data !== null && name in data ? Reflect.get(data, name) : undefined
+  const status = field('status')
   if (status !== 'valid' && status !== 'expired' && status !== 'must_set') {
     throw new AuthResponseError()
   }
-  return status
+  const positiveInteger = (value: unknown) =>
+    typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+  return {
+    status,
+    expirationDays: positiveInteger(field('expirationDays')),
+    expiresInDays: positiveInteger(field('expiresInDays')),
+  }
 }
 
 export type ClientPasswordStatus = 'valid' | 'expired' | 'must_set'
+
+/** Password state from /auth/password-status. */
+export interface PasswordExpiry {
+  status: ClientPasswordStatus
+  /** Current period in days (30, 60, 90 or 120); null without a local password. */
+  expirationDays: number | null
+  /** Days left, rounded up, only during the 72-hour warning window. */
+  expiresInDays: number | null
+}
 
 export class ChangePasswordError extends Error {
   code?: string
@@ -405,12 +421,12 @@ function mapPasswordRecoveryError(error: unknown): ChangePasswordError {
   }
 }
 
-export async function getClientPasswordStatus(): Promise<ClientPasswordStatus> {
+export async function getClientPasswordStatus(): Promise<PasswordExpiry> {
   try {
-    const { data } = await getApi().get<{ status: ClientPasswordStatus }>('/auth/password-status', {
+    const { data } = await getApi().get<unknown>('/auth/password-status', {
       ...clientRequestOptions(),
     })
-    return passwordStatusFromResponse(data)
+    return passwordExpiryFromResponse(data)
   } catch (error) {
     if (error instanceof ChangePasswordError) throw error
     throw new ChangePasswordError(

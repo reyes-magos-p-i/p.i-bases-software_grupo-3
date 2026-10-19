@@ -20,7 +20,7 @@ export const requireClientSession: NavigationGuard = async (to) => {
       return { path: '/', query: { login: 'client', reason: 'required' } }
     }
     if (!clientSession.user.value || !hasClientSession() || to.path === PASSWORD_PATH) return true
-    const status = await getClientPasswordStatus()
+    const { status } = await getClientPasswordStatus()
     if (status !== 'valid') {
       return { path: PASSWORD_PATH, query: { reason: status } }
     }

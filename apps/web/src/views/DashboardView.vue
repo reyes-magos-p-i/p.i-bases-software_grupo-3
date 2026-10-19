@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, wa
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import { authErrorMessage } from '@/utils/auth-errors'
+import { announcePasswordExpiry } from '@/services/password-expiry-notice'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
@@ -67,8 +68,10 @@ function sessionExpired() {
 async function checkPasswordStatus() {
   passwordStatusError.value = ''
   try {
-    const status = await getEmployeePasswordStatus()
-    if (!disposed && status !== 'valid') activeSection.value = 'password'
+    const expiry = await getEmployeePasswordStatus()
+    if (disposed) return
+    if (expiry.status !== 'valid') activeSection.value = 'password'
+    else announcePasswordExpiry(expiry)
   } catch (error) {
     if (disposed) return
     if (error instanceof EmployeeAuthError && error.status === 401) {

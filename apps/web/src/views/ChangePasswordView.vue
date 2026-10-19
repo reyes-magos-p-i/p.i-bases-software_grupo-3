@@ -42,6 +42,9 @@ const user = computed(() =>
 )
 
 const EXPIRATION_OPTIONS = [30, 60, 90, 120] as const
+type ExpirationDays = (typeof EXPIRATION_OPTIONS)[number]
+const isExpirationOption = (days: number | null): days is ExpirationDays =>
+  EXPIRATION_OPTIONS.some((option) => option === days)
 
 const status = ref<ClientPasswordStatus>('valid')
 const statusLoading = ref(true)
@@ -57,7 +60,8 @@ const form = reactive({
   currentPassword: '',
   newPassword: '',
   confirmNewPassword: '',
-  expirationDays: 90 as 30 | 60 | 90 | 120,
+  // New accounts start with 120 days; loadStatus selects the current period.
+  expirationDays: 120 as ExpirationDays,
 })
 const errors = reactive<{ currentPassword?: string; confirm?: string; form?: string }>({})
 const violationCodes = ref<string[]>([])
@@ -99,9 +103,11 @@ async function loadStatus() {
       })
       return
     }
-    status.value = isEmployee.value
+    const expiry = isEmployee.value
       ? await getEmployeePasswordStatus()
       : await getClientPasswordStatus()
+    status.value = expiry.status
+    if (isExpirationOption(expiry.expirationDays)) form.expirationDays = expiry.expirationDays
   } catch (error) {
     recoveryExpired.value =
       error instanceof ChangePasswordError && error.code === 'RECOVERY_INVALID'
@@ -291,13 +297,7 @@ function goHome() {
             <div class="success-state" role="status">
               <span class="success-icon"><i class="bi bi-check-lg" aria-hidden="true"></i></span>
               <h2 id="password-form-title">Contraseña actualizada</h2>
-              <p>
-                {{
-                  isEmployee
-                    ? 'Contraseña actualizada correctamente'
-                    : 'Tu contraseña se actualizó correctamente.'
-                }}
-              </p>
+              <p>Contraseña actualizada con éxito</p>
               <button type="button" class="primary-button continue-button" @click="goHome">
                 {{
                   props.recovery ? 'Iniciar sesión' : isEmployee ? 'Volver al tablero' : 'Continuar'
