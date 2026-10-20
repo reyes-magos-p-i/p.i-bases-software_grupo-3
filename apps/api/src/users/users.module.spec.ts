@@ -189,7 +189,9 @@ describe('UsersModule (application HTTP integration)', () => {
           },
         ],
       })
-      .mockResolvedValueOnce({ rows: [{ EMAIL: 'old@example.com' }] })
+      .mockResolvedValueOnce({
+        rows: [{ EMAIL: 'old@example.com', STATUS: 'ACTIVE' }],
+      })
       .mockResolvedValueOnce({ rowsAffected: 1 });
     await browser
       .patch('/users/clients/42')

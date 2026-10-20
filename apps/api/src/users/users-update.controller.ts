@@ -50,6 +50,26 @@ export class UsersUpdateController {
     return this.usersService.deactivateEmployee(params.id, request.user.id);
   }
 
+  @Patch('clients/:id/activate')
+  @HttpCode(204)
+  @UseGuards(EmployeeSessionOriginGuard)
+  activateClient(@Param() params: UserIdParamsDto, @Body() body: unknown) {
+    this.requireEmptyBody(body);
+    return this.usersService.activateClient(params.id);
+  }
+
+  @Patch('employees/:id/activate')
+  @HttpCode(204)
+  @UseGuards(AdministratorGuard, EmployeeSessionOriginGuard)
+  activateEmployee(
+    @Param() params: UserIdParamsDto,
+    @Req() request: Request & { user: UserIdentity },
+    @Body() body: unknown,
+  ) {
+    this.requireEmptyBody(body);
+    return this.usersService.activateEmployee(params.id, request.user.id);
+  }
+
   private requireEmptyBody(body: unknown) {
     if (
       body !== undefined &&
@@ -59,7 +79,7 @@ export class UsersUpdateController {
         Object.keys(body).length)
     )
       throw new BadRequestException(
-        'La desactivación no admite campos en la solicitud.',
+        'El cambio de estado no admite campos en la solicitud.',
       );
   }
 

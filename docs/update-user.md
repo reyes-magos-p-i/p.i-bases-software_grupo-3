@@ -80,8 +80,8 @@ los permisos consultados por la autenticación en solicitudes posteriores.
 ## Errores y verificación
 
 `400`: entrada inválida, campos no admitidos o ningún cambio; `401`: sesión no
-vigente; `403`: permiso u origen incorrecto; `404`: usuario inexistente o inactivo; `409`:
-correo duplicado o último administrador activo; `500`: fallo inesperado sin detalles internos en la respuesta.
+vigente; `403`: permiso u origen incorrecto; `404`: usuario inexistente; `409`:
+correo duplicado, usuario inactivo (código `USER_INACTIVE`) o último administrador activo; `500`: fallo inesperado sin detalles internos en la respuesta.
 
 Los errores conocidos conservan el borrador y muestran avisos generales o por
 campo. Ante un fallo de red o respuesta inesperada no se repite automáticamente
@@ -116,8 +116,11 @@ datos históricos que no se están cambiando. La API aplica las mismas reglas.
 
 ## Cuentas activas y último administrador
 
-Las modificaciones excluyen cuentas inactivas (404). Los cambios de rol se
-serializan con las desactivaciones de personal mediante un bloqueo Oracle de
+Las modificaciones rechazan cuentas inactivas con 409 y código `USER_INACTIVE`.
+El diálogo no muestra formulario al cargar una cuenta inactiva y bloquea nuevos
+intentos si la cuenta se desactiva mientras se estaba editando. La comprobación de
+estado y la escritura comparten el bloqueo de fila en Oracle. Los cambios de rol se
+serializan con las activaciones y desactivaciones de personal mediante un bloqueo Oracle de
 tabla antes del bloqueo de fila. No se permite convertir al último administrador
 activo en empleado (409); debe existir otro administrador activo. Los correos de
 cuentas inactivas siguen reservados. Ver [Desactivar un usuario](deactivate-user.md).
