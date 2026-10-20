@@ -46,6 +46,18 @@ vi.mock('@/services/theater.service', () => ({
   createTheater,
   updateTheater: vi.fn(),
 }))
+vi.mock('@/services/branch.service', () => ({
+  formatBranchId: (id: number) => `SU-${String(id).padStart(3, '0')}`,
+  getBranches: vi.fn().mockResolvedValue({
+    items: [{ id: 1, name: 'Sucursal Heredia Centro', companyId: 2, companyName: 'Cinetadel S.A' }],
+    total: 1,
+    page: 1,
+    pageSize: 10,
+    totalPages: 1,
+  }),
+  getCompanies: vi.fn().mockResolvedValue([]),
+  getBranch: vi.fn(),
+}))
 vi.mock('@/services/authService', async () => {
   const actual =
     await vi.importActual<typeof import('@/services/authService')>('@/services/authService')
@@ -436,6 +448,21 @@ describe('DashboardView', () => {
     expect(view.find('[aria-label="Proyecciones"]').exists()).toBe(false)
   })
 
+  it('shows branches to administrators only', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Sucursales"]').trigger('click')
+    await flushPromises()
+
+    expect(view.get('h1').text()).toBe('Sucursales')
+    expect(view.get('.result-count').text()).toBe('1 sucursal')
+    expect(view.text()).toContain('SU-001')
+
+    await setRole('EMPLOYEE')
+    expect(view.get('h1').text()).toBe('Clientes')
+    expect(view.find('[aria-label="Sucursales"]').exists()).toBe(false)
+    expect(view.getComponent(DashboardLayout).props('availableSections')).not.toContain('branches')
+  })
+
   it('moves to clients and hides administrator options when the server reports an employee role', async () => {
     const view = await renderDashboard()
 
@@ -446,7 +473,8 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
     expect(view.get('nav').text()).not.toContain('Tablero')
-    expect(view.get('nav').findAll('button')).toHaveLength(7)
+    expect(view.get('nav').text()).not.toContain('Sucursales')
+    expect(view.get('nav').findAll('button')).toHaveLength(6)
   })
 
   it('preserves clients as the current section across role changes', async () => {
@@ -465,7 +493,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(4)
+    expect(pending).toHaveLength(3)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')
