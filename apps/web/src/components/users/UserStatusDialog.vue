@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { activateUser, deactivateUser } from '@/services/user.service'
 import type { UserStatusSelection } from '@/types/user'
@@ -125,9 +126,9 @@ onBeforeUnmount(() => {
             relacionados se conservarán.
           </template>
         </p>
-        <p v-if="error" ref="feedback" class="status-error" role="alert" tabindex="-1">
-          {{ error }}
-        </p>
+        <div v-if="error" ref="feedback" class="status-error" tabindex="-1">
+          <NotificationPopup type="error" :message="error" :duration="0" />
+        </div>
         <footer>
           <button type="button" class="secondary" :disabled="saving" @click="close">
             Cancelar
