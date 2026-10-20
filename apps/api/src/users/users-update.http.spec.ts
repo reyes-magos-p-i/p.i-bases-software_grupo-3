@@ -501,4 +501,17 @@ describe('User update and deactivation HTTP contracts', () => {
       expect(response.text).not.toContain('Oracle');
     });
   });
+  it.each(['clients', 'employees'])(
+    'rejects invalid names before persistence for %s',
+    async (section) => {
+      const response = await patch(section)
+        .send({ firstName: 'Ana123' })
+        .expect(400);
+      expect(response.body.message).toContain(
+        'El primer nombre solo puede contener letras y espacios.',
+      );
+      expect(clientsRepository.updateClient).not.toHaveBeenCalled();
+      expect(repository.updateEmployee).not.toHaveBeenCalled();
+    },
+  );
 });
