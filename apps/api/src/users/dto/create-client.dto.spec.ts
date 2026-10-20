@@ -217,7 +217,7 @@ describe('CreateClientDto', () => {
     for (const value of [
       'a'.repeat(limit),
       'á'.repeat(limit / 2),
-      '🎬'.repeat(limit / 4),
+      '界'.repeat(33) + 'a',
     ]) {
       await expect(
         validatePayload({ ...validPayload, [field]: value }),
@@ -241,7 +241,7 @@ describe('CreateClientDto', () => {
     expect(client.language).toBeUndefined();
   });
 
-  it.each([undefined, 'es', 'en', 'es-CR', 'áéa'])(
+  it.each([undefined, 'es', 'en'])(
     'accepts an omitted or valid language %p',
     async (language) => {
       await expect(
@@ -260,6 +260,8 @@ describe('CreateClientDto', () => {
     [],
     {},
     'abcdef',
+    'es-CR',
+    'áéa',
     'áéá',
     '\uD800',
   ])('rejects an invalid language %p', async (language) => {
@@ -278,4 +280,18 @@ describe('CreateClientDto', () => {
 
     expect(errors.map((error) => error.property)).toEqual([field]);
   });
+  it.each(['firstName', 'secondName', 'firstSurname', 'secondSurname'])(
+    'rejects numbers and symbols in %s',
+    async (field) => {
+      for (const value of ['Ana2', 'Ana!', '🎬', 'Ana\nMaría']) {
+        const errors = await validatePayload({
+          ...validPayload,
+          [field]: value,
+        });
+        expect(
+          errors.find((error) => error.property === field)?.constraints,
+        ).toHaveProperty('personalName');
+      }
+    },
+  );
 });
