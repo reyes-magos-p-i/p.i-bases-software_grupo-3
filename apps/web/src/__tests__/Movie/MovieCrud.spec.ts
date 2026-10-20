@@ -8,6 +8,7 @@ import MovieCrudView from '@/components/Movies/MovieCrudView.vue'
 import MovieCrudEdit from '@/components/Movies/MovieCrudEdit.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import type { MovieAll } from '@/types/movie'
+import MovieCrudDelete from '@/components/Movies/MovieCrudDelete.vue'
 
 import {
   getMovies,
@@ -24,6 +25,14 @@ vi.mock('@/services/movie.service', () => ({
   getGenres: vi.fn(),
   getLanguages: vi.fn(),
 }))
+
+const testMovie: MovieAll = {
+  id: 24,
+  title: 'Interstellar',
+  runningTime: 169,
+  releaseYear: 2014,
+  classification: 'TP',
+}
 
 describe('MovieCrud', () => {
   beforeEach(() => {
@@ -123,15 +132,51 @@ describe('MovieCrud', () => {
     wrapper.unmount()
   })
 
-  it('deletes the selected movie and reloads the list', async () => {
+  it('opens the delete modal and reloads after deletion', async () => {
+    vi.mocked(getMovies).mockResolvedValue([testMovie])
+
     const wrapper = shallowMount(MovieCrud)
     await flushPromises()
 
-    wrapper.findComponent(CrudTable).vm.$emit('delete', { id: 24 })
+    wrapper.findComponent(CrudTable).vm.$emit('delete', {
+      id: 24,
+    })
+    await nextTick()
+
+    const deleteModal = wrapper.findComponent(MovieCrudDelete)
+
+    expect(deleteModal.props('movie')).toEqual(testMovie)
+
+    // Simulate successful deletion
+    deleteModal.vm.$emit('deleted')
     await flushPromises()
 
-    expect(deleteMovie).toHaveBeenCalledWith(24)
     expect(getMovies).toHaveBeenCalledTimes(2)
+
+    wrapper.unmount()
+  })
+
+  it('closes the delete modal without reloading', async () => {
+    vi.mocked(getMovies).mockResolvedValue([testMovie])
+
+    const wrapper = shallowMount(MovieCrud)
+    await flushPromises()
+
+    wrapper.findComponent(CrudTable).vm.$emit('delete', {
+      id: 24,
+    })
+    await nextTick()
+
+    const deleteModal = wrapper.findComponent(MovieCrudDelete)
+
+    expect(deleteModal.props('movie')).toEqual(testMovie)
+
+    // Simulate clicking Cancel
+    deleteModal.vm.$emit('close')
+    await nextTick()
+
+    expect(deleteModal.props('movie')).toBeNull()
+    expect(getMovies).toHaveBeenCalledTimes(1)
 
     wrapper.unmount()
   })
