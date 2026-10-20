@@ -227,8 +227,14 @@ async function load() {
   ])
   if (current.signal.aborted) return
   if (detail.status === 'fulfilled') {
-    user.value = detail.value
-    hydrate(detail.value)
+    if (detail.value.status !== 'ACTIVE') {
+      error.value =
+        'No se puede modificar un usuario inactivo. Actívalo y vuelve a abrir el formulario.'
+      blocked.value = true
+    } else {
+      user.value = detail.value
+      hydrate(detail.value)
+    }
   } else if (!authorization(detail.reason)) {
     error.value =
       status(detail.reason) === 404
@@ -337,6 +343,14 @@ async function save() {
       const code = status(failure)
       if (code === 404) {
         error.value = 'El usuario seleccionado ya no existe.'
+        blocked.value = true
+      } else if (
+        code === 409 &&
+        isAxiosError(failure) &&
+        failure.response?.data?.code === 'USER_INACTIVE'
+      ) {
+        error.value =
+          'El usuario fue desactivado. Cierra y actualiza el listado antes de continuar.'
         blocked.value = true
       } else if (code === 409) {
         const message: unknown = isAxiosError(failure) ? failure.response?.data?.message : undefined

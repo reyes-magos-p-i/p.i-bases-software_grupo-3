@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
+import UserStatusBadge from '@/components/users/UserStatusBadge.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { getUserDetail } from '@/services/user.service'
 import type { UserDetail, UserDetailSelection } from '@/types/user'
@@ -43,6 +44,7 @@ const groups = computed(() => {
       label: 'Identificación',
       fields: [
         { label: 'ID', value: `${prefix}${detail.id}` },
+        { label: 'Estado', value: '', status: detail.status },
         ...(detail.role === 'CLIENT' ? [] : [{ label: 'Rol', value: roleNames[detail.role] }]),
       ],
     },
@@ -191,7 +193,10 @@ onBeforeUnmount(() => request?.abort())
           <dl class="detail-grid">
             <div v-for="field in group.fields" :key="field.label" class="detail-field">
               <dt>{{ field.label }}</dt>
-              <dd>{{ field.value }}</dd>
+              <dd>
+                <UserStatusBadge v-if="'status' in field && field.status" :status="field.status" />
+                <template v-else>{{ field.value }}</template>
+              </dd>
             </div>
           </dl>
         </section>

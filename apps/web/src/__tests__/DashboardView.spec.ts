@@ -24,18 +24,16 @@ const {
   getTheaters,
   createTheater,
   getEmployeePasswordStatus,
-} = vi.hoisted(
-  () => ({
-    getUsers: vi.fn(),
-    getEmployeeListOptions: vi.fn(),
-    getUserCreationOptions: vi.fn(),
-    createUser: vi.fn(),
-    getTheaterCreationOptions: vi.fn(),
-    getTheaters: vi.fn().mockResolvedValue([]),
-    createTheater: vi.fn(),
-    getEmployeePasswordStatus: vi.fn(),
-  }),
-)
+} = vi.hoisted(() => ({
+  getUsers: vi.fn(),
+  getEmployeeListOptions: vi.fn(),
+  getUserCreationOptions: vi.fn(),
+  createUser: vi.fn(),
+  getTheaterCreationOptions: vi.fn(),
+  getTheaters: vi.fn().mockResolvedValue([]),
+  createTheater: vi.fn(),
+  getEmployeePasswordStatus: vi.fn(),
+}))
 vi.mock('@/services/user.service', () => ({
   getUsers,
   getEmployeeListOptions,
@@ -335,15 +333,11 @@ describe('DashboardView', () => {
   })
 
   it('opens the password form when the employee password has expired', async () => {
-    getEmployeePasswordStatus
-      .mockResolvedValueOnce('expired')
-      .mockResolvedValueOnce('expired')
+    getEmployeePasswordStatus.mockResolvedValueOnce('expired').mockResolvedValueOnce('expired')
     const view = await renderDashboard()
     await flushPromises()
 
-    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
-      'Cambiar contraseña',
-    )
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
     expect(view.text()).toContain('Tu contraseña venció.')
   })
 
@@ -357,9 +351,7 @@ describe('DashboardView', () => {
     await view.get('[aria-label="Clientes"]').trigger('click')
     await view.get('.logout-button').trigger('click')
 
-    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
-      'Cambiar contraseña',
-    )
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
     expect(view.get('.logout-button').attributes('disabled')).toBeDefined()
     expect(closeEmployeeSession).not.toHaveBeenCalled()
   })
@@ -482,7 +474,6 @@ describe('DashboardView', () => {
     expect(view.get('h1').text()).toBe('Empleados')
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
-
 
   it('ignores navigation outside the available dashboard sections', async () => {
     const view = await renderDashboard()
@@ -979,12 +970,15 @@ describe('client creation', () => {
       'value',
       '',
     )
-    expect(view.get('[type="checkbox"]').element).toHaveProperty('checked', false)
+    expect(view.getComponent(CreateUserDialog).get('[type="checkbox"]').element).toHaveProperty(
+      'checked',
+      false,
+    )
   })
 
   it('uses loaded geography for the client address without sending a branch or public registration fields', async () => {
     const view = await clientForm()
-    await view.get('[type="checkbox"]').setValue(true)
+    await view.getComponent(CreateUserDialog).get('[type="checkbox"]').setValue(true)
     await view.getComponent(CreateUserDialog).get('[name="provinceId"]').setValue('1')
     await view.getComponent(CreateUserDialog).get('[name="cantonId"]').setValue('19')
     await view.getComponent(CreateUserDialog).get('[name="districtId"]').setValue('102')
@@ -1100,7 +1094,9 @@ describe('client creation', () => {
     await view.get('dialog').trigger('cancel')
     expect(view.get('h1').text()).toBe('Clientes')
     expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(true)
-    expect(view.get('[type="checkbox"]').attributes('disabled')).toBeDefined()
+    expect(
+      view.getComponent(CreateUserDialog).get('[type="checkbox"]').attributes('disabled'),
+    ).toBeDefined()
     expect(createUser).toHaveBeenCalledTimes(1)
     resolve({ id: 43, role: 'CLIENT', email: 'cliente@example.com' })
     await flushPromises()
