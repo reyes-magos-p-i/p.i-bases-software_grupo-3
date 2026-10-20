@@ -306,7 +306,13 @@ describe('ClientsRepository', () => {
         { errorNum: 1, message: 'ORA-00001: (PRODUCTION.UQ_CLIENTS_EMAIL)' },
         409,
       ],
-      [{ errorNum: 2291 }, 400],
+      [
+        {
+          errorNum: 2291,
+          message: 'ORA-02291: (PRODUCTION.FK_ADDRESS_DISTRICT)',
+        },
+        400,
+      ],
     ])(
       'translates known Oracle errors after rollback',
       async (failure, expected) => {
@@ -945,14 +951,14 @@ describe('ClientsRepository', () => {
   });
 
   describe('foreign key failures', () => {
-    it.each(['FK_ADDRESSES_DISTRICT', 'FK_CLIENT_ADDRESS'])(
+    it.each(['FK_ADDRESS_DISTRICT', 'FK_CLIENT_ADDRESS'])(
       'rolls back client creation when Oracle rejects %s',
       async (constraint) => {
         const error = Object.assign(
           new Error('Parent key not found: ' + constraint),
           { errorNum: 2291 },
         );
-        if (constraint !== 'FK_ADDRESSES_DISTRICT')
+        if (constraint !== 'FK_ADDRESS_DISTRICT')
           connection.execute.mockResolvedValueOnce(insertedAddress);
         connection.execute.mockRejectedValueOnce(error);
         const data = {
@@ -968,9 +974,21 @@ describe('ClientsRepository', () => {
         };
         const creation = repository.createClient(data);
 
-        await expect(creation).rejects.toBe(error);
+        if (
+          constraint === 'FK_ADDRESS_DISTRICT' ||
+          constraint === 'FK_EMPLOYEES_BRANCH'
+        ) {
+          await expect(creation).rejects.toMatchObject({
+            status: 400,
+            message: expect.stringContaining(
+              constraint === 'FK_EMPLOYEES_BRANCH' ? 'sucursal' : 'distrito',
+            ),
+          });
+        } else {
+          await expect(creation).rejects.toBe(error);
+        }
         expect(connection.execute).toHaveBeenCalledTimes(
-          constraint === 'FK_ADDRESSES_DISTRICT' ? 1 : 2,
+          constraint === 'FK_ADDRESS_DISTRICT' ? 1 : 2,
         );
         expect(connection.commit).not.toHaveBeenCalled();
         expect(connection.rollback).toHaveBeenCalledTimes(1);
