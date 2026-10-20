@@ -10,7 +10,7 @@ export interface MovieAll {
   id: number
   title: string
   runningTime: number
-  releaseYear: string | null
+  releaseYear: number | null
   classification: string
 }
 
