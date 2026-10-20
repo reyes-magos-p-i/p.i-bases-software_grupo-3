@@ -3,6 +3,7 @@ import oracle from 'oracledb';
 import { DatabaseService } from '../../database/database.service';
 import { Cinema } from '../entities/cinema.entity';
 import { likePattern } from '../../users/user-search.util';
+import type { CinemaDetailDto, CinemaStatus } from '../dto/cinema-detail.dto';
 import type { ListCinemasQueryDto } from '../dto/list-cinemas-query.dto';
 import type {
   CompanyOptionDto,
@@ -119,6 +120,31 @@ export class CinemasRepository {
       page,
       pageSize: query.pageSize,
       totalPages,
+    };
+  }
+
+  async findCinemaById(id: number): Promise<CinemaDetailDto | null> {
+    const result = await this.db.query<{
+      ID: number;
+      NAME: string | null;
+      COMPANY_ID: number;
+      COMPANY_NAME: string | null;
+      STATUS: CinemaStatus;
+    }>(
+      `SELECT c.BRANCH_ID AS ID, TRIM(c.NAME) AS NAME, c.COMPANY_ID,
+              TRIM(p.NAME) AS COMPANY_NAME, c.STATUS
+       FROM CINEMAS c JOIN COMPANIES p ON p.COMPANY_ID = c.COMPANY_ID
+       WHERE c.BRANCH_ID = :id`,
+      { id: { val: id, type: oracle.NUMBER } },
+    );
+    const row = result.rows?.[0];
+    if (!row) return null;
+    return {
+      id: row.ID,
+      name: row.NAME,
+      companyId: row.COMPANY_ID,
+      companyName: row.COMPANY_NAME,
+      status: row.STATUS,
     };
   }
 
