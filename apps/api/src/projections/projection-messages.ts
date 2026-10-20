@@ -1,0 +1,12 @@
+export const PROJECTION_MESSAGES = {
+  unavailable: 'La sala/película seleccionada ya no está disponible.',
+  scheduleConflict: 'La sala ya tiene una proyección asignada en ese horario',
+  pastSchedule: 'La fecha y hora de la proyección no puede estar en el pasado.',
+  invalidPrice: 'El precio debe ser un número positivo en colones.',
+  invalidRange: 'La fecha final no puede ser anterior a la fecha inicial.',
+  notFound: 'Esta proyección ya no está disponible.',
+  selectionUnavailable: 'El elemento seleccionado ya no está disponible.',
+  notEditable: 'Solo se pueden modificar proyecciones activas o inactivas.',
+  alreadyCancelled: 'La proyección ya está cancelada.',
+  finishedNotCancellable: 'No se puede cancelar una proyección finalizada.',
+} as const;

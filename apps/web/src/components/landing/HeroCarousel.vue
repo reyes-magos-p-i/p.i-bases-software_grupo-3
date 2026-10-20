@@ -1,40 +1,15 @@
 <script setup lang="ts">
-import { computed,
-    onMounted, 
-    onUnmounted, 
-    ref } from 'vue'
-
-import hpImage from '@/assets/images/movies/hp.jpg'
-import lotrImage from '@/assets/images/movies/lotr.jpg'
-import scarfaceImage from '@/assets/images/movies/scarface.jpg'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { getMovieFunctions, stripTrailingSlashes } from '../../services/movieFunctions'
+import placeholderImage from '../../assets/images/placeholder.svg'
 
 interface CarouselSlide {
   image: string
   alt: string
   title: string
-  description: string
 }
 
-const slides: CarouselSlide[] = [
-  {
-    image: hpImage,
-    alt: 'Harry Potter: Las Reliquias de la Muerte',
-    title: 'Harry Potter: Las Reliquias de la Muerte',
-    description: 'Disponible próximamente en Cinetadel',
-  },
-  {
-    image: lotrImage,
-    alt: 'El Señor de los Anillos: El Retorno del Rey',
-    title: 'El Señor de los Anillos: El Retorno del Rey',
-    description: 'Ya disponible en cartelera',
-  },
-  {
-    image: scarfaceImage,
-    alt: 'Scarface',
-    title: 'Scarface',
-    description: 'Una experiencia que debes vivir en pantalla grande',
-  },
-]
+const slides = ref<CarouselSlide[]>([])
 
 const autoSlideInterval = 5000
 
@@ -52,7 +27,33 @@ function stopAutoSlide(): void {
   }
 }
 
-onMounted(() => {
+function setPlaceholderSlides(): void {
+  slides.value = [
+    {
+      image: placeholderImage,
+      alt: 'Cinetadel',
+      title: 'Cinetadel',
+    },
+  ]
+}
+
+onMounted(async () => {
+  try {
+    const movies = await getMovieFunctions()
+
+    if (!movies?.length) {
+      setPlaceholderSlides()
+    } else {
+      slides.value = movies.map((movie: { title: string; posterImage: string }) => ({
+        image: `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image/${movie.posterImage}`,
+        alt: movie.title,
+        title: movie.title,
+      }))
+    }
+  } catch {
+    setPlaceholderSlides()
+  }
+
   startAutoSlide()
 })
 
@@ -62,62 +63,45 @@ onUnmounted(() => {
 
 const currentIndex = ref(0)
 
-const currentSlide = computed(() => slides[currentIndex.value])
+const currentSlide = computed(() => slides.value[currentIndex.value])
 
 function nextSlide(): void {
-  currentIndex.value = (currentIndex.value + 1) % slides.length
+  if (!slides.value.length) return
+  currentIndex.value = (currentIndex.value + 1) % slides.value.length
 }
 
 function previousSlide(): void {
-  currentIndex.value =
-    (currentIndex.value - 1 + slides.length) % slides.length
+  if (!slides.value.length) return
+  currentIndex.value = (currentIndex.value - 1 + slides.value.length) % slides.value.length
 }
 
 function selectSlide(index: number): void {
   currentIndex.value = index
 }
+
+function handleImageError(): void {
+  const slide = slides.value[currentIndex.value]
+
+  if (!slide || slide.image === placeholderImage) return
+
+  slide.image = placeholderImage
+}
 </script>
 
 <template>
-  <section
-    class="hero-carousel"
-    aria-label="Películas destacadas"
-  >
-<Transition
-  name="carousel-fade"
-  mode="out-in"
->
-  <div
-    v-if="currentSlide"
-    :key="currentIndex"
-    class="carousel-slide"
-  >
-    <img
-      :src="currentSlide.image"
-      :alt="currentSlide.alt"
-      class="hero-image"
-    />
+  <section class="hero-carousel" aria-label="Películas destacadas">
+    <Transition name="carousel-fade" mode="out-in">
+      <div v-if="currentSlide" :key="currentIndex" class="carousel-slide">
+        <img
+          :src="currentSlide.image"
+          :alt="currentSlide.alt"
+          class="hero-image"
+          @error="handleImageError"
+        />
 
-    <div class="hero-overlay"></div>
-
-    <div class="hero-content">
-      <h1>
-        {{ currentSlide.title }}
-      </h1>
-
-      <p>
-        {{ currentSlide.description }}
-      </p>
-
-      <button
-        type="button"
-        class="purchase-button"
-      >
-        Comprar boletos
-      </button>
-    </div>
-  </div>
-</Transition>
+        <div class="hero-overlay"></div>
+      </div>
+    </Transition>
 
     <button
       type="button"
@@ -125,10 +109,7 @@ function selectSlide(index: number): void {
       aria-label="Película anterior"
       @click="previousSlide"
     >
-      <i
-        class="bi bi-chevron-left"
-        aria-hidden="true"
-      ></i>
+      <i class="bi bi-chevron-left" aria-hidden="true"></i>
     </button>
 
     <button
@@ -137,13 +118,10 @@ function selectSlide(index: number): void {
       aria-label="Siguiente película"
       @click="nextSlide"
     >
-      <i
-        class="bi bi-chevron-right"
-        aria-hidden="true"
-      ></i>
+      <i class="bi bi-chevron-right" aria-hidden="true"></i>
     </button>
 
-    <div class="carousel-indicators">
+    <div class="hero-carousel-indicators">
       <button
         v-for="(_, index) in slides"
         :key="index"
@@ -164,16 +142,15 @@ function selectSlide(index: number): void {
   width: 100%;
   overflow: hidden;
 
-  border-radius: var(--radius-large);
-
-  background-color: var(--color-dark);
+  background-color: var(--surface-background);
 }
 
 .hero-image {
   display: block;
 
   width: 100%;
-  height: clamp(300px, 45vw, 540px);
+  aspect-ratio: 21 / 7.7;
+  height: auto;
 
   object-fit: cover;
 }
@@ -184,51 +161,10 @@ function selectSlide(index: number): void {
 
   background: linear-gradient(
     90deg,
-    rgba(13, 13, 13, 0.85) 0%,
-    rgba(13, 13, 13, 0.3) 60%,
+    var(--hero-overlay-start) 0%,
+    var(--hero-overlay-end) 60%,
     transparent 100%
   );
-}
-
-.hero-content {
-  position: absolute;
-
-  left: clamp(24px, 6vw, 72px);
-  bottom: clamp(38px, 7vw, 72px);
-
-  max-width: 620px;
-
-  color: var(--color-white);
-}
-
-.hero-content h1 {
-  margin-bottom: 12px;
-
-  font-size: clamp(1.6rem, 4vw, 3rem);
-  font-weight: 700;
-}
-
-.hero-content p {
-  margin-bottom: 20px;
-
-  font-size: clamp(0.95rem, 2vw, 1.15rem);
-}
-
-.purchase-button {
-  padding: 10px 20px;
-
-  color: var(--color-white);
-
-  border: 0;
-  border-radius: var(--radius-small);
-
-  background-color: var(--color-primary);
-
-  transition: background-color var(--transition-fast);
-}
-
-.purchase-button:hover {
-  background-color: var(--color-secondary);
 }
 
 .carousel-control {
@@ -244,9 +180,9 @@ function selectSlide(index: number): void {
   border: 0;
   border-radius: 50%;
 
-  color: var(--color-white);
+  color: var(--content-background);
 
-  background-color: rgba(13, 13, 13, 0.65);
+  background-color: var(--carousel-control-background);
 
   transform: translateY(-50%);
 }
@@ -259,7 +195,7 @@ function selectSlide(index: number): void {
   right: 16px;
 }
 
-.carousel-indicators {
+.hero-carousel-indicators {
   position: absolute;
 
   left: 50%;
@@ -277,14 +213,14 @@ function selectSlide(index: number): void {
 
   padding: 0;
 
-  border: 1px solid var(--color-white);
+  border: 1px solid var(--content-background);
   border-radius: 50%;
 
   background: transparent;
 }
 
 .indicator.active {
-  background-color: var(--color-primary);
+  background-color: var(--accent-color);
 }
 
 .carousel-slide {
@@ -306,5 +242,4 @@ function selectSlide(index: number): void {
 .carousel-fade-leave-from {
   opacity: 1;
 }
-
 </style>

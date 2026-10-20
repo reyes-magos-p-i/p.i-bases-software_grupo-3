@@ -1,0 +1,421 @@
+openapi: 3.0.3
+info:
+  title: Cinetadel - Autenticación del personal
+  version: 0.3.0
+  description: |
+    AuthModule está activado en AppModule. El formulario del personal utiliza
+    estas rutas para iniciar, recuperar y cerrar la sesión desde el portal.
+    La ruta /dashboard requiere una identidad vigente de empleado o administrador.
+    Activar este módulo también expone el registro público existente /auth/register;
+    no incorpora el inicio de sesión de clientes ni proveedores externos.
+    El login del personal establece una cookie HttpOnly. Bearer se conserva para
+    tokens existentes cuando no se envía la cookie del personal. Las rutas de este
+    contrato son internas de Nest: Nginx y Vite publican el prefijo /api y lo retiran
+    antes de reenviar a Nest. El navegador debe utilizar /api/auth/... para que
+    envíe la cookie, cuya ruta es /api.
+x-integration-status: frontend-integrated
+paths:
+  /auth/employees/login:
+    post:
+      operationId: loginEmployee
+      summary: Iniciar sesión como empleado o administrador
+      description: |
+        Normaliza el correo eliminando espacios exteriores y convirtiéndolo
+        a minúsculas. Conserva la contraseña exactamente como se recibe.
+        Solo consulta empleados con credenciales locales. Un correo inexistente,
+        una cuenta sin credenciales locales y una contraseña incorrecta producen
+        el mismo error. Los fallos internos no se presentan como credenciales inválidas.
+        Admite 5 solicitudes en 60 segundos por IP de origen y proceso de la API,
+        incluyendo intentos correctos, incorrectos y cuerpos rechazados por el DTO.
+        Nest confía únicamente en proxies loopback para interpretar la IP; esto
+        corresponde al Nginx local documentado. El almacenamiento del limitador
+        es por proceso y no coordina varias instancias de Nest.
+        En IPv6, el limitador agrupa las direcciones de una misma subred /64.
+        La sexta solicitud inicia un bloqueo de 60 segundos; los reintentos durante
+        el bloqueo no prolongan esa espera. Se responde 429 antes de consultar
+        Oracle o verificar contraseñas. Cambiar el correo no reinicia el contador.
+        Exige un Origin exactamente igual al origen configurado en FRONTEND_URL.
+        Un origen ausente, inválido o diferente devuelve 403, salvo que el límite
+        ya se haya superado (429). No se utiliza Host ni Referer como alternativa.
+        El token se entrega solo en Set-Cookie, nunca en el JSON. Cookie y JWT
+        expiran a las 24 horas de la emisión; consultar /auth/me no renueva el plazo.
+      security: []
+      parameters:
+        - in: header
+          name: Origin
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Origen exacto del frontend permitido, incluyendo esquema y puerto si corresponde.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Máximo 150 bytes UTF-8 después de normalizar.
+                password:
+                  type: string
+                  format: password
+                  minLength: 1
+                  maxLength: 128
+                  writeOnly: true
+      responses:
+        "200":
+          description: Credenciales válidas; perfil en JSON y sesión en cookie.
+          headers:
+            Set-Cookie:
+              description: |
+                cinetadel_employee_session contiene el JWT, con HttpOnly,
+                SameSite=Strict, Path=/api, Max-Age y Expires alineados con exp.
+                Sin Domain. Incluye Secure en HTTPS; solo desarrollo o pruebas
+                locales permiten HTTP. No debe almacenarse el token en JavaScript.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/EmployeeProfile"
+        "400":
+          description: Campos inválidos, ausentes o no permitidos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Correo o contraseña incorrectos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+              example:
+                statusCode: 401
+                message: Correo o contraseña incorrectos
+                error: Unauthorized
+        "403":
+          description: Origin ausente, inválido o no autorizado; no se consultan credenciales.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [statusCode, message, error]
+                properties:
+                  statusCode:
+                    type: integer
+                    enum: [403]
+                  message:
+                    type: string
+                  error:
+                    type: string
+                    enum: [Forbidden]
+              example:
+                statusCode: 403
+                message: El origen de la solicitud no está autorizado.
+                error: Forbidden
+        "429":
+          description: Límite de solicitudes superado; esperar el tiempo indicado antes de reintentar.
+          headers:
+            Retry-After:
+              description: Segundos restantes del bloqueo temporal.
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [statusCode, message]
+                properties:
+                  statusCode:
+                    type: integer
+                    enum: [429]
+                  message:
+                    type: string
+              example:
+                statusCode: 429
+                message: Demasiadas solicitudes de inicio de sesión. Espere antes de intentarlo de nuevo.
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/me:
+    get:
+      operationId: getAuthenticatedIdentity
+      summary: Consultar la identidad autenticada
+      description: |
+        Verifica la firma y expiración del JWT y consulta la identidad en la base
+        en cada petición, incluyendo el estado de vigencia de la contraseña del
+        personal. Para personal devuelve únicamente id, rol y primer nombre
+        vigentes; no confía en roles enviados en el token. Rechaza empleados
+        eliminados o con identidad inválida. Conserva la respuesta de perfil para
+        tokens de cliente existentes; este incremento no incorpora el login de clientes.
+        La ruta sigue disponible con contraseña vencida para que el frontend
+        pueda consultar el estado y dirigir al formulario de recuperación.
+        La cookie solo acepta tokens type=employee. Una cookie junto a cualquier
+        cabecera Authorization devuelve 401, incluso si contienen el mismo token.
+        Una cookie inválida no permite recurrir a Bearer. La consulta no escribe
+        cookies ni renueva la sesión. El cierre elimina la cookie del navegador;
+        no existe revocación global de tokens.
+      security:
+        - employeeSession: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Identidad vigente del personal o perfil existente del cliente.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/EmployeeIdentity"
+                  - $ref: "#/components/schemas/ClientProfile"
+        "401":
+          description: Credenciales ausentes, inválidas, expiradas o ambiguas, token de cliente en cookie del personal, o identidad inexistente o inválida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/password-status:
+    get:
+      operationId: getPasswordStatus
+      summary: Consultar vigencia de la contraseña
+      description: |
+        Disponible con contraseña vencida. Para personal, calcula el estado con
+        PASSWORD_SET_AT y EXPIRATION_DAYS; se usa para dirigir al formulario de
+        cambio antes de acceder a las rutas protegidas.
+      security:
+        - employeeSession: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Estado de la contraseña autenticada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [valid, expired, must_set]
+        "401":
+          description: Sesión ausente o inválida.
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/employees/password:
+    patch:
+      operationId: changeEmployeePassword
+      summary: Cambiar la contraseña propia de un empleado
+      description: |
+        Requiere la contraseña actual y permite elegir una vigencia de 30, 60,
+        90 o 120 días. Está disponible incluso cuando la contraseña expiró.
+        El estado queda vigente desde el momento de la actualización.
+      security:
+        - employeeSession: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [currentPassword, newPassword, confirmNewPassword, expirationDays]
+              properties:
+                currentPassword:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+                newPassword:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+                confirmNewPassword:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+                expirationDays:
+                  type: integer
+                  enum: [30, 60, 90, 120]
+      responses:
+        "200":
+          description: Contraseña actualizada.
+        "400":
+          description: Datos inválidos o contraseña actual incorrecta.
+        "401":
+          description: Sesión ausente o inválida.
+        "403":
+          description: Acceso denegado por estado o tipo de cuenta.
+        "429":
+          description: Límite de intentos alcanzado.
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/employees/logout:
+    post:
+      operationId: logoutEmployee
+      summary: Cerrar la sesión del personal en este navegador
+      description: |
+        Exige el mismo Origin autorizado que el login. Elimina la cookie con
+        HttpOnly, SameSite=Strict, Path=/api y Secure cuando corresponde.
+        Es idempotente: admite una cookie ausente, inválida o expirada y no
+        consulta Oracle. No revoca copias del JWT ni sesiones de otros dispositivos;
+        esas copias siguen sujetas a su expiración original de 24 horas.
+      security: []
+      parameters:
+        - in: header
+          name: Origin
+          required: true
+          schema:
+            type: string
+            format: uri
+      responses:
+        "204":
+          description: Cookie eliminada; sin cuerpo de respuesta.
+          headers:
+            Set-Cookie:
+              description: Cookie de sesión vacía con expiración pasada y su mismo ámbito.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-store]
+        "403":
+          description: Origin ausente, inválido o diferente del frontend autorizado.
+        "500":
+          $ref: "#/components/responses/InternalError"
+components:
+  securitySchemes:
+    employeeSession:
+      type: apiKey
+      in: cookie
+      name: cinetadel_employee_session
+      description: Cookie HttpOnly exclusiva para JWT del personal.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    EmployeeIdentity:
+      type: object
+      required: [id, role, firstName]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        role:
+          type: string
+          enum: [EMPLOYEE, ADMINISTRATOR]
+        firstName:
+          type: string
+          minLength: 1
+    EmployeeProfile:
+      allOf:
+        - $ref: "#/components/schemas/EmployeeIdentity"
+        - type: object
+          required: [email, secondName, firstSurname, secondSurname]
+          properties:
+            email:
+              type: string
+              format: email
+            secondName:
+              type: string
+              nullable: true
+            firstSurname:
+              type: string
+            secondSurname:
+              type: string
+    ClientProfile:
+      type: object
+      required: [id, email, firstName, language]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        email:
+          type: string
+        firstName:
+          type: string
+        secondName:
+          type: string
+          nullable: true
+        firstSurname:
+          type: string
+          nullable: true
+        secondSurname:
+          type: string
+          nullable: true
+        birthday:
+          type: string
+          format: date
+          nullable: true
+        phoneNumber:
+          type: string
+          nullable: true
+        gender:
+          type: string
+          nullable: true
+        language:
+          type: string
+    ValidationError:
+      type: object
+      required: [statusCode, message, error]
+      properties:
+        statusCode:
+          type: integer
+          enum: [400]
+        message:
+          type: array
+          items:
+            type: string
+        error:
+          type: string
+          enum: [Bad Request]
+    UnauthorizedError:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode:
+          type: integer
+          enum: [401]
+        message:
+          type: string
+        error:
+          type: string
+  responses:
+    InternalError:
+      description: Fallo interno sin exponer información de Oracle, credenciales o claves.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [statusCode, message]
+            properties:
+              statusCode:
+                type: integer
+                enum: [500]
+              message:
+                type: string
+                enum: [Internal server error]
