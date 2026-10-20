@@ -7,6 +7,7 @@ import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import ProjectionsSection from '@/components/projections/ProjectionsSection.vue'
+import BranchesSection from '@/components/branches/BranchesSection.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
@@ -26,12 +27,20 @@ import { EmployeeAuthError, getEmployeePasswordStatus } from '@/services/authSer
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-type DashboardSection = 'employees' | 'clients' | 'theaters' | 'screenings' | 'password' | 'movies'
+type DashboardSection =
+  | 'employees'
+  | 'clients'
+  | 'theaters'
+  | 'screenings'
+  | 'branches'
+  | 'password'
+  | 'movies'
 // Sections an employee is moved away from when the server reports that role.
 const ADMINISTRATOR_SECTIONS: readonly DashboardSection[] = [
   'employees',
   'theaters',
   'screenings',
+  'branches',
   'password',
 ]
 const activeSection = ref<DashboardSection>(
@@ -255,7 +264,7 @@ onMounted(() => {
 })
 const availableSections = computed(() =>
   role.value === 'ADMINISTRATOR'
-    ? ['employees', 'clients', 'theaters', 'screenings', 'password', 'movies']
+    ? ['employees', 'clients', 'theaters', 'screenings', 'branches', 'password', 'movies']
     : ['clients', 'password'],
 )
 const sectionTitle = computed(() =>
@@ -328,6 +337,7 @@ function returnToDashboard() {
       :disabled="loggingOut"
       @busy="sectionBusy = $event"
     />
+    <BranchesSection v-else-if="activeSection === 'branches'" />
     <section
       v-else-if="activeSection !== 'password'"
       class="preview-content"
