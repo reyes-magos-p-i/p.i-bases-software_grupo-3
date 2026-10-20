@@ -1,0 +1,46 @@
+/* Applies only to BaseModal containing a movie form */
+
+.app-modal-backdrop:has(.movie-form-modal)::backdrop {
+  background: var(--overlay-background);
+}
+
+.app-modal-backdrop .app-modal-card:has(.movie-form-modal) {
+  width: min(880px, 100%);
+  max-width: 880px;
+  padding: 0;
+  border-radius: var(--radius-medium);
+  background: var(--dialog-background);
+  color: var(--text-primary);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Purple heading */
+.app-modal-card:has(.movie-form-modal) .app-modal-title {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 24px 80px 24px 24px;
+  background: var(--primary-color);
+  color: var(--content-background);
+  text-align: left;
+  font-style: normal;
+  font-size: 1.25rem;
+}
+
+/* Close button */
+.app-modal-card:has(.movie-form-modal) .app-modal-close {
+  top: 14px;
+  right: 24px;
+  color: var(--content-background);
+  border-radius: var(--radius-small);
+}
+
+.app-modal-card:has(.movie-form-modal) .app-modal-close:focus-visible {
+  outline-color: var(--focus-on-dark);
+}
+
+.app-modal-backdrop .app-modal-card:has(.movie-delete-content) {
+  width: min(480px, 100%);
+  max-width: 480px;
+}

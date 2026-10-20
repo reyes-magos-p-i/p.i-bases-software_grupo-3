@@ -1,24 +1,34 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 import CreateTheaterDialog from './CreateTheaterDialog.vue'
+import ModifyTheaterDialog from './ModifyTheaterDialog.vue'
 import TheaterDetailDialog from './TheaterDetailDialog.vue'
 import DeactivateTheaterDialog from './DeactivateTheaterDialog.vue'
+import TheaterSearchBar from './TheaterSearchBar.vue'
+import TheaterFilters from './TheaterFilters.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
+import { displayStatus, useTheaterFilters } from '@/composables/useTheaterFilters'
 import {
   createTheater,
   getTheaterCreationOptions,
   getTheaters,
   updateTheater,
 } from '@/services/theater.service'
-import type { CreateTheaterRequest, Theater, TheaterCreationOptions } from '@/types/theater'
+import type {
+  CreateTheaterRequest,
+  Theater,
+  TheaterCreationOptions,
+  UpdateTheaterRequest,
+} from '@/types/theater'
 
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
 const { state, sessionExpired, refreshPermissions } = useEmployeeSessionRecovery()
-const dialog = useTemplateRef<InstanceType<typeof CreateTheaterDialog>>('dialog')
+const createDialog = useTemplateRef<InstanceType<typeof CreateTheaterDialog>>('create-dialog')
+const modifyDialog = useTemplateRef<InstanceType<typeof ModifyTheaterDialog>>('modify-dialog')
 const resultNotice = useTemplateRef<HTMLElement>('result-notice')
 const options = ref<TheaterCreationOptions | null>(null)
 const optionsLoading = ref(false)
@@ -29,15 +39,33 @@ const theaters = ref<Theater[]>([])
 const theatersLoading = ref(false)
 const theatersError = ref('')
 const selectedTheater = ref<Theater | null>(null)
+const detailError = ref('')
 const editingTheater = ref<Theater | null>(null)
 const deactivatingTheater = ref<Theater | null>(null)
 const theaterSubmissionErrors = ref<string[]>([])
+const {
+  search,
+  selectedCinemas,
+  selectedProjectors,
+  selectedStatuses,
+  sortBy,
+  sortDirection,
+  cinemaOptions,
+  projectorOptions,
+  statusOptions,
+  hasFilters,
+  visibleTheaters,
+  clearFilters,
+} = useTheaterFilters(
+  theaters,
+  computed(() => options.value?.statuses.map((status) => status.name) ?? []),
+)
 let request: AbortController | undefined
 let theatersRequest: AbortController | undefined
 
 const columns = [
   { key: 'displayId', label: 'ID' },
-  { key: 'branchId', label: 'Sucursal' },
+  { key: 'cinema', label: 'Sucursal' },
   { key: 'numberOfSeats', label: 'Asientos' },
   { key: 'dimensions', label: 'Dimensiones' },
   { key: 'projectorName', label: 'Proyector' },
@@ -45,13 +73,13 @@ const columns = [
 ]
 
 const rows = () =>
-  theaters.value.map((theater) => ({
+  visibleTheaters.value.map((theater) => ({
     ...theater,
     theater,
     id: theater.theaterId,
     displayId: String(theater.theaterId),
     dimensions: `${theater.dimensionX} x ${theater.dimensionY}`,
-    status: theater.isActive ? theater.status : 'Inactiva',
+    status: displayStatus(theater),
   }))
 
 async function loadOptions() {
@@ -105,57 +133,72 @@ async function loadTheaters() {
   }
 }
 
-function open(theater: Theater | null = null) {
+function openCreate() {
   if (props.disabled || optionsLoading.value) return
-  editingTheater.value = theater
   theaterSubmissionErrors.value = []
-  dialog.value?.open()
+  createDialog.value?.open()
   void loadOptions()
 }
 
-function openCreate() {
-  open()
-}
-
-async function submit(data: CreateTheaterRequest) {
+async function doSubmit(
+  action: 'crear' | 'modificar',
+  participio: 'creada' | 'modificada',
+  apiCall: () => Promise<Theater>,
+  onComplete: () => void,
+) {
   if (submitting.value || props.disabled) return
   submitting.value = true
   emit('busy', true)
   theaterSubmissionErrors.value = []
   creationResult.value = ''
   try {
-    const theater = editingTheater.value
-      ? await updateTheater(editingTheater.value.theaterId, data)
-      : await createTheater(data)
+    const theater = await apiCall()
     if (state.disposed) return
     await loadTheaters()
-    creationResult.value = editingTheater.value
-      ? `Sala ${theater.theaterId} modificada exitosamente.`
-      : `Sala ${theater.theaterId} creada exitosamente.`
+    creationResult.value = `Sala ${theater.theaterId} ${participio} exitosamente.`
     theaterSubmissionErrors.value = []
-    editingTheater.value = null
-    dialog.value?.complete()
+    onComplete()
     await nextTick()
     resultNotice.value?.focus()
   } catch (error) {
     if (state.disposed) return
     if (isAxiosError(error) && error.response?.status === 401) sessionExpired()
     else if (isAxiosError(error) && error.response?.status === 403) {
-      theaterSubmissionErrors.value = [
-        `No tienes permiso para ${editingTheater.value ? 'modificar' : 'crear'} salas.`,
-      ]
+      theaterSubmissionErrors.value = [`No tienes permiso para ${action} salas.`]
       void refreshPermissions()
     } else if (isAxiosError(error) && error.response?.status === 400) {
       theaterSubmissionErrors.value = ['Revisa los datos de la sala e inténtalo nuevamente.']
     } else {
       theaterSubmissionErrors.value = [
-        `El resultado no pudo ser confirmado. Verifica si la sala fue ${editingTheater.value ? 'modificada' : 'creada'} antes de intentarlo de nuevo.`,
+        `El resultado no pudo ser confirmado. Verifica si la sala fue ${participio} antes de intentarlo de nuevo.`,
       ]
     }
   } finally {
     submitting.value = false
     emit('busy', false)
   }
+}
+
+async function submitCreate(data: CreateTheaterRequest) {
+  await doSubmit(
+    'crear',
+    'creada',
+    () => createTheater(data),
+    () => createDialog.value?.complete(),
+  )
+}
+
+async function submitModify(data: UpdateTheaterRequest) {
+  const theater = editingTheater.value!
+  await doSubmit(
+    'modificar',
+    'modificada',
+    () => updateTheater(theater.theaterId, data),
+    () => {
+      editingTheater.value = null
+      modifyDialog.value?.complete()
+    },
+  )
 }
 
 function retryOptions() {
@@ -166,12 +209,28 @@ function retryTheaters() {
   void loadTheaters()
 }
 
-function editTheater(row: { theater?: Theater }) {
-  if (row.theater) open(row.theater)
+async function editTheater(row: { theater?: Theater }) {
+  if (!row.theater || props.disabled || optionsLoading.value) return
+  editingTheater.value = row.theater
+  theaterSubmissionErrors.value = []
+  await nextTick()
+  modifyDialog.value?.open()
+  void loadOptions()
 }
 
 function viewTheater(row: { theater?: Theater }) {
-  if (row.theater) selectedTheater.value = row.theater
+  if (row.theater) {
+    detailError.value = ''
+    selectedTheater.value = row.theater
+  } else {
+    selectedTheater.value = null
+    detailError.value = 'No se pudo mostrar el detalle de la sala.'
+  }
+}
+
+function closeDetail() {
+  selectedTheater.value = null
+  detailError.value = ''
 }
 
 function deactivateTheater(row: { theater?: Theater }) {
@@ -185,6 +244,7 @@ function theaterDeactivated() {
 }
 
 void loadTheaters()
+void loadOptions()
 
 onBeforeUnmount(() => {
   request?.abort()
@@ -206,6 +266,21 @@ onBeforeUnmount(() => {
         Crear sala
       </button>
     </div>
+    <template v-if="theaters.length">
+      <TheaterSearchBar v-model="search" />
+      <TheaterFilters
+        v-model:cinemas="selectedCinemas"
+        v-model:projectors="selectedProjectors"
+        v-model:statuses="selectedStatuses"
+        v-model:sort-by="sortBy"
+        v-model:sort-direction="sortDirection"
+        :cinema-options="cinemaOptions"
+        :projector-options="projectorOptions"
+        :status-options="statusOptions"
+        :has-filters="hasFilters"
+        @clear="clearFilters"
+      />
+    </template>
     <div class="list-content" :aria-busy="theatersLoading">
       <LoadingState v-if="theatersLoading" message="Cargando salas…" />
       <div v-else-if="theatersError" class="feedback error" role="alert">
@@ -214,8 +289,11 @@ onBeforeUnmount(() => {
       </div>
       <template v-else-if="theaters.length">
         <p class="result-count" role="status">
-          {{ theaters.length }}
-          {{ theaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
+          {{ visibleTheaters.length }}
+          {{ visibleTheaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
+        </p>
+        <p v-if="!visibleTheaters.length" class="feedback">
+          Ninguna sala coincide con los filtros seleccionados.
         </p>
         <CrudTable :columns="columns" :rows="rows()" caption="Salas">
           <template #actions="{ row }">
@@ -255,18 +333,35 @@ onBeforeUnmount(() => {
       {{ creationResult }}
     </p>
     <CreateTheaterDialog
-      ref="dialog"
-      :theater="editingTheater"
+      ref="create-dialog"
       :projectors="options?.projectors"
       :cinemas="options?.cinemas"
+      :statuses="options?.statuses"
       :options-loading="optionsLoading"
       :options-error="optionsError"
       :submitting="submitting"
       :submission-errors="theaterSubmissionErrors"
       @retry-options="retryOptions"
-      @submit="submit"
+      @submit="submitCreate"
     />
-    <TheaterDetailDialog :theater="selectedTheater" @close="selectedTheater = null" />
+    <ModifyTheaterDialog
+      ref="modify-dialog"
+      :theater="editingTheater"
+      :projectors="options?.projectors"
+      :cinemas="options?.cinemas"
+      :statuses="options?.statuses"
+      :options-loading="optionsLoading"
+      :options-error="optionsError"
+      :submitting="submitting"
+      :submission-errors="theaterSubmissionErrors"
+      @retry-options="retryOptions"
+      @submit="submitModify"
+    />
+    <TheaterDetailDialog
+      :theater="selectedTheater"
+      :error="detailError"
+      @close="closeDetail"
+    />
     <DeactivateTheaterDialog
       :theater="deactivatingTheater"
       @close="deactivatingTheater = null"
@@ -301,5 +396,21 @@ onBeforeUnmount(() => {
 }
 .action-hint {
   display: inline-flex;
+}
+.empty-state {
+  padding: 24px;
+  border-radius: var(--radius-medium);
+  background: var(--content-background);
+  text-align: center;
+}
+.empty-state i {
+  font-size: 2rem;
+}
+.empty-state h2 {
+  margin: 12px 0;
+  font-size: 1.125rem;
+}
+.empty-state p {
+  margin: 0;
 }
 </style>

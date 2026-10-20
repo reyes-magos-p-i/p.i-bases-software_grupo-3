@@ -87,7 +87,7 @@ const catalogs: UserCreationOptions = {
     { id: 102, label: 'Curridabat', cantonId: 19 },
     { id: 200, label: 'Heredia', cantonId: 40 },
   ],
-  branches: [{ id: 1, label: 'Cinépolis Multiplaza del Este' }],
+  branches: [{ id: 1, label: 'Cinetadel Multiplaza del Este' }],
 }
 
 function pendingCatalogs() {
@@ -132,11 +132,15 @@ beforeEach(() => {
       { projectorId: 1, name: 'IMAX' },
       { projectorId: 2, name: '70mm' },
     ],
-    cinemas: [{ branchId: 3, name: 'Cinépolis Central', companyId: 1 }],
+    cinemas: [{ branchId: 3, name: 'Cinetadel Central', companyId: 1 }],
+    statuses: [
+      { theaterStatusId: 1, name: 'Disponible' },
+      { theaterStatusId: 2, name: 'En función' },
+    ],
   })
   createTheater.mockReset().mockResolvedValue({
     theaterId: 4,
-    branchId: 3,
+    cinema: 'Cinetadel Central',
     numberOfSeats: 250,
     dimensionX: 20,
     dimensionY: 12,
@@ -375,7 +379,7 @@ describe('DashboardView', () => {
 
     await view.get('[name="numberOfSeats"]').setValue('240')
     await view.get('[name="projectorName"]').setValue('IMAX')
-    await view.get('[name="branchId"]').setValue('3')
+    await view.get('[name="cinema"]').setValue('Cinetadel Central')
     await view.get('[name="dimensionX"]').setValue('20')
     await view.get('[name="dimensionY"]').setValue('12')
     await view.get('.theater-dialog form').trigger('submit')
@@ -386,7 +390,7 @@ describe('DashboardView', () => {
       dimensionX: 20,
       dimensionY: 12,
       projectorName: 'IMAX',
-      branchId: 3,
+      cinema: 'Cinetadel Central',
       status: 'Disponible',
     })
     expect(view.get('.creation-result').text()).toContain('Sala 4 creada exitosamente')
@@ -398,11 +402,11 @@ describe('DashboardView', () => {
     await view.get('[aria-label="Salas"]').trigger('click')
     await view.get('.add-user-button').trigger('click')
     await flushPromises()
-    await view.get('[name="numberOfSeats"]').setValue('5000')
+    await view.get('[name="numberOfSeats"]').setValue('5001')
     await view.get('.theater-dialog form').trigger('submit')
 
     expect(createTheater).not.toHaveBeenCalled()
-    expect(view.get('.field-error').text()).toContain('entre 1 y 4999')
+    expect(view.get('.field-error').text()).toContain('entre 1 y 5000')
   })
 
   it('rejects theater seat counts that do not match the dimensions', async () => {
@@ -416,7 +420,7 @@ describe('DashboardView', () => {
     await view.get('.theater-dialog form').trigger('submit')
 
     expect(createTheater).not.toHaveBeenCalled()
-    expect(view.get('.field-error').text()).toContain('igual a Dimensión X por Dimensión Y')
+    expect(view.get('.field-error').text()).toContain('igual a Filas por Columnas')
   })
 
   it('shows projections to administrators only', async () => {

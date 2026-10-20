@@ -70,7 +70,7 @@ onMounted(() => {
   margin: 32px 0 24px;
   padding: 32px 0;
 
-  background-color: #808080;
+  background-color: #020617;
 }
 
 .movie-grid {

@@ -5,7 +5,7 @@ export interface CreateMoviePayload {
   title: string
   synopsis: string
   runningTime: number
-  posterImage: string
+  posterImage?: string
   releaseYear: number
   classificationId: number
   languageIds: number[]
