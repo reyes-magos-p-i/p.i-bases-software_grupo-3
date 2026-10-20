@@ -14,18 +14,20 @@ export class TicketsRepository {
   async getTicketById(id: number): Promise<Ticket | null> {
     try {
       const result = await this.db.query(
-        `SELECT m.title, mf.theater_id, mf.start_time, mf.end_time, t.seat_id
+        `SELECT m.title, mf.theater_id, mf.start_time, mf.end_time, s.ROW_NUMBER, s.COLUMN_NUMBER
         FROM TICKETS t
         JOIN Movie_functions mf
         ON t.movie_function_id = mf.movie_function_id
         JOIN Movies m
         ON mf.movie_id = m.movie_id
+        JOIN SEATS s
+        ON t.seat_id = s.seat_id
         WHERE t.ticket_id = :id`,
         { id },
         { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
 
-      const rows = (result.rows ?? []) as { TITLE: string; THEATER_ID: number; START_TIME: Date; END_TIME: Date; SEAT_ID: number }[];
+      const rows = (result.rows ?? []) as { TITLE: string; THEATER_ID: number; START_TIME: Date; END_TIME: Date; ROW_NUMBER: number; COLUMN_NUMBER: number }[];
 
       if (rows.length === 0) {
         return null;
@@ -37,7 +39,8 @@ export class TicketsRepository {
         theaterId: row.THEATER_ID,
         startTime: row.START_TIME,
         endTime: row.END_TIME,
-        seatId: row.SEAT_ID,
+        rowNumber: row.ROW_NUMBER,
+        columnNumber: row.COLUMN_NUMBER,
       };
     } catch (error) {
       this.logger.error('Error fetching ticket by ID', error as Error);
