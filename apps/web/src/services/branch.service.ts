@@ -1,5 +1,5 @@
 import { getApi } from '@/services/api'
-import type { BranchListQuery, BranchListResult, CompanyOption } from '@/types/branch'
+import type { BranchDetail, BranchListQuery, BranchListResult, CompanyOption } from '@/types/branch'
 
 /** Visible branch ID, e.g. 1 → "SU-001". */
 export function formatBranchId(id: number): string {
@@ -23,5 +23,10 @@ export async function getCompanies(signal?: AbortSignal): Promise<CompanyOption[
     signal,
     timeout: 10000,
   })
+  return response.data
+}
+
+export async function getBranch(id: number, signal?: AbortSignal): Promise<BranchDetail> {
+  const response = await getApi().get<BranchDetail>(`/cinemas/${id}`, { signal, timeout: 10000 })
   return response.data
 }

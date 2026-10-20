@@ -28,3 +28,9 @@ export interface CompanyOption {
   id: number
   name: string | null
 }
+
+export type BranchStatus = 'ACTIVE' | 'INACTIVE'
+
+export interface BranchDetail extends BranchListItem {
+  status: BranchStatus
+}

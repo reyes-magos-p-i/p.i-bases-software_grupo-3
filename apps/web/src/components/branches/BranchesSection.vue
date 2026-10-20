@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, useId } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
+import BranchDetailDialog from '@/components/branches/BranchDetailDialog.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import { formatBranchId, getBranches, getCompanies } from '@/services/branch.service'
 import type {
@@ -32,6 +33,7 @@ const listError = ref<'forbidden' | 'failed' | ''>('')
 const companies = ref<CompanyOption[]>([])
 const companiesLoading = ref(false)
 const companiesError = ref(false)
+const selectedBranchId = ref<number | null>(null)
 let listRequest: AbortController | undefined
 let companiesRequest: AbortController | undefined
 
@@ -144,6 +146,9 @@ function clearFilters() {
   page.value = 1
   void load()
 }
+function viewBranch(row: { [key: string]: unknown }) {
+  if (typeof row.id === 'number') selectedBranchId.value = row.id
+}
 function changePage(value: number) {
   if (loading.value || !result.value || value < 1 || value > result.value.totalPages) return
   page.value = value
@@ -241,10 +246,10 @@ onBeforeUnmount(() => {
             <span v-if="value">{{ value }}</span>
             <span v-else class="missing">{{ NO_COMPANY }}</span>
           </template>
-          <template #actions>
+          <template #actions="{ row }">
             <div class="branch-actions">
-              <span :title="`Ver ${PENDING}`" class="action-hint">
-                <button type="button" :aria-label="`Ver sucursal ${PENDING}`" disabled>
+              <span title="Ver" class="action-hint">
+                <button type="button" aria-label="Ver sucursal" @click="viewBranch(row)">
                   <i class="bi bi-eye" aria-hidden="true"></i>
                 </button>
               </span>
@@ -306,6 +311,12 @@ onBeforeUnmount(() => {
         </button>
       </nav>
     </footer>
+    <BranchDetailDialog
+      :branch-id="selectedBranchId"
+      @close="selectedBranchId = null"
+      @session-expired="sessionExpired"
+      @forbidden="refreshPermissions"
+    />
   </section>
 </template>
 
