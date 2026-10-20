@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Modificación de usuarios
-  version: 1.1.0
-  description: Edición parcial con confirmación en la interfaz. No modifica contraseñas, género ni campos históricos. No requiere cambios de esquema.
+  version: 1.2.0
+  description: Edición parcial con confirmación en la interfaz; las advertencias de correo y rol solo aparecen si se cambia el campo correspondiente. Los errores se muestran al salir del campo o al enviar y los resultados usan NotificationPopup. No modifica contraseñas, género ni campos históricos. No requiere cambios de esquema.
 servers:
   - url: /api
 security:
@@ -185,11 +185,11 @@ components:
     RequiredName:
       type: string
       minLength: 1
-      description: Obligatorio si se envía. Se eliminan espacios externos; no admite texto vacío. Unicode válido con máximo de 100 bytes UTF-8, igual que en creación.
+      description: Solo letras Unicode, acentos y espacios, sin números ni símbolos. Obligatorio si se envía. Se eliminan espacios externos; no admite texto vacío. Unicode válido con máximo de 100 bytes UTF-8, igual que en creación.
     OptionalName:
       type: string
       nullable: true
-      description: Unicode válido con máximo de 100 bytes UTF-8. Se eliminan espacios externos; texto vacío o null elimina el valor.
+      description: Solo letras Unicode, acentos y espacios, sin números ni símbolos. Máximo de 100 bytes UTF-8. Se eliminan espacios externos; texto vacío o null elimina el valor.
     Option:
       type: object
       required: [id, label]
