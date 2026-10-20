@@ -21,6 +21,7 @@ import type {
 } from '@/types/projection'
 import { projectionCode } from '@/utils/projection-format'
 
+
 const PERMISSION_DENIED = 'No tienes permisos para realizar esta acción.'
 const NOT_AVAILABLE = 'Esta proyección ya no está disponible.'
 

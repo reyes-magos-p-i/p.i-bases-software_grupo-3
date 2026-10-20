@@ -97,15 +97,15 @@ La navegación se centra debajo del listado con «Página X de Y» y flechas ant
 y siguiente, etiquetadas para lectores de pantalla. Con cero resultados muestra
 «Página 0 de 0» y ambas flechas desactivadas. El total permanece sobre el listado.
 
-Los filtros de roles y sucursales usan checkboxes dentro de desplegables; las listas
+Los filtros de estados, roles y sucursales usan checkboxes dentro de desplegables; las listas
 largas tienen desplazamiento vertical. Se pueden seleccionar varias opciones.
 Los selectores comparten la misma altura. Los desplegables se cierran al tocar fuera
 o pulsar Escape y animan su apertura, respetando la preferencia de movimiento reducido.
 Ninguna selección significa incluir todas. Dentro de cada filtro se acepta cualquiera
-de los valores elegidos; búsqueda, roles y sucursales se combinan conjuntamente.
+de los valores elegidos; búsqueda, estados, roles y sucursales se combinan conjuntamente.
 Cambiar o limpiar filtros vuelve a la primera página. El ordenamiento sigue siendo
 una selección única. La API recibe, por ejemplo,
-`role=EMPLOYEE,ADMINISTRATOR&branchId=3,5`, conservando los nombres de parámetros
+`status=ACTIVE,INACTIVE&role=EMPLOYEE,ADMINISTRATOR&branchId=3,5`, conservando los nombres de parámetros
 y la compatibilidad con valores únicos. Cada valor se valida y se enlaza al SQL;
 se rechazan listas vacías, duplicados, roles no permitidos e IDs inválidos. Se aceptan
 hasta 1000 sucursales por consulta para limitar el tamaño de las listas SQL.
@@ -121,7 +121,7 @@ La contratación se devuelve como `YYYY-MM-DD`, sin conversión de zona horaria.
 
 `CrudTable` conserva sus eventos `edit`, `view` y `delete` y sus acciones por defecto.
 Un slot permite personalizar las acciones. En ambas listas, «Acciones» es la última
-columna y muestra solo los íconos de Ver, Modificar y Desactivar de Bootstrap,
+columna y muestra solo los íconos de Ver, Modificar y Activar o Desactivar de Bootstrap,
 con etiquetas accesibles y tooltips nativos al mantener el cursor encima. El navegador
 controla el retardo de estos mensajes. Los IDs se mantienen en una sola línea.
 Ver abre el diálogo de [`detalle del usuario`](view-user.md). Modificar abre el
@@ -164,11 +164,20 @@ Las pruebas unitarias y HTTP aisladas simulan Oracle y SMTP, y comprueban
 validación y permisos sin depender de un build previo. La comprobación manual en navegador y la
 verificación de los triggers en Oracle complementan estas pruebas.
 
-## Usuarios activos
+## Estado de usuarios
 
-Los listados, búsquedas y conteos incluyen únicamente cuentas activas. El ícono
-Desactivar abre la confirmación; los administradores pueden desactivar personal
-y clientes, y los empleados pueden desactivar clientes. Tras el éxito se recarga
-el listado y se ajusta la página conservando filtros y orden. Ver
-[Desactivar un usuario](deactivate-user.md) para preparar el estado en Oracle,
-los permisos y las protecciones.
+Los listados, búsquedas y conteos incluyen cuentas activas e inactivas por defecto.
+La columna Estado usa un distintivo reutilizable con texto Activo o Inactivo,
+también presente en el detalle. El filtro opcional `status` admite uno o ambos
+estados (`ACTIVE`, `INACTIVE`), y se permite ordenar por `status`.
+
+El ícono cambia entre Desactivar y Activar (`bi-person-check`) y abre una
+confirmación. Modificar queda deshabilitado en cuentas inactivas; la API también
+rechaza su edición con 409 y código `USER_INACTIVE`. Ver funciona en ambos estados.
+Las transiciones refrescan el listado y conservan filtros, búsqueda y orden.
+Un usuario puede desaparecer de la vista actual si deja de coincidir con el filtro
+de estado elegido. Ver [Activar y desactivar usuarios](deactivate-user.md).
+
+La celda de acciones mantiene el comportamiento nativo de tabla; la distribución
+flexible de íconos se aplica a un contenedor interior para alinear filas de distinta
+altura sin alterar los eventos del componente compartido.

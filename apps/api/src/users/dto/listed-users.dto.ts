@@ -1,6 +1,8 @@
+import type { UserStatus } from '../types/user-status.type';
 import type { UserRole } from '../enums/user-role.enum';
 
 export interface ListedClientDto {
+  status: UserStatus;
   id: number;
   name: string;
   email: string;

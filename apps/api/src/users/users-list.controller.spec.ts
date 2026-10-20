@@ -104,11 +104,13 @@ describe('User list HTTP permissions and validation', () => {
     service.listEmployees.mockResolvedValue(empty);
     service.getEmployeeListOptions.mockResolvedValue({ branches: [] });
     service.getClientDetail.mockResolvedValue({
+      status: 'ACTIVE',
       id: 42,
       role: 'CLIENT',
       firstName: 'Ana',
     });
     service.getEmployeeDetail.mockResolvedValue({
+      status: 'ACTIVE',
       id: 42,
       role: 'EMPLOYEE',
       firstName: 'José',
@@ -128,6 +130,7 @@ describe('User list HTTP permissions and validation', () => {
     async (role) => {
       repository.findEmployeeIdentityById.mockResolvedValue({ id: 21, role });
       await get('/users/clients/42').expect(200, {
+        status: 'ACTIVE',
         id: 42,
         role: 'CLIENT',
         firstName: 'Ana',
@@ -136,6 +139,30 @@ describe('User list HTTP permissions and validation', () => {
       expect(service.getEmployeeDetail).not.toHaveBeenCalled();
     },
   );
+  it.each(['clients', 'employees'])(
+    'returns an inactive %s detail and forwards state filters',
+    async (section) => {
+      const detail =
+        section === 'clients'
+          ? service.getClientDetail
+          : service.getEmployeeDetail;
+      detail.mockResolvedValueOnce({ id: 42, status: 'INACTIVE' });
+      const response = await get('/users/' + section + '/42').expect(200);
+      expect(response.body).toMatchObject({ id: 42, status: 'INACTIVE' });
+      await get(
+        '/users/' + section + '?status=ACTIVE,INACTIVE&sortBy=status',
+      ).expect(200);
+      const list =
+        section === 'clients' ? service.listClients : service.listEmployees;
+      expect(list).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: ['ACTIVE', 'INACTIVE'],
+          sortBy: 'status',
+        }),
+      );
+    },
+  );
+
   it('allows administrators to view staff but rejects employees', async () => {
     await get('/users/employees/42').expect(200);
     expect(service.getEmployeeDetail).toHaveBeenCalledWith(42);

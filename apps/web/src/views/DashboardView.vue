@@ -231,11 +231,7 @@ async function loadCatalogs() {
   }
 }
 
-function openMovieDialog() {
-  if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters')
-    return
-  //userDialog.value?.open()
-}
+
 
 function openUserDialog() {
   if (loggingOut.value || role.value !== 'ADMINISTRATOR' || !isUserSection.value) return
@@ -338,7 +334,8 @@ function returnToDashboard() {
       aria-live="polite"
       aria-atomic="true"
     >
-      <div class="section-heading">
+      <!--Added v-if so that section title doent show in movie crud, purpose it sot keep title and button insde the movie crud-->
+      <div v-if="activeSection !== 'movies'" class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
           v-if="
@@ -355,16 +352,7 @@ function returnToDashboard() {
           {{ activeSection === 'clients' ? 'Añadir cliente' : 'Añadir empleado' }}
         </button>
 
-        <button
-          v-if="activeSection === 'movies'"
-          type="button"
-          class="add-user-button"
-          @click="openMovieDialog"
-        >
-          <i class="bi bi-plus-lg" aria-hidden="true"></i>
 
-          Añadir película
-        </button>
       </div>
       <UserListPanel
         v-if="activeSection === 'employees' || activeSection === 'clients'"

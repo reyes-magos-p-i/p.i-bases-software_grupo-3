@@ -224,7 +224,7 @@ describe('ClientsService', () => {
         .mockResolvedValueOnce({ rows: [client] });
       await expect(
         service.consumeEmailVerification('token-hash'),
-      ).resolves.toEqual(client); 
+      ).resolves.toEqual(client);
       expect(conn.execute).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM CLIENT_EMAIL_VERIFICATIONS'),
         expect.objectContaining({
@@ -332,6 +332,7 @@ describe('ClientsService', () => {
       conn.execute
         .mockResolvedValueOnce({ rows: [{ clientId: 42 }] })
         .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 0 })
         .mockResolvedValueOnce({ rowsAffected: 1 });
 
       await service.deleteExpiredPendingClients();
@@ -349,7 +350,10 @@ describe('ClientsService', () => {
         { clientId: { val: 42, type: oracle.NUMBER } },
         { autoCommit: false },
       );
-      expect(conn.execute.mock.calls[2][0]).toContain('DELETE FROM CLIENTS');
+      expect(conn.execute.mock.calls[2][0]).toContain(
+        'DELETE FROM PASSWORD_RECOVERIES',
+      );
+      expect(conn.execute.mock.calls[3][0]).toContain('DELETE FROM CLIENTS');
       expect(conn.execute.mock.calls[2][1]).toEqual({
         clientId: { val: 42, type: oracle.NUMBER },
       });
@@ -390,6 +394,7 @@ describe('ClientsService', () => {
       conn.execute
         .mockResolvedValueOnce({ rows: [{ clientId: 42 }] })
         .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 0 })
         .mockResolvedValueOnce({ rowsAffected: 0 });
       await expect(service.deleteExpiredPendingClients()).rejects.toThrow(
         'Oracle did not delete a single expired pending client.',
@@ -410,21 +415,23 @@ describe('ClientsService', () => {
         .mockResolvedValueOnce({ rowsAffected: 1 })
         .mockResolvedValueOnce({ rowsAffected: 1 })
         .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
         .mockResolvedValueOnce({ rowsAffected: 1 });
 
       await service.deleteExpiredPendingClients();
 
-      expect(conn.execute).toHaveBeenCalledTimes(5);
+      expect(conn.execute).toHaveBeenCalledTimes(7);
       expect(conn.execute.mock.calls[1][1]).toEqual({
         clientId: { val: 42, type: oracle.NUMBER },
       });
       expect(conn.execute.mock.calls[2][1]).toEqual({
         clientId: { val: 42, type: oracle.NUMBER },
       });
-      expect(conn.execute.mock.calls[3][1]).toEqual({
+      expect(conn.execute.mock.calls[4][1]).toEqual({
         clientId: { val: 43, type: oracle.NUMBER },
       });
-      expect(conn.execute.mock.calls[4][1]).toEqual({
+      expect(conn.execute.mock.calls[6][1]).toEqual({
         clientId: { val: 43, type: oracle.NUMBER },
       });
     });
@@ -602,7 +609,10 @@ describe('ClientsService', () => {
     const strongPassword = 'Cinetadel#2026';
 
     it('requires the current password when the client already has one', async () => {
-      repository.findPasswordHash.mockResolvedValue({ passwordHash: 'irrelevant', salt: 's' });
+      repository.findPasswordHash.mockResolvedValue({
+        passwordHash: 'irrelevant',
+        salt: 's',
+      });
 
       await expect(
         service.changePassword(clientId, email, firstName, {
@@ -610,12 +620,17 @@ describe('ClientsService', () => {
           confirmNewPassword: strongPassword,
           expirationDays: 90,
         }),
-      ).rejects.toMatchObject({ response: { code: 'CURRENT_PASSWORD_INCORRECT' } });
+      ).rejects.toMatchObject({
+        response: { code: 'CURRENT_PASSWORD_INCORRECT' },
+      });
     });
 
     it('rejects an incorrect current password', async () => {
       const storedHash = await argon2.hash('OldPassword#1');
-      repository.findPasswordHash.mockResolvedValue({ passwordHash: storedHash, salt: 's' });
+      repository.findPasswordHash.mockResolvedValue({
+        passwordHash: storedHash,
+        salt: 's',
+      });
 
       await expect(
         service.changePassword(clientId, email, firstName, {
@@ -624,12 +639,17 @@ describe('ClientsService', () => {
           confirmNewPassword: strongPassword,
           expirationDays: 90,
         }),
-      ).rejects.toMatchObject({ response: { code: 'CURRENT_PASSWORD_INCORRECT' } });
+      ).rejects.toMatchObject({
+        response: { code: 'CURRENT_PASSWORD_INCORRECT' },
+      });
     });
 
     it('rejects mismatched confirmation', async () => {
       const storedHash = await argon2.hash('OldPassword#1');
-      repository.findPasswordHash.mockResolvedValue({ passwordHash: storedHash, salt: 's' });
+      repository.findPasswordHash.mockResolvedValue({
+        passwordHash: storedHash,
+        salt: 's',
+      });
 
       await expect(
         service.changePassword(clientId, email, firstName, {
@@ -643,7 +663,10 @@ describe('ClientsService', () => {
 
     it('rejects a new password equal to the current one', async () => {
       const storedHash = await argon2.hash(strongPassword);
-      repository.findPasswordHash.mockResolvedValue({ passwordHash: storedHash, salt: 's' });
+      repository.findPasswordHash.mockResolvedValue({
+        passwordHash: storedHash,
+        salt: 's',
+      });
 
       await expect(
         service.changePassword(clientId, email, firstName, {
@@ -652,12 +675,17 @@ describe('ClientsService', () => {
           confirmNewPassword: strongPassword,
           expirationDays: 90,
         }),
-      ).rejects.toMatchObject({ response: { code: 'NEW_PASSWORD_SAME_AS_CURRENT' } });
+      ).rejects.toMatchObject({
+        response: { code: 'NEW_PASSWORD_SAME_AS_CURRENT' },
+      });
     });
 
     it('rejects a new password that violates the policy', async () => {
       const storedHash = await argon2.hash('OldPassword#1');
-      repository.findPasswordHash.mockResolvedValue({ passwordHash: storedHash, salt: 's' });
+      repository.findPasswordHash.mockResolvedValue({
+        passwordHash: storedHash,
+        salt: 's',
+      });
 
       await expect(
         service.changePassword(clientId, email, firstName, {
@@ -666,7 +694,9 @@ describe('ClientsService', () => {
           confirmNewPassword: 'weak',
           expirationDays: 90,
         }),
-      ).rejects.toMatchObject({ response: { code: 'PASSWORD_POLICY_VIOLATION' } });
+      ).rejects.toMatchObject({
+        response: { code: 'PASSWORD_POLICY_VIOLATION' },
+      });
     });
 
     it('sets a password for the first time when the client has none (social-only account)', async () => {
@@ -688,7 +718,10 @@ describe('ClientsService', () => {
 
     it('changes the password successfully when everything is valid', async () => {
       const storedHash = await argon2.hash('OldPassword#1');
-      repository.findPasswordHash.mockResolvedValue({ passwordHash: storedHash, salt: 's' });
+      repository.findPasswordHash.mockResolvedValue({
+        passwordHash: storedHash,
+        salt: 's',
+      });
 
       await service.changePassword(clientId, email, firstName, {
         currentPassword: 'OldPassword#1',

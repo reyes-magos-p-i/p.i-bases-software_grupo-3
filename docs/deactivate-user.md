@@ -1,14 +1,15 @@
-# Desactivar un usuario
+# Activar y desactivar usuarios
 
 Desactivar conserva la fila, las credenciales, las direcciones y las relaciones
-históricas. El usuario deja de aparecer en listados y búsquedas, no puede
-consultarse ni modificarse mediante la gestión de usuarios y pierde el acceso.
-Esta historia no incluye reactivación ni eliminación física.
+históricas. El usuario pierde el acceso, pero permanece visible en los listados y
+en el detalle de gestión con estado Inactivo. No puede modificarse hasta activarlo.
+La reactivación habilita un inicio de sesión nuevo con las credenciales vigentes;
+no restablece contraseñas ni elimina registros.
 
 ## Permisos y protecciones
 
-- Administradores: desactivar clientes, empleados y otros administradores.
-- Empleados: desactivar clientes; no pueden desactivar personal.
+- Administradores: activar y desactivar clientes, empleados y otros administradores.
+- Empleados: activar y desactivar clientes; no pueden cambiar el estado del personal.
 - Clientes: no tienen acceso a estas operaciones.
 - Un administrador no puede desactivar su propia cuenta.
 - Debe permanecer al menos un administrador activo. También se impide convertir
@@ -46,9 +47,12 @@ ALTER TABLE EMPLOYEES ADD CONSTRAINT CK_EMPLOYEES_STATUS
 ```
 
 La API requiere estas columnas antes de iniciarse. La desactivación actualiza
-solamente el estado dentro de una transacción. Se consulta la fila con
+el estado y revoca las sesiones y recuperaciones pendientes en una misma transacción,
+mediante `PASSWORD_RECOVERIES.RESET_AT`. Si falla la revocación, también se revierte
+el cambio de estado. La tabla de recuperación existente es un requisito; no se
+requieren nuevas columnas ni migraciones para esta ampliación. Se consulta la fila con
 `SELECT ... FOR UPDATE` antes de evaluar su estado: un ID ausente produce `404`
-y una cuenta ya inactiva produce `409`, sin cambios. Las desactivaciones de personal y los cambios de
+y una cuenta que ya tiene el estado solicitado produce `409`, sin cambios. Las activaciones y desactivaciones de personal y los cambios de
 rol usan `LOCK TABLE EMPLOYEES IN SHARE ROW EXCLUSIVE MODE` antes del bloqueo
 de fila: serializan estas operaciones para proteger el último administrador.
 Ese bloqueo puede hacer esperar otras escrituras de personal durante la
@@ -57,26 +61,30 @@ personal después de adquirir el bloqueo.
 
 Las consultas internas de correo/proveedor conservan acceso a cuentas inactivas
 para impedir duplicados o detectar un acceso social bloqueado. Las consultas
-de gestión y de identidad filtran cuentas activas, incluidos los conteos y
-todos los términos de búsqueda. No se aplica un filtro por estado a tablas de
+de identidad siguen filtrando cuentas activas. Las consultas de gestión incluyen
+ambos estados por defecto y permiten filtrarlos; el conteo usa los mismos filtros. No se aplica un filtro por estado a tablas de
 compras ni a otros registros históricos.
 
 ## API y diálogo
 
 - `PATCH /api/users/clients/:id/deactivate`: personal autorizado.
 - `PATCH /api/users/employees/:id/deactivate`: administradores.
+- `PATCH /api/users/clients/:id/activate`: empleados y administradores.
+- `PATCH /api/users/employees/:id/activate`: administradores.
 - ID: entero positivo dentro del rango seguro de JavaScript.
 - Cuerpo: omitido o `{}`; no admite campos.
 - Se requiere autenticación y el origen autorizado de la sesión.
 - Éxito: `204` sin cuerpo.
 - `400`: solicitud inválida; `401`: sesión no vigente; `403`: permiso u
-  origen incorrecto; `404`: inexistente; `409`: cuenta ya inactiva o protegida;
+  origen incorrecto; `404`: inexistente; `409`: cuenta con el estado solicitado o protegida;
   `500`: error interno sin detalles de Oracle.
 
 El contrato está en [deactivate-user.openapi.yaml](deactivate-user.openapi.yaml).
-El ícono de la tabla abre `DeactivateUserDialog`, que reutiliza `BaseModal`
+El ícono de la tabla abre `UserStatusDialog`, que reutiliza `BaseModal`
 y los colores de `variables.css`. Identifica al usuario por nombre e ID
-visible y advierte que perderá acceso, conservando sus datos.
+visible y advierte los efectos de activar o desactivar, conservando sus datos.
+La acción y el ícono cambian según el estado; Modificar queda deshabilitado para
+cuentas inactivas. El detalle sigue disponible para ambos estados.
 
 Cancelar, X, Escape y el fondo cierran sin escribir antes de confirmar.
 Durante la escritura se bloquean el cierre y las confirmaciones duplicadas.
@@ -97,11 +105,36 @@ listado. Las pruebas HTTP aisladas usan controladores, DTO, guards y servicios
 reales con repositorios simulados; las pruebas de repositorio verifican SQL,
 bloqueos, commit y rollback con Oracle simulado. No desactivan cuentas de la base configurada.
 
+Resultados locales del 16 de octubre de 2026:
+
+- API: 78 suites y 1771 pruebas aprobadas; cobertura global de líneas 97,62% y de ramas 90,09%.
+- Web: 49 suites y 855 pruebas aprobadas; cobertura global de líneas 95,25% y de ramas 89,59%.
+- Líneas ejecutables nuevas frente a HEAD, incluidas las de archivos nuevos: 100% en ambos proyectos, según LCOV.
+- Ramas nuevas: 96% en API y 94,83% en web.
+- Compilación, ESLint y Prettier aprobados en ambos proyectos.
+
+Las pruebas usan Oracle, SMTP y proveedores simulados; estos resultados no sustituyen
+la comprobación de bloqueos en Oracle real ni la revisión visual en navegador.
+
 En `apps/api`, ejecutar `npm run test:cov`, `npm run lint` y `npm run build`.
 En `apps/web`, ejecutar `npm run test:cov`, `npm run lint` y `npm run build`.
 En PowerShell con scripts deshabilitados, usar `npm.cmd`.
 
 En navegador, comprobar cancelación, errores, foco y presentación móvil;
-desactivar una cuenta de prueba, verificar su ausencia y probar una sesión
-abierta previamente. Para pruebas manuales usar cuentas prescindibles porque
-la reactivación no tiene interfaz en esta historia.
+desactivar una cuenta de prueba y comprobar su estado Inactivo y el bloqueo de
+edición. Probar una sesión abierta previamente, activar la cuenta y verificar que
+esa sesión sigue recibiendo 401, mientras un nuevo login funciona. Comprobar también
+un enlace de recuperación solicitado antes de la desactivación: no debe revivir.
+
+Ambas transiciones avanzan la versión de sesión y eliminan los secretos de una
+recuperación pendiente. Un cambio de estado sin solicitud de recuperación no inicia
+un cooldown nuevo; se conserva el cooldown de una solicitud real existente. Activar
+no renueva la fecha de contraseña, la contratación ni el registro, y no confirma
+correos pendientes ni envía credenciales nuevas. Las cuentas sociales deben iniciar
+sesión nuevamente con su proveedor.
+
+El guardado de contraseña de cliente bloquea y comprueba la cuenta activa en la
+misma transacción de escritura, evitando que una operación iniciada antes de la
+desactivación pueda guardar después. La limpieza existente de registros públicos
+pendientes elimina también su fila de recuperación antes de eliminar la cuenta,
+manteniendo la integridad referencial y la retención ya establecida.

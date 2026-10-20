@@ -13,9 +13,26 @@ import {
   Min,
 } from 'class-validator';
 import { MaxUtf8Bytes } from '../../common/validation/max-utf8-bytes.decorator';
+import type { UserStatus } from '../types/user-status.type';
 import { UserRole } from '../enums/user-role.enum';
 
 export class ListClientsQueryDto {
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string'
+      ? value.split(',').map((status) => status.trim())
+      : value,
+  )
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(2)
+  @ArrayUnique()
+  @IsIn(['ACTIVE', 'INACTIVE'], {
+    each: true,
+    message: 'El filtro de estado no es válido.',
+  })
+  status?: UserStatus[];
+
   @IsOptional()
   @IsString({ message: 'La búsqueda debe ser texto.' })
   @Matches(/\S/u, { message: 'La búsqueda no puede contener solo espacios.' })
@@ -47,7 +64,7 @@ export class ListClientsQueryDto {
   })
   pageSize = 10;
 
-  @IsIn(['id', 'name', 'email', 'createdAt'], {
+  @IsIn(['id', 'name', 'email', 'createdAt', 'status'], {
     message: 'El campo de ordenamiento no es válido.',
   })
   sortBy: string = 'id';
@@ -59,9 +76,21 @@ export class ListClientsQueryDto {
 }
 
 export class ListEmployeesQueryDto extends ListClientsQueryDto {
-  @IsIn(['id', 'name', 'email', 'createdAt', 'hireDate', 'role', 'branch'], {
-    message: 'El campo de ordenamiento no es válido.',
-  })
+  @IsIn(
+    [
+      'id',
+      'name',
+      'email',
+      'createdAt',
+      'hireDate',
+      'role',
+      'branch',
+      'status',
+    ],
+    {
+      message: 'El campo de ordenamiento no es válido.',
+    },
+  )
   declare sortBy: string;
 
   @IsOptional()

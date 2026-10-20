@@ -1,18 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { AxiosError, type AxiosResponse } from 'axios'
-import DeactivateUserDialog from '@/components/users/DeactivateUserDialog.vue'
-import type { UserDeactivationSelection } from '@/types/user'
+import UserStatusDialog from '@/components/users/UserStatusDialog.vue'
+import type { UserStatusSelection } from '@/types/user'
 
-const { deactivateUser } = vi.hoisted(() => ({ deactivateUser: vi.fn() }))
-vi.mock('@/services/user.service', () => ({ deactivateUser }))
+const { activateUser, deactivateUser } = vi.hoisted(() => ({
+  activateUser: vi.fn(),
+  deactivateUser: vi.fn(),
+}))
+vi.mock('@/services/user.service', () => ({ activateUser, deactivateUser }))
 const page = new DOMWrapper(document.body)
 const prototype = HTMLDialogElement.prototype
 const originalShow = Object.getOwnPropertyDescriptor(prototype, 'showModal')
 const originalClose = Object.getOwnPropertyDescriptor(prototype, 'close')
-let wrapper: VueWrapper<InstanceType<typeof DeactivateUserDialog>> | undefined
-const selection: UserDeactivationSelection = {
+let wrapper: VueWrapper<InstanceType<typeof UserStatusDialog>> | undefined
+const selection: UserStatusSelection = {
   section: 'clients',
+  status: 'ACTIVE',
   id: 42,
   name: 'Ana Núñez',
   displayId: 'CL42',
@@ -26,8 +30,8 @@ function failure(status?: number, message?: string | string[]) {
     status ? ({ status, data: { message } } as AxiosResponse) : undefined,
   )
 }
-async function render(selectionValue: UserDeactivationSelection | null = selection) {
-  wrapper = mount(DeactivateUserDialog, {
+async function render(selectionValue: UserStatusSelection | null = selection) {
+  wrapper = mount(UserStatusDialog, {
     props: { selection: selectionValue },
     attachTo: document.body,
   })
@@ -40,6 +44,7 @@ function button(text: string) {
   return result
 }
 beforeEach(() => {
+  activateUser.mockReset().mockResolvedValue(undefined)
   deactivateUser.mockReset().mockResolvedValue(undefined)
   Object.defineProperties(prototype, {
     showModal: {
@@ -71,7 +76,43 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('DeactivateUserDialog', () => {
+describe('UserStatusDialog', () => {
+  it('reactivates only after confirmation and explains that old sessions stay revoked', async () => {
+    const inactive = { ...selection, status: 'INACTIVE' as const }
+    const view = await render(inactive)
+    expect(page.text()).toContain('Activar usuario')
+    expect(page.text()).toContain('seguirán invalidados')
+    expect(page.text()).toContain('no renueva contraseñas')
+    expect(activateUser).not.toHaveBeenCalled()
+    await button('Confirmar activación').trigger('click')
+    await flushPromises()
+    expect(activateUser).toHaveBeenCalledExactlyOnceWith(inactive)
+    expect(deactivateUser).not.toHaveBeenCalled()
+    expect(view.emitted('status-changed')).toEqual([['ACTIVE']])
+  })
+  it.each(['El cliente ya está activo.', 'El empleado ya está activo.'])(
+    'explains an activation conflict: %s',
+    async (message) => {
+      activateUser.mockRejectedValueOnce(failure(409, message))
+      await render({ ...selection, status: 'INACTIVE' })
+      await button('Confirmar activación').trigger('click')
+      await flushPromises()
+      expect(page.get('[role="alert"]').text()).toBe(message)
+      expect(button('Confirmar activación').attributes('disabled')).toBeDefined()
+    },
+  )
+  it.each([403, 404, 503])(
+    'includes the real HTTP code for exceptional activation failure %s',
+    async (status) => {
+      activateUser.mockRejectedValueOnce(failure(status, 'private database detail'))
+      await render({ ...selection, status: 'INACTIVE' })
+      await button('Confirmar activación').trigger('click')
+      await flushPromises()
+      expect(page.get('[role="alert"]').text()).toContain('Error ' + status + ':')
+      expect(page.text()).not.toContain('private database detail')
+    },
+  )
+
   it('waits for a selected user without submitting', async () => {
     await render(null)
     expect(page.get<HTMLDialogElement>('dialog').element.open).toBe(false)
@@ -92,7 +133,7 @@ describe('DeactivateUserDialog', () => {
     await button('Confirmar desactivación').trigger('click')
     await flushPromises()
     expect(deactivateUser).toHaveBeenCalledWith(selection)
-    expect(wrapper?.emitted('deactivated')).toHaveLength(1)
+    expect(wrapper?.emitted('status-changed')).toHaveLength(1)
   })
   it('clears the previous failure and restores confirmation when reopened for another user', async () => {
     deactivateUser.mockRejectedValueOnce(failure(404))
@@ -113,7 +154,7 @@ describe('DeactivateUserDialog', () => {
     await button('Confirmar desactivación').trigger('click')
     await flushPromises()
     expect(deactivateUser).toHaveBeenLastCalledWith(nextSelection)
-    expect(view.emitted('deactivated')).toHaveLength(1)
+    expect(view.emitted('status-changed')).toHaveLength(1)
   })
   it('prevents duplicate confirmation and closing while saving', async () => {
     let resolve!: () => void
@@ -133,7 +174,7 @@ describe('DeactivateUserDialog', () => {
     expect(wrapper?.emitted('close')).toBeUndefined()
     resolve()
     await flushPromises()
-    expect(wrapper?.emitted('deactivated')).toHaveLength(1)
+    expect(wrapper?.emitted('status-changed')).toHaveLength(1)
   })
   it.each([
     [401, 'La sesión ha expirado.', 'session-expired'],
@@ -184,6 +225,6 @@ describe('DeactivateUserDialog', () => {
     wrapper = undefined
     resolve()
     await flushPromises()
-    expect(view.emitted('deactivated')).toBeUndefined()
+    expect(view.emitted('status-changed')).toBeUndefined()
   })
 })

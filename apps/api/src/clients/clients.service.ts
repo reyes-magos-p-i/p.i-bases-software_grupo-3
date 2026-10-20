@@ -193,6 +193,11 @@ export class ClientsService {
       throw new Error('Oracle did not delete a single pending credential.');
     }
 
+    await connection.execute(
+      'DELETE FROM PASSWORD_RECOVERIES WHERE CLIENT_ID = :clientId',
+      { clientId: { val: clientId, type: oracle.NUMBER } },
+      { autoCommit: false },
+    );
     const client = await connection.execute(
       `DELETE FROM CLIENTS
         WHERE CLIENT_ID = :clientId

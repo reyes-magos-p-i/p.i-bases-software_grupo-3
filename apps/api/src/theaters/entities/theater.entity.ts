@@ -2,10 +2,10 @@ import { IsInt, Max, Min } from 'class-validator';
 
 export class Theater {
     theaterId: number;
-    branchId: number;
+    cinema: string;
     @IsInt()
     @Min(1)
-    @Max(4999)
+    @Max(5000)
     numberOfSeats: number;
     @IsInt()
     @Min(1)
@@ -15,7 +15,10 @@ export class Theater {
     dimensionY: number;
     projectorName: string;
     isActive: boolean;
-    status: TheaterStatus;
+    status: string;
 }
 
-export type TheaterStatus = 'Disponible' | 'En función';
+export interface TheaterStatusOption {
+    theaterStatusId: number;
+    name: string;
+}
