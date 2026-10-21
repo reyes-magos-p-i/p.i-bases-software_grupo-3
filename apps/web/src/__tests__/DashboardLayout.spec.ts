@@ -11,6 +11,7 @@ const sections = [
   ['employees', 'Empleados'],
   ['clients', 'Clientes'],
   ['screenings', 'Proyecciones'],
+  ['tickets', 'Tickets'],
   ['branches', 'Sucursales'],
   ['password', 'Cambiar contraseña'],
   ['account', 'Ajustes de cuenta'],
@@ -100,7 +101,7 @@ describe('DashboardLayout', () => {
     const wrapper = renderLayout()
     const navigation = wrapper.get('nav')
 
-    expect(navigation.findAll('button')).toHaveLength(10)
+    expect(navigation.findAll('button')).toHaveLength(11)
     for (const [, label] of sections) {
       expect(navigation.find('[aria-label="' + label + ' (Pendiente)"]').exists()).toBe(true)
     }
@@ -120,7 +121,7 @@ describe('DashboardLayout', () => {
       expect(navigation.find('[aria-label="' + label + '"]').exists()).toBe(
 
 
-        id !== 'dashboard' && id !== 'employees' && id !== 'theaters',
+        id !== 'dashboard' && id !== 'employees' && id !== 'theaters' && id !== 'tickets',
       )
     }
     expect(wrapper.get('header').text()).toContain('Sesión iniciada como Empleado')
@@ -151,7 +152,7 @@ describe('DashboardLayout', () => {
     const wrapper = renderLayout()
     const buttons = wrapper.findAll('nav button, .logout-button')
 
-    expect(buttons).toHaveLength(11)
+    expect(buttons).toHaveLength(12)
     for (const button of buttons) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')

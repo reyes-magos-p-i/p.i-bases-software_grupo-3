@@ -29,6 +29,7 @@ const sections = [
   { id: 'employees', label: 'Empleados', icon: 'bi-person-circle', administratorOnly: true },
   { id: 'clients', label: 'Clientes', icon: 'bi-people' },
   { id: 'screenings', label: 'Proyecciones', icon: 'bi-calendar-event' },
+  { id: 'tickets', label: 'Tickets', icon: 'bi-ticket-perforated', administratorOnly: true },
   { id: 'branches', label: 'Sucursales', icon: 'bi-building' },
   { id: 'password', label: 'Cambiar contraseña', icon: 'bi-key' },
   { id: 'account', label: 'Ajustes de cuenta', icon: 'bi-gear' },
