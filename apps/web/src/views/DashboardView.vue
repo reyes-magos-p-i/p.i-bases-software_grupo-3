@@ -5,9 +5,13 @@ import { isAxiosError } from 'axios'
 import { authErrorMessage } from '@/utils/auth-errors'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
-import TheatersSection from '@/components/theaters/TheatersSection.vue'
-import ProjectionsSection from '@/components/projections/ProjectionsSection.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
+import {
+  administratorSectionIds,
+  availableSectionsFor,
+  dashboardSections,
+  type DashboardSectionId,
+} from '@/components/layout/dashboard-sections'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
 import type { UserDetailSelection } from '@/types/user'
@@ -26,23 +30,7 @@ import { EmployeeAuthError, getEmployeePasswordStatus } from '@/services/authSer
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-type DashboardSection =
-  | 'employees'
-  | 'clients'
-  | 'theaters'
-  | 'screenings'
-  | 'password'
-  | 'movies'
-  | 'tickets'
-// Sections an employee is moved away from when the server reports that role.
-const ADMINISTRATOR_SECTIONS: readonly DashboardSection[] = [
-  'employees',
-  'theaters',
-  'screenings',
-  'password',
-  'tickets',
-]
-const activeSection = ref<DashboardSection>(
+const activeSection = ref<DashboardSectionId>(
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
 const loggingOut = ref(false)
@@ -261,37 +249,22 @@ onBeforeUnmount(() => {
 onMounted(() => {
   void checkPasswordStatus()
 })
-const availableSections = computed(() =>
-  role.value === 'ADMINISTRATOR'
-    ? ['employees', 'clients', 'theaters', 'screenings', 'password', 'movies', 'tickets']
-    : ['clients', 'password'],
+const availableSections = computed(() => availableSectionsFor(role.value))
+const activeDefinition = computed(() =>
+  dashboardSections.find((section) => section.id === activeSection.value),
 )
-const sectionTitle = computed(() =>
-  activeSection.value === 'employees'
-    ? 'Empleados'
-    : activeSection.value === 'clients'
-      ? 'Clientes'
-      : activeSection.value === 'theaters'
-        ? 'Salas'
-        : activeSection.value === 'password'
-          ? 'Cambiar contraseña'
-          : activeSection.value === 'movies'
-            ? 'Peliculas'
-            : activeSection.value === 'tickets'
-              ? 'Tickets'
-              : 'Clientes',
-)
+const sectionTitle = computed(() => activeDefinition.value?.label ?? 'Clientes')
 
 watch(role, () => {
-  if (role.value === 'EMPLOYEE' && ADMINISTRATOR_SECTIONS.includes(activeSection.value)) {
+  if (role.value === 'EMPLOYEE' && administratorSectionIds.includes(activeSection.value)) {
     activeSection.value = 'clients'
   }
 })
 
 function navigate(section: string) {
   if (submitting.value || passwordChanging.value || sectionBusy.value || loggingOut.value) return
-  if (availableSections.value.includes(section)) {
-    activeSection.value = section as DashboardSection
+  if (availableSections.value.includes(section as DashboardSectionId)) {
+    activeSection.value = section as DashboardSectionId
   }
 }
 
@@ -328,21 +301,12 @@ function returnToDashboard() {
       {{ creationResult }}
     </p>
 
-    <TheatersSection
-      v-if="activeSection === 'theaters'"
+    <component
+      :is="activeDefinition?.component"
+      v-if="activeDefinition?.component"
       :disabled="loggingOut"
       @busy="sectionBusy = $event"
     />
-    <ProjectionsSection
-      v-else-if="activeSection === 'screenings'"
-      :disabled="loggingOut"
-      @busy="sectionBusy = $event"
-    />
-    <section v-else-if="activeSection === 'tickets'" class="preview-content">
-      <div class="section-heading">
-        <h1>Tickets</h1>
-      </div>
-    </section>
     <section
       v-else-if="activeSection !== 'password'"
       class="preview-content"
