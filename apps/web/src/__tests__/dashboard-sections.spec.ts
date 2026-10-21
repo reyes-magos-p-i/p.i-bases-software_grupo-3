@@ -14,9 +14,9 @@ describe('dashboard sections registry', () => {
   })
 
   it('never lets employees open an administrator-only section', () => {
-    for (const section of dashboardSections) {
-      if (section.adminOnly) expect(section.roles).not.toContain('EMPLOYEE')
-    }
+    const adminOnlySections = dashboardSections.filter((section) => section.adminOnly)
+
+    for (const section of adminOnlySections) expect(section.roles).not.toContain('EMPLOYEE')
     const administratorIds = availableSectionsFor('ADMINISTRATOR')
 
     for (const id of availableSectionsFor('EMPLOYEE')) expect(administratorIds).toContain(id)
