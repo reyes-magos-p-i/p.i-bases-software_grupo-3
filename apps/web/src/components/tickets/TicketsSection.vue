@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import { getTicket } from '@/services/ticket.service'
@@ -131,9 +132,10 @@ onBeforeUnmount(() => {
     </form>
 
     <p id="ticket-search-feedback" class="ticket-feedback">
-      <span v-if="searching" role="status">Consultando el tiquete…</span>
-      <span v-else-if="searchError" class="ticket-error" role="alert">{{ searchError }}</span>
+      <span v-if="searchError" class="ticket-error" role="alert">{{ searchError }}</span>
     </p>
+
+    <LoadingState v-if="searching" message="Consultando el tiquete…" />
 
     <div v-if="notification" class="ticket-notification">
       <NotificationPopup
@@ -145,7 +147,7 @@ onBeforeUnmount(() => {
     </div>
 
     <CrudTable
-      v-if="ticket"
+      v-else-if="ticket"
       caption="Tiquetes"
       :columns="columns"
       :rows="rows"
@@ -210,6 +212,31 @@ onBeforeUnmount(() => {
   min-height: 1.5em;
   margin: 0 0 16px;
   color: var(--text-on-dark-secondary);
+}
+.default-actions {
+  display: flex;
+  gap: 4px;
+}
+.default-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  width: 36px;
+  min-height: 36px;
+  padding: 8px;
+  border: 0;
+  color: var(--text-primary);
+  background: transparent;
+  font-size: 1.125rem;
+  text-decoration: none;
+}
+.default-actions button:not(:disabled):hover {
+  background: var(--input-disabled-background);
+  color: var(--text-primary);
+}
+.action-hint {
+  display: inline-flex;
 }
 .ticket-notification {
   position: fixed;
