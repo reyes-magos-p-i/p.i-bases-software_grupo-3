@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { TicketsRepository } from './tickets.repository/tickets.repository';
 //import { CreateTicketDto } from './dto/create-ticket.dto';
 //import { UpdateTicketDto } from './dto/update-ticket.dto';
 
 @Injectable()
 export class TicketsService {
+  constructor(private readonly ticketsRepository: TicketsRepository) {}
   /*
   create(createTicketDto: CreateTicketDto) {
     return 'This action adds a new ticket';
@@ -14,7 +16,7 @@ export class TicketsService {
   }
   */
   findOne(id: number) {
-    return `This action returns a #${id} ticket`;
+    return this.ticketsRepository.getTicketById(id);
   }
   /*
   update(id: number, updateTicketDto: UpdateTicketDto) {
