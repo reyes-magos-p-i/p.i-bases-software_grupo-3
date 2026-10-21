@@ -59,7 +59,7 @@ describe('TicketsSection', () => {
 
     await search(wrapper, '999')
 
-    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El tiquete no existe')
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El ticket no existe')
     expect(wrapper.find('table').exists()).toBe(false)
   })
 
@@ -70,7 +70,7 @@ describe('TicketsSection', () => {
 
     expect(getTicket).not.toHaveBeenCalled()
     expect(wrapper.findComponent(NotificationPopup).props('message')).toBe(
-      'Ingresa un número de tiquete válido.',
+      'Ingresa un número de ticket válido.',
     )
   })
 
@@ -79,13 +79,13 @@ describe('TicketsSection', () => {
     const wrapper = mount(TicketsSection)
 
     await search(wrapper, '999')
-    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El tiquete no existe')
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El ticket no existe')
 
     await search(wrapper, '0')
 
     expect(getTicket).toHaveBeenCalledTimes(1)
     expect(wrapper.findComponent(NotificationPopup).props('message')).toBe(
-      'Ingresa un número de tiquete válido.',
+      'Ingresa un número de ticket válido.',
     )
   })
 })

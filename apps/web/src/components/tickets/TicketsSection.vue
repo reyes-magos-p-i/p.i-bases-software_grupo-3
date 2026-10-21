@@ -54,7 +54,7 @@ async function search() {
   notification.value = ''
   const number = ticketNumber.value.trim()
   if (!/^\d+$/.test(number) || Number(number) < 1) {
-    notification.value = 'Ingresa un número de tiquete válido.'
+    notification.value = 'Ingresa un número de ticket válido.'
     return
   }
 
@@ -71,15 +71,15 @@ async function search() {
     if (current.signal.aborted) return
     searchedNumber.value = Number(number)
     if (result) ticket.value = result
-    else notification.value = 'El tiquete no existe'
+    else notification.value = 'El ticket no existe'
   } catch (error) {
     if (current.signal.aborted) return
     const status = isAxiosError(error) ? error.response?.status : undefined
     if (status === 401) sessionExpired()
     else if (status === 403) {
-      searchError.value = 'No tienes permiso para consultar tiquetes.'
+      searchError.value = 'No tienes permiso para consultar tickets.'
       void refreshPermissions()
-    } else searchError.value = 'No se pudo consultar el tiquete. Inténtalo nuevamente.'
+    } else searchError.value = 'No se pudo consultar el ticket. Inténtalo nuevamente.'
   } finally {
     if (request === current) {
       searching.value = false
@@ -106,13 +106,13 @@ onBeforeUnmount(() => {
   <section class="preview-content" aria-live="polite" aria-atomic="true">
     <div class="section-heading">
       <div>
-        <h1>Consulta de tiquete</h1>
-        <p class="section-subtitle">Ingresa el número de tiquete para ver sus datos</p>
+        <h1>Consulta de ticket</h1>
+        <p class="section-subtitle">Ingresa el número de ticket para ver sus datos</p>
       </div>
     </div>
 
     <form class="ticket-search" role="search" @submit.prevent="search">
-      <label for="ticket-number" class="ticket-search-label">Número de tiquete</label>
+      <label for="ticket-number" class="ticket-search-label">Número de ticket</label>
       <div class="ticket-search-row">
         <input
           id="ticket-number"
@@ -135,7 +135,7 @@ onBeforeUnmount(() => {
       <span v-if="searchError" class="ticket-error" role="alert">{{ searchError }}</span>
     </p>
 
-    <LoadingState v-if="searching" message="Consultando el tiquete…" />
+    <LoadingState v-if="searching" message="Consultando el ticket…" />
 
     <div v-if="notification" class="ticket-notification">
       <NotificationPopup
@@ -148,7 +148,7 @@ onBeforeUnmount(() => {
 
     <CrudTable
       v-else-if="ticket"
-      caption="Tiquetes"
+      caption="Tickets"
       :columns="columns"
       :rows="rows"
       class="ticket-table"
