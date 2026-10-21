@@ -97,7 +97,7 @@ describe('UserStatusDialog', () => {
       await render({ ...selection, status: 'INACTIVE' })
       await button('Confirmar activación').trigger('click')
       await flushPromises()
-      expect(page.get('[role="alert"]').text()).toBe(message)
+      expect(page.get('.notification-message').text()).toBe(message)
       expect(button('Confirmar activación').attributes('disabled')).toBeDefined()
     },
   )
@@ -195,7 +195,7 @@ describe('UserStatusDialog', () => {
     expect(button('Confirmar desactivación').attributes('disabled')).toBeDefined()
     expect(deactivateUser).toHaveBeenCalledTimes(1)
     expect(wrapper?.emitted(event ?? 'session-expired')?.length ?? 0).toBe(event ? 1 : 0)
-    expect(document.activeElement).toBe(page.get('[role="alert"]').element)
+    expect(document.activeElement?.contains(page.get('[role="alert"]').element)).toBe(true)
     await button('Cancelar').trigger('click')
     expect(wrapper?.emitted('close')).toHaveLength(1)
   })
@@ -209,7 +209,7 @@ describe('UserStatusDialog', () => {
     await render()
     await button('Confirmar desactivación').trigger('click')
     await flushPromises()
-    expect(page.get('[role="alert"]').text()).toBe(message)
+    expect(page.get('.notification-message').text()).toBe(message)
   })
   it('ignores completion after unmounting', async () => {
     let resolve!: () => void

@@ -149,9 +149,7 @@ export class ClientsRepository {
           'El correo electrónico ya está registrado para otro cliente.',
         );
       }
-      if (failure?.errorNum === 2291)
-        throw new BadRequestException('El distrito de la dirección no existe.');
-      throw error;
+      this.rethrowCatalogError(error);
     }
   }
 
@@ -369,8 +367,20 @@ export class ClientsRepository {
       ) {
         throw new ConflictException('Este correo ya está registrado');
       }
-      throw error;
+      this.rethrowCatalogError(error);
     }
+  }
+
+  private rethrowCatalogError(error: unknown): never {
+    const failure = error as { errorNum?: number; message?: string } | null;
+    if (
+      failure?.errorNum === 2291 &&
+      /\bFK_ADDRESS_DISTRICT\b/u.test(failure.message ?? '')
+    )
+      throw new BadRequestException(
+        'El distrito seleccionado ya no existe. Selecciona otro distrito.',
+      );
+    throw error;
   }
 
   async insertClient(

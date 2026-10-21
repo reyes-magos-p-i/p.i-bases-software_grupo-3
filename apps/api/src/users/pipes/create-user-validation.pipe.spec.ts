@@ -85,7 +85,7 @@ describe('CreateUserValidationPipe', () => {
     expect(error.getResponse()).toHaveProperty(
       'message',
       expect.arrayContaining([
-        'El identificador del distrito debe ser un número entero.',
+        'Selecciona un distrito válido.',
         'El detalle de la dirección debe ser texto.',
       ]),
     );
@@ -161,7 +161,7 @@ describe('CreateUserValidationPipe', () => {
       birthday: '2000-02-29',
       phoneNumber: '88888888',
       address: { districtId: 7, details: 'Casa azul' },
-      language: 'es-CR',
+      language: 'en',
     };
     const result = await pipe.transform({ ...client, ...fields });
     expect(result).toMatchObject(fields);

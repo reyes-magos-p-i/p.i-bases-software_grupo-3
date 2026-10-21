@@ -3,6 +3,7 @@ import {
   characterCount,
   normalizeMobile,
   validMobile,
+  validName,
   validText,
   validEmail,
 } from '@/utils/user-validation'
@@ -33,13 +34,16 @@ describe('shared user validation', () => {
     'ana@sub.cinema.com',
     'josé@cinema.com',
     'a'.repeat(64) + '@example.com',
-    'a@' + 'b'.repeat(144) + '.com',
-    'a@example..com',
   ])('preserves accepted email formats: %s', (value) => {
     expect(validEmail(value)).toBe(true)
   })
   it.each([
     '',
+    'ana@example..com',
+    'ana@-example.com',
+    'ana@exa_mple.com',
+    'ana<>@example.com',
+    'a@' + 'b'.repeat(144) + '.com',
     '@example.com',
     'ana@',
     'ana@@example.com',
@@ -70,4 +74,16 @@ describe('shared user validation', () => {
   ])('rejects email %s', (value) => {
     expect(validEmail(value)).toBe(false)
   })
+})
+
+describe('personal names', () => {
+  it.each(['Ana', 'María José', 'Muñoz', 'Jose\u0301', '李明'])('accepts %s', (value) => {
+    expect(validName(value)).toBe(true)
+  })
+  it.each(['', ' ', 'Ana2', 'Ana!', 'Ana-María', '🎬', 'Ana\nMaría', '\u0301Ana'])(
+    'rejects %s',
+    (value) => {
+      expect(validName(value)).toBe(false)
+    },
+  )
 })

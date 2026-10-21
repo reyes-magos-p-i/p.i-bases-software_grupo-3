@@ -1,3 +1,4 @@
+import { PersonalName } from '../../common/validation/personal-name.decorator';
 import { Transform, Type } from 'class-transformer';
 import {
   IsDefined,
@@ -25,19 +26,18 @@ const optionalName = ({ value }: { value: unknown }): unknown =>
 export class UpdateAddressDto {
   @IsDefined({ message: 'Selecciona un distrito.' })
   @IsInt({
-    message: 'El identificador del distrito debe ser un número entero.',
+    message: 'Selecciona un distrito válido.',
   })
   @Min(1, { message: 'Selecciona un distrito válido.' })
   @Max(Number.MAX_SAFE_INTEGER, {
-    message: 'El distrito está fuera del rango admitido.',
+    message: 'Selecciona un distrito válido.',
   })
   districtId: number;
 
   @IsOptional()
   @IsString({ message: 'El detalle de la dirección debe ser texto.' })
   @MaxUtf8Bytes(255, {
-    message:
-      'El detalle de la dirección debe ser texto válido y no superar 255 bytes en UTF-8.',
+    message: 'El detalle de la dirección es demasiado largo. Acórtalo.',
   })
   details?: string | null;
 }
@@ -50,9 +50,11 @@ class UpdateUserBaseDto {
   @IsDefined({ message: 'El primer nombre es obligatorio.' })
   @IsString({ message: 'El primer nombre debe ser texto.' })
   @Matches(/\S/u, { message: 'El primer nombre no puede estar vacío.' })
+  @PersonalName({
+    message: 'El primer nombre solo puede contener letras y espacios.',
+  })
   @MaxUtf8Bytes(100, {
-    message:
-      'El primer nombre debe ser texto válido y no superar 100 bytes en UTF-8.',
+    message: 'El primer nombre es demasiado largo. Usa una versión más corta.',
   })
   firstName?: string;
 
@@ -61,9 +63,11 @@ class UpdateUserBaseDto {
   )
   @Transform(optionalName)
   @IsString({ message: 'El segundo nombre debe ser texto.' })
+  @PersonalName({
+    message: 'El segundo nombre solo puede contener letras y espacios.',
+  })
   @MaxUtf8Bytes(100, {
-    message:
-      'El segundo nombre debe ser texto válido y no superar 100 bytes en UTF-8.',
+    message: 'El segundo nombre es demasiado largo. Usa una versión más corta.',
   })
   secondName?: string | null;
 
@@ -85,9 +89,7 @@ class UpdateUserBaseDto {
     },
     { message: 'El correo electrónico debe tener un formato válido.' },
   )
-  @MaxUtf8Bytes(150, {
-    message: 'El correo electrónico no puede superar 150 bytes en UTF-8.',
-  })
+  @MaxUtf8Bytes(150, { message: 'El correo electrónico es demasiado largo.' })
   email?: string;
 }
 
@@ -97,9 +99,12 @@ export class UpdateClientDto extends UpdateUserBaseDto {
   )
   @Transform(optionalName)
   @IsString({ message: 'El primer apellido debe ser texto.' })
+  @PersonalName({
+    message: 'El primer apellido solo puede contener letras y espacios.',
+  })
   @MaxUtf8Bytes(100, {
     message:
-      'El primer apellido debe ser texto válido y no superar 100 bytes en UTF-8.',
+      'El primer apellido es demasiado largo. Usa una versión más corta.',
   })
   firstSurname?: string | null;
 
@@ -108,9 +113,12 @@ export class UpdateClientDto extends UpdateUserBaseDto {
   )
   @Transform(optionalName)
   @IsString({ message: 'El segundo apellido debe ser texto.' })
+  @PersonalName({
+    message: 'El segundo apellido solo puede contener letras y espacios.',
+  })
   @MaxUtf8Bytes(100, {
     message:
-      'El segundo apellido debe ser texto válido y no superar 100 bytes en UTF-8.',
+      'El segundo apellido es demasiado largo. Usa una versión más corta.',
   })
   secondSurname?: string | null;
 
@@ -133,10 +141,10 @@ export class UpdateClientDto extends UpdateUserBaseDto {
 export class UpdateEmployeeDto extends UpdateUserBaseDto {
   @ValidateIf((_object, value: unknown) => value !== undefined)
   @IsDefined({ message: 'Selecciona una sucursal.' })
-  @IsInt({ message: 'La sucursal debe ser un número entero.' })
+  @IsInt({ message: 'Selecciona una sucursal válida.' })
   @Min(1, { message: 'Selecciona una sucursal válida.' })
   @Max(Number.MAX_SAFE_INTEGER, {
-    message: 'La sucursal está fuera del rango admitido.',
+    message: 'Selecciona una sucursal válida.',
   })
   branchId?: number;
   @ValidateIf((_object, value: unknown) => value !== undefined)
@@ -146,9 +154,12 @@ export class UpdateEmployeeDto extends UpdateUserBaseDto {
   @IsDefined({ message: 'El primer apellido es obligatorio.' })
   @IsString({ message: 'El primer apellido debe ser texto.' })
   @Matches(/\S/u, { message: 'El primer apellido no puede estar vacío.' })
+  @PersonalName({
+    message: 'El primer apellido solo puede contener letras y espacios.',
+  })
   @MaxUtf8Bytes(100, {
     message:
-      'El primer apellido debe ser texto válido y no superar 100 bytes en UTF-8.',
+      'El primer apellido es demasiado largo. Usa una versión más corta.',
   })
   firstSurname?: string;
 
@@ -159,9 +170,12 @@ export class UpdateEmployeeDto extends UpdateUserBaseDto {
   @IsDefined({ message: 'El segundo apellido es obligatorio.' })
   @IsString({ message: 'El segundo apellido debe ser texto.' })
   @Matches(/\S/u, { message: 'El segundo apellido no puede estar vacío.' })
+  @PersonalName({
+    message: 'El segundo apellido solo puede contener letras y espacios.',
+  })
   @MaxUtf8Bytes(100, {
     message:
-      'El segundo apellido debe ser texto válido y no superar 100 bytes en UTF-8.',
+      'El segundo apellido es demasiado largo. Usa una versión más corta.',
   })
   secondSurname?: string;
 
