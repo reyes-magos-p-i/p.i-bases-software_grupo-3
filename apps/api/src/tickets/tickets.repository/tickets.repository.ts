@@ -27,7 +27,13 @@ export class TicketsRepository {
         { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
 
-      const rows = (result.rows ?? []) as { TITLE: string; THEATER_ID: number; START_TIME: Date; END_TIME: Date; SEAT: string }[];
+      const rows = (result.rows ?? []) as {
+        TITLE: string;
+        THEATER_ID: number;
+        START_TIME: string;
+        END_TIME: string;
+        SEAT: string;
+      }[];
 
       if (rows.length === 0) {
         return null;

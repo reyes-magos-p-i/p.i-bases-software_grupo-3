@@ -77,14 +77,19 @@ export const dashboardSections: readonly DashboardSectionDefinition[] = [
   { id: 'help', label: 'Asistencia', icon: 'bi-question-circle', roles: [] },
 ]
 
+function isStaffRole(role: UserRole): role is StaffRole {
+  return role === 'ADMINISTRATOR' || role === 'EMPLOYEE'
+}
+
 export function visibleSectionsFor(role: UserRole) {
-  if (role !== 'ADMINISTRATOR' && role !== 'EMPLOYEE') return []
+  if (!isStaffRole(role)) return []
   return dashboardSections.filter((section) => !section.adminOnly || role === 'ADMINISTRATOR')
 }
 
 export function availableSectionsFor(role: UserRole): DashboardSectionId[] {
+  if (!isStaffRole(role)) return []
   return dashboardSections
-    .filter((section) => section.roles.some((allowed) => allowed === role))
+    .filter((section) => section.roles.includes(role))
     .map((section) => section.id)
 }
 
