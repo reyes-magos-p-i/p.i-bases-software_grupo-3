@@ -1,12 +1,11 @@
+import { DateOnly } from '../../common/validation/date-only.decorator';
+import { PersonalName } from '../../common/validation/personal-name.decorator';
 import { Transform, Type } from 'class-transformer';
 import {
-  IsDateString,
   IsIn,
   IsObject,
   IsOptional,
   IsString,
-  Length,
-  Matches,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
@@ -27,7 +26,13 @@ export class CreateClientDto extends CreateUserBaseDto {
     typeof value === 'string' ? value.trim() || null : value,
   )
   @IsString({ message: 'El primer apellido debe ser texto.' })
-  @MaxUtf8Bytes(100)
+  @PersonalName({
+    message: 'El primer apellido solo puede contener letras y espacios.',
+  })
+  @MaxUtf8Bytes(100, {
+    message:
+      'El primer apellido es demasiado largo. Usa una versión más corta.',
+  })
   firstSurname?: string | null;
 
   @IsOptional()
@@ -35,20 +40,20 @@ export class CreateClientDto extends CreateUserBaseDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() || null : value,
   )
-  @MaxUtf8Bytes(100)
+  @PersonalName({
+    message: 'El segundo apellido solo puede contener letras y espacios.',
+  })
+  @MaxUtf8Bytes(100, {
+    message:
+      'El segundo apellido es demasiado largo. Usa una versión más corta.',
+  })
   secondSurname?: string | null;
 
   @IsOptional()
-  @IsDateString(
-    { strict: true },
-    { message: 'La fecha de nacimiento debe ser una fecha válida.' },
+  @DateOnly(
+    { notFuture: true },
+    { message: 'Selecciona una fecha de nacimiento válida que no sea futura.' },
   )
-  @Length(10, 10, {
-    message: 'La fecha de nacimiento debe tener el formato YYYY-MM-DD.',
-  })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/u, {
-    message: 'La fecha de nacimiento debe tener el formato YYYY-MM-DD.',
-  })
   birthday?: string | null;
 
   @IsOptional()
@@ -64,9 +69,6 @@ export class CreateClientDto extends CreateUserBaseDto {
 
   @ValidateIf((_object: unknown, value: unknown) => value !== undefined)
   @IsString({ message: 'El idioma debe ser texto.' })
-  @Matches(/\S/u, {
-    message: 'El idioma no puede estar vacío ni contener solo espacios.',
-  })
-  @MaxUtf8Bytes(5)
+  @IsIn(['es', 'en'], { message: 'Selecciona español o inglés como idioma.' })
   language?: string;
 }

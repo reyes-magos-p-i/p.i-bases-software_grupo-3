@@ -206,7 +206,7 @@ describe('UserDetailDialog', () => {
     reject(new Error('Connection unavailable'))
     await flushPromises()
     expect(page.get('[role="alert"]').text()).toContain('No se pudo mostrar')
-    await page.get('[role="alert"] button').trigger('click')
+    await page.get('.detail-feedback button').trigger('click')
     await flushPromises()
     expect(field('Primer nombre')).toBe('Ana')
   })

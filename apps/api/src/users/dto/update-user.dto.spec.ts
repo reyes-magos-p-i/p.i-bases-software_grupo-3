@@ -210,4 +210,21 @@ describe('User update validation', () => {
       'role',
     ]);
   });
+  it.each([UpdateClientDto, UpdateEmployeeDto])(
+    'protects every changed name without requiring unchanged names',
+    async (Dto) => {
+      for (const field of [
+        'firstName',
+        'secondName',
+        'firstSurname',
+        'secondSurname',
+      ]) {
+        const errors = await validate(
+          plainToInstance(Dto, { [field]: 'Ana123' }),
+        );
+        expect(errors.map((error) => error.property)).toEqual([field]);
+        expect(errors[0].constraints).toHaveProperty('personalName');
+      }
+    },
+  );
 });

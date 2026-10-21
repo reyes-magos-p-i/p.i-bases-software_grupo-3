@@ -163,7 +163,7 @@ describe('CreateEmployeeDto', () => {
       expect.objectContaining({
         property: 'branchId',
         constraints: expect.objectContaining({
-          isDefined: 'El identificador de la sucursal es obligatorio.',
+          isDefined: 'Selecciona una sucursal.',
         }),
       }),
     ]);
@@ -227,7 +227,7 @@ describe('CreateEmployeeDto', () => {
     for (const value of [
       'a'.repeat(limit),
       'á'.repeat(limit / 2),
-      '🎬'.repeat(limit / 4),
+      '界'.repeat(33) + 'a',
     ]) {
       await expect(
         validatePayload({ ...validPayload, [field]: value }),
@@ -265,4 +265,18 @@ describe('CreateEmployeeDto', () => {
 
     expect(errors.map((error) => error.property)).toEqual([field]);
   });
+  it.each(['firstName', 'secondName', 'firstSurname', 'secondSurname'])(
+    'rejects numbers and symbols in %s',
+    async (field) => {
+      for (const value of ['Ana2', 'Ana!', '🎬', 'Ana\nMaría']) {
+        const errors = await validatePayload({
+          ...validPayload,
+          [field]: value,
+        });
+        expect(
+          errors.find((error) => error.property === field)?.constraints,
+        ).toHaveProperty('personalName');
+      }
+    },
+  );
 });
