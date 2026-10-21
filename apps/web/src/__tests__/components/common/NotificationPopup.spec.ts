@@ -38,6 +38,13 @@ describe('NotificationPopup', () => {
     persistent.unmount()
   })
 
+  it('emits close when clicked', async () => {
+    const wrapper = mount(NotificationPopup, { props: { message: 'x', duration: 0 } })
+    await wrapper.trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('pauses auto-dismiss while hovered', async () => {
     const wrapper = mount(NotificationPopup, { props: { message: 'x', duration: 1000 } })
     await wrapper.trigger('mouseenter')
