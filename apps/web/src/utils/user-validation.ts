@@ -8,6 +8,10 @@ export function validText(value: string, maxBytes: number): boolean {
   return !/[\uD800-\uDFFF]/u.test(value) && encoder.encode(value).length <= maxBytes
 }
 
+export function validName(value: string): boolean {
+  return /^\p{L}[\p{L}\p{M}]*(?: +\p{L}[\p{L}\p{M}]*)*$/u.test(value.trim())
+}
+
 export function normalizeMobile(value: string): string {
   const match = /^(?:\+506[ -]?)?([678]\d{3})[ -]?(\d{4})$/u.exec(value.trim())
   return match ? match[1]! + match[2]! : value.trim()
@@ -28,6 +32,19 @@ export function validEmail(value: string): boolean {
     separator > 0 &&
     separator === email.lastIndexOf('@') &&
     lastDot > 0 &&
+    domain
+      .split('.')
+      .every(
+        (label) =>
+          label.length > 0 &&
+          label.length <= 63 &&
+          /^[\p{L}\p{N}](?:[\p{L}\p{M}\p{N}-]*[\p{L}\p{M}\p{N}])?$/u.test(label),
+      ) &&
+    local
+      .split('.')
+      .every((part) =>
+        /^[a-z\d!#$%&'*+\-/=?^_`{|}~\u00a1-\ud7ff\uf900-\ufdcf\ufdf0-\uffef]+$/iu.test(part),
+      ) &&
     !/\s/u.test(email) &&
     /^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/iu.test(domain.slice(lastDot + 1)) &&
     !local.startsWith('.') &&

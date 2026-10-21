@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, wa
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import { authErrorMessage } from '@/utils/auth-errors'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
@@ -51,9 +52,15 @@ const isUserSection = computed(
 const submissionErrors = ref<string[]>([])
 const submissionBlocked = ref(false)
 const creationResult = ref('')
+const operationNotice = ref('')
 const resultIsWarning = ref(false)
 const resultNotice = useTemplateRef<HTMLElement>('result-notice')
 let disposed = false
+
+function dismissUserNotification() {
+  creationResult.value = ''
+  operationNotice.value = ''
+}
 
 function sessionExpired() {
   invalidateEmployeeSession()
@@ -125,6 +132,7 @@ async function submitUser(data: CreateUserRequest) {
   const submittingDialog = userDialog.value
   submitting.value = true
   submissionErrors.value = []
+  operationNotice.value = ''
   creationResult.value = ''
   let completed = false
   try {
@@ -227,8 +235,6 @@ async function loadCatalogs() {
   }
 }
 
-
-
 function openUserDialog() {
   if (loggingOut.value || role.value !== 'ADMINISTRATOR' || !isUserSection.value) return
   userDialog.value?.open()
@@ -264,6 +270,7 @@ watch(role, () => {
 function navigate(section: string) {
   if (submitting.value || passwordChanging.value || sectionBusy.value || loggingOut.value) return
   if (availableSections.value.includes(section as DashboardSectionId)) {
+    operationNotice.value = ''
     activeSection.value = section as DashboardSectionId
   }
 }
@@ -291,15 +298,20 @@ function returnToDashboard() {
       <button type="button" @click="checkPasswordStatus">Reintentar</button>
     </div>
 
-    <p
-      v-if="creationResult && isUserSection"
+    <div
+      v-if="(creationResult || operationNotice) && isUserSection"
       ref="result-notice"
       class="creation-result"
-      :role="resultIsWarning ? 'alert' : 'status'"
       tabindex="-1"
     >
-      {{ creationResult }}
-    </p>
+      <NotificationPopup
+        :key="operationNotice || creationResult"
+        :type="!operationNotice && resultIsWarning ? 'alert' : 'success'"
+        :message="operationNotice || creationResult"
+        :duration="!operationNotice && resultIsWarning ? 0 : 4000"
+        @close="dismissUserNotification"
+      />
+    </div>
 
     <component
       :is="activeDefinition?.component"
@@ -330,8 +342,6 @@ function returnToDashboard() {
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
           {{ activeSection === 'clients' ? 'Añadir cliente' : 'Añadir empleado' }}
         </button>
-
-
       </div>
       <UserListPanel
         v-if="activeSection === 'employees' || activeSection === 'clients'"
@@ -343,6 +353,7 @@ function returnToDashboard() {
         @session-expired="sessionExpired"
         @forbidden="refreshPermissions"
         @user-updated="userUpdated"
+        @notification="operationNotice = $event"
       />
       <MovieCrud v-if="activeSection === 'movies'" />
     </section>

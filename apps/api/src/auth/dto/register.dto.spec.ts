@@ -105,7 +105,7 @@ describe('RegisterDto minimum age validation', () => {
 
     expect(
       errors.find((error) => error.property === 'birthDate')?.constraints,
-    ).toHaveProperty('minimumRegistrationAge');
+    ).toHaveProperty('dateOnly');
   });
 });
 

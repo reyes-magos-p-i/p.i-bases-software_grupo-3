@@ -1,3 +1,4 @@
+import { PersonalName } from '../../common/validation/personal-name.decorator';
 import { Transform } from 'class-transformer';
 import {
   IsDefined,
@@ -36,7 +37,7 @@ export class CreateUserBaseDto {
     },
     { message: 'El correo electrónico debe tener un formato válido.' },
   )
-  @MaxUtf8Bytes(150)
+  @MaxUtf8Bytes(150, { message: 'El correo electrónico es demasiado largo.' })
   email: string;
 
   @IsDefined({ message: 'El primer nombre es obligatorio.' })
@@ -47,7 +48,12 @@ export class CreateUserBaseDto {
   @Matches(/\S/u, {
     message: 'El primer nombre no puede estar vacío ni contener solo espacios.',
   })
-  @MaxUtf8Bytes(100)
+  @PersonalName({
+    message: 'El primer nombre solo puede contener letras y espacios.',
+  })
+  @MaxUtf8Bytes(100, {
+    message: 'El primer nombre es demasiado largo. Usa una versión más corta.',
+  })
   firstName: string;
 
   @IsOptional()
@@ -55,6 +61,11 @@ export class CreateUserBaseDto {
     typeof value === 'string' ? value.trim() || null : value,
   )
   @IsString({ message: 'El segundo nombre debe ser texto.' })
-  @MaxUtf8Bytes(100)
+  @PersonalName({
+    message: 'El segundo nombre solo puede contener letras y espacios.',
+  })
+  @MaxUtf8Bytes(100, {
+    message: 'El segundo nombre es demasiado largo. Usa una versión más corta.',
+  })
   secondName?: string | null;
 }

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Creación administrativa de usuarios
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Contrato para la comunicación HTTP entre Vue y NestJS.
     UsersModule está registrado en AppModule y expone POST /users y
@@ -28,6 +28,14 @@ info:
     una letra acentuada puede ocupar varios bytes. Las herramientas OpenAPI
     no validan automáticamente esta extensión; el backend aplica los límites.
     No se convierten implícitamente cadenas en números.
+    La interfaz valida al salir de un campo o al enviar, sin mostrar errores mientras
+    se escribe. Usa NotificationPopup para resultados y errores generales; los errores
+    por campo permanecen junto a su entrada, con mensajes sin términos de almacenamiento.
+    DatePicker permite seleccionar fechas sin escribirlas y usa la paleta de variables.css.
+    Los nombres admiten letras Unicode, marcas de acento y espacios; no números ni símbolos.
+    El nacimiento no puede ser futuro según el día de Costa Rica. La contratación puede
+    ser futura, pero no anterior al nacimiento. No se impone edad mínima en este formulario.
+    Las referencias de distrito o sucursal inexistentes generan 400 y revierten la creación.
 x-integration-status: backend-integrated
 x-frontend-integration-status: integrated
 security:
@@ -336,8 +344,8 @@ components:
           nullable: true
           minLength: 10
           maxLength: 10
-          pattern: '^\d{4}-\d{2}-\d{2}$'
-          description: Fecha real con formato YYYY-MM-DD, sin hora ni zona horaria.
+          pattern: '^(?!0000)\d{4}-\d{2}-\d{2}$'
+          description: Fecha real no futura según el día de Costa Rica, con año entre 0001 y 9999 y formato YYYY-MM-DD.
         phoneNumber:
           type: string
           nullable: true
@@ -354,13 +362,11 @@ components:
               enum: [null]
         language:
           type: string
-          pattern: '\S'
-          x-max-utf8-bytes: 5
+          enum: [es, en]
           default: es
           description: |
-            Máximo 5 bytes UTF-8. Puede omitirse para usar el valor predeterminado
-            es de Oracle; no admite null, vacío ni solo espacios.
-            Actualmente no se restringe a un catálogo de idiomas.
+            Español o inglés. Puede omitirse para usar el valor predeterminado
+            es de Oracle; no admite null.
     CreateEmployee:
       type: object
       additionalProperties: false
@@ -398,8 +404,8 @@ components:
           format: date
           minLength: 10
           maxLength: 10
-          pattern: '^\d{4}-\d{2}-\d{2}$'
-          description: Fecha real con formato YYYY-MM-DD, sin hora ni zona horaria.
+          pattern: '^(?!0000)\d{4}-\d{2}-\d{2}$'
+          description: Fecha real no futura según el día de Costa Rica, con año entre 0001 y 9999 y formato YYYY-MM-DD.
         phoneNumber:
           type: string
           pattern: '^(?:\+506[ -]?)?[678]\d{3}[ -]?\d{4}$'
@@ -410,7 +416,7 @@ components:
           minLength: 10
           maxLength: 10
           pattern: '^(?!0000)\d{4}-\d{2}-\d{2}$'
-          description: Fecha de contratación obligatoria para empleados y administradores; fecha real con año entre 0001 y 9999, sin hora ni zona horaria. La fecha de registro la genera Oracle automáticamente.
+          description: Fecha de contratación obligatoria para empleados y administradores; fecha real con año entre 0001 y 9999, sin hora ni zona horaria. No puede ser anterior al nacimiento; sí puede ser futura. La fecha de registro la genera Oracle automáticamente.
         address:
           $ref: "#/components/schemas/CreateAddress"
         branchId:
@@ -446,14 +452,14 @@ components:
       description: Correo válido, máximo 150 bytes UTF-8. Se eliminan espacios externos y se normaliza a minúsculas.
     RequiredName:
       type: string
-      pattern: '\S'
+      pattern: '^\p{L}[\p{L}\p{M}]*(?: +\p{L}[\p{L}\p{M}]*)*$'
       x-max-utf8-bytes: 100
-      description: Máximo 100 bytes UTF-8 después de eliminar espacios externos; no admite vacío ni solo espacios.
+      description: Solo letras Unicode, acentos y espacios. Máximo 100 bytes UTF-8 después de eliminar espacios externos; no admite vacío ni solo espacios.
     OptionalName:
       type: string
       nullable: true
       x-max-utf8-bytes: 100
-      description: Máximo 100 bytes UTF-8 después de eliminar espacios externos; permite null. Una cadena vacía se normaliza a null.
+      description: Solo letras Unicode, acentos y espacios. Máximo 100 bytes UTF-8 después de eliminar espacios externos; permite null. Una cadena vacía se normaliza a null.
     CreatedUser:
       type: object
       additionalProperties: false

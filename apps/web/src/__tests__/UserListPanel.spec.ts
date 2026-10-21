@@ -86,7 +86,7 @@ describe('UserListPanel', () => {
     expect(dialog.props('selection')).toMatchObject({ id: 42, status: 'INACTIVE' })
     dialog.vm.$emit('status-changed', 'ACTIVE')
     await flushPromises()
-    expect(view.text()).toContain('El usuario fue activado exitosamente.')
+    expect(view.emitted('notification')).toEqual([['El usuario fue activado exitosamente.']])
     expect(getUsers).toHaveBeenCalledTimes(2)
   })
   it('combines status checkboxes and clears them with the other filters', async () => {
@@ -145,7 +145,7 @@ describe('UserListPanel', () => {
     dialog.vm.$emit('status-changed', 'INACTIVE')
     await flushPromises()
     expect(dialog.props('selection')).toBeNull()
-    expect(view.text()).toContain('El usuario fue desactivado exitosamente.')
+    expect(view.emitted('notification')).toEqual([['El usuario fue desactivado exitosamente.']])
     expect(getUsers).toHaveBeenCalledTimes(2)
   })
   it('prevents selecting the current employee and clears selection when permissions change', async () => {
@@ -172,7 +172,7 @@ describe('UserListPanel', () => {
     dialog.vm.$emit('updated', selection, updated)
     await flushPromises()
     expect(dialog.props('selection')).toBeNull()
-    expect(view.text()).toContain('El usuario fue modificado exitosamente.')
+    expect(view.emitted('notification')).toEqual([['El usuario fue modificado exitosamente.']])
     expect(getUsers).toHaveBeenCalledTimes(2)
     expect(view.emitted('user-updated')?.[0]).toEqual([selection, updated])
   })
