@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import TicketsSection from '@/components/tickets/TicketsSection.vue'
 
 const { getTicket } = vi.hoisted(() => ({ getTicket: vi.fn() }))
@@ -58,7 +59,7 @@ describe('TicketsSection', () => {
 
     await search(wrapper, '999')
 
-    expect(wrapper.find('[role="alert"]').text()).toContain('999')
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El tiquete no existe')
     expect(wrapper.find('table').exists()).toBe(false)
   })
 
@@ -68,6 +69,23 @@ describe('TicketsSection', () => {
     await search(wrapper, 'abc')
 
     expect(getTicket).not.toHaveBeenCalled()
-    expect(wrapper.find('[role="alert"]').text()).toBe('Ingresa un número de tiquete válido.')
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe(
+      'Ingresa un número de tiquete válido.',
+    )
+  })
+
+  it('replaces the not-found notification when the next search is invalid', async () => {
+    getTicket.mockResolvedValue('')
+    const wrapper = mount(TicketsSection)
+
+    await search(wrapper, '999')
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El tiquete no existe')
+
+    await search(wrapper, '0')
+
+    expect(getTicket).toHaveBeenCalledTimes(1)
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe(
+      'Ingresa un número de tiquete válido.',
+    )
   })
 })

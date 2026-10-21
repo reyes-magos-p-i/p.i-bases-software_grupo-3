@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import { getTicket } from '@/services/ticket.service'
 import type { Ticket } from '@/types/ticket'
@@ -13,6 +14,7 @@ const { sessionExpired, refreshPermissions } = useEmployeeSessionRecovery()
 const ticketNumber = ref('')
 const searching = ref(false)
 const searchError = ref('')
+const notification = ref('')
 const searchedNumber = ref<number | null>(null)
 const ticket = ref<Ticket | null>(null)
 let request: AbortController | undefined
@@ -48,9 +50,10 @@ const rows = computed(() => {
 
 async function search() {
   if (props.disabled || searching.value) return
+  notification.value = ''
   const number = ticketNumber.value.trim()
   if (!/^\d+$/.test(number) || Number(number) < 1) {
-    searchError.value = 'Ingresa un número de tiquete válido.'
+    notification.value = 'Ingresa un número de tiquete válido.'
     return
   }
 
@@ -67,7 +70,7 @@ async function search() {
     if (current.signal.aborted) return
     searchedNumber.value = Number(number)
     if (result) ticket.value = result
-    else searchError.value = `No se encontró ningún tiquete con el número ${number}.`
+    else notification.value = 'El tiquete no existe'
   } catch (error) {
     if (current.signal.aborted) return
     const status = isAxiosError(error) ? error.response?.status : undefined
@@ -131,6 +134,15 @@ onBeforeUnmount(() => {
       <span v-if="searching" role="status">Consultando el tiquete…</span>
       <span v-else-if="searchError" class="ticket-error" role="alert">{{ searchError }}</span>
     </p>
+
+    <div v-if="notification" class="ticket-notification">
+      <NotificationPopup
+        type="alert"
+        :message="notification"
+        :duration="1000"
+        @close="notification = ''"
+      />
+    </div>
 
     <CrudTable
       v-if="ticket"
@@ -198,6 +210,12 @@ onBeforeUnmount(() => {
   min-height: 1.5em;
   margin: 0 0 16px;
   color: var(--text-on-dark-secondary);
+}
+.ticket-notification {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1050;
 }
 .ticket-error {
   display: inline-block;
