@@ -136,7 +136,11 @@ describe('CreateUserBaseDto', () => {
   it.each(['firstName', 'secondName'])(
     'enforces the UTF-8 byte limit for %s',
     async (field) => {
-      for (const value of ['a'.repeat(100), 'á'.repeat(50), '🎬'.repeat(25)]) {
+      for (const value of [
+        'a'.repeat(100),
+        'á'.repeat(50),
+        '界'.repeat(33) + 'a',
+      ]) {
         await expect(
           validatePayload({ ...validPayload, [field]: value }),
         ).resolves.toEqual([]);
@@ -218,12 +222,26 @@ describe('CreateUserBaseDto', () => {
       expect(errors).toEqual([
         expect.objectContaining({
           property: 'firstName',
-          constraints: {
+          constraints: expect.objectContaining({
             matches:
               'El primer nombre no puede estar vacío ni contener solo espacios.',
-          },
+          }),
         }),
       ]);
+    },
+  );
+  it.each(['firstName', 'secondName'])(
+    'rejects numbers and symbols in %s',
+    async (field) => {
+      for (const value of ['Ana2', 'Ana!', '🎬', 'Ana\nMaría']) {
+        const errors = await validatePayload({
+          ...validPayload,
+          [field]: value,
+        });
+        expect(
+          errors.find((error) => error.property === field)?.constraints,
+        ).toHaveProperty('personalName');
+      }
     },
   );
 });

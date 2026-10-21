@@ -6,6 +6,8 @@ import {
   clientSession,
   establishClientSession,
   hasClientSession,
+  clientSessionRevision,
+  beginClientSessionChange,
   restoreClientSession,
 } from '@/services/client-session.service'
 import { fbAuth, logoutFromFacebook } from '@/facebook-auth'
@@ -24,13 +26,13 @@ describe('Client session lifecycle', () => {
     clearClientSession()
   })
 
-  it('detects local and Facebook sessions without requiring a restored profile', () => {
+  it('detects application tokens without treating Facebook SDK status as a session', () => {
     expect(hasClientSession()).toBe(false)
     localStorage.setItem('accessToken', 'saved-token')
     expect(hasClientSession()).toBe(true)
     clearClientSession()
     fbAuth.status = 'connected'
-    expect(hasClientSession()).toBe(true)
+    expect(hasClientSession()).toBe(false)
   })
 
   it('clears a local session without calling Facebook when disconnected', async () => {
@@ -150,7 +152,7 @@ describe('Client session lifecycle', () => {
     { ...identity, firstName: ' ' },
     { ...identity, lastName: 3 },
   ])('rejects an invalid client profile: %p', (value) => {
-    expect(() => clientIdentityFromResponse(value)).toThrow('verificar')
+    expect(() => clientIdentityFromResponse(value)).toThrow('AUTH_RESPONSE_INVALID')
   })
 
   it('maps the current API surname and keeps only public identity fields', () => {
@@ -175,7 +177,32 @@ describe('Client session lifecycle', () => {
 
   it('does not replace an existing session with an empty token', () => {
     establishClientSession(identity, 'valid-token')
-    expect(() => establishClientSession(identity, '')).toThrow('verificar')
+    expect(() => establishClientSession(identity, '')).toThrow('AUTH_RESPONSE_INVALID')
     expect(localStorage.getItem('accessToken')).toBe('valid-token')
+  })
+
+  it('clears local access even if the Facebook logout fails', async () => {
+    establishClientSession(identity, 'saved-token')
+    fbAuth.status = 'connected'
+    vi.mocked(logoutFromFacebook).mockRejectedValueOnce(new Error('SDK unavailable'))
+    await expect(clearClientAuth()).rejects.toThrow('SDK unavailable')
+    expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(clientSession.user.value).toBeNull()
+  })
+
+  it('keeps the initial anonymous restoration from cancelling automatic provider login', async () => {
+    const revision = clientSessionRevision()
+    await restoreClientSession(vi.fn())
+    expect(clientSessionRevision()).toBe(revision)
+    expect(clientSession.status.value).toBe('anonymous')
+    expect(beginClientSessionChange()).toBe(revision + 1)
+  })
+
+  it('clears a profile that no longer has its application token', async () => {
+    establishClientSession(identity, 'old-token')
+    localStorage.removeItem('accessToken')
+    await restoreClientSession(vi.fn())
+    expect(clientSession.user.value).toBeNull()
+    expect(clientSession.status.value).toBe('anonymous')
   })
 })

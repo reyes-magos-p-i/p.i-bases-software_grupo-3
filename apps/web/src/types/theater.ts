@@ -1,4 +1,7 @@
-export type TheaterStatus = 'Disponible' | 'En función'
+export interface TheaterStatusOption {
+  theaterStatusId: number
+  name: string
+}
 
 export interface TheaterProjector {
   projectorId: number
@@ -14,26 +17,27 @@ export interface TheaterCinema {
 export interface TheaterCreationOptions {
   projectors: TheaterProjector[]
   cinemas: TheaterCinema[]
+  statuses: TheaterStatusOption[]
 }
 
 export interface CreateTheaterRequest {
-  branchId: number
+  cinema: string
   numberOfSeats: number
   dimensionX: number
   dimensionY: number
   projectorName: string
-  status?: TheaterStatus
+  status?: string
 }
 
 export type UpdateTheaterRequest = Partial<CreateTheaterRequest> & { isActive?: boolean }
 
 export interface Theater {
   theaterId: number
-  branchId: number
+  cinema: string
   numberOfSeats: number
   dimensionX: number
   dimensionY: number
   projectorName: string
   isActive: boolean
-  status: TheaterStatus
+  status: string
 }

@@ -65,11 +65,16 @@ describe('ClientsRepository', () => {
     it('updates only the status and commits exactly one client', async () => {
       connection.execute
         .mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE' }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
         .mockResolvedValueOnce({ rowsAffected: 1 });
       await repository.deactivateClient(42);
       expect(connection.execute).toHaveBeenCalledWith(
-        "UPDATE CLIENTS SET STATUS = 'INACTIVE' WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
-        { id: { val: 42, type: oracle.NUMBER } },
+        'UPDATE CLIENTS SET STATUS = :status WHERE CLIENT_ID = :id AND STATUS = :previousStatus',
+        {
+          id: { val: 42, type: oracle.NUMBER },
+          status: 'INACTIVE',
+          previousStatus: 'ACTIVE',
+        },
         { autoCommit: false },
       );
       expect(connection.execute).toHaveBeenNthCalledWith(
@@ -78,7 +83,7 @@ describe('ClientsRepository', () => {
         { id: { val: 42, type: oracle.NUMBER } },
         { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
       );
-      expect(connection.execute).toHaveBeenCalledTimes(2);
+      expect(connection.execute).toHaveBeenCalledTimes(3);
       expect(connection.commit).toHaveBeenCalledTimes(1);
     });
     it('reports nonexistent clients without committing', async () => {
@@ -139,10 +144,79 @@ describe('ClientsRepository', () => {
       );
     });
   });
+  describe('activation lifecycle', () => {
+    beforeEach(() => {
+      connection.execute.mockReset();
+    });
+    it('reactivates an inactive account without replacing credentials or historical dates', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ STATUS: 'INACTIVE' }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+      await repository.activateClient(42);
+      expect(connection.execute).toHaveBeenCalledWith(
+        'UPDATE CLIENTS SET STATUS = :status WHERE CLIENT_ID = :id AND STATUS = :previousStatus',
+        {
+          id: { val: 42, type: oracle.NUMBER },
+          status: 'ACTIVE',
+          previousStatus: 'INACTIVE',
+        },
+        { autoCommit: false },
+      );
+      const statements = connection.execute.mock.calls.map(
+        ([sql]) => sql as string,
+      );
+      expect(statements.at(-1)).toContain('MERGE INTO PASSWORD_RECOVERIES');
+      expect(statements.join(' ')).not.toMatch(
+        /PASSWORD_SET_AT|HIRE_DATE|CREATED_AT|DELETE FROM/,
+      );
+      expect(connection.commit).toHaveBeenCalledTimes(1);
+      expect(connection.rollback).not.toHaveBeenCalled();
+    });
+    it('rejects reactivation of an already active account', async () => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ STATUS: 'ACTIVE' }],
+      });
+      await expect(repository.activateClient(42)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(connection.commit).not.toHaveBeenCalled();
+    });
+    it.each(['ACTIVE', 'INACTIVE'] as const)(
+      'rolls back the %s transition if revocation fails',
+      async (previousStatus) => {
+        connection.execute
+          .mockResolvedValueOnce({ rows: [{ STATUS: previousStatus }] })
+          .mockResolvedValueOnce({ rowsAffected: 1 })
+          .mockRejectedValueOnce(new Error('Revocation unavailable'));
+        const operation =
+          previousStatus === 'ACTIVE'
+            ? repository.deactivateClient(42)
+            : repository.activateClient(42);
+        await expect(operation).rejects.toThrow('Revocation unavailable');
+        expect(connection.rollback).toHaveBeenCalledTimes(1);
+        expect(connection.commit).not.toHaveBeenCalled();
+      },
+    );
+    it('rejects editing an existing inactive account with a specific conflict', async () => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ STATUS: 'INACTIVE', EMAIL: 'inactive@example.com' }],
+      });
+      await expect(
+        repository.updateClient(42, { phoneNumber: '88888888' }),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: { code: 'USER_INACTIVE' },
+      });
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
+    });
+  });
+
   describe('updateClient', () => {
     beforeEach(() => {
       connection.execute.mockResolvedValueOnce({
-        rows: [{ EMAIL: 'old@example.com' }],
+        rows: [{ STATUS: 'ACTIVE', EMAIL: 'old@example.com' }],
       });
     });
     it('updates selected name fields without changing other columns', async () => {
@@ -232,7 +306,13 @@ describe('ClientsRepository', () => {
         { errorNum: 1, message: 'ORA-00001: (PRODUCTION.UQ_CLIENTS_EMAIL)' },
         409,
       ],
-      [{ errorNum: 2291 }, 400],
+      [
+        {
+          errorNum: 2291,
+          message: 'ORA-02291: (PRODUCTION.FK_ADDRESS_DISTRICT)',
+        },
+        400,
+      ],
     ])(
       'translates known Oracle errors after rollback',
       async (failure, expected) => {
@@ -261,6 +341,7 @@ describe('ClientsRepository', () => {
 
   describe('findClientDetailById', () => {
     const row = {
+      STATUS: 'ACTIVE',
       ID: 42,
       FIRST_NAME: 'Ana',
       SECOND_NAME: 'María',
@@ -283,9 +364,22 @@ describe('ClientsRepository', () => {
       PASSWORD_HASH: 'private',
       ACCESS_TOKEN: 'private',
     };
+    it('returns an inactive account for management without changing authentication filters', async () => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ ...row, STATUS: 'INACTIVE' }],
+      });
+      await expect(repository.findClientDetailById(42)).resolves.toMatchObject({
+        id: 42,
+        status: 'INACTIVE',
+      });
+      const sql = connection.execute.mock.calls[0][0] as string;
+      expect(sql).toContain('.STATUS');
+      expect(sql).not.toContain("STATUS = 'ACTIVE'");
+    });
     it('returns individual fields and the full address without credentials', async () => {
       connection.execute.mockResolvedValue({ rows: [row] });
       expect(await repository.findClientDetailById(42)).toEqual({
+        status: 'ACTIVE',
         id: 42,
         role: 'CLIENT',
         firstName: 'Ana',
@@ -345,6 +439,31 @@ describe('ClientsRepository', () => {
     });
   });
 
+  it('includes all states by default and supports bound status filters and sorting', async () => {
+    connection.execute
+      .mockResolvedValueOnce({ rows: [{ TOTAL: 1 }] })
+      .mockResolvedValueOnce({ rows: [] });
+    await repository.listClients(
+      Object.assign(new ListClientsQueryDto(), {
+        status: ['ACTIVE', 'INACTIVE'],
+        sortBy: 'status',
+      }),
+    );
+    for (const [sql, binds] of connection.execute.mock.calls) {
+      expect(sql).toContain('c.STATUS IN (:status0, :status1)');
+      expect(binds.status0.val).toBe('ACTIVE');
+      expect(binds.status1.val).toBe('INACTIVE');
+    }
+    expect(connection.execute.mock.calls[1][0]).toContain(
+      'ORDER BY c.STATUS ASC',
+    );
+    connection.execute.mockClear().mockResolvedValue({ rows: [] });
+    await repository.listClients(new ListClientsQueryDto());
+    expect(connection.execute.mock.calls[0][0]).not.toContain(
+      "STATUS = 'ACTIVE'",
+    );
+  });
+
   describe('listClients', () => {
     it('matches first names and surnames even when a second name is between them', async () => {
       connection.execute
@@ -367,6 +486,7 @@ describe('ClientsRepository', () => {
         .mockResolvedValueOnce({
           rows: [
             {
+              STATUS: 'ACTIVE',
               ID: 42,
               NAME: 'Ana María Núñez',
               EMAIL: 'ana@example.com',
@@ -387,6 +507,7 @@ describe('ClientsRepository', () => {
       expect(result).toEqual({
         items: [
           {
+            status: 'ACTIVE',
             id: 42,
             name: 'Ana María Núñez',
             email: 'ana@example.com',
@@ -416,7 +537,7 @@ describe('ClientsRepository', () => {
         name0: binds.name0,
       });
       for (const statement of [connection.execute.mock.calls[0][0], sql]) {
-        expect(statement).toContain("WHERE c.STATUS = 'ACTIVE' AND ((");
+        expect(statement).toContain('WHERE ((');
         expect(statement).toContain(String.raw`LIKE :name0 ESCAPE '\'`);
         expect(statement).toContain(String.raw`LIKE :search ESCAPE '\'`);
       }
@@ -830,14 +951,14 @@ describe('ClientsRepository', () => {
   });
 
   describe('foreign key failures', () => {
-    it.each(['FK_ADDRESSES_DISTRICT', 'FK_CLIENT_ADDRESS'])(
+    it.each(['FK_ADDRESS_DISTRICT', 'FK_CLIENT_ADDRESS'])(
       'rolls back client creation when Oracle rejects %s',
       async (constraint) => {
         const error = Object.assign(
           new Error('Parent key not found: ' + constraint),
           { errorNum: 2291 },
         );
-        if (constraint !== 'FK_ADDRESSES_DISTRICT')
+        if (constraint !== 'FK_ADDRESS_DISTRICT')
           connection.execute.mockResolvedValueOnce(insertedAddress);
         connection.execute.mockRejectedValueOnce(error);
         const data = {
@@ -853,9 +974,21 @@ describe('ClientsRepository', () => {
         };
         const creation = repository.createClient(data);
 
-        await expect(creation).rejects.toBe(error);
+        if (
+          constraint === 'FK_ADDRESS_DISTRICT' ||
+          constraint === 'FK_EMPLOYEES_BRANCH'
+        ) {
+          await expect(creation).rejects.toMatchObject({
+            status: 400,
+            message: expect.stringContaining(
+              constraint === 'FK_EMPLOYEES_BRANCH' ? 'sucursal' : 'distrito',
+            ),
+          });
+        } else {
+          await expect(creation).rejects.toBe(error);
+        }
         expect(connection.execute).toHaveBeenCalledTimes(
-          constraint === 'FK_ADDRESSES_DISTRICT' ? 1 : 2,
+          constraint === 'FK_ADDRESS_DISTRICT' ? 1 : 2,
         );
         expect(connection.commit).not.toHaveBeenCalled();
         expect(connection.rollback).toHaveBeenCalledTimes(1);
@@ -1150,9 +1283,24 @@ describe('ClientsRepository', () => {
     });
   });
 
+  it('refuses an in-flight password change after the account was deactivated', async () => {
+    connection.execute.mockResolvedValueOnce({ rows: [] });
+    await expect(
+      repository.savePassword(42, 'new-hash', 'salt', 90),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(connection.execute).toHaveBeenCalledTimes(1);
+    expect(connection.execute.mock.calls[0][0]).toContain(
+      "STATUS = 'ACTIVE' FOR UPDATE",
+    );
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+
   describe('savePassword', () => {
     it('upserts the credentials row inside a transaction', async () => {
-      connection.execute.mockResolvedValue({ rowsAffected: 1 });
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ CLIENT_ID: 1 }] })
+        .mockResolvedValue({ rowsAffected: 1 });
 
       await repository.savePassword(1, 'hash', 'salt', 90);
 
@@ -1171,7 +1319,9 @@ describe('ClientsRepository', () => {
     });
 
     it('throws and rolls back when Oracle does not upsert exactly one row', async () => {
-      connection.execute.mockResolvedValue({ rowsAffected: 0 });
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ CLIENT_ID: 1 }] })
+        .mockResolvedValue({ rowsAffected: 0 });
 
       await expect(
         repository.savePassword(1, 'hash', 'salt', 90),
@@ -1184,7 +1334,9 @@ describe('ClientsRepository', () => {
   });
 
   it('joins the recovery transaction without committing credentials independently', async () => {
-    connection.execute.mockResolvedValue({ rowsAffected: 1 });
+    connection.execute
+      .mockResolvedValueOnce({ rows: [{ CLIENT_ID: 1 }] })
+      .mockResolvedValue({ rowsAffected: 1 });
     await expect(
       repository.savePassword(
         7,
@@ -1200,5 +1352,16 @@ describe('ClientsRepository', () => {
       { autoCommit: false },
     );
     expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { PASSWORD_SET_AT: null, EXPIRATION_DAYS: 90 },
+    { PASSWORD_SET_AT: new Date('invalid'), EXPIRATION_DAYS: 90 },
+    { PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 45 },
+  ])('rejects malformed client password metadata: %p', async (row) => {
+    connection.execute.mockResolvedValueOnce({ rows: [row] });
+    await expect(repository.findPasswordStatus(7)).rejects.toThrow(
+      'Oracle returned invalid client password status.',
+    );
   });
 });

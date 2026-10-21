@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ProjectionListPanel from '@/components/projections/ProjectionListPanel.vue'
 import ProjectionDetailDialog from '@/components/projections/ProjectionDetailDialog.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import type { ListedProjection, ProjectionList } from '@/types/projection'
+import { formatPrice } from '@/utils/projection-format'
 
 const { getProjections, getProjectionFilterOptions } = vi.hoisted(() => ({
   getProjections: vi.fn(),
@@ -60,7 +62,10 @@ const lastQuery = () => getProjections.mock.lastCall![0]
 beforeEach(() => {
   getProjections.mockReset().mockResolvedValue(list())
   getProjectionFilterOptions.mockReset().mockResolvedValue(options)
-  Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: vi.fn() })
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value: vi.fn(),
+  })
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
     configurable: true,
     value: vi.fn(),
@@ -76,34 +81,61 @@ afterEach(() => {
 })
 
 describe('ProjectionListPanel', () => {
+  it.each(['success', 'failure'])(
+    'replaces the shared loading state after a request ends in %s',
+    async (outcome) => {
+      let resolve!: (value: ProjectionList) => void
+      let reject!: (error: Error) => void
+      getProjections.mockReturnValue(
+        new Promise<ProjectionList>((done, fail) => {
+          resolve = done
+          reject = fail
+        }),
+      )
+      const view = await render()
+      expect(view.getComponent(LoadingState).props('message')).toBe('Cargando proyecciones…')
+      expect(view.get('.list-content').attributes('aria-busy')).toBe('true')
+      expect(view.find('table').exists()).toBe(false)
+
+      if (outcome === 'success') resolve(list())
+      else reject(new Error('Connection unavailable'))
+      await flushPromises()
+
+      expect(view.findComponent(LoadingState).exists()).toBe(false)
+      expect(view.get('.list-content').attributes('aria-busy')).toBe('false')
+      expect(view.find('table').exists()).toBe(outcome === 'success')
+      expect(view.find('[role="alert"]').exists()).toBe(outcome === 'failure')
+    },
+  )
+
   it('lists projections with the columns of the design', async () => {
     await render()
     expect(lastQuery()).toEqual({ page: 1, pageSize: 10 })
     expect(wrapper!.findAll('th').map((th) => th.text())).toEqual([
-      'No.',
       'Película',
       'ID Proyección',
-      'Sucursal',
       'Sala',
       'Fecha',
-      'Hora',
       'Duración',
       'Precio',
       'Estado',
       'Acciones',
     ])
-    const cells = wrapper!.findAll('tbody td').map((td) => td.text())
-    expect(cells.slice(0, 8)).toEqual([
-      '1',
+    const cells = wrapper!.findAll('tbody td')
+    expect(cells.slice(0, 7).map((td) => td.text())).toEqual([
       'The Odyssey',
       'MF-007',
-      'Mall Oxígeno',
       'Sala 4',
-      '14/09/2099',
-      '1:00 pm',
+      '14/09/2099 1:00 pm',
       '2 horas 2 minutos',
+      formatPrice(3500),
+      'Cancelada',
     ])
-    expect(cells[9]).toBe('Cancelada')
+    // The date cell shows the date in bold and the start time below it.
+    expect(cells[3]!.get('strong').text()).toBe('14/09/2099')
+    expect(cells[3]!.findAll('.date-cell > span').map((span) => span.text())).toEqual(['1:00 pm'])
+    expect(cells[1]!.get('strong').text()).toBe('MF-007')
+    expect(cells[5]!.get('strong').text()).toBe(formatPrice(3500))
     expect(wrapper!.get('.result-count').text()).toBe('1 proyección')
   })
 
@@ -217,7 +249,6 @@ describe('ProjectionListPanel', () => {
       'Siguiente',
     ])
     expect(wrapper!.get('[aria-current="page"]').text()).toBe('5')
-    expect(wrapper!.get('tbody td').text()).toBe('41')
 
     await wrapper!.get('[aria-label="Página 6"]').trigger('click')
     expect(lastQuery().page).toBe(6)
@@ -310,7 +341,10 @@ describe('ProjectionListPanel', () => {
   it('offers cancellation only while a projection can still be cancelled', async () => {
     const running = { ...item, movieFunctionId: 9, status: 'IN_PROGRESS' as const }
     getProjections.mockResolvedValue(
-      list({ items: [item, running, { ...item, movieFunctionId: 10, status: 'FINISHED' }], total: 3 }),
+      list({
+        items: [item, running, { ...item, movieFunctionId: 10, status: 'FINISHED' }],
+        total: 3,
+      }),
     )
     await render()
     expect(wrapper!.get('[aria-label="Cancelar MF-007"]').attributes('disabled')).toBeDefined()

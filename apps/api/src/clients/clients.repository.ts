@@ -1,8 +1,11 @@
+import { revokeAccountSessions } from '../common/security/session-revocation';
+import type { UserStatus } from '../users/types/user-status.type';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import oracle from 'oracledb';
 import { buildUserSearch } from '../users/user-search.util';
@@ -24,7 +27,18 @@ import type {
 export class ClientsRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  async deactivateClient(id: number): Promise<void> {
+  deactivateClient(id: number): Promise<void> {
+    return this.changeClientStatus(id, 'INACTIVE');
+  }
+
+  activateClient(id: number): Promise<void> {
+    return this.changeClientStatus(id, 'ACTIVE');
+  }
+
+  private async changeClientStatus(
+    id: number,
+    status: UserStatus,
+  ): Promise<void> {
     await this.db.transaction(async (connection) => {
       const selected = await connection.execute<{ STATUS: string }>(
         'SELECT STATUS FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
@@ -34,16 +48,26 @@ export class ClientsRepository {
       const client = selected.rows?.[0];
       if (!client)
         throw new NotFoundException('El cliente seleccionado no existe.');
-      if (client.STATUS === 'INACTIVE')
-        throw new ConflictException('El cliente ya está desactivado.');
-      if (client.STATUS !== 'ACTIVE') throw new Error('Invalid client status.');
+      if (client.STATUS === status)
+        throw new ConflictException(
+          status === 'ACTIVE'
+            ? 'El cliente ya está activo.'
+            : 'El cliente ya está desactivado.',
+        );
+      if (client.STATUS !== 'ACTIVE' && client.STATUS !== 'INACTIVE')
+        throw new Error('Invalid client status.');
       const result = await connection.execute(
-        "UPDATE CLIENTS SET STATUS = 'INACTIVE' WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE'",
-        { id: { val: id, type: oracle.NUMBER } },
+        'UPDATE CLIENTS SET STATUS = :status WHERE CLIENT_ID = :id AND STATUS = :previousStatus',
+        {
+          id: { val: id, type: oracle.NUMBER },
+          status,
+          previousStatus: client.STATUS,
+        },
         { autoCommit: false },
       );
       if (result.rowsAffected !== 1)
-        throw new Error('Oracle did not deactivate a single client.');
+        throw new Error('Oracle did not change the status of a single client.');
+      await revokeAccountSessions(connection, 'client', id);
     });
   }
 
@@ -53,14 +77,23 @@ export class ClientsRepository {
   ): Promise<UpdatedUserDto> {
     try {
       return await this.db.transaction(async (connection) => {
-        const current = await connection.execute<{ EMAIL: string }>(
-          "SELECT EMAIL FROM CLIENTS WHERE CLIENT_ID = :id AND STATUS = 'ACTIVE' FOR UPDATE",
+        const current = await connection.execute<{
+          EMAIL: string;
+          STATUS: UserStatus;
+        }>(
+          'SELECT EMAIL, STATUS FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
           { id: { val: id, type: oracle.NUMBER } },
           { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
         );
         const row = current.rows?.[0];
         if (!row)
           throw new NotFoundException('El usuario seleccionado no existe.');
+        if (row.STATUS !== 'ACTIVE')
+          throw new ConflictException({
+            statusCode: 409,
+            code: 'USER_INACTIVE',
+            message: 'No se puede modificar un usuario inactivo.',
+          });
         if (data.email !== undefined) {
           const duplicate = await connection.execute(
             'SELECT 1 FROM CLIENTS WHERE EMAIL = :email AND CLIENT_ID <> :id AND ROWNUM = 1',
@@ -116,15 +149,14 @@ export class ClientsRepository {
           'El correo electrónico ya está registrado para otro cliente.',
         );
       }
-      if (failure?.errorNum === 2291)
-        throw new BadRequestException('El distrito de la dirección no existe.');
-      throw error;
+      this.rethrowCatalogError(error);
     }
   }
 
   async findClientDetailById(id: number): Promise<ClientDetailDto | null> {
     const result = await this.db.query<{
       ID: number;
+      STATUS: UserStatus;
       FIRST_NAME: string;
       SECOND_NAME: string | null;
       FIRST_SURNAME: string | null;
@@ -144,7 +176,7 @@ export class ClientsRepository {
       PROVINCE_ID: number;
       PROVINCE_NAME: string;
     }>(
-      `SELECT c.CLIENT_ID AS ID, c.FIRST_NAME, c.SECOND_NAME, c.FIRST_SURNAME, c.SECOND_SURNAME,
+      `SELECT c.CLIENT_ID AS ID, c.STATUS, c.FIRST_NAME, c.SECOND_NAME, c.FIRST_SURNAME, c.SECOND_SURNAME,
               TO_CHAR(c.BIRTHDAY, 'YYYY-MM-DD') AS BIRTHDAY, c.PHONE_NUMBER, c.EMAIL,
               c.GENDER, c.LANGUAGE,
               TO_CHAR(c.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS CREATED_AT,
@@ -157,13 +189,14 @@ export class ClientsRepository {
        LEFT JOIN DISTRICTS d ON d.ID_DISTRICT = a.ID_DISTRICT
        LEFT JOIN CANTONS k ON k.ID_CANTON = d.ID_CANTON
        LEFT JOIN PROVINCES p ON p.ID_PROVINCE = k.ID_PROVINCE
-       WHERE c.CLIENT_ID = :id AND c.STATUS = 'ACTIVE'`,
+       WHERE c.CLIENT_ID = :id`,
       { id: { val: id, type: oracle.NUMBER } },
     );
     const row = result.rows?.[0];
     if (!row) return null;
     return {
       id: row.ID,
+      status: row.STATUS,
       role: UserRole.CLIENT,
       firstName: row.FIRST_NAME,
       secondName: row.SECOND_NAME,
@@ -197,10 +230,18 @@ export class ClientsRepository {
     const name =
       "REGEXP_REPLACE(TRIM(c.FIRST_NAME || ' ' || c.SECOND_NAME || ' ' || c.FIRST_SURNAME || ' ' || c.SECOND_SURNAME), '[[:space:]]+', ' ')";
     const binds: oracle.BindParameters = {};
-    let where = "WHERE c.STATUS = 'ACTIVE'";
+    const conditions: string[] = [];
     if (query.search) {
-      where += ` AND ${buildUserSearch(query.search, 'clients', name, binds)}`;
+      conditions.push(buildUserSearch(query.search, 'clients', name, binds));
     }
+    if (query.status?.length) {
+      const parameters = query.status.map((status, index) => {
+        binds[`status${index}`] = { val: status, type: oracle.STRING };
+        return `:status${index}`;
+      });
+      conditions.push(`c.STATUS IN (${parameters.join(', ')})`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const count = await this.db.query<{ TOTAL: number }>(
       `SELECT COUNT(*) AS TOTAL FROM CLIENTS c ${where}`,
       binds,
@@ -216,15 +257,17 @@ export class ClientsRepository {
         name,
         email: 'LOWER(c.EMAIL)',
         createdAt: 'c.CREATED_AT',
+        status: 'c.STATUS',
       }[query.sortBy] ?? 'c.CLIENT_ID';
     const result = await this.db.query<{
       ID: number;
+      STATUS: UserStatus;
       NAME: string;
       EMAIL: string;
       PHONE_NUMBER: string | null;
       CREATED_AT: string | null;
     }>(
-      `SELECT c.CLIENT_ID AS ID, ${name} AS NAME, c.EMAIL, c.PHONE_NUMBER,
+      `SELECT c.CLIENT_ID AS ID, c.STATUS, ${name} AS NAME, c.EMAIL, c.PHONE_NUMBER,
               TO_CHAR(c.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS CREATED_AT
        FROM CLIENTS c ${where}
        ORDER BY ${sort} ${query.sortDirection === 'desc' ? 'DESC' : 'ASC'} NULLS LAST, c.CLIENT_ID ASC
@@ -238,6 +281,7 @@ export class ClientsRepository {
     return {
       items: (result.rows ?? []).map((row) => ({
         id: row.ID,
+        status: row.STATUS,
         name: row.NAME,
         email: row.EMAIL,
         phoneNumber: row.PHONE_NUMBER,
@@ -323,8 +367,20 @@ export class ClientsRepository {
       ) {
         throw new ConflictException('Este correo ya está registrado');
       }
-      throw error;
+      this.rethrowCatalogError(error);
     }
+  }
+
+  private rethrowCatalogError(error: unknown): never {
+    const failure = error as { errorNum?: number; message?: string } | null;
+    if (
+      failure?.errorNum === 2291 &&
+      /\bFK_ADDRESS_DISTRICT\b/u.test(failure.message ?? '')
+    )
+      throw new BadRequestException(
+        'El distrito seleccionado ya no existe. Selecciona otro distrito.',
+      );
+    throw error;
   }
 
   async insertClient(
@@ -435,9 +491,15 @@ export class ClientsRepository {
       { outFormat: oracle.OUT_FORMAT_OBJECT },
     );
     const row = result.rows?.[0];
-    return row
-      ? { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS }
-      : null;
+    if (!row) return null;
+    if (
+      !(row.PASSWORD_SET_AT instanceof Date) ||
+      !Number.isFinite(row.PASSWORD_SET_AT.getTime()) ||
+      ![30, 60, 90, 120].includes(row.EXPIRATION_DAYS)
+    ) {
+      throw new Error('Oracle returned invalid client password status.');
+    }
+    return { setAt: row.PASSWORD_SET_AT, expirationDays: row.EXPIRATION_DAYS };
   }
 
   async findPasswordHash(
@@ -460,6 +522,15 @@ export class ClientsRepository {
     connection?: oracle.Connection,
   ): Promise<void> {
     const save = async (connection: oracle.Connection) => {
+      const active = await connection.execute(
+        "SELECT CLIENT_ID FROM CLIENTS WHERE CLIENT_ID = :clientId AND STATUS = 'ACTIVE' FOR UPDATE",
+        { clientId: { val: clientId, type: oracle.NUMBER } },
+        { autoCommit: false },
+      );
+      if (!active.rows?.length)
+        throw new UnauthorizedException(
+          'La sesión ha expirado. Inicia sesión nuevamente.',
+        );
       const result = await connection.execute(
         `MERGE INTO CLIENT_LOCAL_CREDENTIALS t
         USING (SELECT :clientId AS client_id FROM dual) s

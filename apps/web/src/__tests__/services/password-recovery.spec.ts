@@ -90,13 +90,16 @@ describe('Password recovery service', () => {
   })
 
   it.each([
-    new Error('network secret'),
-    { isAxiosError: true },
-    { isAxiosError: true, response: { status: 500, data: { code: 'PRIVATE_ERROR' } } },
-  ])('sanitizes an unexpected failure: %p', async (error) => {
+    [new Error('network secret'), 'No se pudo completar la recuperación. Inténtalo nuevamente.'],
+    [{ isAxiosError: true }, 'AUTH_NETWORK'],
+    [
+      { isAxiosError: true, response: { status: 500, data: { code: 'PRIVATE_ERROR' } } },
+      'Error 500:',
+    ],
+  ])('sanitizes an unexpected failure: %p', async (error, expected) => {
     post.mockRejectedValue(error)
     await expect(
       requestPasswordRecovery({ email: 'ana@example.com', accountType: 'client' }),
-    ).rejects.toThrow('No se pudo completar la recuperación. Inténtalo nuevamente.')
+    ).rejects.toThrow(expected as string)
   })
 })

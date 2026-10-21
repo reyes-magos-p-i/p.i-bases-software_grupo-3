@@ -36,16 +36,18 @@ Rica. Los campos ausentes muestran «Sin registrar» y las fechas desconocidas,
 
 Los campos nuevos de «Otra identidad» quedan pospuestos. Se usa el nombre
 Administrador para el rol técnico `ADMINISTRATOR`, igual que en creación y listado.
-Las consultas de detalle excluyen cuentas inactivas según la historia de
-[desactivación](deactivate-user.md); su consulta produce 404.
+Las consultas de gestión incluyen cuentas activas e inactivas y muestran su Estado
+con el mismo distintivo del listado. Solo un ID inexistente produce 404.
+La autenticación sigue excluyendo cuentas inactivas. Ver
+[Activar y desactivar usuarios](deactivate-user.md).
 El historial de compras no forma parte de esta historia.
 
 `UserDetailDialog` reutiliza `BaseModal` y adopta la estética del diálogo de creación:
-encabezado vino, grupos de campos y dos columnas, con una columna en móvil. Los
+encabezado con el color primario de la paleta, grupos de campos y dos columnas, con una columna en móvil. Los
 colores proceden de `variables.css`. Los datos se presentan como texto seleccionable,
 sin recuadros ni controles de edición. El modal permite cerrar con la X, el botón Cerrar, Escape
 o el fondo; bloquea el desplazamiento de la página y devuelve el foco al botón que
-lo abrió. Modificar abre el formulario de edición; Desactivar abre su diálogo de confirmación.
+lo abrió. Modificar abre el formulario de edición; Activar o Desactivar abre la confirmación correspondiente; un usuario inactivo no puede modificarse.
 
 ## Estados y errores
 
@@ -56,7 +58,7 @@ No se inicia ningún reintento automático ni ninguna operación de escritura.
 - `400`: ID inválido, rechazado antes de consultar el usuario.
 - `401`: sesión ausente o expirada; se reutiliza el flujo de sesión del dashboard.
 - `403`: falta de permiso; se reutiliza la actualización de permisos del dashboard.
-- `404`: el usuario ya no existe, o fue desactivado después del listado.
+- `404`: el usuario ya no existe.
 - `500`: falla interna, sin información de infraestructura en la respuesta.
 
 Cerrar, cambiar de sección, cambiar de permisos o desmontar el diálogo cancela la

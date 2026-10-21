@@ -4,15 +4,25 @@ import { isAxiosError } from 'axios'
 import MovieCrudView from './MovieCrudView.vue'
 
 import CrudTable from '@/components/crudTable/CrudTable.vue'
-import { deleteMovie, getMovies, getClassifications, getGenres, getLanguages } from '@/services/movie.service'
+import LoadingState from '@/components/common/LoadingState.vue'
+import {
+  getMovies,
+  getClassifications,
+  getGenres,
+  getLanguages,
+} from '@/services/movie.service'
 import type { MovieAll, MovieOption } from '@/types/movie'
 import MovieCrudEdit from './MovieCrudEdit.vue'
+import MovieCrudCreate from './MovieCrudCreate.vue'
+import MovieCrudDelete from './MovieCrudDelete.vue'
 
 const movies = ref<MovieAll[]>([])
 const loading = ref(false)
 const listError = ref('')
+const movieToDelete = ref<MovieAll | null>(null)
 const selectedMovieId = ref<number | null>(null)
 const editingMovieId = ref<number | null>(null)
+const creatingMovie = ref(false)
 
 const classifications = ref<MovieOption[]>([])
 const languages = ref<MovieOption[]>([])
@@ -21,6 +31,30 @@ const catalogsError = ref('')
 
 let request: AbortController | undefined
 let disposed = false
+
+const emit = defineEmits<{
+  'session-expired': []
+  forbidden: []
+}>()
+
+function openCreate() {
+  creatingMovie.value = true
+}
+
+function closeCreate() {
+  creatingMovie.value = false
+}
+
+function openDelete(row: Record<string, unknown>) {
+  if (typeof row.id !== 'number') return
+
+  movieToDelete.value =
+    movies.value.find(movie => movie.id === row.id) ?? null
+}
+
+function closeDelete() {
+  movieToDelete.value = null
+}
 
 const columns = [
   { key: 'id', label: 'ID' },
@@ -53,12 +87,11 @@ async function loadCatalogs() {
   catalogsError.value = ''
 
   try {
-    const [classificationOptions, genreOptions, languageOptions] =
-      await Promise.all([
-        getClassifications(),
-        getGenres(),
-        getLanguages(),
-      ])
+    const [classificationOptions, genreOptions, languageOptions] = await Promise.all([
+      getClassifications(),
+      getGenres(),
+      getLanguages(),
+    ])
 
     classifications.value = classificationOptions
     genres.value = genreOptions
@@ -73,7 +106,6 @@ onMounted(() => {
 })
 
 async function load() {
-
   request?.abort()
 
   const currentRequest = new AbortController()
@@ -97,8 +129,7 @@ async function load() {
       console.error(error.response?.data)
     }
 
-    listError.value =
-      'No se pudo cargar la lista de películas.'
+    listError.value = 'No se pudo cargar la lista de películas.'
   } finally {
     if (request === currentRequest) {
       loading.value = false
@@ -124,21 +155,8 @@ function editMovie(row: Record<string, unknown>) {
   if (!Number.isInteger(id) || id <= 0) return
 
   editingMovieId.value = id
-
 }
 
-async function removeMovie(row: Record<string, unknown>) {
-  const id = Number(row.id)
-
-  if (Number.isNaN(id)) return
-
-  try {
-    await deleteMovie(id)
-    await load()
-  } catch (error) {
-    console.error('Error deleting movie:', error)
-  }
-}
 
 function refresh() {
   void load()
@@ -157,17 +175,23 @@ defineExpose({ refresh })
 </script>
 
 <template>
-  <div class="movie-list-panel">
-    <p v-if="loading" role="status">
-      Cargando películas…
-    </p>
+  <div class="movie-list-panel" :aria-busy="loading">
+    <div class="section-heading">
+        <h1>Peliculas</h1>
+      <button type="button"
+        @click="openCreate"
+        class="add-user-button"
+        >
+         <i class="bi bi-plus-lg" aria-hidden="true"></i>
+      Agregar película
+      </button>
+    </div>
+    <LoadingState v-if="loading" message="Cargando películas…" />
 
     <div v-else-if="listError" role="alert">
       {{ listError }}
 
-      <button type="button" @click="load">
-        Reintentar
-      </button>
+      <button type="button" @click="load">Reintentar</button>
     </div>
 
     <CrudTable
@@ -177,37 +201,48 @@ defineExpose({ refresh })
       caption="Películas"
       @view="viewMovie"
       @edit="editMovie"
-      @delete="removeMovie"
+      @delete="openDelete"
     />
 
-
-    <MovieCrudView
-      :movie-id="selectedMovieId"
-      @close="selectedMovieId = null"
-    />
+    <MovieCrudView :movie-id="selectedMovieId" @close="selectedMovieId = null" />
 
     <p v-if="catalogsError" role="alert">
       {{ catalogsError }}
     </p>
 
+    <MovieCrudCreate
+      v-if="creatingMovie"
+      :classifications="classifications"
+      :languages="languages"
+      :genres="genres"
+      @close="closeCreate"
+      @saved="load"
+      @session-expired="emit('session-expired')"
+      @forbidden="emit('forbidden')"
+    />
+
     <MovieCrudEdit
-    :movie-id="editingMovieId"
-    :classifications="classifications"
-    :languages="languages"
-    :genres="genres"
-    @close="editingMovieId = null"
-    @saved="load"
+      :movie-id="editingMovieId"
+      :classifications="classifications"
+      :languages="languages"
+      :genres="genres"
+      @close="editingMovieId = null"
+      @saved="load"
+      @session-expired="emit('session-expired')"
+      @forbidden="emit('forbidden')"
+    />
+
+    <MovieCrudDelete
+      :movie="movieToDelete"
+      @close="closeDelete"
+      @deleted="load"
     />
   </div>
 </template>
 
 <style>
-  .movie-list-panel {
-    display: grid;
-    gap: 20px;
-  }
-
-
-
-
+.movie-list-panel {
+  display: grid;
+  gap: 20px;
+}
 </style>

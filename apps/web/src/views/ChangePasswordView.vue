@@ -19,6 +19,7 @@ import { clientSession } from '@/services/client-session.service'
 import { employeeSession } from '@/services/employee-session.service'
 import type { EmployeeIdentity } from '@/types/employee-auth'
 import { checkPasswordPolicy, isPasswordPolicySatisfied } from '@/utils/password-policy'
+import { authErrorMessage } from '@/utils/auth-errors'
 
 const props = withDefaults(
   defineProps<{
@@ -104,10 +105,10 @@ async function loadStatus() {
   } catch (error) {
     recoveryExpired.value =
       error instanceof ChangePasswordError && error.code === 'RECOVERY_INVALID'
-    statusError.value =
-      props.recovery && error instanceof ChangePasswordError
-        ? error.message
-        : 'No se pudo comprobar el estado de tu contraseña. Intenta de nuevo.'
+    statusError.value = authErrorMessage(
+      error,
+      'No se pudo comprobar el estado de tu contraseña. Intenta de nuevo.',
+    )
   } finally {
     statusLoading.value = false
   }
@@ -520,7 +521,13 @@ function goHome() {
   padding: clamp(36px, 6vw, 72px) 16px clamp(48px, 7vw, 88px);
   font-family: inherit;
   background:
-    radial-gradient(ellipse at 78% 18%, rgb(54 8 12 / 5%), transparent 38%), var(--color-background);
+    radial-gradient(
+      ellipse at 78% 18%,
+      color-mix(in srgb, var(--primary-color) 5%, transparent),
+      transparent 38%
+    ),
+    var(--page-background);
+  color: var(--text-primary);
 }
 
 .change-password-page.is-embedded {
@@ -547,7 +554,7 @@ function goHome() {
 .page-eyebrow,
 .policy-eyebrow {
   margin: 0 0 8px;
-  color: var(--color-primary);
+  color: var(--text-primary);
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -555,14 +562,14 @@ function goHome() {
 
 .page-heading h1 {
   margin: 0;
-  color: var(--color-black);
+  color: var(--text-primary);
   font-size: clamp(1.8rem, 4vw, 2.5rem);
   font-weight: 750;
 }
 
 .page-description {
   margin: 10px 0 0;
-  color: #626262;
+  color: var(--text-secondary);
 }
 
 .password-layout {
@@ -578,15 +585,16 @@ function goHome() {
 
 .form-card,
 .policy-card {
-  border: 1px solid #e4e1e1;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-medium);
-  background: var(--color-white);
-  box-shadow: 0 8px 28px rgb(13 13 13 / 8%);
+  background: var(--content-background);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--page-background) 8%, transparent);
+  color: var(--text-primary);
 }
 
 .is-embedded .form-card,
 .is-embedded .policy-card {
-  box-shadow: 0 2px 10px rgb(13 13 13 / 5%);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--page-background) 5%, transparent);
 }
 
 .form-card {
@@ -595,7 +603,7 @@ function goHome() {
 
 .form-card h2 {
   margin: 0 0 24px;
-  color: var(--color-black);
+  color: var(--text-primary);
   font-size: 1.35rem;
   font-weight: 700;
 }
@@ -608,7 +616,7 @@ function goHome() {
 .form-field label {
   display: block;
   margin-bottom: 7px;
-  color: #333;
+  color: var(--text-primary);
   font-size: 0.92rem;
   font-weight: 650;
 }
@@ -618,10 +626,10 @@ function goHome() {
   width: 100%;
   min-height: 46px;
   padding: 10px 13px;
-  border: 1px solid #cfcaca;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background-color: #fff;
-  color: var(--color-black);
+  background-color: var(--content-background);
+  color: var(--text-primary);
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
@@ -629,13 +637,13 @@ function goHome() {
 
 .form-field input:focus,
 .form-field select:focus {
-  border-color: var(--color-primary);
+  border-color: var(--primary-color);
   outline: 0;
-  box-shadow: 0 0 0 3px rgb(54 8 12 / 12%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 12%, transparent);
 }
 
 .form-field input[aria-invalid='true'] {
-  border-color: var(--color-error);
+  border-color: var(--error-color);
 }
 
 .password-control {
@@ -657,24 +665,24 @@ function goHome() {
   border: 0;
   border-radius: var(--radius-small);
   background: transparent;
-  color: #5e5a5a;
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
 .password-toggle:hover {
-  color: var(--color-primary);
+  color: var(--text-primary);
 }
 
 .password-toggle:focus-visible,
 .primary-button:focus-visible,
 .secondary-button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 3px;
 }
 
 .field-error {
   margin: 6px 0 0;
-  color: var(--color-error);
+  color: var(--error-color);
   font-size: 0.85rem;
   line-height: 1.45;
 }
@@ -700,8 +708,8 @@ function goHome() {
   padding: 11px 20px;
   border: 0;
   border-radius: var(--radius-small);
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--button-confirm-background);
+  color: var(--button-confirm-text);
   font-weight: 700;
   transition:
     background-color var(--transition-fast),
@@ -710,7 +718,7 @@ function goHome() {
 }
 
 .primary-button:hover:not(:disabled) {
-  background: #521117;
+  background: var(--button-confirm-hover-background);
   transform: translateY(-1px);
 }
 
@@ -722,24 +730,31 @@ function goHome() {
 .secondary-button {
   min-height: 44px;
   padding: 8px 13px;
-  border: 1px solid #d7d2d2;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background: #fff;
-  color: #4b4545;
+  background: var(--content-background);
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
 .secondary-button:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  border-color: var(--primary-color);
+  color: var(--text-primary);
 }
 
 .policy-card {
   display: flex;
   flex-direction: column;
   padding: clamp(24px, 4vw, 40px);
-  border-color: #e0d8d8;
-  background: linear-gradient(145deg, rgb(54 8 12 / 3%), transparent 55%), var(--color-white);
+  border-color: var(--border-color);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--primary-color) 3%, transparent),
+      transparent 55%
+    ),
+    var(--content-background);
+  color: var(--text-primary);
 }
 
 .policy-heading {
@@ -747,7 +762,7 @@ function goHome() {
   align-items: center;
   gap: 15px;
   padding-bottom: 20px;
-  border-bottom: 1px solid #e9e5e5;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .policy-icon {
@@ -757,8 +772,8 @@ function goHome() {
   flex: 0 0 50px;
   place-items: center;
   border-radius: 50%;
-  background: rgb(54 8 12 / 8%);
-  color: var(--color-primary);
+  background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+  color: var(--text-primary);
   font-size: 1.35rem;
 }
 
@@ -769,14 +784,14 @@ function goHome() {
 
 .policy-heading h2 {
   margin: 0;
-  color: var(--color-black);
+  color: var(--text-primary);
   font-size: clamp(1.2rem, 2.5vw, 1.55rem);
   font-weight: 750;
 }
 
 .policy-intro {
   margin: 22px 0 16px;
-  color: #5c5757;
+  color: var(--text-secondary);
   font-size: 0.95rem;
 }
 
@@ -792,7 +807,7 @@ function goHome() {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  color: #6a6565;
+  color: var(--text-secondary);
   font-size: 0.94rem;
   line-height: 1.4;
   transition: color var(--transition-fast);
@@ -801,21 +816,21 @@ function goHome() {
 .policy-checklist li > i {
   flex: 0 0 18px;
   padding-top: 1px;
-  color: #a29b9b;
+  color: var(--text-disabled);
   font-size: 1rem;
 }
 
 .policy-checklist li.satisfied {
-  color: #344d40;
+  color: var(--success-muted-text);
 }
 
 .policy-checklist li.satisfied > i {
-  color: #27814e;
+  color: var(--success-emphasis-color);
 }
 
 .policy-checklist li.violated,
 .policy-checklist li.violated > i {
-  color: var(--color-error);
+  color: var(--error-color);
 }
 
 .policy-note {
@@ -823,14 +838,14 @@ function goHome() {
   gap: 12px;
   margin-top: auto;
   padding: 18px 16px 0;
-  border-top: 1px solid #e9e5e5;
-  color: #514b4b;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-secondary);
 }
 
 .policy-note > i {
   flex: 0 0 auto;
   padding-top: 2px;
-  color: var(--color-primary);
+  color: var(--text-primary);
 }
 
 .policy-note p {
@@ -856,13 +871,13 @@ function goHome() {
 
 .status-expired,
 .status-error {
-  background: #fdf0ef;
-  color: #9f251f;
+  background: var(--error-background);
+  color: var(--error-text);
 }
 
 .status-must-set {
-  background: #eef3fc;
-  color: #244f86;
+  background: var(--info-background);
+  color: var(--text-primary);
 }
 
 .status-message > i {
@@ -876,14 +891,14 @@ function goHome() {
   justify-content: center;
   gap: 12px;
   min-height: 250px;
-  color: #5c5757;
+  color: var(--text-secondary);
 }
 
 .loading-spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid #ded8d8;
-  border-top-color: var(--color-primary);
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
   border-radius: 50%;
   animation: spin 700ms linear infinite;
 }
@@ -900,8 +915,8 @@ function goHome() {
   height: 54px;
   place-items: center;
   border-radius: 50%;
-  background: #e9f5ee;
-  color: #27814e;
+  background: var(--success-background);
+  color: var(--success-emphasis-color);
   font-size: 1.6rem;
 }
 
@@ -911,7 +926,7 @@ function goHome() {
 
 .success-state p {
   margin: 0 0 8px;
-  color: #5c5757;
+  color: var(--text-secondary);
 }
 
 @keyframes spin {
@@ -962,5 +977,15 @@ function goHome() {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.page-heading .page-eyebrow,
+.page-heading h1 {
+  color: var(--text-on-dark);
+}
+
+.page-description,
+.page-status {
+  color: var(--text-on-dark-secondary);
 }
 </style>

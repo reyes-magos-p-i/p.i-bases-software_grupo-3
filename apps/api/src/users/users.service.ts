@@ -44,6 +44,14 @@ export class UsersService {
     return { provinces, cantons, districts };
   }
 
+  activateClient(id: number) {
+    return this.clientsRepository.activateClient(id);
+  }
+
+  activateEmployee(id: number, actorId: number) {
+    return this.usersRepository.activateEmployee(id, actorId);
+  }
+
   deactivateClient(id: number) {
     return this.clientsRepository.deactivateClient(id);
   }

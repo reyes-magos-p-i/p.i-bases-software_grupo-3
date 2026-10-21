@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
+import UserStatusBadge from '@/components/users/UserStatusBadge.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { getUserDetail } from '@/services/user.service'
 import type { UserDetail, UserDetailSelection } from '@/types/user'
@@ -43,6 +45,7 @@ const groups = computed(() => {
       label: 'Identificación',
       fields: [
         { label: 'ID', value: `${prefix}${detail.id}` },
+        { label: 'Estado', value: '', status: detail.status },
         ...(detail.role === 'CLIENT' ? [] : [{ label: 'Rol', value: roleNames[detail.role] }]),
       ],
     },
@@ -174,8 +177,8 @@ onBeforeUnmount(() => request?.abort())
   <BaseModal :open="!!selection" :title="title" @close="close">
     <div class="user-detail-content" :aria-busy="loading">
       <p v-if="loading" class="detail-feedback" role="status">Cargando datos del usuario…</p>
-      <div v-else-if="error" class="detail-feedback detail-error" role="alert">
-        <p>{{ error }}</p>
+      <div v-else-if="error" class="detail-feedback detail-error">
+        <NotificationPopup type="error" :message="error" :duration="0" />
         <button v-if="retryable" type="button" class="detail-button" @click="load">
           Reintentar
         </button>
@@ -191,7 +194,10 @@ onBeforeUnmount(() => request?.abort())
           <dl class="detail-grid">
             <div v-for="field in group.fields" :key="field.label" class="detail-field">
               <dt>{{ field.label }}</dt>
-              <dd>{{ field.value }}</dd>
+              <dd>
+                <UserStatusBadge v-if="'status' in field && field.status" :status="field.status" />
+                <template v-else>{{ field.value }}</template>
+              </dd>
             </div>
           </dl>
         </section>
@@ -205,15 +211,15 @@ onBeforeUnmount(() => request?.abort())
 
 <style scoped>
 :global(.app-modal-backdrop:has(.user-detail-content)::backdrop) {
-  background: color-mix(in srgb, var(--color-black) 55%, transparent);
+  background: var(--overlay-background);
 }
 :global(.app-modal-card:has(.user-detail-content)) {
   width: min(880px, 100%);
   max-width: 880px;
   padding: 0;
   border-radius: var(--radius-medium);
-  background: var(--color-background);
-  color: var(--color-dark);
+  background: var(--dialog-background);
+  color: var(--text-primary);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -222,8 +228,8 @@ onBeforeUnmount(() => request?.abort())
   flex-shrink: 0;
   margin: 0;
   padding: 24px 80px 24px 24px;
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--primary-color);
+  color: var(--content-background);
   text-align: left;
   font-style: normal;
   font-size: 1.25rem;
@@ -231,14 +237,14 @@ onBeforeUnmount(() => request?.abort())
 :global(.app-modal-card:has(.user-detail-content) .app-modal-close) {
   top: 14px;
   right: 24px;
-  color: var(--color-white);
+  color: var(--content-background);
   border-radius: var(--radius-small);
 }
 :global(.app-modal-card:has(.user-detail-content) .app-modal-close:hover) {
-  background: color-mix(in srgb, var(--color-white) 15%, transparent);
+  background: var(--surface-on-dark-hover);
 }
 :global(.app-modal-card:has(.user-detail-content) .app-modal-close:focus-visible) {
-  outline-color: var(--color-cream);
+  outline-color: var(--focus-on-dark);
 }
 .user-detail-content {
   min-height: 0;
@@ -274,12 +280,12 @@ dd {
 }
 .detail-feedback {
   padding: 16px;
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-white);
+  border-left: 3px solid var(--primary-color);
+  background: var(--content-background);
 }
 .detail-error {
-  border-color: var(--color-error);
-  color: var(--color-error);
+  border-color: var(--error-color);
+  color: var(--error-color);
 }
 .detail-footer {
   display: flex;
@@ -289,16 +295,16 @@ dd {
 .detail-button {
   min-height: 44px;
   padding: 10px 20px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--primary-color);
   border-radius: var(--radius-small);
-  background: var(--color-white);
-  color: var(--color-primary);
+  background: var(--content-background);
+  color: var(--button-secondary-text);
 }
 .detail-button:hover {
-  background: var(--color-light_gray);
+  background: var(--surface-hover);
 }
 .detail-button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 @media (max-width: 575px) {

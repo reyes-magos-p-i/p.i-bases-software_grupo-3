@@ -47,11 +47,17 @@ de recuperación, manteniendo el mismo orden al solicitar y completar el proceso
 Se vuelve a comprobar la cuenta, la vigencia y el límite de intentos antes de
 guardar, de modo que dos solicitudes concurrentes no puedan consumir el enlace.
 
-Después del cambio se rechazan los JWT emitidos antes de `RESET_AT`, incluyendo
-las sesiones anteriores de esa cuenta. Como JWT expresa `iat` en segundos, se
-rechazan conservadoramente los tokens emitidos en el mismo segundo del cambio;
-una sesión nueva emitida en el segundo siguiente es válida. La recuperación no
-inicia sesión automáticamente. El usuario vuelve al login correspondiente.
+Después del cambio se rechazan los JWT con una versión de sesión anterior a
+`RESET_AT`. Los nuevos JWT incluyen `sessionVersion` y permiten iniciar sesión
+inmediatamente; solo los JWT antiguos que no incluyen versión conservan la
+comprobación conservadora por `iat`. La recuperación no inicia sesión automáticamente.
+El usuario vuelve al login correspondiente.
+
+Activar o desactivar una cuenta también avanza `RESET_AT` y elimina los secretos
+de su recuperación pendiente en la misma transacción que cambia el estado.
+Reactivar no revive sesiones ni enlaces anteriores, ni renueva contraseñas vencidas
+o confirma correos pendientes. La limpieza de registros públicos pendientes borra
+su fila de recuperación antes de eliminar la cuenta para respetar la clave foránea.
 
 Si falla el envío de instrucciones, se invalida ese token y se registra un aviso
 sin datos personales. La respuesta pública sigue siendo genérica para no revelar
@@ -170,3 +176,22 @@ La prueba E2E general `app.e2e-spec.ts` falla porque conserva la expectativa ini
 `GET /` → `200 Hello World!`, pero el `AppModule` actual no registra esa ruta y
 responde 404. Se confirmó con acceso a Oracle; el fallo no procede del flujo de
 recuperación. Esa prueba y la configuración de CI/SonarQube no se modificaron.
+
+## Sesiones emitidas después de una recuperación
+
+Los JWT nuevos incluyen `sessionVersion`, derivado de `RESET_AT` en la tabla
+existente `PASSWORD_RECOVERIES`, normalizado a UTC y conservando la precisión de
+Oracle. El login local obtiene esa versión en la misma consulta que el hash de
+credenciales para evitar que una recuperación concurrente autorice una contraseña
+anterior con la versión nueva.
+
+La validación compara la versión firmada con la vigente. Una recuperación revoca
+las sesiones anteriores, pero permite usar la nueva contraseña inmediatamente,
+incluso durante el mismo segundo. Los JWT anteriores sin esta propiedad conservan
+la comprobación conservadora por `iat`. No cambia el tiempo de vida de los tokens
+ni se necesita una migración de esquema.
+
+Las regresiones HTTP con persistencia y correo simulados comprueban recuperación,
+rechazo de la contraseña anterior, nuevo login y consulta autenticada de
+`/auth/password-status`. Las pruebas del repositorio comprueban versiones distintas,
+ausentes e inválidas y la compatibilidad con sesiones anteriores.

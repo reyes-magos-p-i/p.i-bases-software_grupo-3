@@ -9,10 +9,14 @@ import {
   useTemplateRef,
   watch,
 } from 'vue'
+import DatePicker from '@/components/common/DatePicker.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import { todayInCostaRica, validDate } from '@/utils/date-only'
 import type { BranchOption, CreateEmployeeRequest, CreateUserRequest } from '@/types/user'
 import {
   characterCount,
   validText,
+  validName,
   validEmail,
   validMobile,
   normalizeMobile,
@@ -244,6 +248,40 @@ function description(field: FieldName, hasHelp = false) {
   return references.join(' ') || undefined
 }
 
+function dateError(field: FieldName, value: string) {
+  if (!validDate(value)) return 'Selecciona una fecha válida.'
+  if (field === 'birthday' && value > todayInCostaRica())
+    return 'La fecha de nacimiento no puede ser futura.'
+  if (field === 'hireDate' && validDate(draft.birthday) && value < draft.birthday)
+    return 'La contratación no puede ser anterior al nacimiento.'
+  return ''
+}
+function textError(
+  field: FieldName,
+  definition: TextFieldDefinition,
+  control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+) {
+  const raw = draft[definition.name]
+  const value = field === 'details' ? raw : raw.trim()
+  if (definition.type === 'date' && control.validity.badInput) return 'Introduce una fecha válida.'
+  if (definition.required && !value.trim()) return 'Este campo es obligatorio.'
+  if (!definition.required && !value) return ''
+  if (/[\uD800-\uDFFF]/u.test(value)) return 'El texto contiene un carácter no válido.'
+  if (definition.maxBytes && !validText(value, definition.maxBytes)) {
+    return 'El texto es demasiado largo. Reduce su longitud.'
+  }
+  if (definition.type === 'date') return dateError(field, value)
+  if (definition.type === 'text' && field !== 'details' && !validName(value))
+    return 'Usa solo letras y espacios; no incluyas números ni símbolos.'
+  return contactError(definition.type, value)
+}
+function contactError(type: TextFieldDefinition['type'], value: string) {
+  if (type === 'email' && !validEmail(value))
+    return 'Introduce un correo electrónico válido, por ejemplo: nombre@ejemplo.com.'
+  if (type === 'tel' && !validMobile(value))
+    return 'Ingresa un celular de Costa Rica de ocho dígitos que comience con 6, 7 u 8.'
+  return ''
+}
 function validateField(
   field: FieldName,
   control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
@@ -251,33 +289,7 @@ function validateField(
 ) {
   if (control.disabled && !includeDisabled) return ''
   const definition = textFields.value.find((item) => item.name === field)
-  if (definition) {
-    const raw = draft[definition.name]
-    const value = field === 'details' ? raw : raw.trim()
-    if (definition.type === 'date' && control.validity.badInput)
-      return 'Introduce una fecha válida.'
-    if (definition.required && !value.trim()) return 'Este campo es obligatorio.'
-    if (!definition.required && !value) return ''
-    if (/[\uD800-\uDFFF]/u.test(value)) return 'El texto contiene un carácter no válido.'
-    if (definition.maxBytes && !validText(value, definition.maxBytes)) {
-      return 'El texto es demasiado largo. Reduce su longitud.'
-    }
-    if (definition.type === 'email' && !validEmail(value))
-      return 'Introduce un correo electrónico válido, por ejemplo: nombre@ejemplo.com.'
-    if (definition.type === 'tel' && !validMobile(value))
-      return 'Ingresa un celular de Costa Rica de ocho dígitos que comience con 6, 7 u 8.'
-    if (definition.type === 'date') {
-      if (field === 'hireDate' && value.startsWith('0000-')) return 'Introduce una fecha válida.'
-      const date = new Date(value + 'T00:00:00Z')
-      if (
-        !/^\d{4}-\d{2}-\d{2}$/u.test(value) ||
-        Number.isNaN(date.getTime()) ||
-        date.toISOString().slice(0, 10) !== value
-      )
-        return 'Introduce una fecha válida.'
-    }
-    return ''
-  }
+  if (definition) return textError(field, definition, control)
 
   const choices = {
     language: ['es', 'en'],
@@ -309,7 +321,7 @@ function onEdit(event: Event) {
   const target = fieldControl(event)
   if (!target) return
   dirty[target.field] = true
-  if (touched[target.field]) errors[target.field] = validateField(target.field, target.control)
+  delete errors[target.field]
 }
 
 function onBlur(event: FocusEvent) {
@@ -323,7 +335,7 @@ async function submit() {
   if (sending.value || props.submissionBlocked || requiredCatalogsUnavailable.value) return
   const controls = dialog.value?.querySelectorAll<
     HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-  >('[name]')
+  >('input[name], select[name], textarea[name]')
   if (!controls) return
   let firstInvalid: HTMLElement | undefined
   for (const control of controls) {
@@ -543,7 +555,7 @@ defineExpose({ open, complete })
         Puedes completar los demás campos.
       </p>
       <div v-else-if="needsAddress && catalogsError" class="catalog-notice">
-        <p role="alert">{{ catalogsError }}</p>
+        <NotificationPopup type="error" :message="catalogsError" :duration="0" />
         <button type="button" class="cancel-button" @click="retryCatalogs">Reintentar</button>
       </div>
 
@@ -551,10 +563,15 @@ defineExpose({ open, complete })
         v-if="submissionErrors.length"
         ref="submission-feedback"
         class="catalog-notice"
-        role="alert"
         tabindex="-1"
       >
-        <p v-for="message in submissionErrors" :key="message">{{ message }}</p>
+        <NotificationPopup
+          v-for="message in submissionErrors"
+          :key="message"
+          type="error"
+          :message="message"
+          :duration="0"
+        />
       </div>
 
       <fieldset v-for="group in groups" :key="group.label" :disabled="sending">
@@ -566,7 +583,22 @@ defineExpose({ open, complete })
               <span v-if="field.required" class="required-marker" aria-hidden="true">*</span>
               <span v-else>(opcional)</span>
             </label>
+            <DatePicker
+              v-if="field.type === 'date'"
+              :id="id + '-' + field.name"
+              v-model="draft[field.name]"
+              :name="field.name"
+              :required="field.required"
+              :disabled="sending"
+              :max="field.name === 'birthday' ? todayInCostaRica() : undefined"
+              :min="
+                field.name === 'hireDate' && validDate(draft.birthday) ? draft.birthday : undefined
+              "
+              :aria-invalid="!!errors[field.name]"
+              :aria-describedby="description(field.name)"
+            />
             <input
+              v-else
               :id="id + '-' + field.name"
               v-model="draft[field.name]"
               :name="field.name"
@@ -859,8 +891,8 @@ defineExpose({ open, complete })
   padding: 0;
   border: 0;
   border-radius: var(--radius-medium);
-  color: var(--color-dark);
-  background: var(--color-background);
+  color: var(--text-primary);
+  background: var(--dialog-background);
   overflow: hidden;
 }
 
@@ -870,7 +902,7 @@ defineExpose({ open, complete })
 }
 
 .user-dialog::backdrop {
-  background: color-mix(in srgb, var(--color-black) 55%, transparent);
+  background: var(--overlay-background);
 }
 
 .dialog-heading {
@@ -880,8 +912,8 @@ defineExpose({ open, complete })
   justify-content: space-between;
   gap: 16px;
   padding: 16px 24px;
-  color: var(--color-white);
-  background: var(--color-primary);
+  color: var(--dialog-heading-text);
+  background: var(--dialog-heading-background);
 }
 
 .dialog-heading h2 {
@@ -900,11 +932,11 @@ defineExpose({ open, complete })
 }
 
 .close-button:hover {
-  background: color-mix(in srgb, var(--color-white) 15%, transparent);
+  background: var(--surface-on-dark-hover);
 }
 
 .close-button:focus-visible {
-  outline: 2px solid var(--color-cream);
+  outline: 2px solid var(--focus-on-dark);
   outline-offset: 2px;
 }
 
@@ -964,7 +996,7 @@ label {
 .address-toggle input {
   width: 20px;
   height: 20px;
-  accent-color: var(--color-primary);
+  accent-color: var(--primary-color);
 }
 
 .form-control,
@@ -980,18 +1012,18 @@ label {
 }
 
 .required-marker {
-  color: var(--color-error);
+  color: var(--error-color);
   font-weight: 700;
 }
 
 .field-error {
-  color: var(--color-error);
+  color: var(--error-color);
   font-size: 0.875rem;
 }
 
 .form-control[aria-invalid='true'],
 .form-select[aria-invalid='true'] {
-  border-color: var(--color-error);
+  border-color: var(--error-color);
 }
 
 textarea {
@@ -1000,8 +1032,8 @@ textarea {
 
 .form-control:focus,
 .form-select:focus {
-  border-color: var(--color-primary);
-  outline: 2px solid var(--color-primary);
+  border-color: var(--primary-color);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
   box-shadow: none;
 }
@@ -1009,8 +1041,8 @@ textarea {
 .preview-note,
 .catalog-notice {
   padding: 12px;
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-white);
+  border-left: 3px solid var(--primary-color);
+  background: var(--content-background);
 }
 
 .form-actions {
@@ -1024,28 +1056,39 @@ textarea {
 .create-button {
   min-height: 44px;
   padding: 10px 20px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--primary-color);
   border-radius: var(--radius-small);
 }
 
 .cancel-button {
-  color: var(--color-primary);
-  background: var(--color-white);
+  color: var(--button-secondary-text);
+  background: var(--content-background);
 }
 
 .cancel-button:hover {
-  background: var(--color-light_gray);
+  background: var(--surface-hover);
 }
 
 .cancel-button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 
+.create-button {
+  background: var(--button-confirm-background);
+  color: var(--button-confirm-text);
+  border-color: var(--button-confirm-background);
+}
+
+.create-button:not(:disabled):hover {
+  background: var(--button-confirm-hover-background);
+  border-color: var(--button-confirm-hover-background);
+}
+
 .create-button:disabled {
-  border-color: var(--color-light_gray);
-  color: var(--color-dark);
-  background: var(--color-light_gray);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  background: var(--input-disabled-background);
   cursor: not-allowed;
 }
 

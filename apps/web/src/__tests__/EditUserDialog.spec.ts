@@ -25,6 +25,7 @@ const originalClose = Object.getOwnPropertyDescriptor(prototype, 'close')
 let wrapper: VueWrapper<InstanceType<typeof EditUserDialog>> | undefined
 const client: ClientDetail = {
   id: 42,
+  status: 'ACTIVE',
   role: 'CLIENT',
   firstName: 'Ana',
   secondName: null,
@@ -137,6 +138,27 @@ afterEach(() => {
 })
 
 describe('EditUserDialog', () => {
+  it('blocks inactive details before displaying an editable form', async () => {
+    getUserDetail.mockResolvedValueOnce({ ...client, status: 'INACTIVE' })
+    await render()
+    expect(page.text()).toContain('No se puede modificar un usuario inactivo')
+    expect(page.find('form').exists()).toBe(false)
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+  it('blocks a concurrent deactivation conflict without marking the email as duplicated', async () => {
+    const rejection = failure(409, 'No se puede modificar un usuario inactivo.')
+    if (rejection.response) rejection.response.data = { code: 'USER_INACTIVE' }
+    updateUser.mockRejectedValueOnce(rejection)
+    const view = await render()
+    await prepareEmail()
+    await confirm()
+    expect(page.text()).toContain('El usuario fue desactivado')
+    expect(button('Guardar cambios').attributes('disabled')).toBeDefined()
+    expect(page.get('input[name="email"]').attributes('aria-invalid')).toBe('false')
+    expect(view.emitted('updated')).toBeUndefined()
+    expect(updateUser).toHaveBeenCalledTimes(1)
+  })
+
   it('waits for a selection without querying', async () => {
     await render(null)
     expect(getUserDetail).not.toHaveBeenCalled()
@@ -512,5 +534,48 @@ describe('EditUserDialog', () => {
     await view.setProps({ selection: null })
     await flushPromises()
     expect(page.find('form').exists()).toBe(false)
+  })
+  it('waits for blur before reporting an invalid name and validates again on submit', async () => {
+    await render()
+    const name = page.get('input[name="firstName"]')
+    await name.setValue('Ana123')
+    expect(name.attributes('aria-invalid')).toBe('false')
+    await name.trigger('focusout')
+    expect(name.attributes('aria-invalid')).toBe('true')
+    expect(page.text()).toContain('usa solo letras y espacios')
+    await name.setValue('María')
+    expect(name.attributes('aria-invalid')).toBe('false')
+    await name.setValue('María!')
+    await page.get('form').trigger('submit')
+    expect(page.text()).not.toContain('Confirmar modificación')
+    expect(updateUser).not.toHaveBeenCalled()
+    expect(page.text()).not.toMatch(/bytes|UTF-8|Unicode/u)
+  })
+  it('keeps unchanged historical names out of the update and shows no unrelated warning', async () => {
+    getUserDetail.mockResolvedValueOnce({ ...client, firstName: 'Histórico123' })
+    await render()
+    await page.get('input[name="phoneNumber"]').setValue('77777777')
+    await page.get('form').trigger('submit')
+    expect(page.text()).toContain('Confirmar modificación')
+    expect(page.text()).not.toContain('Cambiar el correo')
+    expect(page.text()).not.toContain('Cambiar el rol')
+    await confirm()
+    expect(updateUser).toHaveBeenCalledWith(
+      { section: 'clients', id: 42 },
+      { phoneNumber: '77777777' },
+    )
+  })
+  it('shows only the warning for the staff field being changed', async () => {
+    getUserDetail.mockResolvedValueOnce(employee)
+    await render({ section: 'employees', id: 42 })
+    await page.get('[name="role"]').setValue('EMPLOYEE')
+    await page.get('form').trigger('submit')
+    expect(page.text()).toContain('Cambiar el rol modificará los permisos del usuario.')
+    expect(page.text()).not.toContain('Cambiar el correo')
+    await button('Volver a editar').trigger('click')
+    await page.get('[name="role"]').setValue('ADMINISTRATOR')
+    await prepareEmail()
+    expect(page.text()).toContain('Cambiar el correo afectará el acceso')
+    expect(page.text()).not.toContain('Cambiar el rol')
   })
 })

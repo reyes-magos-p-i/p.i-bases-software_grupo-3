@@ -21,6 +21,7 @@ describe('Client local authentication', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.resetAllMocks()
+    get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
     create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
@@ -36,6 +37,8 @@ describe('Client local authentication', () => {
     post.mockResolvedValue({ data: { client: identity, accessToken: 'client-token' } })
     await expect(loginClient(credentials)).resolves.toEqual(identity)
     expect(post).toHaveBeenCalledExactlyOnceWith('/auth/clients/login', credentials, {
+      adapter: 'fetch',
+      withCredentials: false,
       timeout: 15000,
     })
     expect(clientSession.user.value).toEqual(identity)
@@ -47,7 +50,7 @@ describe('Client local authentication', () => {
     [401, undefined, 'incorrectos'],
     [403, 'EMAIL_VERIFICATION_REQUIRED', 'Confirma'],
     [403, undefined, 'autorizar'],
-    [500, undefined, 'conectar'],
+    [500, undefined, 'Error 500'],
   ])('reports HTTP %s (%s) without leaking server details', async (status, code, message) => {
     const { loginClient } = await import('@/services/authService')
     post.mockRejectedValue({
@@ -102,7 +105,7 @@ describe('Client local authentication', () => {
     get.mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } })
     await expect(getClientSession('expired')).resolves.toBeNull()
     get.mockRejectedValueOnce(new Error('Private network failure'))
-    await expect(getClientSession('saved')).rejects.toThrow('conectar')
+    await expect(getClientSession('saved')).rejects.toThrow('solicitud de autenticación')
   })
 
   it('checks employee password expiration through the session cookie', async () => {
@@ -145,6 +148,7 @@ describe('registerUser', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.resetAllMocks()
+    get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
   })
@@ -208,6 +212,7 @@ describe('email verification API', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.resetAllMocks()
+    get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
     get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
@@ -292,6 +297,7 @@ describe('facebook authentication API', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.resetAllMocks()
+    get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
     get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
@@ -353,6 +359,7 @@ describe('employee authentication API', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.resetAllMocks()
+    get.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     vi.stubEnv('VITE_API_BASE_URL', '/api')
     localStorage.clear()
     create.mockImplementation((defaults) => ({ defaults, post, get, patch }))
@@ -387,7 +394,7 @@ describe('employee authentication API', () => {
     patch.mockResolvedValueOnce({ data: { message: 'Contraseña actualizada correctamente' } })
     await expect(changeEmployeePassword(payload)).resolves.toBeUndefined()
     expect(patch).toHaveBeenCalledExactlyOnceWith('/auth/employees/password', payload, {
-      headers: undefined,
+      timeout: 15000,
     })
   })
 
@@ -413,6 +420,9 @@ describe('employee authentication API', () => {
 
   it('blocks employee login while a client session is stored', async () => {
     localStorage.setItem('accessToken', 'client-token')
+    get.mockResolvedValueOnce({
+      data: { id: 7, email: 'client@example.com', firstName: 'Ana', lastName: 'Rojas' },
+    })
     const { loginEmployee } = await import('@/services/authService')
 
     await expect(
@@ -429,7 +439,7 @@ describe('employee authentication API', () => {
     get.mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } })
     expect(await getEmployeeSession()).toBeNull()
     get.mockResolvedValueOnce({ data: { id: 22, role: 'CLIENT', firstName: 'Ana' } })
-    await expect(getEmployeeSession()).rejects.toThrow('verificar')
+    await expect(getEmployeeSession()).rejects.toThrow('AUTH_RESPONSE_INVALID')
   })
 
   it.each([
@@ -443,7 +453,7 @@ describe('employee authentication API', () => {
     const { loginEmployee } = await import('@/services/authService')
     post.mockResolvedValue({ data: { user } })
     await expect(loginEmployee({ email: 'a@example.com', password: 'x' })).rejects.toThrow(
-      'verificar',
+      'AUTH_RESPONSE_INVALID',
     )
   })
 
@@ -452,7 +462,7 @@ describe('employee authentication API', () => {
     async (firstName) => {
       const { getEmployeeSession } = await import('@/services/authService')
       get.mockResolvedValue({ data: { id: 21, role: 'EMPLOYEE', firstName } })
-      await expect(getEmployeeSession()).rejects.toThrow('verificar')
+      await expect(getEmployeeSession()).rejects.toThrow('AUTH_RESPONSE_INVALID')
     },
   )
 
@@ -460,7 +470,7 @@ describe('employee authentication API', () => {
     [400, 'Revisa'],
     [401, 'incorrectos'],
     [403, 'autorizar'],
-    [500, 'conectar'],
+    [500, 'Error 500'],
   ])('maps status %s without exposing internal messages', async (status, message) => {
     const { loginEmployee } = await import('@/services/authService')
     post.mockRejectedValue({
@@ -503,8 +513,91 @@ describe('employee authentication API', () => {
       timeout: 10000,
     })
     post.mockRejectedValueOnce(new Error('Private transport details'))
-    await expect(logoutEmployee()).rejects.toThrow('conectar')
+    await expect(logoutEmployee()).rejects.toThrow('solicitud de autenticación')
     get.mockRejectedValueOnce({ isAxiosError: true, code: 'ERR_NETWORK' })
-    await expect(getEmployeeSession()).rejects.toThrow('conectar')
+    await expect(getEmployeeSession()).rejects.toThrow('AUTH_NETWORK')
+  })
+
+  it('allows staff login after an expired client token is rejected', async () => {
+    localStorage.setItem('accessToken', 'expired-token')
+    post.mockResolvedValueOnce({ data: { user: { id: 21, role: 'EMPLOYEE', firstName: 'Ana' } } })
+    const { loginEmployee } = await import('@/services/authService')
+    await expect(
+      loginEmployee({ email: 'staff@example.com', password: 'secret' }),
+    ).resolves.toMatchObject({ id: 21 })
+    expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks client login while a verified employee session exists', async () => {
+    get.mockResolvedValueOnce({ data: { id: 21, role: 'EMPLOYEE', firstName: 'Ana' } })
+    const { loginClient } = await import('@/services/authService')
+    await expect(loginClient({ email: 'ana@example.com', password: 'secret' })).rejects.toThrow(
+      'sesión del personal',
+    )
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('does not replace a newer client session with a late login response', async () => {
+    let resolve!: (value: unknown) => void
+    post.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done
+      }),
+    )
+    const { loginClient } = await import('@/services/authService')
+    const { establishClientSession } = await import('@/services/client-session.service')
+    const pending = loginClient({ email: 'ana@example.com', password: 'secret' })
+    await vi.waitFor(() => expect(post).toHaveBeenCalled())
+    establishClientSession(
+      { id: 8, email: 'new@example.com', firstName: 'Luis', lastName: '' },
+      'new-token',
+    )
+    resolve({
+      data: {
+        client: { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: '' },
+        accessToken: 'old-token',
+      },
+    })
+    await expect(pending).rejects.toThrow('La sesión cambió')
+    expect(localStorage.getItem('accessToken')).toBe('new-token')
+  })
+
+  it('rejects a malformed employee password status response', async () => {
+    get.mockResolvedValueOnce({ data: { status: 'unknown' } })
+    const { getEmployeePasswordStatus } = await import('@/services/authService')
+    await expect(getEmployeePasswordStatus()).rejects.toThrow('AUTH_RESPONSE_INVALID')
+  })
+
+  it('does not start an automatic Facebook login after the user changes the session', async () => {
+    const { facebookLogin } = await import('@/services/authService')
+    const { clientSessionRevision, beginClientSessionChange } =
+      await import('@/services/client-session.service')
+    const revision = clientSessionRevision()
+    beginClientSessionChange()
+    await expect(facebookLogin('provider-token', revision)).rejects.toThrow('La sesión cambió')
+    expect(post).not.toHaveBeenCalled()
+    expect(get).not.toHaveBeenCalled()
+  })
+
+  it('opens the Google popup before awaiting a session request', async () => {
+    let resolve!: (result: { code: string }) => void
+    googleAuthCodeLogin.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done
+      }),
+    )
+    post.mockResolvedValueOnce({
+      data: {
+        client: { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: '' },
+        accessToken: 'google-token',
+      },
+    })
+    const { loginWithGoogle } = await import('@/services/authService')
+    const pending = loginWithGoogle()
+    expect(googleAuthCodeLogin).toHaveBeenCalledTimes(1)
+    expect(get).not.toHaveBeenCalled()
+    resolve({ code: 'google-code' })
+    await expect(pending).resolves.toMatchObject({ id: 7 })
   })
 })

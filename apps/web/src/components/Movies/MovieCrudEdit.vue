@@ -5,6 +5,10 @@ import { isAxiosError } from 'axios'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { getMovie, updateMovie } from '@/services/movie.service'
 import type { MovieDetail, MovieOption } from '@/types/movie'
+import ReusableSearchDropdown from '../common/ReusableSearchDropdown.vue'
+import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
+import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
+import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 
 const props = defineProps<{
   movieId: number | null
@@ -41,10 +45,61 @@ const form = reactive({
 let request: AbortController | undefined
 let saveRequest: AbortController | undefined
 
+const isFormValid = computed(() => {
+  return (
+    form.title.trim().length > 0 &&
+    form.title.length <= 100 &&
+    form.synopsis.trim().length > 0 &&
+    form.synopsis.length <= 1000 &&
+    Number.isInteger(form.runningTime) &&
+    form.runningTime !== null &&
+    form.runningTime > 0 &&
+    Number.isInteger(form.releaseYear) &&
+    form.releaseYear !== null &&
+    form.releaseYear > 0 &&
+    form.classificationId !== null
+  )
+})
+
+const hasChanges = computed(() => {
+  if (!movie.value) return false
+
+  const original = movie.value
+
+  const sameIds = (a: number[], b: number[]) =>
+    a.length === b.length &&
+    [...a].sort((x, y) => x - y)
+      .every((id, index) => id === [...b].sort((x, y) => x - y)[index])
+
+  return (
+    form.title !== original.title ||
+    form.synopsis !== original.synopsis ||
+    form.runningTime !== original.runningTime ||
+    form.releaseYear !== original.releaseYear ||
+    form.classificationId !== original.classification.id ||
+    !sameIds(form.languageIds, original.languages.map(l => l.id)) ||
+    !sameIds(form.genreIds, original.genres.map(g => g.id))
+  )
+})
+
+const canSave = computed(() =>
+  hasChanges.value &&
+  isFormValid.value &&
+  !saving.value &&
+  !loading.value
+)
+
 const title = computed(() =>
   movie.value
     ? `Modificar ${movie.value.title}`
     : 'Modificar película',
+)
+
+const languageOptions = computed(() =>
+  props.languages.map(language => ({
+    value: language.id,
+    label: language.name
+  }))
 )
 
 function reportError(failure: unknown, operation: 'load' | 'save') {
@@ -146,16 +201,11 @@ async function save() {
   saveError.value = ''
 
   // Validate again after trimming and before sending the request.
-  if (
-    !form.title.trim() ||
-    !form.synopsis.trim() ||
-    !Number.isInteger(form.runningTime) ||
-    Number(form.runningTime) <= 0 ||
-    !Number.isInteger(form.releaseYear) ||
-    Number(form.releaseYear) <= 0 ||
-    form.classificationId === null
-  ) {
-    saveError.value = 'Completa los campos requeridos con valores válidos.'
+  if (!hasChanges.value) return
+
+  if (!isFormValid.value) {
+    saveError.value =
+      'Completa los campos requeridos con valores válidos.'
     return
   }
 
@@ -171,7 +221,7 @@ async function save() {
         synopsis: form.synopsis.trim(),
         runningTime: Number(form.runningTime),
         releaseYear: Number(form.releaseYear),
-        classificationId: form.classificationId,
+        classificationId: form.classificationId ?? undefined,
         languageIds: [...form.languageIds],
         genreIds: [...form.genreIds],
       },
@@ -258,38 +308,29 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="detail-field">
-                <label for="movie-title">Título</label>
-                <input
-                  id="movie-title"
+                <LimitedTextInput
                   v-model="form.title"
-                  class="edit-input"
-                  type="text"
+                  label="Título"
+                  placeholder="Ingrese el título"
+                  :limit="100"
                   required
                 />
               </div>
 
               <div class="detail-field">
-                <label for="movie-duration">Duración en minutos</label>
-                <input
-                  id="movie-duration"
-                  v-model.number="form.runningTime"
-                  class="edit-input"
-                  type="number"
-                  min="1"
-                  step="1"
+                <PositiveNumberInput
+                  v-model="form.runningTime"
+                  label="Duración en minutos"
+                  placeholder="Ej. 120"
                   required
                 />
               </div>
 
               <div class="detail-field">
-                <label for="movie-year">Año de estreno</label>
-                <input
-                  id="movie-year"
-                  v-model.number="form.releaseYear"
-                  class="edit-input"
-                  type="number"
-                  min="1"
-                  step="1"
+                <PositiveNumberInput
+                  v-model="form.releaseYear"
+                  label="Año de estreno"
+                  placeholder="Ej. 2026"
                   required
                 />
               </div>
@@ -297,47 +338,23 @@ onBeforeUnmount(() => {
           </section>
 
           <section class="detail-group">
-            <h3>Clasificación</h3>
-
-            <label for="movie-classification">Clasificación</label>
-            <select
-              id="movie-classification"
+            <SimpleDropdown
               v-model="form.classificationId"
-              class="edit-input"
+              label="Clasificación"
+              placeholder="Seleccione una clasificación"
+              :options="classifications"
               required
-            >
-              <option :value="null" disabled>
-                Selecciona una clasificación
-              </option>
-
-              <option
-                v-for="classification in classifications"
-                :key="classification.id"
-                :value="classification.id"
-              >
-                {{ classification.name }}
-              </option>
-            </select>
+            />
           </section>
 
-          <fieldset class="detail-group option-fieldset">
-            <legend>Idiomas</legend>
 
-            <div class="edit-options">
-              <label
-                v-for="language in languages"
-                :key="language.id"
-                class="edit-option"
-              >
-                <input
-                  v-model="form.languageIds"
-                  type="checkbox"
-                  :value="language.id"
-                />
-                {{ language.name }}
-              </label>
-            </div>
-          </fieldset>
+          <ReusableSearchDropdown
+            class="detail-group"
+            v-model="form.languageIds"
+            label="Idiomas"
+            placeholder="Buscar idiomas..."
+            :options="languageOptions"
+          />
 
           <fieldset class="detail-group option-fieldset">
             <legend>Géneros</legend>
@@ -359,14 +376,13 @@ onBeforeUnmount(() => {
           </fieldset>
 
           <section class="detail-group">
-            <h3>Descripción</h3>
-
-            <label for="movie-synopsis">Sinopsis</label>
-            <textarea
-              id="movie-synopsis"
+              <LimitedTextInput
               v-model="form.synopsis"
-              class="edit-input"
-              rows="5"
+              label="Sinopsis"
+              placeholder="Ingrese la sinopsis"
+              :limit="1000"
+              multiline
+              :rows="5"
               required
             />
           </section>
@@ -393,7 +409,7 @@ onBeforeUnmount(() => {
           <button
             type="submit"
             class="detail-button save-button"
-            :disabled="saving"
+            :disabled="!canSave"
           >
             {{ saving ? 'Guardando…' : 'Guardar cambios' }}
           </button>
@@ -410,44 +426,45 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* Modal background */
 :global(.app-modal-backdrop:has(.movie-detail-content)::backdrop) {
-  background: color-mix(
-    in srgb,
-    var(--color-black) 55%,
-    transparent
-  );
+  background: var(--overlay-background);
 }
 
+/* Modal container */
 :global(.app-modal-card:has(.movie-detail-content)) {
   width: min(880px, 100%);
   max-width: 880px;
   padding: 0;
   border-radius: var(--radius-medium);
-  background: var(--color-background);
-  color: var(--color-dark);
+  background: var(--dialog-background);
+  color: var(--text-primary);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
+/* Modal title */
 :global(.app-modal-card:has(.movie-detail-content) .app-modal-title) {
   flex-shrink: 0;
   margin: 0;
   padding: 24px 80px 24px 24px;
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--primary-color);
+  color: var(--content-background);
   text-align: left;
   font-style: normal;
   font-size: 1.25rem;
 }
 
+/* Modal close button */
 :global(.app-modal-card:has(.movie-detail-content) .app-modal-close) {
   top: 14px;
   right: 24px;
-  color: var(--color-white);
+  color: var(--content-background);
   border-radius: var(--radius-small);
 }
 
+/* Main content */
 .movie-detail-content {
   min-height: 0;
   padding: 24px;
@@ -455,16 +472,19 @@ onBeforeUnmount(() => {
   overscroll-behavior: contain;
 }
 
+/* Sections */
 .detail-group {
   margin-bottom: 24px;
 }
 
-.detail-group h3 {
+.detail-group h3,
+.option-fieldset legend {
   margin: 0 0 16px;
   font-size: 1rem;
   font-weight: 700;
 }
 
+/* Form layout */
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -476,73 +496,16 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-dt {
-  margin-bottom: 6px;
-  font-weight: 500;
-}
-
-dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.detail-feedback {
-  padding: 16px;
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-white);
-}
-
-.detail-error {
-  border-color: var(--color-error);
-  color: var(--color-error);
-}
-
-.detail-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 24px;
-}
-
-.detail-button {
-  min-height: 44px;
-  padding: 10px 20px;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-small);
-  background: var(--color-white);
-  color: var(--color-primary);
-}
-
-.detail-button:hover {
-  background: var(--color-light_gray);
-}
-
-@media (max-width: 575px) {
-  .movie-detail-content {
-    padding: 20px 16px;
-  }
-
-  .detail-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
+/* Fieldsets */
 .edit-fieldset,
 .option-fieldset {
   min-width: 0;
   padding: 0;
   border: 0;
-}
-
-.edit-fieldset {
   margin: 0;
 }
 
-.option-fieldset legend {
-  margin-bottom: 16px;
-  font-weight: 700;
-}
-
+/* Labels */
 .detail-field label,
 .detail-group > label,
 .field-label {
@@ -551,19 +514,23 @@ dd {
   font-weight: 500;
 }
 
+/* Read-only information */
 .detail-field p {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
+/* Text inputs and selects */
 .edit-input {
   box-sizing: border-box;
   width: 100%;
   min-height: 44px;
+  margin: 0;
   padding: 10px 12px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background: var(--color-white);
-  color: var(--color-dark);
+  background: var(--content-background);
+  color: var(--text-primary);
   font: inherit;
 }
 
@@ -571,6 +538,7 @@ textarea.edit-input {
   resize: vertical;
 }
 
+/* Genre checkboxes */
 .edit-options {
   display: flex;
   flex-wrap: wrap;
@@ -583,22 +551,89 @@ textarea.edit-input {
   gap: 8px;
 }
 
+.edit-option input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-color);
+}
+
+/* Feedback and errors */
+.detail-feedback {
+  padding: 16px;
+  margin-bottom: 20px;
+  border-left: 3px solid var(--primary-color);
+  background: var(--content-background);
+  color: var(--text-primary);
+}
+
+.detail-error {
+  border-color: var(--error-color);
+  color: var(--error-color);
+}
+
+/* Footer layout */
 .detail-footer {
+  display: flex;
+  justify-content: flex-end;
   gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 24px;
 }
 
+/* General buttons */
+.detail-button {
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 1px solid var(--primary-color);
+  border-radius: var(--radius-small);
+  background: var(--content-background);
+  color: var(--button-secondary-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Cancel button hover */
+.detail-button:not(.save-button):hover {
+  background: var(--surface-hover);
+}
+
+/* Save button */
 .save-button {
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--button-confirm-background);
+  border-color: var(--button-confirm-background);
+  color: var(--button-confirm-text);
 }
 
-.save-button:hover {
-  background: var(--color-primary);
-  filter: brightness(0.95);
+.save-button:not(:disabled):hover {
+  background: var(--button-confirm-hover-background);
+  border-color: var(--button-confirm-hover-background);
 }
 
+/* Disabled buttons */
 .detail-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Keyboard focus */
+.edit-input:focus-visible,
+.detail-button:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* Mobile layout */
+@media (max-width: 575px) {
+  .movie-detail-content {
+    padding: 20px 16px;
+  }
+
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-footer .detail-button {
+    flex: 1;
+  }
 }
 </style>

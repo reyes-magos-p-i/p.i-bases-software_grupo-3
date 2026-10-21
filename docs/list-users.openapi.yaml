@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Consulta de usuarios
-  version: 1.0.0
+  version: 1.1.0
   description: Listados paginados separados de clientes y personal. La creación se documenta en create-user.openapi.yaml.
 servers:
   - url: /api
@@ -14,6 +14,7 @@ paths:
       summary: Listar clientes
       description: Permitido para empleados y administradores con identidad vigente en Oracle.
       parameters:
+        - $ref: "#/components/parameters/Status"
         - $ref: "#/components/parameters/Search"
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
@@ -22,7 +23,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [id, name, email, createdAt]
+            enum: [id, name, email, createdAt, status]
             default: id
       responses:
         "200":
@@ -50,6 +51,7 @@ paths:
       summary: Listar empleados y administradores
       description: Exclusivo de administradores. No acepta identificadores o roles de sesión enviados por el consumidor como prueba de autorización.
       parameters:
+        - $ref: "#/components/parameters/Status"
         - $ref: "#/components/parameters/Search"
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
@@ -58,7 +60,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [id, name, email, createdAt, hireDate, role, branch]
+            enum: [id, name, email, createdAt, hireDate, role, branch, status]
             default: id
         - name: role
           in: query
@@ -151,6 +153,20 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
+    Status:
+      name: status
+      in: query
+      description: Omitir para incluir activos e inactivos; coincidir con cualquiera de los estados seleccionados.
+      style: form
+      explode: false
+      schema:
+        type: array
+        minItems: 1
+        maxItems: 2
+        uniqueItems: true
+        items:
+          type: string
+          enum: [ACTIVE, INACTIVE]
     Search:
       name: search
       in: query
@@ -202,8 +218,11 @@ components:
           description: Cero si no existen coincidencias; en ese caso page es 1.
     Client:
       type: object
-      required: [id, name, email, phoneNumber, createdAt]
+      required: [id, name, email, phoneNumber, createdAt, status]
       properties:
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
         id:
           type: integer
         name:

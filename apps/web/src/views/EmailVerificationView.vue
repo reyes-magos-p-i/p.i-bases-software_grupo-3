@@ -100,26 +100,27 @@ async function resend() {
   min-height: 55vh;
   place-items: center;
   padding: 40px 16px;
-  background: var(--color-background);
+  background: var(--page-background);
 }
 
 .verification-card {
   width: min(100%, 480px);
   padding: clamp(24px, 5vw, 40px);
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-medium);
-  background: var(--color-white);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 8%);
+  background: var(--content-background);
+  box-shadow: 0 8px 28px var(--shadow-color);
+  color: var(--text-primary);
 }
 
 .verification-card h1 {
   margin: 0 0 12px;
-  color: var(--color-primary);
+  color: var(--text-primary);
   font-size: clamp(1.4rem, 4vw, 1.8rem);
 }
 
 .verification-card > p {
-  color: var(--color-dark);
+  color: var(--text-primary);
   line-height: 1.6;
 }
 
@@ -132,8 +133,10 @@ async function resend() {
 .resend-form input {
   min-height: 44px;
   padding: 8px 12px;
-  border: 1px solid #aaa;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-small);
+  color: var(--text-primary);
+  background: var(--input-background);
 }
 
 .resend-form button {
@@ -141,8 +144,8 @@ async function resend() {
   padding: 8px 16px;
   border: 0;
   border-radius: var(--radius-small);
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--button-background);
+  color: var(--button-text);
   font-weight: 700;
 }
 
@@ -151,8 +154,8 @@ async function resend() {
   padding: 8px 16px;
   border: 0;
   border-radius: var(--radius-small);
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--button-background);
+  color: var(--button-text);
   font-weight: 700;
 }
 
@@ -167,10 +170,10 @@ async function resend() {
 }
 
 .message-success {
-  color: #206a3b;
+  color: var(--success-text);
 }
 
 .message-error {
-  color: var(--color-error);
+  color: var(--error-color);
 }
 </style>

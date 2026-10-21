@@ -9,4 +9,5 @@ export interface EmployeeWithLocalCredentials extends UserIdentity {
   firstSurname: string;
   secondSurname: string;
   passwordHash: string;
+  sessionVersion: string | null;
 }

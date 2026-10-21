@@ -21,6 +21,7 @@ describe('UsersService', () => {
   let service: UsersService;
   const repository = {
     deactivateEmployee: jest.fn(),
+    activateEmployee: jest.fn(),
     updateEmployee: jest.fn(),
     findEmployeeDetailById: jest.fn(),
     listEmployees: jest.fn(),
@@ -30,6 +31,7 @@ describe('UsersService', () => {
   };
   const clientsRepository = {
     deactivateClient: jest.fn(),
+    activateClient: jest.fn(),
     updateClient: jest.fn(),
     findClientDetailById: jest.fn(),
     listClients: jest.fn(),
@@ -96,6 +98,13 @@ describe('UsersService', () => {
 
   afterEach(async () => {
     await module.close();
+  });
+
+  it('delegates activation without generating or sending credentials', async () => {
+    await service.activateClient(42);
+    await service.activateEmployee(42, 21);
+    expect(clientsRepository.activateClient).toHaveBeenCalledWith(42);
+    expect(repository.activateEmployee).toHaveBeenCalledWith(42, 21);
   });
 
   it('delegates client deactivation without generating or sending credentials', async () => {

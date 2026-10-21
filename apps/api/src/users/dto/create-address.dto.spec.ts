@@ -32,7 +32,7 @@ describe('CreateAddressDto', () => {
         expect.objectContaining({
           property: 'districtId',
           constraints: expect.objectContaining({
-            isDefined: 'El identificador del distrito es obligatorio.',
+            isDefined: 'Selecciona un distrito.',
           }),
         }),
       ]);

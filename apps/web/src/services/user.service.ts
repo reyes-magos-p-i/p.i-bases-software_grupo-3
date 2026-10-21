@@ -11,6 +11,7 @@ import type {
   UserEditOptions,
   UserListQuery,
   UserListResult,
+  UserStatus,
 } from '@/types/user'
 
 export async function getUserCreationOptions(signal?: AbortSignal): Promise<UserCreationOptions> {
@@ -34,6 +35,7 @@ export async function getUsers(
   const response = await getApi().get<UserListResult>(`/users/${section}`, {
     params: {
       ...query,
+      ...(query.status ? { status: query.status.length ? query.status.join(',') : undefined } : {}),
       ...(query.role ? { role: query.role.length ? query.role.join(',') : undefined } : {}),
       ...(query.branchId
         ? { branchId: query.branchId.length ? query.branchId.join(',') : undefined }
@@ -86,9 +88,18 @@ export async function updateUser(
   return response.data
 }
 
-export async function deactivateUser(selection: UserDetailSelection): Promise<void> {
+export function deactivateUser(selection: UserDetailSelection): Promise<void> {
+  return changeUserStatus(selection, 'INACTIVE')
+}
+
+export function activateUser(selection: UserDetailSelection): Promise<void> {
+  return changeUserStatus(selection, 'ACTIVE')
+}
+
+async function changeUserStatus(selection: UserDetailSelection, status: UserStatus): Promise<void> {
+  const action = status === 'ACTIVE' ? 'activate' : 'deactivate'
   await getApi().patch<void>(
-    `/users/${selection.section}/${selection.id}/deactivate`,
+    `/users/${selection.section}/${selection.id}/${action}`,
     {},
     {
       timeout: 10000,

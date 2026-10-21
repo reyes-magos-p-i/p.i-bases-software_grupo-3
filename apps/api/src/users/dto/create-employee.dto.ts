@@ -1,12 +1,12 @@
+import { DateOnly } from '../../common/validation/date-only.decorator';
+import { PersonalName } from '../../common/validation/personal-name.decorator';
 import { Transform, Type } from 'class-transformer';
 import {
-  IsDateString,
   IsDefined,
   IsIn,
   IsInt,
   IsObject,
   IsString,
-  Length,
   Matches,
   Max,
   Min,
@@ -33,7 +33,13 @@ export class CreateEmployeeDto extends CreateUserBaseDto {
     message:
       'El primer apellido no puede estar vacío ni contener solo espacios.',
   })
-  @MaxUtf8Bytes(100)
+  @PersonalName({
+    message: 'El primer apellido solo puede contener letras y espacios.',
+  })
+  @MaxUtf8Bytes(100, {
+    message:
+      'El primer apellido es demasiado largo. Usa una versión más corta.',
+  })
   firstSurname: string;
 
   @IsDefined({ message: 'El segundo apellido es obligatorio.' })
@@ -45,34 +51,30 @@ export class CreateEmployeeDto extends CreateUserBaseDto {
     message:
       'El segundo apellido no puede estar vacío ni contener solo espacios.',
   })
-  @MaxUtf8Bytes(100)
+  @PersonalName({
+    message: 'El segundo apellido solo puede contener letras y espacios.',
+  })
+  @MaxUtf8Bytes(100, {
+    message:
+      'El segundo apellido es demasiado largo. Usa una versión más corta.',
+  })
   secondSurname: string;
 
   @IsDefined({ message: 'La fecha de nacimiento es obligatoria.' })
-  @IsDateString(
-    { strict: true },
-    { message: 'La fecha de nacimiento debe ser una fecha válida.' },
+  @DateOnly(
+    { notFuture: true },
+    { message: 'Selecciona una fecha de nacimiento válida que no sea futura.' },
   )
-  @Length(10, 10, {
-    message: 'La fecha de nacimiento debe tener el formato YYYY-MM-DD.',
-  })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/u, {
-    message: 'La fecha de nacimiento debe tener el formato YYYY-MM-DD.',
-  })
   birthday: string;
 
   @IsDefined({ message: 'La fecha de contratación es obligatoria.' })
-  @IsDateString(
-    { strict: true },
-    { message: 'La fecha de contratación debe ser una fecha válida.' },
+  @DateOnly(
+    { notBefore: 'birthday' },
+    {
+      message:
+        'Selecciona una fecha de contratación válida, igual o posterior al nacimiento.',
+    },
   )
-  @Length(10, 10, {
-    message: 'La fecha de contratación debe tener el formato YYYY-MM-DD.',
-  })
-  @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/u, {
-    message:
-      'La fecha de contratación debe tener el formato YYYY-MM-DD con un año entre 0001 y 9999.',
-  })
   hireDate: string;
 
   @IsDefined({ message: 'El teléfono es obligatorio.' })
@@ -86,15 +88,15 @@ export class CreateEmployeeDto extends CreateUserBaseDto {
   @Type(() => CreateAddressDto)
   address: CreateAddressDto;
 
-  @IsDefined({ message: 'El identificador de la sucursal es obligatorio.' })
+  @IsDefined({ message: 'Selecciona una sucursal.' })
   @IsInt({
-    message: 'El identificador de la sucursal debe ser un número entero.',
+    message: 'Selecciona una sucursal válida.',
   })
   @Min(1, {
-    message: 'El identificador de la sucursal está fuera del rango admitido.',
+    message: 'Selecciona una sucursal válida.',
   })
   @Max(Number.MAX_SAFE_INTEGER, {
-    message: 'El identificador de la sucursal está fuera del rango admitido.',
+    message: 'Selecciona una sucursal válida.',
   })
   branchId: number;
 }

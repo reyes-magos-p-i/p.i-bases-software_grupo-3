@@ -13,7 +13,6 @@ import {
 } from '@/services/authService'
 import {
   authenticateEmployee,
-  closeEmployeeSession,
   employeeSession,
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
@@ -22,9 +21,13 @@ import {
   clearClientAuth,
   clientSession,
   restoreClientSession,
+  clearClientSession,
 } from '@/services/client-session.service'
+import { authErrorMessage, authErrorStatus } from '@/utils/auth-errors'
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
+
+defineProps<{ overlay?: boolean }>()
 
 const PASSWORD_PATH = '/account/password'
 const activeModal = ref<'register' | 'login' | null>(null)
@@ -68,10 +71,17 @@ async function enforceClientPasswordStatus() {
     if (status !== 'valid') {
       await router.replace({ path: PASSWORD_PATH, query: { reason: status } })
     }
-  } catch {
-    if (!disposed) {
-      recoveryError.value =
-        'No se pudo comprobar el estado de tu contraseña. Puedes volver a intentarlo.'
+  } catch (error) {
+    if (!disposed && clientUser.value === user && hasClientSession()) {
+      if (authErrorStatus(error) === 401) {
+        clearClientSession()
+        await router.replace({ path: '/', query: { login: 'client', reason: 'expired' } })
+      } else {
+        recoveryError.value = authErrorMessage(
+          error,
+          'No se pudo comprobar el estado de tu contraseña. Puedes volver a intentarlo.',
+        )
+      }
     }
   }
 }
@@ -87,9 +97,16 @@ async function recoverSession() {
   if (results[1]?.status === 'fulfilled' && !disposed) {
     await enforceClientPasswordStatus()
   }
-  if (results.some((result) => result.status === 'rejected')) {
+  const failure = results.find((result) => result.status === 'rejected')
+  if (failure?.status === 'rejected') {
     if (!disposed)
-      recoveryError.value = 'No se pudo comprobar tu sesión. Puedes volver a intentarlo.'
+      recoveryError.value =
+        failure.reason instanceof EmployeeAuthError
+          ? failure.reason.message
+          : authErrorMessage(
+              failure.reason,
+              'No se pudo comprobar tu sesión. Puedes volver a intentarlo.',
+            )
   }
   if (!disposed) recovering.value = false
 }
@@ -139,7 +156,7 @@ function closeLogin() {
   if (submitting.value) return
   activeModal.value = null
   loginError.value = ''
-  if (route.query.login === 'employee') {
+  if (route.query.login === 'employee' || route.query.login === 'client') {
     const query = { ...route.query }
     delete query.login
     delete query.reason
@@ -150,12 +167,13 @@ function closeLogin() {
 watch(
   () => route.query,
   (query) => {
-    if (query.login !== 'employee') return
-    loginMode.value = 'employee'
+    if (query.login !== 'employee' && query.login !== 'client') return
+    loginMode.value = query.login
     activeModal.value = 'login'
     loginError.value =
       route.query.reason === 'unavailable'
-        ? 'No se pudo comprobar la sesión. Inténtalo nuevamente.'
+        ? (query.login === 'employee' ? employeeSession.error.value : clientSession.error.value) ||
+          'No se pudo comprobar la sesión. Inténtalo nuevamente.'
         : route.query.reason === 'expired'
           ? 'Tu sesión terminó. Inicia sesión nuevamente.'
           : ''
@@ -165,7 +183,8 @@ watch(
 
 onMounted(() => {
   if (employeeSession.status.value === 'error') {
-    recoveryError.value = 'No se pudo comprobar tu sesión. Puedes volver a intentarlo.'
+    recoveryError.value =
+      employeeSession.error.value || 'No se pudo comprobar tu sesión. Puedes volver a intentarlo.'
   } else {
     void recoverSession()
   }
@@ -193,10 +212,16 @@ async function handleClientLogin(identity?: ClientIdentity) {
 }
 
 async function logoutClient() {
-  await closeEmployeeSession()
-  await clearClientAuth()
-  activeModal.value = null
-  await router.replace('/')
+  try {
+    await clearClientAuth()
+    activeModal.value = null
+    await router.replace('/')
+  } catch (error) {
+    recoveryError.value = authErrorMessage(
+      error,
+      'Se cerró la sesión local, pero no se pudo confirmar el cierre con el proveedor.',
+    )
+  }
 }
 
 function goToChangePassword() {
@@ -205,7 +230,7 @@ function goToChangePassword() {
 </script>
 
 <template>
-  <header class="site-header">
+  <header class="site-header" :class="{ 'site-header-overlay': overlay }">
     <nav class="landing-container navbar-content">
       <RouterLink to="/" class="brand" aria-label="Ir a la página principal de Cinetadel">
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
@@ -260,7 +285,15 @@ function goToChangePassword() {
 <style scoped>
 .site-header {
   width: 100%;
-  background-color: var(--color-light_gray);
+  background-color: transparent;
+  color: var(--text-on-dark);
+}
+
+.site-header-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
 }
 
 .dashboard-link {
@@ -276,6 +309,8 @@ function goToChangePassword() {
 .session-feedback button {
   min-height: 44px;
   margin-left: 8px;
+  color: var(--button-text);
+  background: var(--button-background);
 }
 
 .navbar-content {
@@ -307,23 +342,38 @@ function goToChangePassword() {
 
 .register-button,
 .login-button {
-  color: inherit;
+  color: var(--navbar-button-text);
   background-color: transparent;
   border: none;
   box-sizing: border-box;
-  padding: 30px;
+  padding: 24px 30px;
   font-weight: 700;
 }
 
 .register-button:hover,
 .login-button:hover {
-  color: var(--color-white);
-  background-color: var(--color-primary);
+  color: var(--navbar-button-text);
+  background-color: var(--navbar-button-hover-background);
+}
+
+.navbar-actions > .register-button {
+  position: relative;
+}
+
+.navbar-actions > .register-button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 1px;
+  height: 22px;
+  background-color: var(--navbar-separator-color);
+  transform: translateY(-50%);
 }
 
 .register-button:focus-visible,
 .login-button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--focus-on-dark);
   outline-offset: -4px;
 }
 

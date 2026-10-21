@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
 import EditUserDialog from '@/components/users/EditUserDialog.vue'
-import DeactivateUserDialog from '@/components/users/DeactivateUserDialog.vue'
+import UserStatusDialog from '@/components/users/UserStatusDialog.vue'
 import { getEmployeeListOptions, getUsers } from '@/services/user.service'
 import type { BranchOption, UserListQuery, UserListResult, UserRole } from '@/types/user'
 import type { UserDetailSelection, UpdatedUser } from '@/types/user'
-import type { UserDeactivationSelection } from '@/types/user'
+import UserStatusBadge from '@/components/users/UserStatusBadge.vue'
+import type { UserStatus, UserStatusSelection } from '@/types/user'
 
 const props = defineProps<{
   section: 'clients' | 'employees'
@@ -18,15 +21,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   'session-expired': []
   forbidden: []
+  notification: [message: string]
   'user-updated': [selection: UserDetailSelection, user: UpdatedUser]
 }>()
 const id = useId()
 const filterContainer = ref<HTMLElement | null>(null)
 const selectedUser = ref<UserDetailSelection | null>(null)
 const editedUser = ref<UserDetailSelection | null>(null)
-const deactivatedUser = ref<UserDeactivationSelection | null>(null)
-const updateNotice = ref('')
-const updateFeedback = ref<HTMLElement | null>(null)
+const statusUser = ref<UserStatusSelection | null>(null)
 const searchDraft = ref('')
 const appliedSearch = ref('')
 const validationError = ref('')
@@ -36,6 +38,7 @@ const result = ref<UserListResult | null>(null)
 const page = ref(1)
 const sortBy = ref('id')
 const sortDirection = ref<'asc' | 'desc'>('asc')
+const selectedStatuses = ref<UserStatus[]>([])
 const selectedRoles = ref<('EMPLOYEE' | 'ADMINISTRATOR')[]>([])
 const selectedBranches = ref<number[]>([])
 const branches = ref<BranchOption[]>([])
@@ -79,6 +82,7 @@ const columns = computed(() => [
       ]
     : []),
   { key: 'createdAt', label: 'Registro' },
+  { key: 'status', label: 'Estado' },
 ])
 const dateFormat = new Intl.DateTimeFormat('es-CR', {
   timeZone: 'America/Costa_Rica',
@@ -107,6 +111,7 @@ const hasFilters = computed(
   () =>
     !!appliedSearch.value ||
     !!searchDraft.value ||
+    selectedStatuses.value.length > 0 ||
     selectedRoles.value.length > 0 ||
     selectedBranches.value.length > 0 ||
     !!validationError.value,
@@ -135,6 +140,7 @@ async function load() {
     sortBy: sortBy.value,
     sortDirection: sortDirection.value,
     ...(appliedSearch.value ? { search: appliedSearch.value } : {}),
+    ...(selectedStatuses.value.length ? { status: [...selectedStatuses.value] } : {}),
     ...(isEmployeeList.value && selectedRoles.value.length
       ? { role: [...selectedRoles.value] }
       : {}),
@@ -202,7 +208,7 @@ function search() {
   else if (/[\uD800-\uDFFF\p{Cc}]/u.test(value))
     validationError.value = 'La búsqueda contiene caracteres no válidos.'
   else if (new TextEncoder().encode(value).length > 400)
-    validationError.value = 'La búsqueda no puede superar 400 bytes en UTF-8.'
+    validationError.value = 'La búsqueda es demasiado larga. Usa menos texto.'
   appliedSearch.value = value.trim().replace(/\s+/gu, ' ')
   page.value = 1
   void load()
@@ -215,6 +221,7 @@ function clearFilters() {
   searchDraft.value = ''
   appliedSearch.value = ''
   validationError.value = ''
+  selectedStatuses.value = []
   selectedRoles.value = []
   selectedBranches.value = []
   page.value = 1
@@ -233,51 +240,55 @@ function viewUser(row: { [key: string]: unknown }) {
   selectedUser.value = { section: props.section, id: row.id }
 }
 function editUser(row: { [key: string]: unknown }) {
-  if (!canRead.value || typeof row.id !== 'number') return
-  updateNotice.value = ''
+  if (!canRead.value || row.status !== 'ACTIVE' || typeof row.id !== 'number') return
   editedUser.value = { section: props.section, id: row.id }
 }
 function userUpdated(selection: UserDetailSelection, user: UpdatedUser) {
   editedUser.value = null
-  updateNotice.value = 'El usuario fue modificado exitosamente.'
+  emit('notification', 'El usuario fue modificado exitosamente.')
   emit('user-updated', selection, user)
   refresh()
-  void nextTick(() => updateFeedback.value?.focus())
 }
-function canDeactivate(row: { [key: string]: unknown }) {
+function canChangeStatus(row: { [key: string]: unknown }) {
   return canRead.value && !(props.section === 'employees' && row.id === props.currentUserId)
 }
-function deactivateSelection(row: { [key: string]: unknown }) {
+function changeStatusSelection(row: { [key: string]: unknown }) {
   if (
-    !canDeactivate(row) ||
+    !canChangeStatus(row) ||
     typeof row.id !== 'number' ||
     typeof row.name !== 'string' ||
-    typeof row.displayId !== 'string'
+    typeof row.displayId !== 'string' ||
+    (row.status !== 'ACTIVE' && row.status !== 'INACTIVE')
   )
     return
-  updateNotice.value = ''
-  deactivatedUser.value = {
+  statusUser.value = {
     section: props.section,
     id: row.id,
     name: row.name,
     displayId: row.displayId,
+    status: row.status,
   }
 }
-function userDeactivated() {
-  deactivatedUser.value = null
-  updateNotice.value = 'El usuario fue desactivado exitosamente.'
+function userStatusChanged(status: UserStatus) {
+  statusUser.value = null
+  emit(
+    'notification',
+    status === 'ACTIVE'
+      ? 'El usuario fue activado exitosamente.'
+      : 'El usuario fue desactivado exitosamente.',
+  )
   refresh()
-  void nextTick(() => updateFeedback.value?.focus())
 }
 watch(
   () => [props.section, props.role],
   () => {
     selectedUser.value = null
     editedUser.value = null
-    deactivatedUser.value = null
+    statusUser.value = null
     searchDraft.value = ''
     appliedSearch.value = ''
     validationError.value = ''
+    selectedStatuses.value = []
     selectedRoles.value = []
     selectedBranches.value = []
     sortBy.value = 'id'
@@ -300,9 +311,6 @@ defineExpose({ refresh })
 
 <template>
   <div class="user-list-panel">
-    <p v-if="updateNotice" ref="updateFeedback" class="feedback" role="status" tabindex="-1">
-      {{ updateNotice }}
-    </p>
     <form class="search-bar" novalidate @submit.prevent="search">
       <div class="search-field">
         <label :for="id + '-search'">Buscar {{ isEmployeeList ? 'empleados' : 'clientes' }}</label>
@@ -384,12 +392,42 @@ defineExpose({ refresh })
           >
         </fieldset>
       </details>
+      <details class="filter-picker">
+        <summary>
+          Estado
+          <span>{{
+            selectedStatuses.length ? `${selectedStatuses.length} seleccionados` : 'Todos'
+          }}</span>
+        </summary>
+        <fieldset class="checkbox-options">
+          <legend class="visually-hidden">Filtrar por estados</legend>
+          <label
+            ><input
+              v-model="selectedStatuses"
+              type="checkbox"
+              name="status"
+              value="ACTIVE"
+              @change="filtersChanged"
+            />Activo</label
+          >
+          <label
+            ><input
+              v-model="selectedStatuses"
+              type="checkbox"
+              name="status"
+              value="INACTIVE"
+              @change="filtersChanged"
+            />Inactivo</label
+          >
+        </fieldset>
+      </details>
       <label
         >Ordenar por<select v-model="sortBy" name="sortBy" @change="filtersChanged">
           <option value="id">ID</option>
           <option value="name">Nombre completo</option>
           <option value="email">Correo electrónico</option>
           <option value="createdAt">Fecha de registro</option>
+          <option value="status">Estado</option>
           <template v-if="isEmployeeList"
             ><option value="role">Rol</option>
             <option value="branch">Sucursal</option>
@@ -404,18 +442,19 @@ defineExpose({ refresh })
         </select></label
       >
     </div>
-    <div v-if="optionsError" class="feedback error" role="alert">
-      {{ optionsError }}
+    <div v-if="optionsError" class="feedback error">
+      <NotificationPopup type="error" :message="optionsError" :duration="0" />
       <button type="button" class="secondary-button" @click="loadOptions">
         Reintentar sucursales
       </button>
     </div>
     <div class="list-content" :aria-busy="loading">
-      <p v-if="loading" class="feedback" role="status">
-        Cargando {{ isEmployeeList ? 'empleados' : 'clientes' }}…
-      </p>
-      <div v-else-if="listError" class="feedback error" role="alert">
-        {{ listError }}
+      <LoadingState
+        v-if="loading"
+        :message="`Cargando ${isEmployeeList ? 'empleados' : 'clientes'}…`"
+      />
+      <div v-else-if="listError" class="feedback error">
+        <NotificationPopup type="error" :message="listError" :duration="0" />
         <button type="button" class="secondary-button" @click="load">Reintentar</button>
       </div>
       <template v-else-if="result">
@@ -429,6 +468,12 @@ defineExpose({ refresh })
           :rows="rows"
           :caption="isEmployeeList ? 'Empleados' : 'Clientes'"
         >
+          <template #cell-status="{ row }">
+            <UserStatusBadge
+              v-if="row.status === 'ACTIVE' || row.status === 'INACTIVE'"
+              :status="row.status"
+            />
+          </template>
           <template #actions="{ row }">
             <div class="user-actions">
               <span title="Ver" class="action-hint">
@@ -436,22 +481,43 @@ defineExpose({ refresh })
                   <i class="bi bi-eye" aria-hidden="true"></i>
                 </button>
               </span>
-              <span title="Modificar" class="action-hint">
-                <button type="button" aria-label="Modificar" @click="editUser(row)">
-                  <i class="bi bi-pencil-square" aria-hidden="true"></i>
-                </button>
-              </span>
               <span
-                :title="canDeactivate(row) ? 'Desactivar' : 'No puedes desactivar tu propia cuenta'"
+                :title="
+                  row.status === 'ACTIVE'
+                    ? 'Modificar'
+                    : 'No se puede modificar un usuario inactivo'
+                "
                 class="action-hint"
               >
                 <button
                   type="button"
-                  :disabled="!canDeactivate(row)"
-                  aria-label="Desactivar"
-                  @click="deactivateSelection(row)"
+                  aria-label="Modificar"
+                  :disabled="row.status !== 'ACTIVE'"
+                  @click="editUser(row)"
                 >
-                  <i class="bi bi-person-slash" aria-hidden="true"></i>
+                  <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                </button>
+              </span>
+              <span
+                :title="
+                  canChangeStatus(row)
+                    ? row.status === 'ACTIVE'
+                      ? 'Desactivar'
+                      : 'Activar'
+                    : 'No puedes desactivar tu propia cuenta'
+                "
+                class="action-hint"
+              >
+                <button
+                  type="button"
+                  :disabled="!canChangeStatus(row)"
+                  :aria-label="row.status === 'ACTIVE' ? 'Desactivar' : 'Activar'"
+                  @click="changeStatusSelection(row)"
+                >
+                  <i
+                    :class="row.status === 'ACTIVE' ? 'bi bi-person-slash' : 'bi bi-person-check'"
+                    aria-hidden="true"
+                  ></i>
                 </button>
               </span>
             </div>
@@ -507,10 +573,10 @@ defineExpose({ refresh })
       @session-expired="emit('session-expired')"
       @forbidden="emit('forbidden')"
     />
-    <DeactivateUserDialog
-      :selection="deactivatedUser"
-      @close="deactivatedUser = null"
-      @deactivated="userDeactivated"
+    <UserStatusDialog
+      :selection="statusUser"
+      @close="statusUser = null"
+      @status-changed="userStatusChanged"
       @session-expired="emit('session-expired')"
       @forbidden="emit('forbidden')"
     />
@@ -553,7 +619,7 @@ label {
   position: absolute;
   left: 14px;
   top: 14px;
-  color: var(--color-gray);
+  color: var(--text-secondary);
 }
 input,
 select,
@@ -564,9 +630,9 @@ button {
 }
 input,
 select {
-  border: 1px solid var(--color-light_gray);
-  background: var(--color-white);
-  color: var(--color-dark);
+  border: 1px solid var(--border-color);
+  background: var(--content-background);
+  color: var(--text-primary);
   padding: 10px 12px;
 }
 input {
@@ -574,7 +640,7 @@ input {
   padding-left: 40px;
 }
 input[aria-invalid='true'] {
-  border-color: var(--color-error);
+  border-color: var(--error-color);
 }
 .filters label {
   flex: 1;
@@ -595,20 +661,21 @@ input[aria-invalid='true'] {
 }
 .filter-picker summary {
   min-height: 44px;
-  border: 1px solid var(--color-light_gray);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background: var(--color-white);
+  background: var(--content-background);
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 600;
+  color: var(--text-primary);
 }
 .filter-picker summary span {
   margin-left: 8px;
-  color: var(--color-gray);
+  color: var(--text-secondary);
   font-weight: 400;
 }
 .filter-picker summary:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 .checkbox-options {
@@ -622,10 +689,11 @@ input[aria-invalid='true'] {
   overflow-y: auto;
   margin: 0;
   padding: 8px;
-  border: 1px solid var(--color-light_gray);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background: var(--color-white);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-black) 8%, transparent);
+  background: var(--content-background);
+  box-shadow: 0 4px 12px var(--shadow-color);
+  color: var(--text-primary);
 }
 .filter-picker[open] .checkbox-options {
   animation: filter-open 160ms ease-out;
@@ -660,7 +728,7 @@ input[aria-invalid='true'] {
   height: 18px;
   padding: 0;
   flex-shrink: 0;
-  accent-color: var(--color-primary);
+  accent-color: var(--primary-color);
 }
 .checkbox-options p {
   margin: 8px;
@@ -681,14 +749,14 @@ input[aria-invalid='true'] {
   min-height: 36px;
   background: transparent;
   border: 0;
-  color: var(--color-primary);
+  color: var(--text-primary);
   font-size: 1.125rem;
 }
 .user-actions button:disabled {
   pointer-events: none;
 }
 .user-actions button:not(:disabled):hover {
-  background: var(--color-light_gray);
+  background: var(--surface-hover);
 }
 .action-hint {
   display: inline-flex;
@@ -701,16 +769,17 @@ input[aria-invalid='true'] {
 }
 button {
   padding: 10px 16px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--primary-color);
   cursor: pointer;
 }
 .primary-button {
-  background: var(--color-primary);
-  color: var(--color-white);
+  background: var(--button-background);
+  color: var(--button-text);
+  border-color: var(--button-background);
 }
 .secondary-button {
-  background: var(--color-white);
-  color: var(--color-primary);
+  background: var(--content-background);
+  color: var(--button-secondary-text);
 }
 button:disabled {
   opacity: 0.5;
@@ -719,23 +788,24 @@ button:disabled {
 input:focus-visible,
 select:focus-visible,
 button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 .feedback,
 .empty-state {
   padding: 24px;
   border-radius: var(--radius-medium);
-  background: var(--color-white);
+  background: var(--content-background);
+  color: var(--text-primary);
 }
 .error {
-  color: var(--color-error);
-  border-left: 4px solid var(--color-error);
+  color: var(--error-color);
+  border-left: 4px solid var(--error-color);
 }
 .result-count {
   margin: 0 0 12px;
   font-size: 0.875rem;
-  color: var(--color-gray);
+  color: var(--text-on-dark-secondary);
 }
 .empty-state {
   text-align: center;

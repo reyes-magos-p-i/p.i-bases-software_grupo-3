@@ -16,6 +16,7 @@ let bodyStyle: string | null
 let rootStyle: string | null
 const client: ClientDetail = {
   id: 42,
+  status: 'ACTIVE',
   role: 'CLIENT',
   firstName: 'Ana',
   secondName: 'María',
@@ -40,6 +41,7 @@ const client: ClientDetail = {
 }
 const employee: EmployeeDetail = {
   id: 42,
+  status: 'ACTIVE',
   role: 'ADMINISTRATOR',
   firstName: 'José',
   secondName: null,
@@ -114,6 +116,19 @@ afterEach(() => {
 })
 
 describe('UserDetailDialog', () => {
+  it.each(['ACTIVE', 'INACTIVE'] as const)(
+    'shows the state of a selected %s user',
+    async (status) => {
+      getUserDetail.mockResolvedValueOnce({ ...client, status })
+      await render()
+      const label = page.findAll('dt').find((item) => item.text() === 'Estado')
+      expect(label?.element.parentElement?.textContent).toContain(
+        status === 'ACTIVE' ? 'Activo' : 'Inactivo',
+      )
+      expect(page.find('form').exists()).toBe(false)
+    },
+  )
+
   it('waits for a selection without querying or locking the page', async () => {
     await render(null)
     expect(getUserDetail).not.toHaveBeenCalled()
@@ -191,7 +206,7 @@ describe('UserDetailDialog', () => {
     reject(new Error('Connection unavailable'))
     await flushPromises()
     expect(page.get('[role="alert"]').text()).toContain('No se pudo mostrar')
-    await page.get('[role="alert"] button').trigger('click')
+    await page.get('.detail-feedback button').trigger('click')
     await flushPromises()
     expect(field('Primer nombre')).toBe('Ana')
   })

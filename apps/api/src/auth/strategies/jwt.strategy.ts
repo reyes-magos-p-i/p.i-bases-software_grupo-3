@@ -49,6 +49,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         payload.type,
         payload.sub,
         'iat' in payload ? payload.iat : undefined,
+        'sessionVersion' in payload ? payload.sessionVersion : undefined,
       )
     ) {
       throw new UnauthorizedException();

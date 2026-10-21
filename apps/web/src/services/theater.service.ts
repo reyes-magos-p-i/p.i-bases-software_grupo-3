@@ -4,6 +4,7 @@ import type {
   Theater,
   TheaterCinema,
   TheaterProjector,
+  TheaterStatusOption,
   UpdateTheaterRequest,
 } from '@/types/theater'
 
@@ -13,11 +14,12 @@ export async function getTheaters(signal?: AbortSignal): Promise<Theater[]> {
 }
 
 export async function getTheaterCreationOptions(signal?: AbortSignal) {
-  const [projectors, cinemas] = await Promise.all([
+  const [projectors, cinemas, statuses] = await Promise.all([
     getApi().get<TheaterProjector[]>('/projectors', { signal, timeout: 10000 }),
     getApi().get<TheaterCinema[]>('/cinemas', { signal, timeout: 10000 }),
+    getApi().get<TheaterStatusOption[]>('/theaters/statuses', { signal, timeout: 10000 }),
   ])
-  return { projectors: projectors.data, cinemas: cinemas.data }
+  return { projectors: projectors.data, cinemas: cinemas.data, statuses: statuses.data }
 }
 
 export async function createTheater(data: CreateTheaterRequest): Promise<Theater> {
