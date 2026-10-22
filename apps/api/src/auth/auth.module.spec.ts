@@ -44,6 +44,14 @@ describe('AuthModule', () => {
       ],
       providers: [
         {
+          provide: 'PROFILE_AUTH_CONSUMER',
+          inject: [JwtService, EmailVerificationSender],
+          useFactory: (jwt: JwtService, sender: EmailVerificationSender) => ({
+            jwt,
+            sender,
+          }),
+        },
+        {
           provide: 'ORIGIN_GUARD_CONSUMER',
           inject: [EmployeeSessionOriginGuard],
           useFactory: (guard: EmployeeSessionOriginGuard) => guard,
@@ -80,6 +88,10 @@ describe('AuthModule', () => {
     expect(module.get('ORIGIN_GUARD_CONSUMER')).toBeInstanceOf(
       EmployeeSessionOriginGuard,
     );
+    expect(module.get('PROFILE_AUTH_CONSUMER')).toEqual({
+      jwt: module.get(JwtService),
+      sender: module.get(EmailVerificationSender),
+    });
     expect(module.get(AuthController)).toBeDefined();
     expect(module.get(AuthService)).toBeDefined();
     expect(module.get(ClientsService)).toBeDefined();
