@@ -545,4 +545,23 @@ describe('AppHeader authentication navigation', () => {
     expect(getClientPasswordStatus).not.toHaveBeenCalled()
     expect(router.currentRoute.value.path).toBe('/account/confirm-email')
   })
+
+  it('closes the login modal on the first click without validating an unfinished email', async () => {
+    await wrapper.get('.login-button').trigger('click')
+    const email = page.get<HTMLInputElement>('[name="email"]')
+    await email.setValue('invalid')
+    email.element.focus()
+    const close = page.get<HTMLButtonElement>('.app-modal-close')
+    close.element.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }),
+    )
+    close.element.focus()
+    await nextTick()
+    expect(email.attributes('aria-invalid')).toBe('false')
+    await close.trigger('pointerup')
+    await close.trigger('click')
+    expect(page.find('dialog[open]').exists()).toBe(false)
+    expect(wrapper.getComponent(LoginModal).props('open')).toBe(false)
+    expect(loginClient).not.toHaveBeenCalled()
+  })
 })
