@@ -287,11 +287,12 @@ function goToChangePassword() {
 <style scoped>
 .site-header {
   width: 100%;
-  background-color: transparent;
+  background-color: var(--navbar-background);
   color: var(--text-on-dark);
 }
 
 .site-header-overlay {
+  background-color: transparent;
   position: absolute;
   top: 0;
   left: 0;
