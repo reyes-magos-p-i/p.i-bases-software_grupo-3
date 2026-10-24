@@ -1,4 +1,4 @@
-import { OmitType } from '@nestjs/mapped-types';
+import { OmitType, PickType } from '@nestjs/mapped-types';
 import { IsIn, IsOptional } from 'class-validator';
 import { UpdateClientDto } from '../../users/dto/update-user.dto';
 
@@ -12,4 +12,7 @@ export class UpdateClientProfileDto extends OmitType(UpdateClientDto, [
   gender?: string | null;
 }
 
-export class DeactivateClientProfileDto {}
+export class DeactivateClientProfileDto extends PickType(
+  UpdateClientProfileDto,
+  [] as const,
+) {}

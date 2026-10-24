@@ -206,8 +206,7 @@ export class ClientsRepository {
         );
         const row = current.rows?.[0];
         if (
-          !row ||
-          row.STATUS !== 'ACTIVE' ||
+          row?.STATUS !== 'ACTIVE' ||
           row.EMAIL !== email ||
           (version.rows?.[0]?.SESSION_VERSION ?? null) !== sessionVersion
         ) {

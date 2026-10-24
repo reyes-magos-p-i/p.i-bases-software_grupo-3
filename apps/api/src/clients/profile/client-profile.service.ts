@@ -16,7 +16,7 @@ export class ClientProfileService {
 
   async getProfile(id: number) {
     const profile = await this.clients.findClientDetailById(id);
-    if (!profile || profile.status !== 'ACTIVE')
+    if (profile?.status !== 'ACTIVE')
       throw new UnauthorizedException(
         'Tu sesión terminó. Inicia sesión nuevamente.',
       );
