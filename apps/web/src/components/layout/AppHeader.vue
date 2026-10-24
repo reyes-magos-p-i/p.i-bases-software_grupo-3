@@ -61,7 +61,8 @@ async function enforceClientPasswordStatus() {
     !user ||
     !hasClientSession() ||
     route.path === PASSWORD_PATH ||
-    route.path === '/recover-password'
+    route.path === '/recover-password' ||
+    route.path === '/account/confirm-email'
   )
     return
 
@@ -241,6 +242,7 @@ function goToChangePassword() {
           :user="clientUser"
           @logout="logoutClient"
           @change-password="goToChangePassword"
+          @profile="router.push('/account/profile')"
         />
         <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
           >Ir al dashboard</RouterLink
@@ -285,11 +287,12 @@ function goToChangePassword() {
 <style scoped>
 .site-header {
   width: 100%;
-  background-color: transparent;
+  background-color: var(--navbar-background);
   color: var(--text-on-dark);
 }
 
 .site-header-overlay {
+  background-color: transparent;
   position: absolute;
   top: 0;
   left: 0;
