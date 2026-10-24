@@ -147,4 +147,35 @@ describe('ClientProfileForm', () => {
     expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
     wrapper.unmount()
   })
+
+  it.each(['[name="firstName"]', '[name="phoneNumber"]'])(
+    'allows cancelling invalid %s without blur feedback',
+    async (selector) => {
+      const wrapper = mountForm()
+      const field = wrapper.get(selector)
+      await field.setValue(selector.includes('firstName') ? 'Ana123' : '22223333')
+      const cancel = wrapper.findAll('.actions button')[0]!
+      await field.trigger('blur', { relatedTarget: cancel.element })
+      expect(wrapper.findAll('.field-error').every((item) => item.text() === '')).toBe(true)
+      await cancel.trigger('click')
+      expect(wrapper.emitted('cancel')).toHaveLength(1)
+      expect(wrapper.emitted('save')).toBeUndefined()
+      wrapper.unmount()
+    },
+  )
+
+  it('keeps address blur validation from interrupting cancellation', async () => {
+    const wrapper = mountForm()
+    await wrapper.get('[name="hasAddress"]').setValue(true)
+    const details = wrapper.get('[name="details"]')
+    await details.setValue('á'.repeat(128))
+    const cancel = wrapper.findAll('.actions button')[0]!
+    await details.trigger('blur', { relatedTarget: cancel.element })
+    await wrapper.get('[name="districtId"]').trigger('blur', { relatedTarget: cancel.element })
+    expect(wrapper.findAll('.field-error').every((item) => item.text() === '')).toBe(true)
+    await cancel.trigger('click')
+    expect(wrapper.emitted('cancel')).toHaveLength(1)
+    expect(wrapper.emitted('save')).toBeUndefined()
+    wrapper.unmount()
+  })
 })

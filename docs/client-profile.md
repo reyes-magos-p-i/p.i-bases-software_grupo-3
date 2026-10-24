@@ -16,6 +16,8 @@ El backend reutiliza los DTO del CRUD mediante `@nestjs/mapped-types`. La actual
 
 Los nombres admiten letras, marcas de acentuación y espacios. El celular acepta el formato móvil de Costa Rica, con prefijo `+506` opcional, y se normaliza a ocho dígitos. La dirección utiliza los mismos catálogos y límites de almacenamiento del CRUD. El frontend reutiliza sus utilidades de validación y muestra errores al salir del campo o enviar, sin interrumpir la escritura. El contador de dirección muestra caracteres. Los mensajes evitan detalles técnicos de almacenamiento.
 
+La validación al perder foco distingue las acciones del usuario: cerrar, cancelar, mostrar contraseñas, abrir un calendario y navegar no deben provocar mensajes que desplacen el control antes de completar la acción. `useBlurValidation` comparte esta protección entre los formularios del perfil, el CRUD y la autenticación (incluida la recuperación). Admite foco por teclado y gestos de ratón, táctiles y lápiz, incluso cuando el navegador no informa el destino del foco. Al enviar se mantienen todas las validaciones. Los eventos y temporizadores de esta protección se liberan al desmontar el formulario.
+
 El primer nombre sigue siendo obligatorio. Los campos opcionales de clientes creados por personal conservan esa condición. Los nombres históricos que no se modifican no se vuelven a enviar. Una actualización vacía se rechaza. La dirección se crea o desvincula dentro de la transacción existente, sin alterar direcciones compartidas.
 
 La edición solicita confirmación antes de guardar. Cancelar, cambiar de sección o abandonar una edición con cambios pendientes requiere confirmar el descarte. Durante las solicitudes se impiden envíos repetidos. Después de guardar se vuelve a consultar el perfil y se actualiza la identidad del menú. Un fallo de esa consulta se distingue de un fallo al guardar. Las respuestas tardías no sustituyen una sesión más reciente.
@@ -69,3 +71,16 @@ La validación automatizada no acredita la entrega real de correo ni la configur
 | Ramas nuevas cubiertas     | 113/136 (83,09 %)                 | 378/406 (93,10 %)                   |
 
 Las métricas de código nuevo se calcularon cruzando los informes LCOV con las líneas añadidas respecto de `HEAD` y todos los archivos fuente nuevos. Las pruebas se excluyen de esa medición. La cobertura combinada local de líneas y ramas nuevas es 91,52 % en API y 95,88 % en web; ambas superan el 80 %. SonarQube realizará su propio cálculo sobre la base de comparación de la PR. No se modificó su configuración.
+
+### Revisión de interacción y header (24 de octubre de 2026)
+
+El header utiliza `--navbar-background` (`--surface-background` en la paleta actual) cuando no está superpuesto, de modo que se distingue de `--page-background` sin introducir colores fijos. En el portal conserva el fondo transparente mediante la variante `overlay`, para mantener el efecto sobre el carrusel. La protección de validaciones al perder foco se aplica al registro, inicio de sesión y recuperación, creación y modificación de clientes y personal, edición del perfil y cambio de correo.
+
+Las pruebas simulan foco, eventos nativos de puntero y solicitudes. Cubren cerrar y cancelar al primer intento, abrir el calendario, mostrar contraseñas, navegación por teclado, gestos cancelados y limpieza de listeners y temporizadores. Se conserva el rechazo de datos inválidos al enviar. No requieren conexiones a Oracle ni a proveedores externos.
+
+- Suite del área afectada: 8 archivos y 252 pruebas correctas.
+- Suite web completa: 68 archivos y 1075 pruebas correctas.
+- Cobertura global web: 95,03 % de líneas y 90,43 % de ramas.
+- Código nuevo de este ajuste respecto de `HEAD`: 38/39 líneas (97,44 %) y 33/35 ramas (94,29 %), con cobertura combinada de 95,95 % según LCOV.
+- `useBlurValidation.ts`: 100 % de líneas cubiertas.
+- Compilación, comprobación de tipos, ESLint y formato Prettier correctos.

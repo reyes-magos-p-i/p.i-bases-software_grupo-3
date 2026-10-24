@@ -1,9 +1,44 @@
-import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DOMWrapper, mount, type VueWrapper } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import ClientEmailChangeDialog from '@/components/clients/ClientEmailChangeDialog.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 
 describe('ClientEmailChangeDialog', () => {
+  let native: VueWrapper | undefined
+  const prototype = HTMLDialogElement.prototype
+  const originalShow = Object.getOwnPropertyDescriptor(prototype, 'showModal')
+  const originalClose = Object.getOwnPropertyDescriptor(prototype, 'close')
+  beforeEach(() => {
+    Object.defineProperties(prototype, {
+      showModal: {
+        configurable: true,
+        value: function (this: HTMLDialogElement) {
+          this.open = true
+        },
+      },
+      close: {
+        configurable: true,
+        value: function (this: HTMLDialogElement) {
+          this.open = false
+        },
+      },
+    })
+  })
+  afterEach(() => {
+    native?.unmount()
+    native = undefined
+    for (const [key, descriptor] of [
+      ['showModal', originalShow],
+      ['close', originalClose],
+    ] as const) {
+      if (descriptor) Object.defineProperty(prototype, key, descriptor)
+      else Reflect.deleteProperty(prototype, key)
+    }
+    document.body.innerHTML = ''
+    vi.restoreAllMocks()
+  })
+
   const options = {
     props: { open: true, currentEmail: 'old@example.com' },
     global: { stubs: { BaseModal: { template: '<section><slot /></section>' } } },
@@ -47,5 +82,53 @@ describe('ClientEmailChangeDialog', () => {
     expect(wrapper.text()).toContain('Enviando…')
     expect(wrapper.get('[role="alert"]').text()).toBe('Correo reservado')
     wrapper.unmount()
+  })
+  it.each(['.actions button[type="button"]', '.app-modal-close'])(
+    'closes on the first touch of %s without blur reflow',
+    async (selector) => {
+      native = mount(ClientEmailChangeDialog, {
+        props: { open: true, currentEmail: 'old@example.com' },
+        attachTo: document.body,
+      })
+      const page = new DOMWrapper(document.body)
+      await nextTick()
+      const email = page.get<HTMLInputElement>('input')
+      await email.setValue('unfinished')
+      email.element.focus()
+      const action = page.get<HTMLButtonElement>(selector)
+      action.element.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'touch' }),
+      )
+      await email.trigger('blur', { relatedTarget: null })
+      expect(email.attributes('aria-invalid')).toBe('false')
+      expect(page.text()).not.toContain('Escribe un correo electrónico válido')
+      await action.trigger('pointerup')
+      await action.trigger('click')
+      expect(native.emitted('close')).toHaveLength(1)
+      expect(native.emitted('request')).toBeUndefined()
+      await native.setProps({ open: false })
+      expect(page.get<HTMLDialogElement>('dialog').element.open).toBe(false)
+    },
+  )
+
+  it('allows keyboard closing and still validates an invalid email on submit', async () => {
+    native = mount(ClientEmailChangeDialog, {
+      props: { open: true, currentEmail: 'old@example.com' },
+      attachTo: document.body,
+    })
+    const page = new DOMWrapper(document.body)
+    await nextTick()
+    const email = page.get<HTMLInputElement>('input')
+    await email.setValue('unfinished')
+    email.element.focus()
+    const close = page.get<HTMLButtonElement>('.app-modal-close')
+    close.element.focus()
+    await nextTick()
+    expect(email.attributes('aria-invalid')).toBe('false')
+    await close.trigger('click')
+    expect(native.emitted('close')).toHaveLength(1)
+    await page.get('form').trigger('submit')
+    expect(email.attributes('aria-invalid')).toBe('true')
+    expect(native.emitted('request')).toBeUndefined()
   })
 })

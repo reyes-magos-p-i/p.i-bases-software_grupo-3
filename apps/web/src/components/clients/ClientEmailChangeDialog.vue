@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useBlurValidation } from '@/composables/useBlurValidation'
 import { ref, useId, watch } from 'vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { validEmail } from '@/utils/user-validation'
+
+const shouldValidateOnBlur = useBlurValidation()
 
 const props = defineProps<{
   open: boolean
@@ -58,7 +61,7 @@ function submit() {
         :disabled="pending"
         :aria-invalid="Boolean(validation)"
         :aria-describedby="`${fieldId}-feedback`"
-        @blur="validate"
+        @blur="shouldValidateOnBlur($event) && validate()"
         @input="validation = ''"
       />
       <p :id="`${fieldId}-feedback`" class="error" aria-live="polite">{{ validation }}</p>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useBlurValidation } from '@/composables/useBlurValidation'
 import { computed, reactive, ref, useId, watch } from 'vue'
 import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue'
 import type {
@@ -13,6 +14,8 @@ import {
   validName,
   validText,
 } from '@/utils/user-validation'
+
+const shouldValidateOnBlur = useBlurValidation()
 
 const props = defineProps<{
   profile: ClientProfile
@@ -174,7 +177,7 @@ function confirm() {
             :aria-invalid="Boolean(errors[field.key])"
             :aria-describedby="`${id}-${field.key}-error`"
             @input="clearError(field.key)"
-            @blur="validateName(field.key)"
+            @blur="shouldValidateOnBlur($event) && validateName(field.key)"
           />
           <p :id="`${id}-${field.key}-error`" class="field-error" aria-live="polite">
             {{ errors[field.key] }}
@@ -191,7 +194,7 @@ function confirm() {
             :aria-invalid="Boolean(errors.phoneNumber)"
             :aria-describedby="`${id}-phone-error`"
             @input="delete errors.phoneNumber"
-            @blur="validatePhone"
+            @blur="shouldValidateOnBlur($event) && validatePhone()"
           />
           <p :id="`${id}-phone-error`" class="field-error" aria-live="polite">
             {{ errors.phoneNumber }}
@@ -263,7 +266,7 @@ function confirm() {
             :aria-invalid="Boolean(errors.districtId)"
             :aria-describedby="`${id}-district-error`"
             @change="delete errors.districtId"
-            @blur="validateAddress"
+            @blur="shouldValidateOnBlur($event) && validateAddress()"
           >
             <option value="">Selecciona un distrito</option>
             <option v-for="option in districts" :key="option.id" :value="option.id">
@@ -284,7 +287,7 @@ function confirm() {
             :aria-invalid="Boolean(errors.details)"
             :aria-describedby="`${id}-details-error`"
             @input="delete errors.details"
-            @blur="validateDetails"
+            @blur="shouldValidateOnBlur($event) && validateDetails()"
           ></textarea
           ><span class="counter">{{ characterCount(form.details) }}/255</span>
           <p :id="`${id}-details-error`" class="field-error" aria-live="polite">
