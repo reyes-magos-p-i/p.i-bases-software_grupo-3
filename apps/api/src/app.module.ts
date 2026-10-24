@@ -1,3 +1,4 @@
+import { ClientProfileModule } from './clients/profile/client-profile.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { HealthModule } from './health/health.module';
@@ -12,7 +13,6 @@ import { CinemasModule } from './cinemas/cinemas.module';
 import { ProjectorsModule } from './projectors/projectors.module';
 import { ProjectionsModule } from './projections/projections.module';
 
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -23,6 +23,7 @@ import { ProjectionsModule } from './projections/projections.module';
     MovieFuctionsModule,
     DatabaseModule,
     AuthModule,
+    ClientProfileModule,
     UsersModule,
     MoviesModule,
     TheatersModule,
