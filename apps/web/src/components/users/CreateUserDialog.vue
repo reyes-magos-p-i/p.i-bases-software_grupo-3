@@ -9,10 +9,14 @@ import {
   useTemplateRef,
   watch,
 } from 'vue'
+import DatePicker from '@/components/common/DatePicker.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import { todayInCostaRica, validDate } from '@/utils/date-only'
 import type { BranchOption, CreateEmployeeRequest, CreateUserRequest } from '@/types/user'
 import {
   characterCount,
   validText,
+  validName,
   validEmail,
   validMobile,
   normalizeMobile,
@@ -244,6 +248,40 @@ function description(field: FieldName, hasHelp = false) {
   return references.join(' ') || undefined
 }
 
+function dateError(field: FieldName, value: string) {
+  if (!validDate(value)) return 'Selecciona una fecha válida.'
+  if (field === 'birthday' && value > todayInCostaRica())
+    return 'La fecha de nacimiento no puede ser futura.'
+  if (field === 'hireDate' && validDate(draft.birthday) && value < draft.birthday)
+    return 'La contratación no puede ser anterior al nacimiento.'
+  return ''
+}
+function textError(
+  field: FieldName,
+  definition: TextFieldDefinition,
+  control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+) {
+  const raw = draft[definition.name]
+  const value = field === 'details' ? raw : raw.trim()
+  if (definition.type === 'date' && control.validity.badInput) return 'Introduce una fecha válida.'
+  if (definition.required && !value.trim()) return 'Este campo es obligatorio.'
+  if (!definition.required && !value) return ''
+  if (/[\uD800-\uDFFF]/u.test(value)) return 'El texto contiene un carácter no válido.'
+  if (definition.maxBytes && !validText(value, definition.maxBytes)) {
+    return 'El texto es demasiado largo. Reduce su longitud.'
+  }
+  if (definition.type === 'date') return dateError(field, value)
+  if (definition.type === 'text' && field !== 'details' && !validName(value))
+    return 'Usa solo letras y espacios; no incluyas números ni símbolos.'
+  return contactError(definition.type, value)
+}
+function contactError(type: TextFieldDefinition['type'], value: string) {
+  if (type === 'email' && !validEmail(value))
+    return 'Introduce un correo electrónico válido, por ejemplo: nombre@ejemplo.com.'
+  if (type === 'tel' && !validMobile(value))
+    return 'Ingresa un celular de Costa Rica de ocho dígitos que comience con 6, 7 u 8.'
+  return ''
+}
 function validateField(
   field: FieldName,
   control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
@@ -251,33 +289,7 @@ function validateField(
 ) {
   if (control.disabled && !includeDisabled) return ''
   const definition = textFields.value.find((item) => item.name === field)
-  if (definition) {
-    const raw = draft[definition.name]
-    const value = field === 'details' ? raw : raw.trim()
-    if (definition.type === 'date' && control.validity.badInput)
-      return 'Introduce una fecha válida.'
-    if (definition.required && !value.trim()) return 'Este campo es obligatorio.'
-    if (!definition.required && !value) return ''
-    if (/[\uD800-\uDFFF]/u.test(value)) return 'El texto contiene un carácter no válido.'
-    if (definition.maxBytes && !validText(value, definition.maxBytes)) {
-      return 'El texto es demasiado largo. Reduce su longitud.'
-    }
-    if (definition.type === 'email' && !validEmail(value))
-      return 'Introduce un correo electrónico válido, por ejemplo: nombre@ejemplo.com.'
-    if (definition.type === 'tel' && !validMobile(value))
-      return 'Ingresa un celular de Costa Rica de ocho dígitos que comience con 6, 7 u 8.'
-    if (definition.type === 'date') {
-      if (field === 'hireDate' && value.startsWith('0000-')) return 'Introduce una fecha válida.'
-      const date = new Date(value + 'T00:00:00Z')
-      if (
-        !/^\d{4}-\d{2}-\d{2}$/u.test(value) ||
-        Number.isNaN(date.getTime()) ||
-        date.toISOString().slice(0, 10) !== value
-      )
-        return 'Introduce una fecha válida.'
-    }
-    return ''
-  }
+  if (definition) return textError(field, definition, control)
 
   const choices = {
     language: ['es', 'en'],
@@ -309,7 +321,7 @@ function onEdit(event: Event) {
   const target = fieldControl(event)
   if (!target) return
   dirty[target.field] = true
-  if (touched[target.field]) errors[target.field] = validateField(target.field, target.control)
+  delete errors[target.field]
 }
 
 function onBlur(event: FocusEvent) {
@@ -323,7 +335,7 @@ async function submit() {
   if (sending.value || props.submissionBlocked || requiredCatalogsUnavailable.value) return
   const controls = dialog.value?.querySelectorAll<
     HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-  >('[name]')
+  >('input[name], select[name], textarea[name]')
   if (!controls) return
   let firstInvalid: HTMLElement | undefined
   for (const control of controls) {
@@ -543,7 +555,7 @@ defineExpose({ open, complete })
         Puedes completar los demás campos.
       </p>
       <div v-else-if="needsAddress && catalogsError" class="catalog-notice">
-        <p role="alert">{{ catalogsError }}</p>
+        <NotificationPopup type="error" :message="catalogsError" :duration="0" />
         <button type="button" class="cancel-button" @click="retryCatalogs">Reintentar</button>
       </div>
 
@@ -551,10 +563,15 @@ defineExpose({ open, complete })
         v-if="submissionErrors.length"
         ref="submission-feedback"
         class="catalog-notice"
-        role="alert"
         tabindex="-1"
       >
-        <p v-for="message in submissionErrors" :key="message">{{ message }}</p>
+        <NotificationPopup
+          v-for="message in submissionErrors"
+          :key="message"
+          type="error"
+          :message="message"
+          :duration="0"
+        />
       </div>
 
       <fieldset v-for="group in groups" :key="group.label" :disabled="sending">
@@ -566,7 +583,22 @@ defineExpose({ open, complete })
               <span v-if="field.required" class="required-marker" aria-hidden="true">*</span>
               <span v-else>(opcional)</span>
             </label>
+            <DatePicker
+              v-if="field.type === 'date'"
+              :id="id + '-' + field.name"
+              v-model="draft[field.name]"
+              :name="field.name"
+              :required="field.required"
+              :disabled="sending"
+              :max="field.name === 'birthday' ? todayInCostaRica() : undefined"
+              :min="
+                field.name === 'hireDate' && validDate(draft.birthday) ? draft.birthday : undefined
+              "
+              :aria-invalid="!!errors[field.name]"
+              :aria-describedby="description(field.name)"
+            />
             <input
+              v-else
               :id="id + '-' + field.name"
               v-model="draft[field.name]"
               :name="field.name"

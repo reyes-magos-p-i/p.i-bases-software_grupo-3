@@ -1,3 +1,4 @@
+import DatePicker from '@/components/common/DatePicker.vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
@@ -32,18 +33,16 @@ const {
   getTheaters,
   createTheater,
   getEmployeePasswordStatus,
-} = vi.hoisted(
-  () => ({
-    getUsers: vi.fn(),
-    getEmployeeListOptions: vi.fn(),
-    getUserCreationOptions: vi.fn(),
-    createUser: vi.fn(),
-    getTheaterCreationOptions: vi.fn(),
-    getTheaters: vi.fn().mockResolvedValue([]),
-    createTheater: vi.fn(),
-    getEmployeePasswordStatus: vi.fn(),
-  }),
-)
+} = vi.hoisted(() => ({
+  getUsers: vi.fn(),
+  getEmployeeListOptions: vi.fn(),
+  getUserCreationOptions: vi.fn(),
+  createUser: vi.fn(),
+  getTheaterCreationOptions: vi.fn(),
+  getTheaters: vi.fn().mockResolvedValue([]),
+  createTheater: vi.fn(),
+  getEmployeePasswordStatus: vi.fn(),
+}))
 vi.mock('@/services/user.service', () => ({
   getUsers,
   getEmployeeListOptions,
@@ -97,7 +96,7 @@ const catalogs: UserCreationOptions = {
     { id: 102, label: 'Curridabat', cantonId: 19 },
     { id: 200, label: 'Heredia', cantonId: 40 },
   ],
-  branches: [{ id: 1, label: 'Cinépolis Multiplaza del Este' }],
+  branches: [{ id: 1, label: 'Cinetadel Multiplaza del Este' }],
 }
 
 function pendingCatalogs() {
@@ -142,11 +141,15 @@ beforeEach(() => {
       { projectorId: 1, name: 'IMAX' },
       { projectorId: 2, name: '70mm' },
     ],
-    cinemas: [{ branchId: 3, name: 'Cinépolis Central', companyId: 1 }],
+    cinemas: [{ branchId: 3, name: 'Cinetadel Central', companyId: 1 }],
+    statuses: [
+      { theaterStatusId: 1, name: 'Disponible' },
+      { theaterStatusId: 2, name: 'En función' },
+    ],
   })
   createTheater.mockReset().mockResolvedValue({
     theaterId: 4,
-    branchId: 3,
+    cinema: 'Cinetadel Central',
     numberOfSeats: 250,
     dimensionX: 20,
     dimensionY: 12,
@@ -270,6 +273,26 @@ describe('DashboardView', () => {
     expect(restoreEmployeeSession).toHaveBeenCalledWith(true)
     expect(view.getComponent(DashboardLayout).props('userName')).toBe('Alicia')
   })
+  it('retains the operation notification while refreshing permissions after editing the current user', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    vi.mocked(restoreEmployeeSession).mockImplementationOnce(async () => {
+      await setRole('EMPLOYEE')
+      return { id: 21, role: 'EMPLOYEE', firstName: 'Ana' }
+    })
+    const list = view.getComponent(UserListPanel)
+    list.vm.$emit('notification', 'El usuario fue modificado exitosamente.')
+    list.vm.$emit(
+      'user-updated',
+      { section: 'employees', id: 21 },
+      { id: 21, role: 'EMPLOYEE', email: 'ana@example.com' },
+    )
+    await flushPromises()
+    expect(view.get('.notification-popup').text()).toContain(
+      'El usuario fue modificado exitosamente.',
+    )
+    expect(view.getComponent(UserListPanel).props('section')).toBe('clients')
+  })
   it('refreshes session permissions after editing the active administrator', async () => {
     const view = await renderDashboard()
     await flushPromises()
@@ -375,9 +398,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     await flushPromises()
 
-    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
-      'Cambiar contraseña',
-    )
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
     expect(view.text()).toContain('Tu contraseña venció.')
   })
 
@@ -444,9 +465,7 @@ describe('DashboardView', () => {
     await view.get('[aria-label="Clientes"]').trigger('click')
     await view.get('.logout-button').trigger('click')
 
-    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
-      'Cambiar contraseña',
-    )
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
     expect(view.get('.logout-button').attributes('disabled')).toBeDefined()
     expect(closeEmployeeSession).not.toHaveBeenCalled()
   })
@@ -474,7 +493,7 @@ describe('DashboardView', () => {
 
     await view.get('[name="numberOfSeats"]').setValue('240')
     await view.get('[name="projectorName"]').setValue('IMAX')
-    await view.get('[name="branchId"]').setValue('3')
+    await view.get('[name="cinema"]').setValue('Cinetadel Central')
     await view.get('[name="dimensionX"]').setValue('20')
     await view.get('[name="dimensionY"]').setValue('12')
     await view.get('.theater-dialog form').trigger('submit')
@@ -485,7 +504,7 @@ describe('DashboardView', () => {
       dimensionX: 20,
       dimensionY: 12,
       projectorName: 'IMAX',
-      branchId: 3,
+      cinema: 'Cinetadel Central',
       status: 'Disponible',
     })
     expect(view.get('.creation-result').text()).toContain('Sala 4 creada exitosamente')
@@ -497,11 +516,11 @@ describe('DashboardView', () => {
     await view.get('[aria-label="Salas"]').trigger('click')
     await view.get('.add-user-button').trigger('click')
     await flushPromises()
-    await view.get('[name="numberOfSeats"]').setValue('5000')
+    await view.get('[name="numberOfSeats"]').setValue('5001')
     await view.get('.theater-dialog form').trigger('submit')
 
     expect(createTheater).not.toHaveBeenCalled()
-    expect(view.get('.field-error').text()).toContain('entre 1 y 4999')
+    expect(view.get('.field-error').text()).toContain('entre 1 y 5000')
   })
 
   it('rejects theater seat counts that do not match the dimensions', async () => {
@@ -515,7 +534,7 @@ describe('DashboardView', () => {
     await view.get('.theater-dialog form').trigger('submit')
 
     expect(createTheater).not.toHaveBeenCalled()
-    expect(view.get('.field-error').text()).toContain('igual a Dimensión X por Dimensión Y')
+    expect(view.get('.field-error').text()).toContain('igual a Filas por Columnas')
   })
 
   it('shows projections to administrators only', async () => {
@@ -569,7 +588,6 @@ describe('DashboardView', () => {
     expect(view.get('h1').text()).toBe('Empleados')
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
-
 
   it('ignores navigation outside the available dashboard sections', async () => {
     const view = await renderDashboard()
@@ -867,10 +885,7 @@ describe('employee creation', () => {
       cantonId: '19',
       districtId: '102',
     })) {
-      await view
-        .getComponent(CreateUserDialog)
-        .get('[name="' + field + '"]')
-        .setValue(value)
+      await setFormField(view, field, value)
     }
     return view
   }
@@ -983,7 +998,7 @@ describe('employee creation', () => {
     await flushPromises()
     expect(getUsers).toHaveBeenCalledTimes(2)
     expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
-    expect(view.get('.creation-result').attributes('role')).toBe('alert')
+    expect(view.get('.creation-result .notification-popup').attributes('role')).toBe('alert')
     expect(view.get('.creation-result').text()).toContain('fue creada')
     expect(view.get('.creation-result').text()).toContain('No repitas')
     expect(createUser).toHaveBeenCalledTimes(1)
@@ -1066,12 +1081,15 @@ describe('client creation', () => {
       'value',
       '',
     )
-    expect(view.get('[type="checkbox"]').element).toHaveProperty('checked', false)
+    expect(view.getComponent(CreateUserDialog).get('[type="checkbox"]').element).toHaveProperty(
+      'checked',
+      false,
+    )
   })
 
   it('uses loaded geography for the client address without sending a branch or public registration fields', async () => {
     const view = await clientForm()
-    await view.get('[type="checkbox"]').setValue(true)
+    await view.getComponent(CreateUserDialog).get('[type="checkbox"]').setValue(true)
     await view.getComponent(CreateUserDialog).get('[name="provinceId"]').setValue('1')
     await view.getComponent(CreateUserDialog).get('[name="cantonId"]').setValue('19')
     await view.getComponent(CreateUserDialog).get('[name="districtId"]').setValue('102')
@@ -1142,7 +1160,7 @@ describe('client creation', () => {
     expect(view.get('.creation-result').text()).toContain(
       'La cuenta de cliente@example.com fue creada',
     )
-    expect(view.get('.creation-result').attributes('role')).toBe('alert')
+    expect(view.get('.creation-result .notification-popup').attributes('role')).toBe('alert')
     expect(createUser).toHaveBeenCalledTimes(1)
   })
 
@@ -1187,7 +1205,9 @@ describe('client creation', () => {
     await view.get('dialog').trigger('cancel')
     expect(view.get('h1').text()).toBe('Clientes')
     expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(true)
-    expect(view.get('[type="checkbox"]').attributes('disabled')).toBeDefined()
+    expect(
+      view.getComponent(CreateUserDialog).get('[type="checkbox"]').attributes('disabled'),
+    ).toBeDefined()
     expect(createUser).toHaveBeenCalledTimes(1)
     resolve({ id: 43, role: 'CLIENT', email: 'cliente@example.com' })
     await flushPromises()
@@ -1216,3 +1236,18 @@ describe('dashboard routes', () => {
     expect(applicationRouter.resolve('/privacy-policy').name).toBe('privacy-policy')
   })
 })
+
+async function setFormField(view: VueWrapper, name: string, value: string) {
+  const picker = view
+    .findAllComponents(DatePicker)
+    .find((component) => component.vm.$attrs.name === name)
+  if (picker) {
+    picker.vm.$emit('update:modelValue', value)
+    await nextTick()
+    await view.get('[name="' + name + '"]').trigger('change')
+  } else
+    await view
+      .getComponent(CreateUserDialog)
+      .get('[name="' + name + '"]')
+      .setValue(value)
+}

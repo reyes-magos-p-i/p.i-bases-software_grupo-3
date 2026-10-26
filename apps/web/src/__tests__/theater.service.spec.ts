@@ -16,7 +16,7 @@ vi.mock('axios', () => ({ default: { create } }))
 
 describe('theater service', () => {
   const payload: CreateTheaterRequest = {
-    branchId: 4,
+    cinema: 'Centro',
     numberOfSeats: 120,
     dimensionX: 12,
     dimensionY: 10,
@@ -33,19 +33,24 @@ describe('theater service', () => {
 
   afterEach(() => vi.unstubAllEnvs())
 
-  it('loads projectors and cinemas with the request signal and timeout', async () => {
+  it('loads projectors, cinemas and statuses with the request signal and timeout', async () => {
     const projectors = [{ projectorId: 1, name: 'Laser 4K' }]
     const cinemas = [{ branchId: 4, name: 'Centro', companyId: 9 }]
+    const statuses = [{ theaterStatusId: 1, name: 'Disponible' }]
     const controller = new AbortController()
-    get.mockImplementation((path: string) =>
-      Promise.resolve({ data: path === '/projectors' ? projectors : cinemas }),
-    )
+    const responses: Record<string, unknown> = {
+      '/projectors': projectors,
+      '/cinemas': cinemas,
+      '/theaters/statuses': statuses,
+    }
+    get.mockImplementation((path: string) => Promise.resolve({ data: responses[path] }))
 
     const { getTheaterCreationOptions } = await import('@/services/theater.service')
 
     await expect(getTheaterCreationOptions(controller.signal)).resolves.toEqual({
       projectors,
       cinemas,
+      statuses,
     })
     expect(create).toHaveBeenCalledExactlyOnceWith({ baseURL: '/api' })
     expect(get).toHaveBeenNthCalledWith(1, '/projectors', {
@@ -53,6 +58,10 @@ describe('theater service', () => {
       timeout: 10000,
     })
     expect(get).toHaveBeenNthCalledWith(2, '/cinemas', {
+      signal: controller.signal,
+      timeout: 10000,
+    })
+    expect(get).toHaveBeenNthCalledWith(3, '/theaters/statuses', {
       signal: controller.signal,
       timeout: 10000,
     })
@@ -107,7 +116,7 @@ describe('theater service', () => {
     const { getTheaterCreationOptions } = await import('@/services/theater.service')
 
     await expect(getTheaterCreationOptions()).rejects.toBe(failure)
-    expect(get).toHaveBeenCalledTimes(2)
+    expect(get).toHaveBeenCalledTimes(3)
   })
 
   it('propagates a theater creation failure without retrying', async () => {

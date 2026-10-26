@@ -25,17 +25,25 @@ catálogos fallan, se pueden reintentar sin perder el borrador y editar los dem�
 campos mientras la dirección permanece intacta.
 
 Los datos fijos se presentan como texto, sin recuadros similares a controles editables.
+Los nombres y apellidos admiten letras, tildes y espacios, sin números, signos ni emojis.
 Cada nombre y apellido conserva el límite de creación de 100 bytes UTF-8 y se
 eliminan espacios externos. Primer nombre es obligatorio; segundo nombre es opcional.
 Los apellidos son opcionales en clientes y obligatorios en personal. Un campo
 opcional vacío se guarda como `null`; los campos omitidos permanecen intactos.
 
-Guardar cambios valida los campos modificados y muestra una advertencia con la
+Salir de un campo valida únicamente ese campo; escribir no presenta errores nuevos.
+Guardar cambios vuelve a validar todos los campos modificados y muestra una advertencia con la
 lista de campos afectados. Cancelar, X o Escape antes de confirmar no escribe
 datos. Volver a editar conserva el borrador. Confirmar cambios envía una sola
-solicitud; mientras se procesa, los controles de confirmación y cierre se bloquean.
+solicitud. La advertencia sobre el acceso por correo solo aparece al cambiar el correo;
+la advertencia de permisos solo aparece al cambiar el rol. Mientras se procesa, los controles de confirmación y cierre se bloquean.
 
-La validación muestra mensajes junto a cada campo. El correo se normaliza a
+La validación muestra mensajes comprensibles junto a cada campo, sin referencias a bytes
+ni UTF-8. Los límites de almacenamiento siguen comprobándose internamente; el contador
+de dirección muestra caracteres. NotificationPopup presenta resultados y errores generales
+de creación, edición, detalle y cambio de estado; los errores que requieren una acción
+permanecen visibles. Los resultados se conservan si una edición cambia los permisos
+y desplaza al usuario a otra sección. El correo se normaliza a
 minúsculas, sin espacios externos, y tiene un máximo de 150 bytes UTF-8. El celular
 acepta ocho dígitos con inicio 6, 7 u 8, separador de espacio o guion entre grupos
 de cuatro, y prefijo opcional `+506`; se almacena como ocho dígitos. La validación
@@ -80,8 +88,8 @@ los permisos consultados por la autenticación en solicitudes posteriores.
 ## Errores y verificación
 
 `400`: entrada inválida, campos no admitidos o ningún cambio; `401`: sesión no
-vigente; `403`: permiso u origen incorrecto; `404`: usuario inexistente o inactivo; `409`:
-correo duplicado o último administrador activo; `500`: fallo inesperado sin detalles internos en la respuesta.
+vigente; `403`: permiso u origen incorrecto; `404`: usuario inexistente; `409`:
+correo duplicado, usuario inactivo (código `USER_INACTIVE`) o último administrador activo; `500`: fallo inesperado sin detalles internos en la respuesta.
 
 Los errores conocidos conservan el borrador y muestran avisos generales o por
 campo. Ante un fallo de red o respuesta inesperada no se repite automáticamente
@@ -116,8 +124,32 @@ datos históricos que no se están cambiando. La API aplica las mismas reglas.
 
 ## Cuentas activas y último administrador
 
-Las modificaciones excluyen cuentas inactivas (404). Los cambios de rol se
-serializan con las desactivaciones de personal mediante un bloqueo Oracle de
+Las modificaciones rechazan cuentas inactivas con 409 y código `USER_INACTIVE`.
+El diálogo no muestra formulario al cargar una cuenta inactiva y bloquea nuevos
+intentos si la cuenta se desactiva mientras se estaba editando. La comprobación de
+estado y la escritura comparten el bloqueo de fila en Oracle. Los cambios de rol se
+serializan con las activaciones y desactivaciones de personal mediante un bloqueo Oracle de
 tabla antes del bloqueo de fila. No se permite convertir al último administrador
 activo en empleado (409); debe existir otro administrador activo. Los correos de
 cuentas inactivas siguen reservados. Ver [Desactivar un usuario](deactivate-user.md).
+
+## Resultados automatizados de esta revisión
+
+Verificación local del 19 de octubre de 2026 con Oracle, correo y solicitudes simulados:
+
+| Área | Pruebas            | Cobertura global de líneas | Cobertura de líneas nuevas |
+| ---- | ------------------ | -------------------------- | -------------------------- |
+| API  | 1864, en 81 suites | 97,25 %                    | 100 %                      |
+| Web  | 969, en 60 suites  | 94,63 %                    | 96,97 %                    |
+
+La medición de líneas nuevas cruza los archivos LCOV con las líneas ejecutables
+agregadas respecto de HEAD, incluyendo archivos nuevos y excluyendo pruebas. Al
+incluir también las ramas nuevas, la medición local es 96,81 % en API y 96,11 %
+en web. No sustituye el análisis posterior de SonarQube contra su propia base.
+ESLint, compilación y formato se comprueban con las herramientas existentes.
+
+Las regresiones incluyen validación al salir del campo y antes del envío, nombres
+inválidos en frontend y backend, calendario sin escritura manual y con teclado,
+nacimiento futuro, contratación anterior al nacimiento, edad mínima solo en registro
+público, reversión de errores de catálogos, conservación de datos históricos no
+modificados y advertencias de correo y rol condicionadas al cambio correspondiente.

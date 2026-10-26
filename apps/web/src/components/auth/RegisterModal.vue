@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
-import { validText, validEmail } from '@/utils/user-validation'
+import DatePicker from '@/components/common/DatePicker.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import { hasMinimumAge, todayInCostaRica, validDate } from '@/utils/date-only'
+import {
+  validText,
+  validEmail,
+  validName,
+  validMobile,
+  normalizeMobile,
+  characterCount,
+} from '@/utils/user-validation'
 import { EmailDeliveryError, registerUser, resendEmailVerification } from '@/services/authService'
 import BaseModal from '@/components/common/BaseModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
@@ -55,80 +65,79 @@ watch(
  */
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*_-]).{8,}$/
 
-function normalizeCostaRicaPhone(phone: string): string {
-  return phone.trim().replace(/[-\s]/gu, '')
-}
-
-function isAdult(birthDate: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(birthDate)
-  if (!match) return false
-  const [, yearText, monthText, dayText] = match
-  const birthYear = Number(yearText)
-  const birthMonth = Number(monthText)
-  const birthDay = Number(dayText)
-  const parsedDate = new Date(Date.UTC(birthYear, birthMonth - 1, birthDay))
-  if (
-    parsedDate.getUTCFullYear() !== birthYear ||
-    parsedDate.getUTCMonth() + 1 !== birthMonth ||
-    parsedDate.getUTCDate() !== birthDay
-  )
-    return false
-
-  const todayParts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Costa_Rica',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts()
-  const today = Object.fromEntries(todayParts.map(({ type, value }) => [type, value]))
-  const todayYear = Number(today.year)
-  const todayMonth = Number(today.month)
-  const todayDay = Number(today.day)
-
-  return (
-    birthYear < todayYear - 18 ||
-    (birthYear === todayYear - 18 &&
-      (birthMonth < todayMonth || (birthMonth === todayMonth && birthDay <= todayDay)))
-  )
-}
-
-function validate(): boolean {
-  Object.keys(errors).forEach((k) => delete errors[k])
-
-  if (!validEmail(form.email)) errors.email = 'Ingresa un correo válido'
-  if (!form.firstName.trim()) errors.firstName = 'Requerido'
-  if (!form.lastName.trim()) errors.lastName = 'Requerido'
+function validateIdentity(validationErrors: Record<string, string>) {
+  if (!validEmail(form.email)) validationErrors.email = 'Ingresa un correo válido'
+  if (!form.firstName.trim()) validationErrors.firstName = 'Ingresa tu nombre.'
+  if (!form.lastName.trim()) validationErrors.lastName = 'Ingresa tu apellido.'
   if (!form.phone.trim()) {
-    errors.phone = 'Requerido'
-  } else if (!/^\d{4}[-\s]?\d{4}$/u.test(form.phone.trim())) {
-    errors.phone = 'Ingresa un teléfono costarricense válido de 8 dígitos'
+    validationErrors.phone = 'Ingresa tu número de celular.'
+  } else if (!validMobile(form.phone)) {
+    validationErrors.phone =
+      'Ingresa un celular de Costa Rica de ocho dígitos que comience con 6, 7 u 8.'
   }
   for (const field of ['firstName', 'lastName'] as const) {
-    if (form[field].trim() && !validText(form[field].trim(), 100))
-      errors[field] = 'Ingresa texto válido de hasta 100 bytes en UTF-8.'
+    if (form[field].trim() && !validName(form[field]))
+      validationErrors[field] = 'Usa solo letras y espacios; no incluyas números ni símbolos.'
+    else if (!validText(form[field].trim(), 100))
+      validationErrors[field] = 'El texto es demasiado largo. Usa una versión más corta.'
   }
-  if (!form.gender) errors.gender = 'Selecciona una opción'
+  if (!['M', 'F', 'O', 'N'].includes(form.gender)) validationErrors.gender = 'Selecciona una opción'
+  if (!['es', 'en'].includes(form.language))
+    validationErrors.language = 'Selecciona español o inglés como idioma.'
+}
+function validateBirthDate(validationErrors: Record<string, string>) {
   if (!form.birthDate) {
-    errors.birthDate = 'Requerido'
-  } else if (!isAdult(form.birthDate)) {
-    errors.birthDate = 'Debes tener al menos 18 años para registrarte'
+    validationErrors.birthDate = 'Selecciona tu fecha de nacimiento.'
+  } else if (!validDate(form.birthDate) || form.birthDate > todayInCostaRica()) {
+    validationErrors.birthDate = 'Selecciona una fecha de nacimiento válida que no sea futura.'
+  } else if (!hasMinimumAge(form.birthDate, 18)) {
+    validationErrors.birthDate = 'Debes tener al menos 18 años para registrarte'
   }
+}
+function validatePassword(validationErrors: Record<string, string>) {
   if (!PASSWORD_RULE.test(form.password))
-    errors.password =
+    validationErrors.password =
       'Mínimo 8 caracteres con mayúscula, minúscula, número y un carácter especial (!@#$%^&*_-).'
   if (
-    form.password === form.email ||
-    form.password === form.firstName ||
-    form.password === form.lastName
+    form.password === form.email.trim().toLowerCase() ||
+    form.password === form.firstName.trim() ||
+    form.password === form.lastName.trim()
   )
-    errors.password = 'La contraseña no puede ser igual al correo ni al nombre de usuario'
+    validationErrors.password = 'La contraseña no puede ser igual al correo ni al nombre de usuario'
+  if (characterCount(form.password) > 128)
+    validationErrors.password = 'La contraseña no puede superar 128 caracteres.'
   if (form.password !== form.confirmPassword)
-    errors.confirmPassword = 'Las contraseñas no coinciden'
-  if (!form.acceptTerms) errors.acceptTerms = 'Debes aceptar los términos'
-
-  return Object.keys(errors).length === 0
+    validationErrors.confirmPassword = 'Las contraseñas no coinciden'
+  if (!form.acceptTerms) validationErrors.acceptTerms = 'Debes aceptar los términos'
+}
+function validate(field?: string): boolean {
+  const validationErrors: Record<string, string> = {}
+  validateIdentity(validationErrors)
+  validateBirthDate(validationErrors)
+  validatePassword(validationErrors)
+  if (field) {
+    delete errors[field]
+    if (validationErrors[field]) errors[field] = validationErrors[field]
+  } else {
+    Object.keys(errors).forEach((key) => delete errors[key])
+    Object.assign(errors, validationErrors)
+  }
+  return Object.keys(validationErrors).length === 0
 }
 
+function inputChanged(event: Event) {
+  const control = event.target
+  if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement)
+    delete errors[control.id === 'terms' ? 'acceptTerms' : control.id]
+}
+function inputBlurred(event: FocusEvent) {
+  const control = event.target
+  if (
+    (control instanceof HTMLInputElement || control instanceof HTMLSelectElement) &&
+    control.id in form
+  )
+    validate(control.id)
+}
 function handleAuthenticated(identity: ClientIdentity) {
   serverError.value = ''
   emit('authenticated', identity)
@@ -152,7 +161,7 @@ async function onSubmit() {
       email: form.email.trim().toLowerCase(),
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
-      phone: normalizeCostaRicaPhone(payload.phone),
+      phone: normalizeMobile(payload.phone),
     })
     verificationEmail.value = payload.email.trim().toLowerCase()
     verificationState.value = 'sent'
@@ -194,7 +203,7 @@ async function resendVerificationEmail() {
 
       <hr class="my-3" />
 
-      <form novalidate @submit.prevent="onSubmit">
+      <form novalidate @submit.prevent="onSubmit" @input="inputChanged" @focusout="inputBlurred">
         <div class="row g-3">
           <div class="col-12">
             <label class="form-label fw-bold" for="email">Correo Electrónico</label>
@@ -268,10 +277,11 @@ async function resendVerificationEmail() {
 
           <div class="col-6">
             <label class="form-label fw-bold" for="birthDate">Fecha de nacimiento</label>
-            <input
+            <DatePicker
               id="birthDate"
               v-model="form.birthDate"
-              type="date"
+              :max="todayInCostaRica()"
+              :disabled="loading"
               class="form-control"
               :class="{ 'is-invalid': errors.birthDate }"
             />
@@ -330,9 +340,7 @@ async function resendVerificationEmail() {
                 type="button"
                 class="password-toggle"
                 :aria-controls="'confirmPassword'"
-                :aria-label="
-                  showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'
-                "
+                :aria-label="showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
                 :aria-pressed="showConfirmPassword"
                 @click="showConfirmPassword = !showConfirmPassword"
               >
@@ -366,7 +374,7 @@ async function resendVerificationEmail() {
           </div>
         </div>
 
-        <div v-if="serverError" class="alert alert-danger mt-3 mb-0">{{ serverError }}</div>
+        <NotificationPopup v-if="serverError" type="error" :message="serverError" :duration="0" />
 
         <div class="text-center mt-3">
           <button type="submit" class="btn-brand" :disabled="loading">
@@ -377,17 +385,22 @@ async function resendVerificationEmail() {
     </template>
 
     <section v-else class="verification-feedback" aria-live="polite">
-      <p v-if="verificationState === 'sent'" class="alert alert-success">
-        Te enviamos un enlace de confirmación a <strong>{{ verificationEmail }}</strong
-        >. Confirma tu correo para activar tu cuenta e iniciar sesión.
-      </p>
-      <p v-else class="alert alert-danger" role="alert">{{ serverError }}</p>
+      <NotificationPopup
+        v-if="verificationState === 'sent'"
+        type="success"
+        :message="`Te enviamos un enlace de confirmación a ${verificationEmail}. Confirma tu correo para activar tu cuenta e iniciar sesión.`"
+        :duration="0"
+      />
+      <NotificationPopup v-else type="error" :message="serverError" :duration="0" />
       <p v-if="verificationState === 'delivery-failed'" class="small">
         La cuenta quedó pendiente. Puedes volver a solicitar el correo.
       </p>
-      <p v-if="serverError && verificationState === 'sent'" class="alert alert-danger" role="alert">
-        {{ serverError }}
-      </p>
+      <NotificationPopup
+        v-if="serverError && verificationState === 'sent'"
+        type="error"
+        :message="serverError"
+        :duration="0"
+      />
       <button
         type="button"
         class="btn-brand"

@@ -3,6 +3,7 @@ import 'bootstrap-icons/font/bootstrap-icons.css'
 import './styles/variables.css'
 import './styles/main.css'
 import './styles/dashboard.css'
+import './styles/crud-modal.css'
 
 import { createApp } from 'vue'
 import App from './App.vue'

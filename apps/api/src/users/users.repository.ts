@@ -1,3 +1,5 @@
+import { revokeAccountSessions } from '../common/security/session-revocation';
+import type { UserStatus } from './types/user-status.type';
 import {
   BadRequestException,
   ConflictException,
@@ -27,8 +29,20 @@ import type {
 export class UsersRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  async deactivateEmployee(id: number, actorId: number): Promise<void> {
-    if (id === actorId)
+  deactivateEmployee(id: number, actorId: number): Promise<void> {
+    return this.changeEmployeeStatus(id, actorId, 'INACTIVE');
+  }
+
+  activateEmployee(id: number, actorId: number): Promise<void> {
+    return this.changeEmployeeStatus(id, actorId, 'ACTIVE');
+  }
+
+  private async changeEmployeeStatus(
+    id: number,
+    actorId: number,
+    status: UserStatus,
+  ): Promise<void> {
+    if (id === actorId && status === 'INACTIVE')
       throw new ConflictException('No puedes desactivar tu propia cuenta.');
     await this.db.transaction(async (connection) => {
       await this.lockEmployeeLifecycle(connection);
@@ -39,7 +53,7 @@ export class UsersRepository {
       );
       if (actor.rows?.[0]?.ROLE !== UserRole.ADMINISTRATOR)
         throw new ForbiddenException(
-          'No tienes permiso para desactivar personal.',
+          'No tienes permiso para cambiar el estado del personal.',
         );
       const selected = await connection.execute<{
         ROLE: string;
@@ -52,24 +66,35 @@ export class UsersRepository {
       const employee = selected.rows?.[0];
       if (!employee)
         throw new NotFoundException('El empleado seleccionado no existe.');
-      if (employee.STATUS === 'INACTIVE')
-        throw new ConflictException('El empleado ya está desactivado.');
-      if (employee.STATUS !== 'ACTIVE')
+      if (employee.STATUS === status)
+        throw new ConflictException(
+          status === 'ACTIVE'
+            ? 'El empleado ya está activo.'
+            : 'El empleado ya está desactivado.',
+        );
+      if (employee.STATUS !== 'ACTIVE' && employee.STATUS !== 'INACTIVE')
         throw new Error('Invalid employee status.');
-      if (employee.ROLE === UserRole.ADMINISTRATOR)
+      if (status === 'INACTIVE' && employee.ROLE === UserRole.ADMINISTRATOR)
         await this.requireAnotherAdministrator(connection);
       const result = await connection.execute(
-        "UPDATE EMPLOYEES SET STATUS = 'INACTIVE' WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE'",
-        { id: { val: id, type: oracle.NUMBER } },
+        'UPDATE EMPLOYEES SET STATUS = :status WHERE EMPLOYEE_ID = :id AND STATUS = :previousStatus',
+        {
+          id: { val: id, type: oracle.NUMBER },
+          status,
+          previousStatus: employee.STATUS,
+        },
         { autoCommit: false },
       );
       if (result.rowsAffected !== 1)
-        throw new Error('Oracle did not deactivate a single employee.');
+        throw new Error(
+          'Oracle did not change the status of a single employee.',
+        );
+      await revokeAccountSessions(connection, 'employee', id);
     });
   }
 
   private lockEmployeeLifecycle(connection: oracle.Connection) {
-    // Serialize role changes and deactivation before locking individual employees.
+    // Serialize role and status changes before locking individual employees.
     return connection.execute(
       'LOCK TABLE EMPLOYEES IN SHARE ROW EXCLUSIVE MODE',
       {},
@@ -100,30 +125,27 @@ export class UsersRepository {
         const current = await connection.execute<{
           EMAIL: string;
           ROLE: UserRole.EMPLOYEE | UserRole.ADMINISTRATOR;
+          STATUS: UserStatus;
         }>(
-          "SELECT EMAIL, ROLE FROM EMPLOYEES WHERE EMPLOYEE_ID = :id AND STATUS = 'ACTIVE' FOR UPDATE",
+          'SELECT EMAIL, ROLE, STATUS FROM EMPLOYEES WHERE EMPLOYEE_ID = :id FOR UPDATE',
           { id: { val: id, type: oracle.NUMBER } },
           { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
         );
         const row = current.rows?.[0];
         if (!row)
           throw new NotFoundException('El usuario seleccionado no existe.');
+        if (row.STATUS !== 'ACTIVE')
+          throw new ConflictException({
+            statusCode: 409,
+            code: 'USER_INACTIVE',
+            message: 'No se puede modificar un usuario inactivo.',
+          });
         if (
           row.ROLE === UserRole.ADMINISTRATOR &&
           data.role === UserRole.EMPLOYEE
         )
           await this.requireAnotherAdministrator(connection);
-        if (data.email !== undefined) {
-          const duplicate = await connection.execute(
-            'SELECT 1 FROM EMPLOYEES WHERE LOWER(TRIM(EMAIL)) = :email AND EMPLOYEE_ID <> :id AND ROWNUM = 1',
-            { email: data.email, id },
-            { autoCommit: false },
-          );
-          if (duplicate.rows?.length)
-            throw new ConflictException(
-              'El correo electrónico ya está registrado para otro empleado.',
-            );
-        }
+        await this.requireUniqueEmployeeEmail(connection, id, data.email);
         const changes: string[] = [];
         const binds: oracle.BindParameters = {
           id: { val: id, type: oracle.NUMBER },
@@ -183,15 +205,31 @@ export class UsersRepository {
           'El correo electrónico ya está registrado para otro empleado.',
         );
       }
-      if (failure?.errorNum === 2291)
-        throw new BadRequestException('El distrito de la dirección no existe.');
-      throw error;
+      this.rethrowCatalogError(error);
     }
+  }
+
+  private async requireUniqueEmployeeEmail(
+    connection: oracle.Connection,
+    id: number,
+    email: string | undefined,
+  ): Promise<void> {
+    if (email === undefined) return;
+    const duplicate = await connection.execute(
+      'SELECT 1 FROM EMPLOYEES WHERE LOWER(TRIM(EMAIL)) = :email AND EMPLOYEE_ID <> :id AND ROWNUM = 1',
+      { email, id },
+      { autoCommit: false },
+    );
+    if (duplicate.rows?.length)
+      throw new ConflictException(
+        'El correo electrónico ya está registrado para otro empleado.',
+      );
   }
 
   async findEmployeeDetailById(id: number): Promise<EmployeeDetailDto | null> {
     const result = await this.db.query<{
       ID: number;
+      STATUS: UserStatus;
       FIRST_NAME: string;
       SECOND_NAME: string | null;
       FIRST_SURNAME: string;
@@ -213,7 +251,7 @@ export class UsersRepository {
       PROVINCE_ID: number;
       PROVINCE_NAME: string;
     }>(
-      `SELECT e.EMPLOYEE_ID AS ID, e.FIRST_NAME, e.SECOND_NAME, e.FIRST_SURNAME, e.SECOND_SURNAME,
+      `SELECT e.EMPLOYEE_ID AS ID, e.STATUS, e.FIRST_NAME, e.SECOND_NAME, e.FIRST_SURNAME, e.SECOND_SURNAME,
               TO_CHAR(e.BIRTHDAY, 'YYYY-MM-DD') AS BIRTHDAY, e.PHONE_NUMBER, e.EMAIL,
               e.ROLE, e.BRANCH_ID, b.NAME AS BRANCH_NAME,
               TO_CHAR(e.HIRE_DATE, 'YYYY-MM-DD') AS HIRE_DATE,
@@ -228,13 +266,14 @@ export class UsersRepository {
        LEFT JOIN DISTRICTS d ON d.ID_DISTRICT = a.ID_DISTRICT
        LEFT JOIN CANTONS k ON k.ID_CANTON = d.ID_CANTON
        LEFT JOIN PROVINCES p ON p.ID_PROVINCE = k.ID_PROVINCE
-       WHERE e.EMPLOYEE_ID = :id AND e.STATUS = 'ACTIVE'`,
+       WHERE e.EMPLOYEE_ID = :id`,
       { id: { val: id, type: oracle.NUMBER } },
     );
     const row = result.rows?.[0];
     if (!row) return null;
     return {
       id: row.ID,
+      status: row.STATUS,
       role: row.ROLE,
       firstName: row.FIRST_NAME,
       secondName: row.SECOND_NAME,
@@ -280,10 +319,17 @@ export class UsersRepository {
   ): Promise<ListedUsersDto<ListedEmployeeDto>> {
     const name =
       "REGEXP_REPLACE(TRIM(e.FIRST_NAME || ' ' || e.SECOND_NAME || ' ' || e.FIRST_SURNAME || ' ' || e.SECOND_SURNAME), '[[:space:]]+', ' ')";
-    const conditions: string[] = ["e.STATUS = 'ACTIVE'"];
+    const conditions: string[] = [];
     const binds: oracle.BindParameters = {};
     if (query.search) {
       conditions.push(buildUserSearch(query.search, 'employees', name, binds));
+    }
+    if (query.status?.length) {
+      const parameters = query.status.map((status, index) => {
+        binds[`status${index}`] = { val: status, type: oracle.STRING };
+        return `:status${index}`;
+      });
+      conditions.push(`e.STATUS IN (${parameters.join(', ')})`);
     }
     if (query.role?.length) {
       const parameters = query.role.map((role, index) => {
@@ -316,12 +362,14 @@ export class UsersRepository {
         name,
         email: 'LOWER(e.EMAIL)',
         createdAt: 'e.CREATED_AT',
+        status: 'e.STATUS',
         hireDate: 'e.HIRE_DATE',
         role: 'e.ROLE',
         branch: 'LOWER(b.NAME)',
       }[query.sortBy] ?? 'e.EMPLOYEE_ID';
     const result = await this.db.query<{
       ID: number;
+      STATUS: UserStatus;
       NAME: string;
       EMAIL: string;
       PHONE_NUMBER: string;
@@ -331,7 +379,7 @@ export class UsersRepository {
       BRANCH_NAME: string;
       HIRE_DATE: string | null;
     }>(
-      `SELECT e.EMPLOYEE_ID AS ID, ${name} AS NAME, e.EMAIL, e.PHONE_NUMBER,
+      `SELECT e.EMPLOYEE_ID AS ID, e.STATUS, ${name} AS NAME, e.EMAIL, e.PHONE_NUMBER,
               TO_CHAR(e.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3"Z"') AS CREATED_AT,
               e.ROLE, e.BRANCH_ID, b.NAME AS BRANCH_NAME, TO_CHAR(e.HIRE_DATE, 'YYYY-MM-DD') AS HIRE_DATE
        ${from}
@@ -346,6 +394,7 @@ export class UsersRepository {
     return {
       items: (result.rows ?? []).map((row) => ({
         id: row.ID,
+        status: row.STATUS,
         name: row.NAME,
         email: row.EMAIL,
         phoneNumber: row.PHONE_NUMBER,
@@ -604,8 +653,23 @@ export class UsersRepository {
           'El correo electrónico ya está registrado para otro empleado.',
         );
       }
-      throw error;
+      this.rethrowCatalogError(error);
     }
+  }
+
+  private rethrowCatalogError(error: unknown): never {
+    const failure = error as { errorNum?: number; message?: string } | null;
+    if (failure?.errorNum === 2291) {
+      if (/\bFK_ADDRESS_DISTRICT\b/u.test(failure.message ?? ''))
+        throw new BadRequestException(
+          'El distrito seleccionado ya no existe. Selecciona otro distrito.',
+        );
+      if (/\bFK_EMPLOYEES_BRANCH\b/u.test(failure.message ?? ''))
+        throw new BadRequestException(
+          'La sucursal seleccionada ya no existe. Selecciona otra sucursal.',
+        );
+    }
+    throw error;
   }
 
   private async insertAddress(

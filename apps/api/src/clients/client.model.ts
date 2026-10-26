@@ -1,9 +1,10 @@
+import type { UserStatus } from '../users/types/user-status.type';
 import type { PasswordHashResult } from '../common/security/password-hasher';
 
 export type Provider = 'GOOGLE' | 'FACEBOOK';
 
 export interface Client {
-  status: 'ACTIVE' | 'INACTIVE';
+  status: UserStatus;
   id: number;
   email: string;
   firstName: string;

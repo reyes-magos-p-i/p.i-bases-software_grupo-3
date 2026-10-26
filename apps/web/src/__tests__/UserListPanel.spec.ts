@@ -3,7 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { AxiosError, type AxiosResponse } from 'axios'
 import UserListPanel from '@/components/users/UserListPanel.vue'
 import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
-import DeactivateUserDialog from '@/components/users/DeactivateUserDialog.vue'
+import UserStatusDialog from '@/components/users/UserStatusDialog.vue'
 import EditUserDialog from '@/components/users/EditUserDialog.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import type { UserListResult } from '@/types/user'
@@ -18,6 +18,7 @@ const clients: UserListResult = {
   items: [
     {
       id: 42,
+      status: 'ACTIVE',
       name: 'Ana María Núñez',
       email: 'ana@example.com',
       phoneNumber: null,
@@ -41,7 +42,7 @@ async function render(
 ) {
   wrapper = mount(UserListPanel, {
     props: { section, role },
-    global: { stubs: { UserDetailDialog: true, EditUserDialog: true, DeactivateUserDialog: true } },
+    global: { stubs: { UserDetailDialog: true, EditUserDialog: true, UserStatusDialog: true } },
   })
   await flushPromises()
   return wrapper
@@ -61,26 +62,90 @@ afterEach(() => {
 })
 
 describe('UserListPanel', () => {
+  it('shows inactive users, blocks editing and selects activation with its own icon', async () => {
+    getUsers.mockResolvedValueOnce({
+      ...clients,
+      items: [{ ...clients.items[0], status: 'INACTIVE' }],
+    })
+    const view = await render()
+    expect(
+      view
+        .findAll('th')
+        .map((heading) => heading.text())
+        .slice(-2),
+    ).toEqual(['Estado', 'Acciones'])
+    expect(view.get('tbody').text()).toContain('Inactivo')
+    const edit = view.get('button[aria-label="Modificar"]')
+    expect(edit.attributes('disabled')).toBeDefined()
+    await edit.trigger('click')
+    expect(view.getComponent(EditUserDialog).props('selection')).toBeNull()
+    const activate = view.get('button[aria-label="Activar"]')
+    expect(activate.find('.bi-person-check').exists()).toBe(true)
+    await activate.trigger('click')
+    const dialog = view.getComponent(UserStatusDialog)
+    expect(dialog.props('selection')).toMatchObject({ id: 42, status: 'INACTIVE' })
+    dialog.vm.$emit('status-changed', 'ACTIVE')
+    await flushPromises()
+    expect(view.emitted('notification')).toEqual([['El usuario fue activado exitosamente.']])
+    expect(getUsers).toHaveBeenCalledTimes(2)
+  })
+  it('combines status checkboxes and clears them with the other filters', async () => {
+    const view = await render()
+    await view.get('input[name="status"][value="INACTIVE"]').setValue(true)
+    await flushPromises()
+    expect(getUsers).toHaveBeenLastCalledWith(
+      'clients',
+      expect.objectContaining({ status: ['INACTIVE'], page: 1 }),
+      expect.any(AbortSignal),
+    )
+    await view.get('input[name="status"][value="ACTIVE"]').setValue(true)
+    await flushPromises()
+    expect(getUsers).toHaveBeenLastCalledWith(
+      'clients',
+      expect.objectContaining({ status: ['INACTIVE', 'ACTIVE'] }),
+      expect.any(AbortSignal),
+    )
+    await view.get('select[name="sortBy"]').setValue('status')
+    await flushPromises()
+    expect(getUsers).toHaveBeenLastCalledWith(
+      'clients',
+      expect.objectContaining({ sortBy: 'status' }),
+      expect.any(AbortSignal),
+    )
+    await view
+      .findAll('button')
+      .find((button) => button.text().includes('Limpiar filtros'))!
+      .trigger('click')
+    await flushPromises()
+    expect(
+      view
+        .findAll<HTMLInputElement>('input[name="status"]')
+        .every((input) => !input.element.checked),
+    ).toBe(true)
+    expect(getUsers.mock.calls.slice(-1)[0]?.[1]).not.toHaveProperty('status')
+  })
+
   it('selects a client for deactivation, cancels without reloading, and refreshes after success', async () => {
     const view = await render('clients', 'EMPLOYEE')
     await view.setProps({ currentUserId: 42 })
     await view.get('button[aria-label="Desactivar"]').trigger('click')
-    const dialog = view.getComponent(DeactivateUserDialog)
+    const dialog = view.getComponent(UserStatusDialog)
     expect(dialog.props('selection')).toEqual({
       section: 'clients',
       id: 42,
       name: clients.items[0]?.name,
       displayId: 'CL42',
+      status: 'ACTIVE',
     })
     dialog.vm.$emit('close')
     await flushPromises()
     expect(dialog.props('selection')).toBeNull()
     expect(getUsers).toHaveBeenCalledTimes(1)
     await view.get('button[aria-label="Desactivar"]').trigger('click')
-    dialog.vm.$emit('deactivated')
+    dialog.vm.$emit('status-changed', 'INACTIVE')
     await flushPromises()
     expect(dialog.props('selection')).toBeNull()
-    expect(view.text()).toContain('El usuario fue desactivado exitosamente.')
+    expect(view.emitted('notification')).toEqual([['El usuario fue desactivado exitosamente.']])
     expect(getUsers).toHaveBeenCalledTimes(2)
   })
   it('prevents selecting the current employee and clears selection when permissions change', async () => {
@@ -89,7 +154,7 @@ describe('UserListPanel', () => {
     expect(view.get('button[aria-label="Desactivar"]').attributes('disabled')).toBeDefined()
     await view.setProps({ currentUserId: 21 })
     await view.get('button[aria-label="Desactivar"]').trigger('click')
-    const dialog = view.getComponent(DeactivateUserDialog)
+    const dialog = view.getComponent(UserStatusDialog)
     dialog.vm.$emit('session-expired')
     dialog.vm.$emit('forbidden')
     expect(view.emitted('session-expired')).toHaveLength(1)
@@ -107,7 +172,7 @@ describe('UserListPanel', () => {
     dialog.vm.$emit('updated', selection, updated)
     await flushPromises()
     expect(dialog.props('selection')).toBeNull()
-    expect(view.text()).toContain('El usuario fue modificado exitosamente.')
+    expect(view.emitted('notification')).toEqual([['El usuario fue modificado exitosamente.']])
     expect(getUsers).toHaveBeenCalledTimes(2)
     expect(view.emitted('user-updated')?.[0]).toEqual([selection, updated])
   })

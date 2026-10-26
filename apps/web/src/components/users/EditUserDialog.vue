@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import {
   characterCount,
   validText,
+  validName,
   validEmail,
   validMobile,
   normalizeMobile,
@@ -117,6 +119,10 @@ function changes(): UpdateClientRequest | UpdateEmployeeRequest {
   }
   return result
 }
+const roleChanged = computed(() => {
+  const payload = changes()
+  return 'role' in payload && payload.role !== undefined
+})
 const hasChanges = computed(() => Object.keys(changes()).length > 0)
 const changedLabels = computed(() =>
   Object.keys(changes()).map(
@@ -227,8 +233,14 @@ async function load() {
   ])
   if (current.signal.aborted) return
   if (detail.status === 'fulfilled') {
-    user.value = detail.value
-    hydrate(detail.value)
+    if (detail.value.status !== 'ACTIVE') {
+      error.value =
+        'No se puede modificar un usuario inactivo. Actívalo y vuelve a abrir el formulario.'
+      blocked.value = true
+    } else {
+      user.value = detail.value
+      hydrate(detail.value)
+    }
   } else if (!authorization(detail.reason)) {
     error.value =
       status(detail.reason) === 404
@@ -273,46 +285,100 @@ async function retryCatalogs() {
     }
   }
 }
-function validate() {
-  for (const field of Object.keys(errors)) delete errors[field]
-  const payload = changes()
+function validateNames(
+  payload: UpdateClientRequest | UpdateEmployeeRequest,
+  validationErrors: Record<string, string>,
+) {
   for (const { name, label, required } of nameFields.value) {
     if (payload[name] === undefined) continue
     const value = draft[name].trim()
-    if (required && !value) errors[name] = `${label}: este campo es obligatorio.`
-    else if (!validText(value, 100)) {
-      errors[name] = `${label}: ingresa texto válido de hasta 100 bytes en UTF-8.`
-    }
+    if (required && !value) validationErrors[name] = `${label}: este campo es obligatorio.`
+    else if (value && !validName(value))
+      validationErrors[name] = `${label}: usa solo letras y espacios, sin números ni símbolos.`
+    else if (!validText(value, 100))
+      validationErrors[name] = `${label}: el texto es demasiado largo. Usa una versión más corta.`
   }
+}
+function validateContact(
+  payload: UpdateClientRequest | UpdateEmployeeRequest,
+  validationErrors: Record<string, string>,
+) {
   if (payload.email !== undefined) {
-    if (!payload.email) errors.email = 'El correo electrónico es obligatorio.'
-    else if (!validEmail(payload.email)) errors.email = 'Ingresa un correo electrónico válido.'
+    if (!payload.email) validationErrors.email = 'El correo electrónico es obligatorio.'
+    else if (!validEmail(payload.email))
+      validationErrors.email = 'Ingresa un correo electrónico válido.'
   }
   if (payload.phoneNumber !== undefined) {
     if (!payload.phoneNumber && !isClient.value)
-      errors.phoneNumber = 'El número de celular es obligatorio.'
+      validationErrors.phoneNumber = 'El número de celular es obligatorio.'
     else if (payload.phoneNumber && !validMobile(payload.phoneNumber))
-      errors.phoneNumber =
+      validationErrors.phoneNumber =
         'Ingresa un celular de Costa Rica de ocho dígitos que comience con 6, 7 u 8.'
   }
+}
+function validateAddress(
+  payload: UpdateClientRequest | UpdateEmployeeRequest,
+  validationErrors: Record<string, string>,
+) {
   if (payload.address !== undefined && payload.address !== null) {
     if (!catalogs.value || catalogsError.value)
-      errors.address = 'Carga las opciones de dirección antes de modificarla.'
-    if (!draft.provinceId) errors.provinceId = 'Selecciona una provincia.'
+      validationErrors.address = 'Carga las opciones de dirección antes de modificarla.'
+    if (!catalogs.value?.provinces.some((item) => item.id === draft.provinceId))
+      validationErrors.provinceId = 'Selecciona una provincia.'
     if (!draft.cantonId || !cantons.value.some((item) => item.id === draft.cantonId))
-      errors.cantonId = 'Selecciona un cantón válido.'
+      validationErrors.cantonId = 'Selecciona un cantón válido.'
     if (!draft.districtId || !districts.value.some((item) => item.id === draft.districtId))
-      errors.districtId = 'Selecciona un distrito válido.'
+      validationErrors.districtId = 'Selecciona un distrito válido.'
     if (!validText(draft.details, 255))
-      errors.details = 'El detalle debe ser texto válido y no superar 255 bytes en UTF-8.'
+      validationErrors.details =
+        'El detalle de la dirección es demasiado largo o contiene un carácter no válido. Revísalo.'
   }
+}
+function validate(field?: string) {
+  const validationErrors: Record<string, string> = {}
+  const payload = changes()
+  validateNames(payload, validationErrors)
+  validateContact(payload, validationErrors)
+  validateAddress(payload, validationErrors)
   if (
     'branchId' in payload &&
     payload.branchId !== undefined &&
     !branches.value.some((branch) => branch.id === payload.branchId)
   )
-    errors.branchId = 'Selecciona una sucursal válida.'
-  return Object.keys(errors).length === 0
+    validationErrors.branchId = 'Selecciona una sucursal válida.'
+  if (
+    'role' in payload &&
+    payload.role !== undefined &&
+    !['EMPLOYEE', 'ADMINISTRATOR'].includes(payload.role)
+  )
+    validationErrors.role = 'Selecciona un rol válido.'
+  if (field) {
+    delete errors[field]
+    if (validationErrors[field]) errors[field] = validationErrors[field]
+  } else {
+    for (const key of Object.keys(errors)) delete errors[key]
+    Object.assign(errors, validationErrors)
+  }
+  return Object.keys(validationErrors).length === 0
+}
+function editedField(event: Event) {
+  const control = event.target
+  if (
+    control instanceof HTMLInputElement ||
+    control instanceof HTMLSelectElement ||
+    control instanceof HTMLTextAreaElement
+  )
+    delete errors[control.name]
+}
+function blurredField(event: FocusEvent) {
+  const control = event.target
+  if (
+    (control instanceof HTMLInputElement ||
+      control instanceof HTMLSelectElement ||
+      control instanceof HTMLTextAreaElement) &&
+    control.name
+  )
+    validate(control.name)
 }
 async function prepare() {
   if (saving.value || blocked.value || !hasChanges.value) return
@@ -337,6 +403,14 @@ async function save() {
       const code = status(failure)
       if (code === 404) {
         error.value = 'El usuario seleccionado ya no existe.'
+        blocked.value = true
+      } else if (
+        code === 409 &&
+        isAxiosError(failure) &&
+        failure.response?.data?.code === 'USER_INACTIVE'
+      ) {
+        error.value =
+          'El usuario fue desactivado. Cierra y actualiza el listado antes de continuar.'
         blocked.value = true
       } else if (code === 409) {
         const message: unknown = isAxiosError(failure) ? failure.response?.data?.message : undefined
@@ -419,8 +493,8 @@ onBeforeUnmount(() => {
   <BaseModal :open="!!selection" :title="title" :close-disabled="saving" @close="close">
     <div class="user-edit-content" :aria-busy="loading || saving">
       <p v-if="loading" role="status">Cargando datos del usuario…</p>
-      <div v-if="error" ref="feedback" class="edit-feedback edit-error" role="alert" tabindex="-1">
-        <p>{{ error }}</p>
+      <div v-if="error" ref="feedback" class="edit-feedback edit-error" tabindex="-1">
+        <NotificationPopup type="error" :message="error" :duration="0" />
         <button v-if="retryable" class="secondary" type="button" @click="load">Reintentar</button>
       </div>
       <template v-if="user && !loading">
@@ -439,12 +513,11 @@ onBeforeUnmount(() => {
           <ul>
             <li v-for="label in changedLabels" :key="label">{{ label }}</li>
           </ul>
-          <p>
-            Los cambios reemplazarán los datos actuales. Cambiar el correo afectará el acceso con
-            correo electrónico<span v-if="!isClient"
-              >; cambiar el rol modificará los permisos del usuario</span
-            >.
+          <p>Los cambios reemplazarán los datos actuales.</p>
+          <p v-if="changes().email !== undefined">
+            Cambiar el correo afectará el acceso con correo electrónico.
           </p>
+          <p v-if="roleChanged">Cambiar el rol modificará los permisos del usuario.</p>
           <p>¿Deseas guardar estos cambios?</p>
           <footer>
             <button type="button" class="secondary" :disabled="saving" @click="close">
@@ -458,7 +531,13 @@ onBeforeUnmount(() => {
             </button>
           </footer>
         </div>
-        <form v-else novalidate @submit.prevent="prepare">
+        <form
+          v-else
+          novalidate
+          @submit.prevent="prepare"
+          @input="editedField"
+          @focusout="blurredField"
+        >
           <fieldset :disabled="saving || blocked">
             <legend>Datos editables</legend>
             <div class="edit-grid">
@@ -492,7 +571,6 @@ onBeforeUnmount(() => {
                   required
                   :aria-invalid="!!errors.email"
                   :aria-describedby="errors.email ? `${id}-email-error` : undefined"
-                  @input="delete errors.email"
                 />
                 <p v-if="errors.email" :id="`${id}-email-error`" class="field-error">
                   {{ errors.email }}
@@ -512,7 +590,6 @@ onBeforeUnmount(() => {
                   :required="!isClient"
                   :aria-invalid="!!errors.phoneNumber"
                   :aria-describedby="errors.phoneNumber ? `${id}-phone-error` : undefined"
-                  @input="delete errors.phoneNumber"
                 />
                 <p v-if="errors.phoneNumber" :id="`${id}-phone-error`" class="field-error">
                   {{ errors.phoneNumber }}
@@ -526,7 +603,6 @@ onBeforeUnmount(() => {
                   name="role"
                   :aria-invalid="!!errors.role"
                   :aria-describedby="errors.role ? `${id}-role-error` : undefined"
-                  @change="delete errors.role"
                 >
                   <option value="EMPLOYEE">{{ roleNames.EMPLOYEE }}</option>
                   <option value="ADMINISTRATOR">{{ roleNames.ADMINISTRATOR }}</option>
@@ -545,7 +621,6 @@ onBeforeUnmount(() => {
                 :disabled="!!branchesError || catalogsLoading || !branches.length"
                 :aria-invalid="!!errors.branchId"
                 :aria-describedby="errors.branchId ? `${id}-branch-error` : undefined"
-                @change="delete errors.branchId"
               >
                 <option
                   v-if="
@@ -563,8 +638,8 @@ onBeforeUnmount(() => {
               <p v-if="errors.branchId" :id="`${id}-branch-error`" class="field-error">
                 {{ errors.branchId }}
               </p>
-              <p v-if="branchesError" class="edit-feedback" role="alert">
-                {{ branchesError }}
+              <div v-if="branchesError" class="edit-feedback">
+                <NotificationPopup type="error" :message="branchesError" :duration="0" />
                 <button
                   type="button"
                   class="secondary"
@@ -573,11 +648,11 @@ onBeforeUnmount(() => {
                 >
                   Reintentar sucursales
                 </button>
-              </p>
+              </div>
             </div>
             <h3>Dirección{{ isClient ? ' (opcional)' : ' *' }}</h3>
-            <p v-if="catalogsError" class="edit-feedback" role="alert">
-              {{ catalogsError }}
+            <div v-if="catalogsError" class="edit-feedback">
+              <NotificationPopup type="error" :message="catalogsError" :duration="0" />
               <button
                 type="button"
                 class="secondary"
@@ -586,7 +661,7 @@ onBeforeUnmount(() => {
               >
                 {{ catalogsLoading ? 'Cargando…' : 'Reintentar opciones' }}
               </button>
-            </p>
+            </div>
             <label v-if="isClient" class="checkbox-label"
               ><input
                 v-model="draft.addressEnabled"
@@ -652,7 +727,6 @@ onBeforeUnmount(() => {
                   :disabled="!catalogs || !draft.cantonId || catalogsLoading"
                   :aria-invalid="!!errors.districtId"
                   :aria-describedby="errors.districtId ? `${id}-district-error` : undefined"
-                  @change="delete errors.districtId"
                 >
                   <option :value="0">Selecciona un distrito</option>
                   <option v-for="item in districts" :key="item.id" :value="item.id">
@@ -676,7 +750,6 @@ onBeforeUnmount(() => {
                   :disabled="!catalogs || catalogsLoading"
                   :aria-invalid="!!errors.details"
                   :aria-describedby="`${id}-details-hint${errors.details ? ` ${id}-details-error` : ''}`"
-                  @input="delete errors.details"
                 ></textarea>
                 <p :id="`${id}-details-hint`" class="field-hint">
                   {{ characterCount(draft.details) }}/255

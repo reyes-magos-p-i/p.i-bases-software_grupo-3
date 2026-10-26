@@ -36,11 +36,13 @@ describe('User update and deactivation HTTP contracts', () => {
     findEmployeeCredentialsStatus: jest.fn(),
     updateEmployee: jest.fn(),
     deactivateEmployee: jest.fn(),
+    activateEmployee: jest.fn(),
     getCreationOptions: jest.fn(),
   };
   const clientsRepository = {
     updateClient: jest.fn(),
     deactivateClient: jest.fn(),
+    activateClient: jest.fn(),
   };
   const clients = {
     findById: jest.fn(),
@@ -58,8 +60,6 @@ describe('User update and deactivation HTTP contracts', () => {
         'Cookie',
         `${EMPLOYEE_SESSION_COOKIE}=${jwt.sign({ sub: 21, type: 'employee' })}`,
       );
-  const deactivate = (section = 'clients', id = '42') =>
-    patch(section, id + '/deactivate');
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -335,7 +335,9 @@ describe('User update and deactivation HTTP contracts', () => {
     expect(response.text).not.toContain('private database details');
   });
 
-  describe('deactivation', () => {
+  describe.each(['deactivate', 'activate'])('%s HTTP contract', (action) => {
+    const deactivate = (section = 'clients', id = '42') =>
+      patch(section, id + '/' + action);
     it.each(['ADMINISTRATOR', 'EMPLOYEE'])(
       'allows %s to deactivate clients without changing credentials',
       async (role) => {
@@ -346,7 +348,11 @@ describe('User update and deactivation HTTP contracts', () => {
         });
         const response = await deactivate().send({}).expect(204);
         expect(response.text).toBe('');
-        expect(clientsRepository.deactivateClient).toHaveBeenCalledWith(42);
+        expect(
+          clientsRepository[
+            action === 'activate' ? 'activateClient' : 'deactivateClient'
+          ],
+        ).toHaveBeenCalledWith(42);
         expect(generator.generate).not.toHaveBeenCalled();
         expect(hasher.hash).not.toHaveBeenCalled();
         expect(sender.send).not.toHaveBeenCalled();
@@ -354,7 +360,11 @@ describe('User update and deactivation HTTP contracts', () => {
     );
     it('passes the authenticated administrator to staff deactivation', async () => {
       await deactivate('employees').expect(204);
-      expect(repository.deactivateEmployee).toHaveBeenCalledWith(42, 21);
+      expect(
+        repository[
+          action === 'activate' ? 'activateEmployee' : 'deactivateEmployee'
+        ],
+      ).toHaveBeenCalledWith(42, 21);
     });
     it('rejects employees on staff deactivation', async () => {
       repository.findEmployeeIdentityById.mockResolvedValue({
@@ -363,7 +373,11 @@ describe('User update and deactivation HTTP contracts', () => {
         firstName: 'Ana',
       });
       await deactivate('employees').expect(403);
-      expect(repository.deactivateEmployee).not.toHaveBeenCalled();
+      expect(
+        repository[
+          action === 'activate' ? 'activateEmployee' : 'deactivateEmployee'
+        ],
+      ).not.toHaveBeenCalled();
     });
     it.each(['clients', 'employees'])(
       'rejects missing sessions and client tokens for %s',
@@ -376,8 +390,16 @@ describe('User update and deactivation HTTP contracts', () => {
             `Bearer ${jwt.sign({ sub: 99, type: 'client' })}`,
           )
           .expect(403);
-        expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
-        expect(repository.deactivateEmployee).not.toHaveBeenCalled();
+        expect(
+          clientsRepository[
+            action === 'activate' ? 'activateClient' : 'deactivateClient'
+          ],
+        ).not.toHaveBeenCalled();
+        expect(
+          repository[
+            action === 'activate' ? 'activateEmployee' : 'deactivateEmployee'
+          ],
+        ).not.toHaveBeenCalled();
       },
     );
     it.each([undefined, 'https://external.example'])(
@@ -387,14 +409,22 @@ describe('User update and deactivation HTTP contracts', () => {
         if (originValue) call.set('Origin', originValue);
         else call.unset('Origin');
         await call.expect(403);
-        expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
+        expect(
+          clientsRepository[
+            action === 'activate' ? 'activateClient' : 'deactivateClient'
+          ],
+        ).not.toHaveBeenCalled();
       },
     );
     it.each(['0', '-1', '1.5', 'ADM42', '9007199254740992'])(
       'rejects invalid target %s',
       async (id) => {
         await deactivate('clients', id).expect(400);
-        expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
+        expect(
+          clientsRepository[
+            action === 'activate' ? 'activateClient' : 'deactivateClient'
+          ],
+        ).not.toHaveBeenCalled();
       },
     );
     it.each([
@@ -404,15 +434,25 @@ describe('User update and deactivation HTTP contracts', () => {
       [],
     ])('rejects a nonempty or invalid body %p', async (body) => {
       await deactivate().send(body).expect(400);
-      expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
+      expect(
+        clientsRepository[
+          action === 'activate' ? 'activateClient' : 'deactivateClient'
+        ],
+      ).not.toHaveBeenCalled();
     });
     it.each(['clients', 'employees'])(
       'distinguishes missing and already inactive %s',
       async (section) => {
         const remove =
           section === 'clients'
-            ? clientsRepository.deactivateClient
-            : repository.deactivateEmployee;
+            ? clientsRepository[
+                action === 'activate' ? 'activateClient' : 'deactivateClient'
+              ]
+            : repository[
+                action === 'activate'
+                  ? 'activateEmployee'
+                  : 'deactivateEmployee'
+              ];
         const name = section === 'clients' ? 'cliente' : 'empleado';
         remove.mockRejectedValueOnce(
           new NotFoundException(`El ${name} seleccionado no existe.`),
@@ -430,23 +470,29 @@ describe('User update and deactivation HTTP contracts', () => {
       'No puedes desactivar tu propia cuenta.',
       'Debe permanecer al menos un administrador activo.',
     ])('preserves the protected-account conflict: %s', async (message) => {
-      repository.deactivateEmployee.mockRejectedValueOnce(
-        new ConflictException(message),
-      );
+      repository[
+        action === 'activate' ? 'activateEmployee' : 'deactivateEmployee'
+      ].mockRejectedValueOnce(new ConflictException(message));
       const response = await deactivate('employees').expect(409);
       expect(response.body.message).toBe(message);
     });
     it('rejects the same employee cookie when its identity is no longer active', async () => {
       await deactivate().expect(204);
       repository.findEmployeeIdentityById.mockResolvedValue(null);
-      clientsRepository.deactivateClient.mockClear();
+      clientsRepository[
+        action === 'activate' ? 'activateClient' : 'deactivateClient'
+      ].mockClear();
       await deactivate().expect(401);
-      expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
+      expect(
+        clientsRepository[
+          action === 'activate' ? 'activateClient' : 'deactivateClient'
+        ],
+      ).not.toHaveBeenCalled();
     });
     it('keeps persistence errors private', async () => {
-      clientsRepository.deactivateClient.mockRejectedValueOnce(
-        new Error('Private Oracle details'),
-      );
+      clientsRepository[
+        action === 'activate' ? 'activateClient' : 'deactivateClient'
+      ].mockRejectedValueOnce(new Error('Private Oracle details'));
       const response = await deactivate().expect(500);
       expect(response.body).toEqual({
         statusCode: 500,
@@ -455,4 +501,17 @@ describe('User update and deactivation HTTP contracts', () => {
       expect(response.text).not.toContain('Oracle');
     });
   });
+  it.each(['clients', 'employees'])(
+    'rejects invalid names before persistence for %s',
+    async (section) => {
+      const response = await patch(section)
+        .send({ firstName: 'Ana123' })
+        .expect(400);
+      expect(response.body.message).toContain(
+        'El primer nombre solo puede contener letras y espacios.',
+      );
+      expect(clientsRepository.updateClient).not.toHaveBeenCalled();
+      expect(repository.updateEmployee).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -49,11 +49,17 @@ de recuperación, manteniendo el mismo orden al solicitar y completar el proceso
 Se vuelve a comprobar la cuenta, la vigencia y el límite de intentos antes de
 guardar, de modo que dos solicitudes concurrentes no puedan consumir el enlace.
 
-Después del cambio se rechazan los JWT emitidos antes de `RESET_AT`, incluyendo
-las sesiones anteriores de esa cuenta. Como JWT expresa `iat` en segundos, se
-rechazan conservadoramente los tokens emitidos en el mismo segundo del cambio;
-una sesión nueva emitida en el segundo siguiente es válida. La recuperación no
-inicia sesión automáticamente. El usuario vuelve al login correspondiente.
+Después del cambio se rechazan los JWT con una versión de sesión anterior a
+`RESET_AT`. Los nuevos JWT incluyen `sessionVersion` y permiten iniciar sesión
+inmediatamente; solo los JWT antiguos que no incluyen versión conservan la
+comprobación conservadora por `iat`. La recuperación no inicia sesión automáticamente.
+El usuario vuelve al login correspondiente.
+
+Activar o desactivar una cuenta también avanza `RESET_AT` y elimina los secretos
+de su recuperación pendiente en la misma transacción que cambia el estado.
+Reactivar no revive sesiones ni enlaces anteriores, ni renueva contraseñas vencidas
+o confirma correos pendientes. La limpieza de registros públicos pendientes borra
+su fila de recuperación antes de eliminar la cuenta para respetar la clave foránea.
 
 Si falla el envío de instrucciones, se invalida ese token y se registra un aviso
 sin datos personales. La respuesta pública sigue siendo genérica para no revelar

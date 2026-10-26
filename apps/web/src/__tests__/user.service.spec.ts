@@ -68,6 +68,25 @@ describe('createUser', () => {
       )
     },
   )
+  it.each(['clients', 'employees'] as const)(
+    'activates the selected %s account with an empty PATCH',
+    async (section) => {
+      const { activateUser } = await import('@/services/user.service')
+      patch.mockResolvedValue({ status: 204 })
+      await activateUser({ section, id: 42 })
+      expect(patch).toHaveBeenCalledWith(`/users/${section}/42/activate`, {}, { timeout: 10000 })
+    },
+  )
+  it('serializes multiple status filters and omits an empty selection', async () => {
+    const { getUsers } = await import('@/services/user.service')
+    get.mockResolvedValue({ data: { items: [], total: 0 } })
+    const query = { page: 1, pageSize: 10, sortBy: 'status', sortDirection: 'asc' as const }
+    await getUsers('clients', { ...query, status: ['ACTIVE', 'INACTIVE'] })
+    expect(get.mock.calls.slice(-1)[0]?.[1].params.status).toBe('ACTIVE,INACTIVE')
+    await getUsers('clients', { ...query, status: [] })
+    expect(get.mock.calls.slice(-1)[0]?.[1].params.status).toBeUndefined()
+  })
+
   it('does not retry a failed deactivation automatically', async () => {
     const { deactivateUser } = await import('@/services/user.service')
     patch.mockRejectedValue(new Error('network'))

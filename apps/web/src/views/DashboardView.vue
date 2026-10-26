@@ -4,11 +4,16 @@ import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import { authErrorMessage } from '@/utils/auth-errors'
 import { announcePasswordExpiry, dismissPasswordExpiry } from '@/services/password-expiry-notice'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
-import TheatersSection from '@/components/theaters/TheatersSection.vue'
-import ProjectionsSection from '@/components/projections/ProjectionsSection.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
+import {
+  administratorSectionIds,
+  availableSectionsFor,
+  dashboardSections,
+  type DashboardSectionId,
+} from '@/components/layout/dashboard-sections'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
 import type { UserDetailSelection } from '@/types/user'
@@ -28,10 +33,7 @@ import { onPasswordBlocked } from '@/services/api'
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-type DashboardSection = 'employees' | 'clients' | 'theaters' | 'screenings' | 'password' | 'movies'
-// Sections an employee is moved away from when the server reports that role.
-const ADMINISTRATOR_SECTIONS: readonly DashboardSection[] = ['employees', 'theaters', 'screenings']
-const activeSection = ref<DashboardSection>(
+const activeSection = ref<DashboardSectionId>(
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
 // An expired or missing password keeps the dashboard on the password change.
@@ -55,9 +57,15 @@ const isUserSection = computed(
 const submissionErrors = ref<string[]>([])
 const submissionBlocked = ref(false)
 const creationResult = ref('')
+const operationNotice = ref('')
 const resultIsWarning = ref(false)
 const resultNotice = useTemplateRef<HTMLElement>('result-notice')
 let disposed = false
+
+function dismissUserNotification() {
+  creationResult.value = ''
+  operationNotice.value = ''
+}
 
 function sessionExpired() {
   invalidateEmployeeSession()
@@ -138,6 +146,7 @@ async function submitUser(data: CreateUserRequest) {
   const submittingDialog = userDialog.value
   submitting.value = true
   submissionErrors.value = []
+  operationNotice.value = ''
   creationResult.value = ''
   let completed = false
   try {
@@ -240,12 +249,6 @@ async function loadCatalogs() {
   }
 }
 
-function openMovieDialog() {
-  if (loggingOut.value || role.value !== 'ADMINISTRATOR' || activeSection.value === 'theaters')
-    return
-  //userDialog.value?.open()
-}
-
 function openUserDialog() {
   if (loggingOut.value || role.value !== 'ADMINISTRATOR' || !isUserSection.value) return
   userDialog.value?.open()
@@ -269,27 +272,14 @@ onMounted(() => {
   stopPasswordBlocked = onPasswordBlocked(lockToPasswordChange)
   void checkPasswordStatus()
 })
-const availableSections = computed(() =>
-  role.value === 'ADMINISTRATOR'
-    ? ['employees', 'clients', 'theaters', 'screenings', 'password', 'movies']
-    : ['clients', 'password'],
+const availableSections = computed(() => availableSectionsFor(role.value))
+const activeDefinition = computed(() =>
+  dashboardSections.find((section) => section.id === activeSection.value),
 )
-const sectionTitle = computed(() =>
-  activeSection.value === 'employees'
-    ? 'Empleados'
-    : activeSection.value === 'clients'
-      ? 'Clientes'
-      : activeSection.value === 'theaters'
-        ? 'Salas'
-        : activeSection.value === 'password'
-          ? 'Cambiar contraseña'
-          : activeSection.value === 'movies'
-            ? 'Peliculas'
-            : 'Clientes',
-)
+const sectionTitle = computed(() => activeDefinition.value?.label ?? 'Clientes')
 
 watch(role, () => {
-  if (role.value === 'EMPLOYEE' && ADMINISTRATOR_SECTIONS.includes(activeSection.value)) {
+  if (role.value === 'EMPLOYEE' && administratorSectionIds.includes(activeSection.value)) {
     activeSection.value = 'clients'
   }
 })
@@ -301,8 +291,9 @@ watch(activeSection, (section) => {
 
 function navigate(section: string) {
   if (submitting.value || passwordChanging.value || sectionBusy.value || loggingOut.value) return
-  if (availableSections.value.includes(section)) {
-    activeSection.value = section as DashboardSection
+  if (availableSections.value.includes(section as DashboardSectionId)) {
+    operationNotice.value = ''
+    activeSection.value = section as DashboardSectionId
   }
 }
 
@@ -334,23 +325,24 @@ async function returnToDashboard() {
       <button type="button" @click="checkPasswordStatus">Reintentar</button>
     </div>
 
-    <p
-      v-if="creationResult && isUserSection"
+    <div
+      v-if="(creationResult || operationNotice) && isUserSection"
       ref="result-notice"
       class="creation-result"
-      :role="resultIsWarning ? 'alert' : 'status'"
       tabindex="-1"
     >
-      {{ creationResult }}
-    </p>
+      <NotificationPopup
+        :key="operationNotice || creationResult"
+        :type="!operationNotice && resultIsWarning ? 'alert' : 'success'"
+        :message="operationNotice || creationResult"
+        :duration="!operationNotice && resultIsWarning ? 0 : 4000"
+        @close="dismissUserNotification"
+      />
+    </div>
 
-    <TheatersSection
-      v-if="activeSection === 'theaters'"
-      :disabled="loggingOut"
-      @busy="sectionBusy = $event"
-    />
-    <ProjectionsSection
-      v-else-if="activeSection === 'screenings'"
+    <component
+      :is="activeDefinition?.component"
+      v-if="activeDefinition?.component"
       :disabled="loggingOut"
       @busy="sectionBusy = $event"
     />
@@ -360,7 +352,8 @@ async function returnToDashboard() {
       aria-live="polite"
       aria-atomic="true"
     >
-      <div class="section-heading">
+      <!--Added v-if so that section title doent show in movie crud, purpose it sot keep title and button insde the movie crud-->
+      <div v-if="activeSection !== 'movies'" class="section-heading">
         <h1>{{ sectionTitle }}</h1>
         <button
           v-if="
@@ -376,17 +369,6 @@ async function returnToDashboard() {
           <i class="bi bi-plus-lg" aria-hidden="true"></i>
           {{ activeSection === 'clients' ? 'Añadir cliente' : 'Añadir empleado' }}
         </button>
-
-        <button
-          v-if="activeSection === 'movies'"
-          type="button"
-          class="add-user-button"
-          @click="openMovieDialog"
-        >
-          <i class="bi bi-plus-lg" aria-hidden="true"></i>
-
-          Añadir película
-        </button>
       </div>
       <UserListPanel
         v-if="activeSection === 'employees' || activeSection === 'clients'"
@@ -398,6 +380,7 @@ async function returnToDashboard() {
         @session-expired="sessionExpired"
         @forbidden="refreshPermissions"
         @user-updated="userUpdated"
+        @notification="operationNotice = $event"
       />
       <MovieCrud v-if="activeSection === 'movies'" />
     </section>
