@@ -1,3 +1,9 @@
+import ClientPreferencesForm from '@/components/clients/ClientPreferencesForm.vue'
+import {
+  getClientPreferenceSettings,
+  saveClientPreferences,
+} from '@/services/client-preferences.service'
+import type { ClientPreferenceSettings } from '@/types/client-preferences'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ClientProfileView from '@/views/ClientProfileView.vue'
@@ -7,6 +13,7 @@ import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue'
 import SectionNavigation from '@/components/common/SectionNavigation.vue'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import {
   getClientProfile,
   getClientAddressOptions,
@@ -20,6 +27,11 @@ import {
   establishClientSession,
 } from '@/services/client-session.service'
 import type { ClientProfile } from '@/types/client-profile'
+
+vi.mock('@/services/client-preferences.service', () => ({
+  getClientPreferenceSettings: vi.fn(),
+  saveClientPreferences: vi.fn(),
+}))
 
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
@@ -70,9 +82,17 @@ describe('ClientProfileView', () => {
       details: 'Cerca del cine',
     },
   }
+  const preferences: ClientPreferenceSettings = {
+    genres: [{ id: 2, name: 'Acción' }],
+    languages: [{ id: 3, name: 'Español' }],
+    selected: { genreIds: [], languageIds: [] },
+    maxSelections: 1000,
+  }
   const wrappers: VueWrapper[] = []
   beforeEach(() => {
     vi.resetAllMocks()
+    vi.mocked(getClientPreferenceSettings).mockResolvedValue(structuredClone(preferences))
+    vi.mocked(saveClientPreferences).mockResolvedValue({ genreIds: [], languageIds: [] })
     establishClientSession(
       { id: 7, email: data.email, firstName: 'Ana', lastName: 'Rojas' },
       'token',
@@ -99,6 +119,7 @@ describe('ClientProfileView', () => {
           AppHeader: true,
           AppFooter: true,
           ClientProfileForm: true,
+          ClientPreferencesForm: true,
           ClientEmailChangeDialog: true,
           ConfirmationDialog: true,
           ChangePasswordView: true,
@@ -126,6 +147,7 @@ describe('ClientProfileView', () => {
   it('loads personal data without rendering read-only inputs and updates the account identity', async () => {
     const wrapper = render()
     expect(wrapper.text()).toContain('Cargando perfil')
+    expect(wrapper.getComponent(LoadingState).props('surface')).toBe('dark')
     await flushPromises()
     expect(wrapper.text()).toContain('Ana María Rojas')
     expect(wrapper.text()).toContain('Cerca del cine')
@@ -134,7 +156,7 @@ describe('ClientProfileView', () => {
     expect(clientSession.user.value?.firstName).toBe('Ana')
     expect(getClientProfile).toHaveBeenCalledWith(expect.any(AbortSignal))
   })
-  it('shows truthful empty values and defers preferences without fictitious content', async () => {
+  it('shows truthful empty values and the registered language alongside live preferences', async () => {
     vi.mocked(getClientProfile).mockResolvedValue({
       ...data,
       secondName: null,
@@ -151,7 +173,7 @@ describe('ClientProfileView', () => {
     expect(wrapper.text()).toContain('Sin especificar')
     await choose(wrapper, 'preferences')
     expect(wrapper.text()).toContain('Inglés')
-    expect(wrapper.text()).toContain('Próximamente')
+    expect(wrapper.getComponent(ClientPreferencesForm).props('settings')).toEqual(preferences)
     expect(wrapper.find('input').exists()).toBe(false)
   })
   it('retries profile loading after an unavailable service', async () => {
@@ -371,6 +393,163 @@ describe('ClientProfileView', () => {
       query: { login: 'client', reason: 'expired' },
     })
     expect(navigation.leave?.()).toBe(true)
+    expect(clientSession.user.value).toBeNull()
+  })
+  it('fetches current preferences only when entering their section', async () => {
+    const wrapper = render()
+    await flushPromises()
+    expect(getClientPreferenceSettings).not.toHaveBeenCalled()
+    await choose(wrapper, 'preferences')
+    expect(wrapper.getComponent(ClientPreferencesForm).props('settings')).toEqual(preferences)
+    await choose(wrapper, 'personal')
+    vi.mocked(getClientPreferenceSettings).mockResolvedValue({
+      ...preferences,
+      genres: [{ id: 2, name: 'Nombre actualizado' }],
+    })
+    await choose(wrapper, 'preferences')
+    expect(getClientPreferenceSettings).toHaveBeenCalledTimes(2)
+    expect(wrapper.getComponent(ClientPreferencesForm).props('settings').genres[0]?.name).toBe(
+      'Nombre actualizado',
+    )
+  })
+  it('saves empty preferences and refreshes their stored state', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'preferences')
+    wrapper.getComponent(ClientPreferencesForm).vm.$emit('save', { genreIds: [], languageIds: [] })
+    await flushPromises()
+    expect(saveClientPreferences).toHaveBeenCalledWith({ genreIds: [], languageIds: [] })
+    expect(getClientPreferenceSettings).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Tus preferencias se guardaron correctamente')
+    expect(navigation.leave?.()).toBe(true)
+  })
+  it('keeps failed preference edits available for correction and retry', async () => {
+    vi.mocked(saveClientPreferences).mockRejectedValue(new Error('offline'))
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'preferences')
+    const form = wrapper.getComponent(ClientPreferencesForm)
+    form.vm.$emit('dirty', true)
+    form.vm.$emit('save', { genreIds: [2], languageIds: [3] })
+    await flushPromises()
+    expect(wrapper.text()).toContain('No se pudieron guardar tus preferencias')
+    expect(wrapper.findComponent(ClientPreferencesForm).exists()).toBe(true)
+    expect(getClientPreferenceSettings).toHaveBeenCalledTimes(1)
+  })
+  it('keeps the blue loading indicator inside the light preferences card', async () => {
+    let finish!: (settings: ClientPreferenceSettings) => void
+    vi.mocked(getClientPreferenceSettings).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'preferences')
+    expect(wrapper.getComponent(LoadingState).props('surface')).toBe('light')
+    expect(wrapper.text()).toContain('Cargando preferencias')
+    finish(preferences)
+    await flushPromises()
+    expect(wrapper.findComponent(LoadingState).exists()).toBe(false)
+    expect(wrapper.findComponent(ClientPreferencesForm).exists()).toBe(true)
+  })
+  it('retries loading unavailable preference catalogs', async () => {
+    vi.mocked(getClientPreferenceSettings).mockRejectedValueOnce(new Error('offline'))
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'preferences')
+    expect(wrapper.findComponent(ClientPreferencesForm).exists()).toBe(false)
+    expect(wrapper.text()).toContain('No se pudieron cargar tus preferencias')
+    await button(wrapper, 'Reintentar').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(ClientPreferencesForm).exists()).toBe(true)
+  })
+  it('distinguishes a successful preference save from a failed refresh', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'preferences')
+    vi.mocked(getClientPreferenceSettings).mockRejectedValueOnce(new Error('refresh failed'))
+    wrapper.getComponent(ClientPreferencesForm).vm.$emit('save', { genreIds: [2], languageIds: [] })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Tus preferencias se guardaron correctamente')
+    expect(wrapper.text()).toContain('No se pudieron cargar tus preferencias')
+    expect(wrapper.text()).not.toContain('No se pudieron guardar tus preferencias')
+  })
+  it('confirms discarding a preference draft without updating the server', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'preferences')
+    const form = wrapper.getComponent(ClientPreferencesForm)
+    form.vm.$emit('dirty', true)
+    form.vm.$emit('cancel')
+    await flushPromises()
+    const dialog = confirmation(wrapper, 'Cambios sin guardar')
+    expect(dialog.props('open')).toBe(true)
+    dialog.vm.$emit('cancel')
+    await flushPromises()
+    expect(wrapper.getComponent(ClientPreferencesForm).vm).toBe(form.vm)
+    form.vm.$emit('cancel')
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(wrapper.getComponent(ClientPreferencesForm).vm).not.toBe(form.vm)
+    expect(wrapper.getComponent(ClientPreferencesForm).props('settings')).toEqual(preferences)
+    expect(saveClientPreferences).not.toHaveBeenCalled()
+  })
+  it('ignores late preference responses after leaving their section', async () => {
+    let finish!: (settings: ClientPreferenceSettings) => void
+    vi.mocked(getClientPreferenceSettings).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const wrapper = render()
+    await flushPromises()
+    wrapper.getComponent(SectionNavigation).vm.$emit('select', 'preferences')
+    await flushPromises()
+    const signal = vi.mocked(getClientPreferenceSettings).mock.calls[0]![0]!
+    await choose(wrapper, 'personal')
+    expect(signal.aborted).toBe(true)
+    finish(preferences)
+    await flushPromises()
+    expect(wrapper.findComponent(ClientPreferencesForm).exists()).toBe(false)
+    expect(wrapper.text()).toContain('Mis datos')
+  })
+  it('blocks repeated preference submissions and ignores an old response after logout', async () => {
+    let finish!: (selection: { genreIds: number[]; languageIds: number[] }) => void
+    vi.mocked(saveClientPreferences).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'preferences')
+    const form = wrapper.getComponent(ClientPreferencesForm)
+    form.vm.$emit('save', { genreIds: [], languageIds: [] })
+    form.vm.$emit('save', { genreIds: [], languageIds: [] })
+    expect(saveClientPreferences).toHaveBeenCalledTimes(1)
+    expect(navigation.leave?.()).toBe(false)
+    clearClientSession()
+    finish({ genreIds: [], languageIds: [] })
+    await flushPromises()
+    expect(getClientPreferenceSettings).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).not.toContain('Tus preferencias se guardaron correctamente')
+  })
+  it('redirects an expired session during preference loading', async () => {
+    vi.mocked(getClientPreferenceSettings).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 401 },
+    })
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'preferences')
+    expect(navigation.replace).toHaveBeenCalledWith({
+      path: '/',
+      query: { login: 'client', reason: 'expired' },
+    })
     expect(clientSession.user.value).toBeNull()
   })
 })

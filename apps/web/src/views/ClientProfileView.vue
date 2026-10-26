@@ -9,6 +9,15 @@ import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import ClientProfileForm from '@/components/clients/ClientProfileForm.vue'
 import ClientEmailChangeDialog from '@/components/clients/ClientEmailChangeDialog.vue'
+import ClientPreferencesForm from '@/components/clients/ClientPreferencesForm.vue'
+import {
+  getClientPreferenceSettings,
+  saveClientPreferences,
+} from '@/services/client-preferences.service'
+import type {
+  ClientPreferenceSelection,
+  ClientPreferenceSettings,
+} from '@/types/client-preferences'
 import ChangePasswordView from './ChangePasswordView.vue'
 import avatar from '@/assets/profile/profile-circle-svgrepo-com.svg'
 import {
@@ -40,6 +49,12 @@ const sections = [
   { id: 'preferences', label: 'Preferencias', icon: 'bi-sliders' },
   { id: 'deactivation', label: 'Desactivar cuenta', icon: 'bi-person-dash' },
 ]
+const preferenceSettings = ref<ClientPreferenceSettings | null>(null)
+const preferencesLoading = ref(false)
+const preferencesError = ref('')
+const preferencesFormKey = ref(0)
+let preferencesGeneration = 0
+let preferencesAbort: AbortController | undefined
 const selected = ref('personal')
 const profile = ref<ClientProfile | null>(null)
 const options = ref<ClientAddressOptions | null>(null)
@@ -177,6 +192,65 @@ function changeSection(section: string) {
   requestDiscard(() => {
     editing.value = false
     selected.value = section
+    if (section === 'preferences') void loadPreferences()
+    else {
+      preferencesAbort?.abort()
+      preferencesGeneration++
+      preferencesLoading.value = false
+    }
+  })
+}
+
+async function loadPreferences() {
+  const session = sessionSnapshot()
+  const request = ++preferencesGeneration
+  preferencesAbort?.abort()
+  const controller = new AbortController()
+  preferencesAbort = controller
+  preferencesLoading.value = true
+  preferencesError.value = ''
+  const current = () =>
+    session.current() && request === preferencesGeneration && selected.value === 'preferences'
+  try {
+    const settings = await getClientPreferenceSettings(controller.signal)
+    if (!current()) return
+    preferenceSettings.value = settings
+    preferencesFormKey.value++
+  } catch (error) {
+    if (!current()) return
+    preferencesError.value = clientProfileError(
+      error,
+      'No se pudieron cargar tus preferencias. Intenta nuevamente.',
+    )
+    if (authErrorStatus(error) === 401) await handleError(error, preferencesError.value)
+  } finally {
+    if (!disposed && request === preferencesGeneration) preferencesLoading.value = false
+  }
+}
+async function savePreferences(selection: ClientPreferenceSelection) {
+  if (busy.value) return
+  const session = sessionSnapshot()
+  busy.value = true
+  try {
+    await saveClientPreferences(selection)
+    if (!session.current()) return
+    dirty.value = false
+    notify(
+      'success',
+      'Tus preferencias se guardaron correctamente. El portal mostrará primero las películas que coincidan con ellas.',
+    )
+    await loadPreferences()
+  } catch (error) {
+    if (session.current())
+      await handleError(error, 'No se pudieron guardar tus preferencias. Intenta nuevamente.')
+  } finally {
+    if (!disposed) busy.value = false
+  }
+}
+function cancelPreferences() {
+  requestDiscard(() => {
+    dirty.value = false
+    preferencesFormKey.value++
   })
 }
 async function save(changes: ClientProfileUpdate) {
@@ -266,6 +340,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   disposed = true
   abort.abort()
+  preferencesAbort?.abort()
   window.removeEventListener('beforeunload', beforeUnload)
   leaveResolve?.(false)
 })
@@ -294,7 +369,7 @@ onBeforeUnmount(() => {
       </p>
       <RouterLink to="/">Volver al portal</RouterLink>
     </section>
-    <LoadingState v-else-if="loading" message="Cargando perfil..." />
+    <LoadingState v-else-if="loading" message="Cargando perfil..." surface="dark" />
     <section v-else-if="loadError" class="profile-card">
       <p role="alert">{{ loadError }}</p>
       <button type="button" @click="load">Reintentar</button>
@@ -412,7 +487,9 @@ onBeforeUnmount(() => {
           />
         </template>
         <template v-else-if="selected === 'preferences'"
-          ><h2>Preferencias</h2>
+          ><h2 v-if="!preferenceSettings || preferencesLoading || preferencesError">
+            Preferencias
+          </h2>
           <dl>
             <dt>Idioma registrado</dt>
             <dd>
@@ -425,11 +502,21 @@ onBeforeUnmount(() => {
               }}
             </dd>
           </dl>
-          <p class="upcoming">
-            <i class="bi bi-sliders" aria-hidden="true"></i> Próximamente podrás administrar tus
-            preferencias de contenido y recomendaciones desde esta sección.
-          </p></template
-        >
+          <LoadingState v-if="preferencesLoading" message="Cargando preferencias..." />
+          <div v-else-if="preferencesError" role="alert">
+            <p>{{ preferencesError }}</p>
+            <button type="button" @click="loadPreferences">Reintentar</button>
+          </div>
+          <ClientPreferencesForm
+            v-else-if="preferenceSettings"
+            :key="preferencesFormKey"
+            :settings="preferenceSettings"
+            :pending="busy"
+            @save="savePreferences"
+            @dirty="dirty = $event"
+            @cancel="cancelPreferences"
+          />
+        </template>
         <template v-else
           ><h2>Desactivar cuenta</h2>
           <p>
@@ -611,12 +698,7 @@ button,
   color: var(--text-on-dark);
   border-color: transparent;
 }
-.upcoming {
-  padding: 1rem;
-  border-radius: var(--radius-small);
-  background: var(--info-background);
-  margin-top: 1.5rem;
-}
+
 :disabled {
   opacity: 0.65;
 }
