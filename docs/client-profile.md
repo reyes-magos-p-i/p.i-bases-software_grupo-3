@@ -22,6 +22,8 @@ El primer nombre sigue siendo obligatorio. Los campos opcionales de clientes cre
 
 La edición solicita confirmación antes de guardar. Cancelar, cambiar de sección o abandonar una edición con cambios pendientes requiere confirmar el descarte. Durante las solicitudes se impiden envíos repetidos. Después de guardar se vuelve a consultar el perfil y se actualiza la identidad del menú. Un fallo de esa consulta se distingue de un fallo al guardar. Las respuestas tardías no sustituyen una sesión más reciente.
 
+Las notificaciones generales del perfil reutilizan `NotificationPopup` en la esquina inferior derecha, con el ancho adaptable y la duración estándar de cuatro segundos. El cierre automático se pausa mientras el cursor está sobre la notificación. Los errores al solicitar un cambio de correo se muestran únicamente en el diálogo, sin duplicarlos como notificación ni dejarlos visibles al cambiar de sección. Una sesión vencida conserva el cierre del diálogo, la invalidación local y la redirección al inicio de sesión.
+
 ## Cambio de correo
 
 1. El cliente introduce un nuevo correo desde Seguridad. Se comprueba el formato, que sea diferente al actual y que no esté reservado por otro cliente, incluso inactivo.
@@ -36,6 +38,8 @@ El JWT de confirmación tiene audiencia y propósito `client-email-change`, firm
 Se reutilizan el transporte SMTP y la plantilla de confirmación de registro con un propósito distinto. El registro conserva su contenido y comportamiento. No se utilizan los registros pendientes de verificación de registro ni su limpieza automática para cuentas establecidas. El cambio de correo no requiere modificar el esquema. La versión de sesiones se obtiene de `PASSWORD_RECOVERIES`, ya utilizada por la autenticación y la desactivación. Las tablas propias de preferencias se documentan por separado.
 
 Los enlaces de correo utilizan el `FRONTEND_URL` existente. La configuración SMTP y `JWT_SECRET` son las existentes. La solicitud y confirmación de correo tienen un límite de cinco solicitudes por minuto por IP y validación de origen. Los datos de perfil y las respuestas de confirmación no deben almacenarse en caché. Las contraseñas y sus hashes nunca forman parte de la respuesta del perfil.
+
+`SessionOriginGuard` es la guarda compartida para comprobar el origen autorizado en rutas de clientes y personal. El nombre genérico no cambia su validación, la configuración existente ni las comprobaciones de autenticación y autorización de cada ruta.
 
 ## API
 
@@ -88,3 +92,14 @@ Las pruebas simulan foco, eventos nativos de puntero y solicitudes. Cubren cerra
 - Código nuevo de este ajuste respecto de `HEAD`: 38/39 líneas (97,44 %) y 33/35 ramas (94,29 %), con cobertura combinada de 95,95 % según LCOV.
 - `useBlurValidation.ts`: 100 % de líneas cubiertas.
 - Compilación, comprobación de tipos, ESLint y formato Prettier correctos.
+
+### Corrección de notificaciones y nombre de la guarda (26 de octubre de 2026)
+
+El fallo de solicitud de cambio de correo se informa únicamente dentro de su diálogo. Se verifican también el correo ocupado, el cierre y reapertura sin errores anteriores y la redirección por sesión vencida. Las notificaciones generales y de éxito del perfil se muestran abajo a la derecha mediante una opción reutilizable de `NotificationPopup`; sus demás consumidores conservan la posición dentro del contenido. Se mantiene el cierre automático estándar y su pausa al pasar el cursor.
+
+La guarda y su prueba se renombran a `session-origin.guard.ts` y `session-origin.guard.spec.ts`. Se actualizaron las referencias de autenticación, recuperación, perfil, preferencias, usuarios y proyecciones. La comparación con la revisión anterior comprueba que los cambios del backend son exclusivamente de nombre y referencias, además del formato.
+
+- API: 90 suites y 2046 pruebas correctas; cobertura global de líneas de 97,57 % y ramas de 89,26 %.
+- Web: 73 archivos y 1140 pruebas correctas; cobertura global de líneas de 95,67 % y ramas de 90,81 %.
+- Código nuevo respecto de `HEAD`, según LCOV: API 17/17 líneas y 5/6 ramas (95,65 % combinado); web 2/2 líneas y 3/3 ramas (100 % combinado). Se excluyen pruebas y se incluye el archivo fuente renombrado. SonarQube calculará sus métricas con la base de comparación de la PR.
+- Compilación, tipos, ESLint y Prettier correctos en ambas aplicaciones. Las pruebas utilizan persistencia y correo simulados.
