@@ -78,10 +78,6 @@ onBeforeUnmount(() => {
           <i class="bi bi-person-badge" aria-hidden="true"></i>
           Mi perfil
         </button>
-        <button type="button" disabled title="Próximamente">
-          <i class="bi bi-gear" aria-hidden="true"></i>
-          Ajustes de Cuenta
-        </button>
         <button type="button" @click="emit('change-password')">
           <i class="bi bi-key" aria-hidden="true"></i>
           Cambiar Contraseña
@@ -196,10 +192,6 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--text-primary);
   text-align: left;
-}
-
-.account-actions button:disabled {
-  color: var(--text-disabled);
 }
 
 .account-logout {
