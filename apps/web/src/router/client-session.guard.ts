@@ -13,7 +13,7 @@ import { authErrorStatus } from '@/utils/auth-errors'
 const PASSWORD_PATH = '/account/password'
 
 export const requireClientSession: NavigationGuard = async (to) => {
-  if (to.path === '/recover-password') return true
+  if (to.path === '/recover-password' || to.path === '/account/confirm-email') return true
   const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
   try {
     if (to.meta.requiresClient && !(await restoreClientSession(getClientSession))) {

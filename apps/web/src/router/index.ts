@@ -13,6 +13,17 @@ const router = createRouter({
 
   routes: [
     {
+      path: '/account/profile',
+      name: 'client-profile',
+      component: () => import('@/views/ClientProfileView.vue'),
+      meta: { requiresClient: true },
+    },
+    {
+      path: '/account/confirm-email',
+      name: 'client-email-confirmation',
+      component: () => import('@/views/ClientEmailConfirmationView.vue'),
+    },
+    {
       path: '/recover-password',
       name: 'recover-password',
       component: () => import('@/views/ChangePasswordView.vue'),

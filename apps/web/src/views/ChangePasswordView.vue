@@ -32,6 +32,7 @@ const props = withDefaults(
 )
 const emit = defineEmits<{
   'return-to-dashboard': []
+  'return-to-profile': []
   'submission-state': [loading: boolean]
 }>()
 const router = useRouter()
@@ -237,6 +238,10 @@ function goHome() {
     emit('return-to-dashboard')
     return
   }
+  if (props.embedded) {
+    emit('return-to-profile')
+    return
+  }
   void router.push(isEmployee.value ? '/dashboard' : '/')
 }
 </script>
@@ -300,7 +305,13 @@ function goHome() {
               </p>
               <button type="button" class="primary-button continue-button" @click="goHome">
                 {{
-                  props.recovery ? 'Iniciar sesión' : isEmployee ? 'Volver al tablero' : 'Continuar'
+                  props.recovery
+                    ? 'Iniciar sesión'
+                    : isEmployee
+                      ? 'Volver al tablero'
+                      : props.embedded
+                        ? 'Volver a mi perfil'
+                        : 'Continuar'
                 }}
               </button>
             </div>
@@ -987,5 +998,13 @@ function goHome() {
 .page-description,
 .page-status {
   color: var(--text-on-dark-secondary);
+}
+.is-embedded .page-heading .page-eyebrow,
+.is-embedded .page-heading h1 {
+  color: var(--text-primary);
+}
+.is-embedded .page-description,
+.is-embedded .page-status {
+  color: var(--text-secondary);
 }
 </style>

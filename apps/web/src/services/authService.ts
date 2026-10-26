@@ -297,7 +297,7 @@ export async function logoutEmployee(): Promise<void> {
   }
 }
 
-function clientRequestOptions() {
+export function clientRequestOptions() {
   const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
   if (!token)
     throw new ChangePasswordError(

@@ -31,6 +31,17 @@ describe('Client local authentication', () => {
     localStorage.clear()
   })
 
+  it('shares the current bearer transport without creating a second authentication client', async () => {
+    const { clientRequestOptions } = await import('@/services/authService')
+    localStorage.setItem('accessToken', 'profile-token')
+    expect(clientRequestOptions()).toEqual({
+      headers: { Authorization: 'Bearer profile-token' },
+      adapter: 'fetch',
+      withCredentials: false,
+      timeout: 10000,
+    })
+    expect(post).not.toHaveBeenCalled()
+  })
   it('establishes the existing client session after a successful local login', async () => {
     const { loginClient } = await import('@/services/authService')
     const { clientSession } = await import('@/services/client-session.service')
