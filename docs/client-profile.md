@@ -6,7 +6,7 @@ La ruta `/account/profile` permite consultar y modificar la cuenta del cliente a
 
 - **Mis datos:** consulta de nombres, apellidos, correo, celular, nacimiento, género, dirección, fecha de registro y estado. La edición permite nombres, apellidos, celular, dirección y los valores de género existentes (`M`, `F`, `O`, `N` o sin especificar). Nacimiento y fecha de registro son únicamente de consulta.
 - **Seguridad:** cambio de correo verificado y reutilización del formulario de cambio de contraseña. Se mantiene la contraseña actual para cuentas con contraseña local y el comportamiento existente de configuración para cuentas sociales.
-- **Preferencias:** muestra el idioma registrado. La edición de preferencias, géneros de películas y recomendaciones corresponde a otra historia.
+- **Preferencias:** permite seleccionar varios géneros e idiomas de los catálogos vigentes, guardar una selección vacía y recuperar las preferencias guardadas al volver a iniciar sesión. Las coincidencias dan prioridad a las películas del portal sin excluir las demás. El idioma registrado se consulta por separado y no cambia al guardar preferencias. Véase [client-preferences.md](client-preferences.md).
 - **Desactivar cuenta:** requiere confirmación, conserva los registros, cambia el estado a inactivo y revoca las sesiones. La reactivación continúa a cargo del personal autorizado mediante el CRUD existente.
 - Se utiliza el avatar predeterminado. La carga y administración de imágenes corresponde a otra historia.
 
@@ -33,7 +33,7 @@ La edición solicita confirmación antes de guardar. Cancelar, cambiar de secci�
 
 El JWT de confirmación tiene audiencia y propósito `client-email-change`, firma HS256 y carece del tipo de cuenta utilizado en los JWT de acceso. No puede utilizarse para iniciar sesión. Usar un enlace, recuperar la contraseña, desactivar la cuenta o revocar sus sesiones invalida los enlaces con una versión anterior. Cambiar el correo anterior también los invalida. Pueden existir varias solicitudes pendientes; confirmar una invalida las demás. Un fallo al revocar sesiones revierte el cambio de correo.
 
-Se reutilizan el transporte SMTP y la plantilla de confirmación de registro con un propósito distinto. El registro conserva su contenido y comportamiento. No se utilizan los registros pendientes de verificación de registro ni su limpieza automática para cuentas establecidas. **No se crean tablas ni se modifica el esquema.** La versión de sesiones se obtiene de `PASSWORD_RECOVERIES`, ya utilizada por la autenticación y la desactivación.
+Se reutilizan el transporte SMTP y la plantilla de confirmación de registro con un propósito distinto. El registro conserva su contenido y comportamiento. No se utilizan los registros pendientes de verificación de registro ni su limpieza automática para cuentas establecidas. El cambio de correo no requiere modificar el esquema. La versión de sesiones se obtiene de `PASSWORD_RECOVERIES`, ya utilizada por la autenticación y la desactivación. Las tablas propias de preferencias se documentan por separado.
 
 Los enlaces de correo utilizan el `FRONTEND_URL` existente. La configuración SMTP y `JWT_SECRET` son las existentes. La solicitud y confirmación de correo tienen un límite de cinco solicitudes por minuto por IP y validación de origen. Los datos de perfil y las respuestas de confirmación no deben almacenarse en caché. Las contraseñas y sus hashes nunca forman parte de la respuesta del perfil.
 
@@ -41,14 +41,18 @@ Los enlaces de correo utilizan el `FRONTEND_URL` existente. La configuración SM
 
 El contrato se encuentra en [client-profile.openapi.yaml](client-profile.openapi.yaml). Todos los paths se sirven bajo `/api`.
 
-| Método | Ruta                            | Acceso                                                   | Resultado                                    |
-| ------ | ------------------------------- | -------------------------------------------------------- | -------------------------------------------- |
-| GET    | `/clients/me`                   | Cliente con contraseña vigente                           | Datos propios                                |
-| GET    | `/clients/me/address-options`   | Cliente con contraseña vigente                           | Provincias, cantones y distritos             |
-| PATCH  | `/clients/me`                   | Cliente y origen autorizado                              | 204 al actualizar datos personales           |
-| PATCH  | `/clients/me/deactivate`        | Cliente y origen autorizado                              | 204 al desactivar y revocar sesiones         |
-| POST   | `/clients/me/email-change`      | Cliente, origen autorizado y límite de solicitudes       | 202 después de aceptar el correo para envío  |
-| POST   | `/clients/email-change/confirm` | Enlace válido, origen autorizado y límite de solicitudes | ID de la cuenta confirmada; sin credenciales |
+| Método | Ruta                             | Acceso                                                   | Resultado                                    |
+| ------ | -------------------------------- | -------------------------------------------------------- | -------------------------------------------- |
+| GET    | `/clients/me`                    | Cliente con contraseña vigente                           | Datos propios                                |
+| GET    | `/clients/me/address-options`    | Cliente con contraseña vigente                           | Provincias, cantones y distritos             |
+| PATCH  | `/clients/me`                    | Cliente y origen autorizado                              | 204 al actualizar datos personales           |
+| PATCH  | `/clients/me/deactivate`         | Cliente y origen autorizado                              | 204 al desactivar y revocar sesiones         |
+| POST   | `/clients/me/email-change`       | Cliente, origen autorizado y límite de solicitudes       | 202 después de aceptar el correo para envío  |
+| POST   | `/clients/email-change/confirm`  | Enlace válido, origen autorizado y límite de solicitudes | ID de la cuenta confirmada; sin credenciales |
+| GET    | `/clients/me/preferences`        | Cliente con contraseña vigente                           | Opciones actuales y selección propia         |
+| PUT    | `/clients/me/preferences`        | Cliente y origen autorizado                              | Reemplaza ambas selecciones de forma atómica |
+| GET    | `/clients/me/preferences/portal` | Cliente con contraseña vigente                           | Catálogo completo ordenado por preferencias  |
+| GET    | `/movie-fuctions/catalog`        | Público                                                  | Catálogo completo en orden habitual          |
 
 ## Verificación automatizada
 
