@@ -19,6 +19,7 @@ const NO_COMPANY = 'Sin compañía asignada'
 // Create, modify and deactivate belong to SCRUM-32/33/34; they stay visible but disabled.
 const PENDING = '(Pendiente)'
 
+const props = defineProps<{ disabled?: boolean }>()
 const { state, sessionExpired, refreshPermissions } = useEmployeeSessionRecovery()
 const id = useId()
 const searchDraft = ref('')
@@ -121,6 +122,7 @@ async function loadCompanies() {
 }
 
 function search() {
+  if (props.disabled) return
   const value = searchDraft.value
   validationError.value = ''
   if (value !== '' && !value.trim())
@@ -192,7 +194,7 @@ onBeforeUnmount(() => {
           />
         </div>
       </div>
-      <button type="submit" class="primary-button">Buscar</button>
+      <button type="submit" class="primary-button" :disabled="disabled">Buscar</button>
       <button type="button" class="secondary-button" :disabled="!hasFilters" @click="clearFilters">
         <i class="bi bi-x-circle" aria-hidden="true"></i> Limpiar filtros
       </button>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import UserDetailDialog from '@/components/users/UserDetailDialog.vue'
@@ -20,6 +21,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'session-expired': []
   forbidden: []
+  notification: [message: string]
   'user-updated': [selection: UserDetailSelection, user: UpdatedUser]
 }>()
 const id = useId()
@@ -27,8 +29,6 @@ const filterContainer = ref<HTMLElement | null>(null)
 const selectedUser = ref<UserDetailSelection | null>(null)
 const editedUser = ref<UserDetailSelection | null>(null)
 const statusUser = ref<UserStatusSelection | null>(null)
-const updateNotice = ref('')
-const updateFeedback = ref<HTMLElement | null>(null)
 const searchDraft = ref('')
 const appliedSearch = ref('')
 const validationError = ref('')
@@ -208,7 +208,7 @@ function search() {
   else if (/[\uD800-\uDFFF\p{Cc}]/u.test(value))
     validationError.value = 'La búsqueda contiene caracteres no válidos.'
   else if (new TextEncoder().encode(value).length > 400)
-    validationError.value = 'La búsqueda no puede superar 400 bytes en UTF-8.'
+    validationError.value = 'La búsqueda es demasiado larga. Usa menos texto.'
   appliedSearch.value = value.trim().replace(/\s+/gu, ' ')
   page.value = 1
   void load()
@@ -241,15 +241,13 @@ function viewUser(row: { [key: string]: unknown }) {
 }
 function editUser(row: { [key: string]: unknown }) {
   if (!canRead.value || row.status !== 'ACTIVE' || typeof row.id !== 'number') return
-  updateNotice.value = ''
   editedUser.value = { section: props.section, id: row.id }
 }
 function userUpdated(selection: UserDetailSelection, user: UpdatedUser) {
   editedUser.value = null
-  updateNotice.value = 'El usuario fue modificado exitosamente.'
+  emit('notification', 'El usuario fue modificado exitosamente.')
   emit('user-updated', selection, user)
   refresh()
-  void nextTick(() => updateFeedback.value?.focus())
 }
 function canChangeStatus(row: { [key: string]: unknown }) {
   return canRead.value && !(props.section === 'employees' && row.id === props.currentUserId)
@@ -263,7 +261,6 @@ function changeStatusSelection(row: { [key: string]: unknown }) {
     (row.status !== 'ACTIVE' && row.status !== 'INACTIVE')
   )
     return
-  updateNotice.value = ''
   statusUser.value = {
     section: props.section,
     id: row.id,
@@ -274,12 +271,13 @@ function changeStatusSelection(row: { [key: string]: unknown }) {
 }
 function userStatusChanged(status: UserStatus) {
   statusUser.value = null
-  updateNotice.value =
+  emit(
+    'notification',
     status === 'ACTIVE'
       ? 'El usuario fue activado exitosamente.'
-      : 'El usuario fue desactivado exitosamente.'
+      : 'El usuario fue desactivado exitosamente.',
+  )
   refresh()
-  void nextTick(() => updateFeedback.value?.focus())
 }
 watch(
   () => [props.section, props.role],
@@ -313,9 +311,6 @@ defineExpose({ refresh })
 
 <template>
   <div class="user-list-panel">
-    <p v-if="updateNotice" ref="updateFeedback" class="feedback" role="status" tabindex="-1">
-      {{ updateNotice }}
-    </p>
     <form class="search-bar" novalidate @submit.prevent="search">
       <div class="search-field">
         <label :for="id + '-search'">Buscar {{ isEmployeeList ? 'empleados' : 'clientes' }}</label>
@@ -447,8 +442,8 @@ defineExpose({ refresh })
         </select></label
       >
     </div>
-    <div v-if="optionsError" class="feedback error" role="alert">
-      {{ optionsError }}
+    <div v-if="optionsError" class="feedback error">
+      <NotificationPopup type="error" :message="optionsError" :duration="0" />
       <button type="button" class="secondary-button" @click="loadOptions">
         Reintentar sucursales
       </button>
@@ -458,8 +453,8 @@ defineExpose({ refresh })
         v-if="loading"
         :message="`Cargando ${isEmployeeList ? 'empleados' : 'clientes'}…`"
       />
-      <div v-else-if="listError" class="feedback error" role="alert">
-        {{ listError }}
+      <div v-else-if="listError" class="feedback error">
+        <NotificationPopup type="error" :message="listError" :duration="0" />
         <button type="button" class="secondary-button" @click="load">Reintentar</button>
       </div>
       <template v-else-if="result">

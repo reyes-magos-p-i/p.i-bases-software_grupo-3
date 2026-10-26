@@ -1,3 +1,4 @@
+import DatePicker from '@/components/common/DatePicker.vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
@@ -268,6 +269,26 @@ describe('DashboardView', () => {
     await flushPromises()
     expect(restoreEmployeeSession).toHaveBeenCalledWith(true)
     expect(view.getComponent(DashboardLayout).props('userName')).toBe('Alicia')
+  })
+  it('retains the operation notification while refreshing permissions after editing the current user', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    vi.mocked(restoreEmployeeSession).mockImplementationOnce(async () => {
+      await setRole('EMPLOYEE')
+      return { id: 21, role: 'EMPLOYEE', firstName: 'Ana' }
+    })
+    const list = view.getComponent(UserListPanel)
+    list.vm.$emit('notification', 'El usuario fue modificado exitosamente.')
+    list.vm.$emit(
+      'user-updated',
+      { section: 'employees', id: 21 },
+      { id: 21, role: 'EMPLOYEE', email: 'ana@example.com' },
+    )
+    await flushPromises()
+    expect(view.get('.notification-popup').text()).toContain(
+      'El usuario fue modificado exitosamente.',
+    )
+    expect(view.getComponent(UserListPanel).props('section')).toBe('clients')
   })
   it('refreshes session permissions after editing the active administrator', async () => {
     const view = await renderDashboard()
@@ -799,10 +820,7 @@ describe('employee creation', () => {
       cantonId: '19',
       districtId: '102',
     })) {
-      await view
-        .getComponent(CreateUserDialog)
-        .get('[name="' + field + '"]')
-        .setValue(value)
+      await setFormField(view, field, value)
     }
     return view
   }
@@ -915,7 +933,7 @@ describe('employee creation', () => {
     await flushPromises()
     expect(getUsers).toHaveBeenCalledTimes(2)
     expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
-    expect(view.get('.creation-result').attributes('role')).toBe('alert')
+    expect(view.get('.creation-result .notification-popup').attributes('role')).toBe('alert')
     expect(view.get('.creation-result').text()).toContain('fue creada')
     expect(view.get('.creation-result').text()).toContain('No repitas')
     expect(createUser).toHaveBeenCalledTimes(1)
@@ -1077,7 +1095,7 @@ describe('client creation', () => {
     expect(view.get('.creation-result').text()).toContain(
       'La cuenta de cliente@example.com fue creada',
     )
-    expect(view.get('.creation-result').attributes('role')).toBe('alert')
+    expect(view.get('.creation-result .notification-popup').attributes('role')).toBe('alert')
     expect(createUser).toHaveBeenCalledTimes(1)
   })
 
@@ -1153,3 +1171,18 @@ describe('dashboard routes', () => {
     expect(applicationRouter.resolve('/privacy-policy').name).toBe('privacy-policy')
   })
 })
+
+async function setFormField(view: VueWrapper, name: string, value: string) {
+  const picker = view
+    .findAllComponents(DatePicker)
+    .find((component) => component.vm.$attrs.name === name)
+  if (picker) {
+    picker.vm.$emit('update:modelValue', value)
+    await nextTick()
+    await view.get('[name="' + name + '"]').trigger('change')
+  } else
+    await view
+      .getComponent(CreateUserDialog)
+      .get('[name="' + name + '"]')
+      .setValue(value)
+}
