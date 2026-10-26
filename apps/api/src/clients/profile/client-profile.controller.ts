@@ -12,7 +12,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
-import { EmployeeSessionOriginGuard } from '../../auth/guards/employee-session-origin.guard';
+import { SessionOriginGuard } from '../../auth/guards/session-origin.guard';
 import { PasswordStatusGuard } from '../../auth/password/password-status.guard';
 import { ClientGuard } from './guards/client.guard';
 import { ClientProfileService } from './client-profile.service';
@@ -47,14 +47,14 @@ export class ClientProfileController {
 
   @Patch()
   @HttpCode(204)
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   update(@Req() request: ClientRequest, @Body() data: UpdateClientProfileDto) {
     return this.profile.updateProfile(request.user.id, data);
   }
 
   @Patch('deactivate')
   @HttpCode(204)
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   deactivate(
     @Req() request: ClientRequest,
     @Body() _body: DeactivateClientProfileDto,
@@ -64,7 +64,7 @@ export class ClientProfileController {
 
   @Post('email-change')
   @HttpCode(202)
-  @UseGuards(EmployeeSessionOriginGuard, ThrottlerGuard)
+  @UseGuards(SessionOriginGuard, ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   requestEmail(
     @Req() request: ClientRequest,

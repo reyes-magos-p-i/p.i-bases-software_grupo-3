@@ -22,7 +22,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
 import { EmployeeSessionService } from './employee-session.service';
-import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
+import { SessionOriginGuard } from './guards/session-origin.guard';
 import { ConfirmEmailVerificationDto } from './dto/confirm-email-verification.dto';
 import { ResendEmailVerificationDto } from './dto/resend-email-verification.dto';
 import { AllowExpiredPassword } from './password/allow-expired-password.decorator';
@@ -63,7 +63,7 @@ export class AuthController {
   }
 
   @Post('employees/login')
-  @UseGuards(ThrottlerGuard, EmployeeSessionOriginGuard)
+  @UseGuards(ThrottlerGuard, SessionOriginGuard)
   @Header('Cache-Control', 'no-store')
   @HttpCode(HttpStatus.OK)
   async loginEmployee(
@@ -76,7 +76,7 @@ export class AuthController {
   }
 
   @Post('clients/login')
-  @UseGuards(ThrottlerGuard, EmployeeSessionOriginGuard)
+  @UseGuards(ThrottlerGuard, SessionOriginGuard)
   @Header('Cache-Control', 'no-store')
   @HttpCode(HttpStatus.OK)
   async loginClient(@Body() dto: LoginDto) {
@@ -103,7 +103,7 @@ export class AuthController {
   }
 
   @Post('employees/logout')
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   @Header('Cache-Control', 'no-store')
   @HttpCode(HttpStatus.NO_CONTENT)
   logoutEmployee(@Res({ passthrough: true }) response: Response): void {

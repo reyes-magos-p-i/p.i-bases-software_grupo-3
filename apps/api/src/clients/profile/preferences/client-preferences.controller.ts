@@ -10,7 +10,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import { PasswordStatusGuard } from '../../../auth/password/password-status.guard';
-import { EmployeeSessionOriginGuard } from '../../../auth/guards/employee-session-origin.guard';
+import { SessionOriginGuard } from '../../../auth/guards/session-origin.guard';
 import { ClientGuard } from '../guards/client.guard';
 import { ClientPreferencesService } from './client-preferences.service';
 import { UpdateClientPreferencesDto } from './client-preferences.dto';
@@ -30,7 +30,7 @@ export class ClientPreferencesController {
 
   @Put()
   @Header('Cache-Control', 'no-store')
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   save(
     @Req() request: ClientRequest,
     @Body() data: UpdateClientPreferencesDto,

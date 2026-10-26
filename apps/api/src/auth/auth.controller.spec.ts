@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { EmployeeSessionService } from './employee-session.service';
-import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
+import { SessionOriginGuard } from './guards/session-origin.guard';
 import { ClientsService } from '../clients/clients.service';
 import {
   ForbiddenException,
@@ -49,7 +49,7 @@ describe('AuthController', () => {
     })
       .overrideGuard(ThrottlerGuard)
       .useValue({ canActivate: () => true })
-      .overrideGuard(EmployeeSessionOriginGuard)
+      .overrideGuard(SessionOriginGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
