@@ -247,7 +247,6 @@ describe('AuthController', () => {
               currentPassword: 'old',
               newPassword: 'new',
               confirmNewPassword: 'new',
-              expirationDays: 90,
             },
           ),
         ).rejects.toThrow(ForbiddenException);
@@ -255,7 +254,6 @@ describe('AuthController', () => {
           currentPassword: 'old',
           newPassword: 'new',
           confirmNewPassword: 'new',
-          expirationDays: 90,
         };
         auth.changeEmployeePassword.mockResolvedValue(undefined);
         await expect(
@@ -275,7 +273,6 @@ describe('AuthController', () => {
           currentPassword: 'old',
           newPassword: 'new',
           confirmNewPassword: 'new',
-          expirationDays: 90,
         };
         auth.changeEmployeePassword.mockResolvedValue(undefined);
         await expect(

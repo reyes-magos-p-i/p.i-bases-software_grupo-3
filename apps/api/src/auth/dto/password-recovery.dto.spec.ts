@@ -48,23 +48,30 @@ describe('Password recovery input', () => {
     expect(input.temporaryPassword).toBe(' temporary ');
   });
 
-  it.each([
-    'token',
-    'temporaryPassword',
-    'newPassword',
-    'confirmNewPassword',
-    'expirationDays',
-  ])('requires %s', async (field) => {
-    const input: Record<string, unknown> = {
+  it.each(['token', 'temporaryPassword', 'newPassword', 'confirmNewPassword'])(
+    'requires %s',
+    async (field) => {
+      const input: Record<string, unknown> = {
+        token: 'a'.repeat(64),
+        temporaryPassword: 'temp',
+        newPassword: 'secret',
+        confirmNewPassword: 'secret',
+        expirationDays: 90,
+      };
+      delete input[field];
+      const errors = await validate(plainToInstance(ResetPasswordDto, input));
+      expect(errors.map((error) => error.property)).toContain(field);
+    },
+  );
+
+  it('accepts a reset without a period, since employees cannot choose one', async () => {
+    const input = plainToInstance(ResetPasswordDto, {
       token: 'a'.repeat(64),
       temporaryPassword: 'temp',
       newPassword: 'secret',
       confirmNewPassword: 'secret',
-      expirationDays: 90,
-    };
-    delete input[field];
-    const errors = await validate(plainToInstance(ResetPasswordDto, input));
-    expect(errors.map((error) => error.property)).toContain(field);
+    });
+    await expect(validate(input)).resolves.toEqual([]);
   });
 
   it('rejects oversized passwords and unsupported expiration', async () => {

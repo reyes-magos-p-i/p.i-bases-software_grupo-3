@@ -396,7 +396,6 @@ describe('employee authentication API', () => {
       currentPassword: 'Current!Password9',
       newPassword: 'Cr0wn!River77',
       confirmNewPassword: 'Cr0wn!River77',
-      expirationDays: 90 as const,
     }
     patch.mockResolvedValueOnce({ data: { message: 'Contraseña actualizada correctamente' } })
     await expect(changeEmployeePassword(payload)).resolves.toBeUndefined()
@@ -419,7 +418,6 @@ describe('employee authentication API', () => {
         currentPassword: 'bad',
         newPassword: 'Cr0wn!River77',
         confirmNewPassword: 'Cr0wn!River77',
-        expirationDays: 90,
       }),
     ).rejects.toMatchObject({ code: 'CURRENT_PASSWORD_INCORRECT' })
     expect(patch).toHaveBeenCalledTimes(1)

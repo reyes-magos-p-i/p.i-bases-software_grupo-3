@@ -11,7 +11,7 @@ import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
 import type { EmployeeDetailDto } from './dto/user-detail.dto';
 import { DatabaseService } from '../database/database.service';
-import { DEFAULT_PASSWORD_EXPIRATION_DAYS } from '../auth/password/password-status';
+import { EMPLOYEE_PASSWORD_EXPIRATION_DAYS } from '../auth/password/password-status';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import type { CreateAddressDto } from './dto/create-address.dto';
 import type { UpdateEmployeeDto, UpdatedUserDto } from './dto/update-user.dto';
@@ -582,7 +582,7 @@ export class UsersRepository {
             passwordHash: { val: data.passwordHash, type: oracle.STRING },
             salt: { val: data.salt, type: oracle.STRING },
             expirationDays: {
-              val: DEFAULT_PASSWORD_EXPIRATION_DAYS,
+              val: EMPLOYEE_PASSWORD_EXPIRATION_DAYS,
               type: oracle.NUMBER,
             },
           },
@@ -712,7 +712,6 @@ export class UsersRepository {
     employeeId: number,
     passwordHash: string,
     salt: string,
-    expirationDays: number,
     connection?: oracle.Connection,
   ): Promise<void> {
     const execute = connection
@@ -733,7 +732,10 @@ export class UsersRepository {
         employeeId: { val: employeeId, type: oracle.NUMBER },
         passwordHash: { val: passwordHash, type: oracle.STRING },
         salt: { val: salt, type: oracle.STRING },
-        expirationDays: { val: expirationDays, type: oracle.NUMBER },
+        expirationDays: {
+          val: EMPLOYEE_PASSWORD_EXPIRATION_DAYS,
+          type: oracle.NUMBER,
+        },
       },
       { autoCommit: !connection },
     );

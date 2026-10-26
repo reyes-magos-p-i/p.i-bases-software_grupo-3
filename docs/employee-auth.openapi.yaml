@@ -227,7 +227,9 @@ paths:
                     type: integer
                     nullable: true
                     enum: [30, 60, 90, 120, null]
-                    description: Periodo configurado; null sin contraseña local.
+                    description: |
+                      Periodo configurado; null sin contraseña local. Para el
+                      personal siempre es 30.
                   expiresInDays:
                     type: integer
                     nullable: true
@@ -249,9 +251,10 @@ paths:
       operationId: changeEmployeePassword
       summary: Cambiar la contraseña propia de un empleado
       description: |
-        Requiere la contraseña actual y permite elegir una vigencia de 30, 60,
-        90 o 120 días. Está disponible incluso cuando la contraseña expiró.
-        El estado queda vigente desde el momento de la actualización.
+        Requiere la contraseña actual. La vigencia del personal es fija de 30
+        días y no se puede elegir: enviar expirationDays responde 400. Está
+        disponible incluso cuando la contraseña expiró. El estado queda vigente
+        desde el momento de la actualización.
       security:
         - employeeSession: []
         - bearerAuth: []
@@ -262,7 +265,7 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [currentPassword, newPassword, confirmNewPassword, expirationDays]
+              required: [currentPassword, newPassword, confirmNewPassword]
               properties:
                 currentPassword:
                   type: string
@@ -276,9 +279,6 @@ paths:
                   type: string
                   minLength: 1
                   writeOnly: true
-                expirationDays:
-                  type: integer
-                  enum: [30, 60, 90, 120]
       responses:
         "200":
           description: Contraseña actualizada.

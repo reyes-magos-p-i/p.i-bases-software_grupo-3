@@ -13,8 +13,10 @@ export interface PasswordExpiry {
   expiresInDays: number | null;
 }
 
-/** Period of every new account's password, clients and employees alike. */
-export const DEFAULT_PASSWORD_EXPIRATION_DAYS = 120;
+/** Period of a new client's password; clients may later pick 30, 60, 90 or 120. */
+export const DEFAULT_PASSWORD_EXPIRATION_DAYS = 30;
+/** Fixed period of every employee password; employees cannot choose another. */
+export const EMPLOYEE_PASSWORD_EXPIRATION_DAYS = 30;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** The expiry warning starts 72 hours before the password expires. */

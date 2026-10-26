@@ -1,13 +1,23 @@
 # Expiración de contraseña (SCRUM-287)
 
-Aplica a clientes y empleados con contraseña local. No requiere cambios de base
-de datos: usa `PASSWORD_SET_AT` y `EXPIRATION_DAYS` de
-`CLIENT_LOCAL_CREDENTIALS` y `EMPLOYEE_LOCAL_CREDENTIALS`.
+Aplica a clientes y empleados con contraseña local. Usa `PASSWORD_SET_AT` y
+`EXPIRATION_DAYS` de `CLIENT_LOCAL_CREDENTIALS` y `EMPLOYEE_LOCAL_CREDENTIALS`.
+La migración `database/migrations/20261025_password_expiration_30_days.sql`
+fija el periodo de 30 días; se aplica junto con la versión del API que lo usa.
 
 ## Reglas
 
-- Periodos permitidos: 30, 60, 90 y 120 días. Toda cuenta nueva, de cliente o
-  de empleado, empieza con 120 días (`DEFAULT_PASSWORD_EXPIRATION_DAYS`).
+- **Empleados:** la vigencia es obligatoria y fija de 30 días
+  (`EMPLOYEE_PASSWORD_EXPIRATION_DAYS`). No se puede elegir otra al crear la
+  cuenta, al cambiar la contraseña ni al recuperarla. La base de datos lo
+  refuerza con `CHECK (expiration_days = 30)`.
+  - La migración pasa a 30 días las contraseñas del personal que tenían otro
+    periodo sin tocar `PASSWORD_SET_AT`. Por eso, una contraseña definida hace
+    más de 30 días vence en ese momento y se pide cambiarla.
+- **Clientes:** toda cuenta nueva empieza con 30 días
+  (`DEFAULT_PASSWORD_EXPIRATION_DAYS`). Al cambiar o recuperar la contraseña
+  pueden elegir 30, 60, 90 o 120 días. Las cuentas existentes conservan el
+  periodo que ya tenían.
 - La contraseña vence en el instante exacto en que se cumple el periodo,
   calculado en horas desde `PASSWORD_SET_AT` con la hora del servidor. Con 30
   días, una contraseña creada el 01/10/2026 08:00 vence el 31/10/2026 08:00; a
@@ -71,6 +81,10 @@ nueva para continuar.».
 
 ## Formulario de cambio
 
-El selector «Vigencia de la contraseña» ofrece solo 30, 60, 90 y 120 días. Se
-preselecciona el periodo actual de la cuenta. Sin contraseña local, y en la
-recuperación (que no conoce el periodo), se preselecciona 120.
+- **Clientes:** el selector «Vigencia de la contraseña» ofrece solo 30, 60, 90
+  y 120 días. Se preselecciona el periodo actual de la cuenta. Sin contraseña
+  local, y en la recuperación (que no conoce el periodo), se preselecciona 30.
+- **Empleados:** no hay selector. El formulario muestra «30 días. La vigencia
+  de las contraseñas del personal es fija.» y la petición no envía
+  `expirationDays`; si se envía, `PATCH /auth/employees/password` responde
+  `400`. En la recuperación del personal el valor se ignora.

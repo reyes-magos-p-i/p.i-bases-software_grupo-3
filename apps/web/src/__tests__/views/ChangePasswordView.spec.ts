@@ -101,6 +101,7 @@ describe('ChangePasswordView.vue', () => {
       expect(getEmployeePasswordStatus).not.toHaveBeenCalled()
       expect(wrapper.text()).toContain('Contraseña temporal')
       expect(wrapper.text()).toContain('solo puede usarse una vez')
+      expect(wrapper.find('#expirationDays').exists()).toBe(accountType === 'client')
       await wrapper.get('#currentPassword').setValue('temporary')
       await wrapper.get('#newPassword').setValue('NewSecret123!')
       await wrapper.get('#confirmNewPassword').setValue('NewSecret123!')
@@ -111,8 +112,9 @@ describe('ChangePasswordView.vue', () => {
         temporaryPassword: 'temporary',
         newPassword: 'NewSecret123!',
         confirmNewPassword: 'NewSecret123!',
-        // Recovery does not know the current period, so it offers the new-account default.
-        expirationDays: 120,
+        // Recovery does not know the client's period, so it offers the new-account default;
+        // employees never send one because theirs is fixed.
+        ...(accountType === 'client' ? { expirationDays: 30 } : {}),
       })
       expect(changeClientPassword).not.toHaveBeenCalled()
       expect(changeEmployeePassword).not.toHaveBeenCalled()
@@ -258,7 +260,7 @@ describe('ChangePasswordView.vue', () => {
     [expiry('expired', 30), '30'],
     [expiry('valid', 60), '60'],
     // Without a local password there is no period yet: the new-account default applies.
-    [expiry('must_set', null), '120'],
+    [expiry('must_set', null), '30'],
   ])('preselects the current password period: %j', async (current, selected) => {
     vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(current)
     const wrapper = mountView()
@@ -466,14 +468,17 @@ describe('ChangePasswordView.vue', () => {
     expect(changeEmployeePassword).not.toHaveBeenCalled()
   })
 
-  it('updates an employee password with the selected expiration and returns to the dashboard', async () => {
+  it('updates an employee password with the fixed 30-day period and returns to the dashboard', async () => {
     vi.mocked(changeEmployeePassword).mockResolvedValueOnce(undefined)
     const wrapper = mountView({ embedded: true, accountType: 'employee' })
     await flushPromises()
+    expect(wrapper.find('#expirationDays').exists()).toBe(false)
+    expect(wrapper.get('#employee-expiration').text()).toBe(
+      '30 días. La vigencia de las contraseñas del personal es fija.',
+    )
     await wrapper.get('#currentPassword').setValue('Current!Password9')
     await wrapper.get('#newPassword').setValue('Cr0wn!River77')
     await wrapper.get('#confirmNewPassword').setValue('Cr0wn!River77')
-    await wrapper.get('#expirationDays').setValue('60')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
@@ -481,7 +486,6 @@ describe('ChangePasswordView.vue', () => {
       currentPassword: 'Current!Password9',
       newPassword: 'Cr0wn!River77',
       confirmNewPassword: 'Cr0wn!River77',
-      expirationDays: 60,
     })
     expect(wrapper.text()).toContain('Contraseña actualizada con éxito')
     await wrapper.get('.continue-button').trigger('click')

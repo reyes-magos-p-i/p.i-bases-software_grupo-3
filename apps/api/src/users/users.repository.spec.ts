@@ -1155,10 +1155,10 @@ describe('UsersRepository', () => {
       );
     });
 
-    it('updates password hash, salt, change date, and expiration for active employee', async () => {
+    it('updates password hash, salt, change date, and the fixed 30-day expiration for active employee', async () => {
       connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
       await expect(
-        repository.saveEmployeePassword(21, 'new-hash', 'new-salt', 60),
+        repository.saveEmployeePassword(21, 'new-hash', 'new-salt'),
       ).resolves.toBeUndefined();
       expect(connection.execute).toHaveBeenCalledWith(
         expect.stringContaining('PASSWORD_SET_AT = SYSTIMESTAMP'),
@@ -1166,7 +1166,7 @@ describe('UsersRepository', () => {
           employeeId: { val: 21, type: oracle.NUMBER },
           passwordHash: { val: 'new-hash', type: oracle.STRING },
           salt: { val: 'new-salt', type: oracle.STRING },
-          expirationDays: { val: 60, type: oracle.NUMBER },
+          expirationDays: { val: 30, type: oracle.NUMBER },
         },
         { autoCommit: true, outFormat: oracle.OUT_FORMAT_OBJECT },
       );
@@ -1175,7 +1175,7 @@ describe('UsersRepository', () => {
     it('reports when the employee password was not updated', async () => {
       connection.execute.mockResolvedValueOnce({ rowsAffected: 0 });
       await expect(
-        repository.saveEmployeePassword(21, 'new-hash', 'new-salt', 60),
+        repository.saveEmployeePassword(21, 'new-hash', 'new-salt'),
       ).rejects.toThrow('Oracle did not update a single employee password.');
     });
   });
@@ -1287,7 +1287,7 @@ describe('UsersRepository', () => {
             employeeId: { val: 84, type: oracle.NUMBER },
             passwordHash: { val: data.passwordHash, type: oracle.STRING },
             salt: { val: data.salt, type: oracle.STRING },
-            expirationDays: { val: 120, type: oracle.NUMBER },
+            expirationDays: { val: 30, type: oracle.NUMBER },
           },
           { autoCommit: false },
         );
@@ -1739,7 +1739,6 @@ describe('UsersRepository', () => {
         7,
         'new-hash',
         'salt',
-        90,
         connection as unknown as oracle.Connection,
       ),
     ).resolves.toBeUndefined();

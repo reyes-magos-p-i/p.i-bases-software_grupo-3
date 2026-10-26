@@ -450,8 +450,11 @@ export interface ChangeClientPasswordPayload {
   expirationDays: 30 | 60 | 90 | 120
 }
 
-export interface ChangeEmployeePasswordPayload extends ChangeClientPasswordPayload {
+/** Employees cannot choose a period: the API always applies 30 days. */
+export interface ChangeEmployeePasswordPayload {
   currentPassword: string
+  newPassword: string
+  confirmNewPassword: string
 }
 
 type ChangePasswordErrorResponse = {
@@ -520,7 +523,7 @@ export async function changeEmployeePassword(
 
 async function changePassword(
   endpoint: string,
-  payload: ChangeClientPasswordPayload,
+  payload: ChangeClientPasswordPayload | ChangeEmployeePasswordPayload,
   client = false,
 ): Promise<void> {
   try {
