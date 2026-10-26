@@ -3,7 +3,7 @@ import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
-import { getTheaters } from '@/services/theater.service'
+import { getTheaterCreationOptions, getTheaters } from '@/services/theater.service'
 import type { Theater } from '@/types/theater'
 
 vi.mock('@/services/theater.service', () => ({
@@ -108,6 +108,24 @@ describe('TheatersSection loading presentation', () => {
     expect(view.findComponent(LoadingState).exists()).toBe(false)
     expect(view.get('tbody').text()).toContain(theater.projectorName)
     expect(getTheaters).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('TheatersSection with a malformed options response', () => {
+  it.each([
+    ['a non-array statuses field', { projectors: [], cinemas: [], statuses: null }],
+    ['a missing statuses field', { projectors: [], cinemas: [] }],
+  ])('still renders the list given %s', async (_label, options) => {
+    vi.mocked(getTheaters).mockResolvedValue([theater])
+    vi.mocked(getTheaterCreationOptions).mockResolvedValue(
+      options as unknown as Awaited<ReturnType<typeof getTheaterCreationOptions>>,
+    )
+    const view = render()
+    await flushPromises()
+
+    expect(view.findComponent(CrudTable).exists()).toBe(true)
+    expect(view.get('tbody').text()).toContain(theater.projectorName)
+    expect(view.find('.filters').exists()).toBe(true)
   })
 })
 
