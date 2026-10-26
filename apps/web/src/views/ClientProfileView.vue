@@ -111,8 +111,8 @@ function dateLabel(value: string | null, timestamp = false) {
 function notify(type: 'success' | 'error', message: string) {
   notification.value = { type, message }
 }
-async function handleError(error: unknown, fallback: string) {
-  notify('error', clientProfileError(error, fallback))
+async function handleError(error: unknown, fallback: string, options: { notify?: boolean } = {}) {
+  if (options.notify !== false) notify('error', clientProfileError(error, fallback))
   if (authErrorStatus(error) === 401) {
     dirty.value = false
     busy.value = false
@@ -294,7 +294,7 @@ async function sendEmail(email: string) {
       error,
       'No se pudo enviar la confirmación. Tu correo actual se mantiene. Intenta nuevamente.',
     )
-    await handleError(error, emailError.value)
+    await handleError(error, emailError.value, { notify: false })
   } finally {
     if (!disposed) busy.value = false
   }
@@ -358,7 +358,7 @@ onBeforeUnmount(() => {
       v-if="notification"
       :type="notification.type"
       :message="notification.message"
-      :duration="notification.type === 'error' ? 0 : 6000"
+      placement="bottom-right"
       @close="notification = null"
     />
     <section v-if="deactivated" class="profile-card completed">

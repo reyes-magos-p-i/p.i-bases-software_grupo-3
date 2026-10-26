@@ -277,6 +277,15 @@ describe('ClientProfileView', () => {
     expect(wrapper.getComponent(ClientEmailChangeDialog).props('open')).toBe(false)
     expect(wrapper.text()).toContain('30 minutos')
     expect(clientSession.user.value?.email).toBe(data.email)
+    expect(wrapper.findAllComponents(NotificationPopup)).toHaveLength(1)
+    expect(wrapper.getComponent(NotificationPopup).props()).toMatchObject({
+      type: 'success',
+      placement: 'bottom-right',
+      duration: 4000,
+    })
+    wrapper.getComponent(NotificationPopup).vm.$emit('close')
+    await flushPromises()
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
   })
   it('retains the email dialog and reports a failed send', async () => {
     vi.mocked(requestClientEmailChange).mockRejectedValue(new Error('smtp failed'))
@@ -289,12 +298,76 @@ describe('ClientProfileView', () => {
     expect(wrapper.getComponent(ClientEmailChangeDialog).props('error')).toContain(
       'Tu correo actual se mantiene',
     )
+    expect(wrapper.getComponent(ClientEmailChangeDialog).props('open')).toBe(true)
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
     wrapper.getComponent(ClientEmailChangeDialog).vm.$emit('close')
     await flushPromises()
     expect(wrapper.getComponent(ClientEmailChangeDialog).props('open')).toBe(false)
-    wrapper.getComponent(NotificationPopup).vm.$emit('close')
-    await flushPromises()
+    await choose(wrapper, 'deactivation')
     expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
+  })
+
+  it('shows a reserved-email error only in the dialog and clears it when reopening', async () => {
+    const message = 'Ese correo ya está registrado para otro cliente.'
+    vi.mocked(requestClientEmailChange).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: { message } },
+    })
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'security')
+    await button(wrapper, 'Cambiar correo').trigger('click')
+    wrapper.getComponent(ClientEmailChangeDialog).vm.$emit('request', 'taken@example.com')
+    await flushPromises()
+    expect(wrapper.getComponent(ClientEmailChangeDialog).props('error')).toBe(message)
+    expect(wrapper.getComponent(ClientEmailChangeDialog).props('pending')).toBe(false)
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
+    expect(clientSession.user.value?.email).toBe(data.email)
+    wrapper.getComponent(ClientEmailChangeDialog).vm.$emit('close')
+    await flushPromises()
+    await button(wrapper, 'Cambiar correo').trigger('click')
+    expect(wrapper.getComponent(ClientEmailChangeDialog).props('error')).toBe('')
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
+  })
+
+  it('still closes the dialog and redirects when an email request reveals an expired session', async () => {
+    vi.mocked(requestClientEmailChange).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 401 },
+    })
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'security')
+    await button(wrapper, 'Cambiar correo').trigger('click')
+    wrapper.getComponent(ClientEmailChangeDialog).vm.$emit('request', 'new@example.com')
+    await flushPromises()
+    expect(wrapper.findComponent(ClientEmailChangeDialog).exists()).toBe(false)
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
+    expect(clientSession.user.value).toBeNull()
+    expect(navigation.leave?.()).toBe(true)
+    expect(navigation.replace).toHaveBeenCalledExactlyOnceWith({
+      path: '/',
+      query: { login: 'client', reason: 'expired' },
+    })
+  })
+
+  it('uses one floating notification with the standard timeout for other profile errors', async () => {
+    vi.mocked(updateClientProfile).mockRejectedValue(new Error('offline'))
+    const wrapper = render()
+    await edit(wrapper)
+    wrapper.getComponent(ClientProfileForm).vm.$emit('save', { firstName: 'María' })
+    await flushPromises()
+    expect(wrapper.findAllComponents(NotificationPopup)).toHaveLength(1)
+    expect(wrapper.getComponent(NotificationPopup).props()).toMatchObject({
+      type: 'error',
+      placement: 'bottom-right',
+      duration: 4000,
+    })
+    expect(wrapper.getComponent(NotificationPopup).props('message')).toContain(
+      'No se pudieron guardar',
+    )
+    expect(wrapper.findComponent(ClientProfileForm).exists()).toBe(true)
+    expect(navigation.replace).not.toHaveBeenCalled()
   })
   it('reuses the password component and locks navigation during its submission', async () => {
     const wrapper = render()
