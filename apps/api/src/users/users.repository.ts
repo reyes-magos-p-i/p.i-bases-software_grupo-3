@@ -473,7 +473,7 @@ export class UsersRepository {
     };
   }
 
-  async getCreationOptions(): Promise<UserCreationOptionsDto> {
+  async getAddressOptions(): Promise<Omit<UserCreationOptionsDto, 'branches'>> {
     const options = { outFormat: oracle.OUT_FORMAT_OBJECT };
     const provinces = await this.db.query<{
       ID_PROVINCE: number;
@@ -501,16 +501,7 @@ export class UsersRepository {
       {},
       options,
     );
-    const branches = await this.db.query<{
-      BRANCH_ID: number;
-      NAME: string;
-    }>(
-      'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
-      {},
-      options,
-    );
-
-    return new UserCreationOptionsDto({
+    return {
       provinces: (provinces.rows ?? []).map((row) => ({
         id: row.ID_PROVINCE,
         label: row.NAME,
@@ -525,6 +516,22 @@ export class UsersRepository {
         label: row.NAME,
         cantonId: row.ID_CANTON,
       })),
+    };
+  }
+
+  async getCreationOptions(): Promise<UserCreationOptionsDto> {
+    const address = await this.getAddressOptions();
+    const branches = await this.db.query<{
+      BRANCH_ID: number;
+      NAME: string;
+    }>(
+      'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
+      {},
+      { outFormat: oracle.OUT_FORMAT_OBJECT },
+    );
+
+    return new UserCreationOptionsDto({
+      ...address,
       branches: (branches.rows ?? []).map((row) => ({
         id: row.BRANCH_ID,
         label: row.NAME,

@@ -1963,4 +1963,25 @@ describe('UsersRepository', () => {
       "r.RESET_AT AT TIME ZONE 'UTC'",
     );
   });
+  it('loads only address catalogs for clients without exposing staff branches', async () => {
+    connection.execute
+      .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
+      .mockResolvedValueOnce({
+        rows: [{ ID_CANTON: 2, NAME: 'Central', ID_PROVINCE: 1 }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ ID_DISTRICT: 3, NAME: 'Carmen', ID_CANTON: 2 }],
+      });
+    await expect(repository.getAddressOptions()).resolves.toEqual({
+      provinces: [{ id: 1, label: 'San José' }],
+      cantons: [{ id: 2, label: 'Central', provinceId: 1 }],
+      districts: [{ id: 3, label: 'Carmen', cantonId: 2 }],
+    });
+    expect(connection.execute).toHaveBeenCalledTimes(3);
+    expect(
+      connection.execute.mock.calls.every(
+        ([sql]: [string]) => !sql.includes('CINEMAS'),
+      ),
+    ).toBe(true);
+  });
 });

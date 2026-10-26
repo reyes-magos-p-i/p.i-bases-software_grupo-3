@@ -538,6 +538,22 @@ describe('ChangePasswordView.vue', () => {
     expect(wrapper.find('form').exists()).toBe(false)
     wrapper.unmount()
   })
+  it('returns embedded clients to their profile after updating the password', async () => {
+    vi.mocked(getClientPasswordStatus).mockResolvedValue('valid')
+    vi.mocked(changeClientPassword).mockResolvedValue(undefined)
+    const wrapper = mountView({ embedded: true, accountType: 'client' })
+    await flushPromises()
+    await wrapper.get('#currentPassword').setValue('OldSecret123!')
+    await wrapper.get('#newPassword').setValue('NewSecret123!')
+    await wrapper.get('#confirmNewPassword').setValue('NewSecret123!')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('.continue-button').text()).toBe('Volver a mi perfil')
+    await wrapper.get('.continue-button').trigger('click')
+    expect(wrapper.emitted('return-to-profile')).toEqual([[]])
+    expect(wrapper.emitted('return-to-dashboard')).toBeUndefined()
+    wrapper.unmount()
+  })
 })
 
 function flushPromises() {
