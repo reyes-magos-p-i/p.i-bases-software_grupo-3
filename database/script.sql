@@ -67,6 +67,14 @@ CREATE TABLE Cinemas (
         FOREIGN KEY (company_id) REFERENCES Companies (company_id)
 );
 
+-- Two active branches cannot share a name, ignoring case, accents and outer
+-- spaces (SCRUM-32/33, migration 20261027_cinemas_active_name.sql).
+CREATE UNIQUE INDEX ux_cinemas_active_name ON Cinemas (
+    CASE WHEN status = 'ACTIVE'
+         THEN TRANSLATE(LOWER(TRIM(name)), 'áéíóúüñ', 'aeiouun')
+    END
+);
+
 -- =========================================================
 -- SECTION: Users (employees and clients)
 -- =========================================================

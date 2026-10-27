@@ -40,8 +40,9 @@ Requiere la migración `20261016_cinemas_status.sql` (columna `CINEMAS.STATUS`).
   «No hay sucursales registradas».
 - Error al consultar: «No se pudieron cargar las sucursales» con Reintentar.
   Sin permiso: «No tiene permisos para acceder a esta sección».
-- «Agregar Sucursal», Modificar y Desactivar se muestran deshabilitados con el
-  aviso «Pendiente». Se habilitan en SCRUM-32, SCRUM-33 y SCRUM-34.
+- «Crear sucursal» abre el formulario de SCRUM-32 ([manage-branch.md](manage-branch.md)).
+  Modificar y Desactivar se muestran deshabilitados con el aviso «Pendiente» hasta
+  SCRUM-33 y SCRUM-34.
 
 ## Detalle
 

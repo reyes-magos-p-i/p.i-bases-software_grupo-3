@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import BranchDetailDialog from '@/components/branches/BranchDetailDialog.vue'
+import BranchFormDialog from '@/components/branches/BranchFormDialog.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
-import { formatBranchId, getBranches, getCompanies } from '@/services/branch.service'
+import { createBranch, formatBranchId, getBranches, getCompanies } from '@/services/branch.service'
+import { branchErrorsFromApi, type BranchFormErrors } from '@/utils/branch-validation'
 import type {
   BranchListQuery,
+  BranchRequest,
   BranchListResult,
   BranchPageSize,
   CompanyOption,
@@ -16,10 +20,12 @@ import type {
 const PAGE_SIZES: readonly BranchPageSize[] = [10, 20, 50]
 const NO_NAME = 'Sin nombre registrado'
 const NO_COMPANY = 'Sin compañía asignada'
-// Create, modify and deactivate belong to SCRUM-32/33/34; they stay visible but disabled.
+// Modify and deactivate belong to SCRUM-33/34; they stay visible but disabled.
 const PENDING = '(Pendiente)'
+const NO_PERMISSION = 'No tiene permisos para acceder a esta sección'
 
 const props = defineProps<{ disabled?: boolean }>()
+const emit = defineEmits<{ busy: [value: boolean] }>()
 const { state, sessionExpired, refreshPermissions } = useEmployeeSessionRecovery()
 const id = useId()
 const searchDraft = ref('')
@@ -35,6 +41,11 @@ const companies = ref<CompanyOption[]>([])
 const companiesLoading = ref(false)
 const companiesError = ref(false)
 const selectedBranchId = ref<number | null>(null)
+const formDialog = useTemplateRef<InstanceType<typeof BranchFormDialog>>('form-dialog')
+const submitting = ref(false)
+const submissionError = ref('')
+const submissionFieldErrors = ref<BranchFormErrors>({})
+const notice = ref('')
 let listRequest: AbortController | undefined
 let companiesRequest: AbortController | undefined
 
@@ -151,6 +162,41 @@ function clearFilters() {
 function viewBranch(row: { [key: string]: unknown }) {
   if (typeof row.id === 'number') selectedBranchId.value = row.id
 }
+function openCreate() {
+  if (props.disabled || submitting.value) return
+  submissionError.value = ''
+  submissionFieldErrors.value = {}
+  formDialog.value?.open()
+  if (companiesError.value || !companies.value.length) void loadCompanies()
+}
+async function submitCreate(data: BranchRequest) {
+  if (submitting.value || props.disabled) return
+  submitting.value = true
+  emit('busy', true)
+  submissionError.value = ''
+  submissionFieldErrors.value = {}
+  try {
+    await createBranch(data)
+    if (state.disposed) return
+    formDialog.value?.complete()
+    notice.value = 'Sucursal creada con éxito'
+    void load()
+  } catch (error) {
+    if (state.disposed) return
+    const status = failed(error)
+    const fieldErrors =
+      (status === 400 || status === 409) && isAxiosError(error)
+        ? branchErrorsFromApi(error.response?.data?.message)
+        : {}
+    if (fieldErrors.name || fieldErrors.companyId) submissionFieldErrors.value = fieldErrors
+    else
+      submissionError.value =
+        status === 403 ? NO_PERMISSION : 'No se pudo crear la sucursal, intenta de nuevo'
+  } finally {
+    submitting.value = false
+    emit('busy', false)
+  }
+}
 function changePage(value: number) {
   if (loading.value || !result.value || value < 1 || value > result.value.totalPages) return
   page.value = value
@@ -170,12 +216,16 @@ onBeforeUnmount(() => {
   <section class="preview-content branches-section" aria-labelledby="branches-title">
     <div class="section-heading">
       <h1 id="branches-title">Sucursales</h1>
-      <span :title="`Agregar sucursal ${PENDING}`" class="action-hint">
-        <button type="button" class="add-user-button" disabled>
-          <i class="bi bi-plus-lg" aria-hidden="true"></i>
-          Agregar Sucursal
-        </button>
-      </span>
+      <button
+        type="button"
+        class="add-user-button"
+        aria-haspopup="dialog"
+        :disabled="disabled || submitting"
+        @click="openCreate"
+      >
+        <i class="bi bi-plus-lg" aria-hidden="true"></i>
+        Crear sucursal
+      </button>
     </div>
 
     <form class="search-bar" novalidate @submit.prevent="search">
@@ -227,7 +277,7 @@ onBeforeUnmount(() => {
       <LoadingState v-if="loading" message="Cargando sucursales…" />
       <div v-else-if="listError === 'forbidden'" class="state-card error" role="alert">
         <i class="bi bi-shield-lock" aria-hidden="true"></i>
-        <h2>No tiene permisos para acceder a esta sección</h2>
+        <h2>{{ NO_PERMISSION }}</h2>
       </div>
       <div v-else-if="listError" class="state-card error" role="alert">
         <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
@@ -313,6 +363,20 @@ onBeforeUnmount(() => {
         </button>
       </nav>
     </footer>
+    <BranchFormDialog
+      ref="form-dialog"
+      :companies="companies"
+      :companies-loading="companiesLoading"
+      :companies-error="companiesError"
+      :submitting="submitting"
+      :submission-error="submissionError"
+      :submission-field-errors="submissionFieldErrors"
+      @retry-companies="loadCompanies"
+      @submit="submitCreate"
+    />
+    <div v-if="notice" class="branch-notification">
+      <NotificationPopup type="success" :message="notice" @close="notice = ''" />
+    </div>
     <BranchDetailDialog
       :branch-id="selectedBranchId"
       @close="selectedBranchId = null"
@@ -428,6 +492,12 @@ select:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--primary-color);
   outline-offset: 2px;
+}
+.branch-notification {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1050;
 }
 .action-hint {
   display: inline-flex;

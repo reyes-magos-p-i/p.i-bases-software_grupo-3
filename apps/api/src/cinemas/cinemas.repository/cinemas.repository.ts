@@ -5,6 +5,7 @@ import { Cinema } from '../entities/cinema.entity';
 import { likePattern } from '../../users/user-search.util';
 import type { CinemaDetailDto, CinemaStatus } from '../dto/cinema-detail.dto';
 import type { ListCinemasQueryDto } from '../dto/list-cinemas-query.dto';
+import type { CreateCinemaDto } from '../dto/create-cinema.dto';
 import type {
   CompanyOptionDto,
   ListedCinemasDto,
@@ -19,6 +20,16 @@ const fold = (value: string) =>
   value
     .toLowerCase()
     .replace(/[áéíóúüñ]/gu, (letter) => PLAIN[ACCENTED.indexOf(letter)]);
+
+// The unique index of 20261027_cinemas_active_name.sql backs nameIsTaken when two
+// requests save the same name at once.
+const isTakenName = (error: unknown) => {
+  const failure = error as { errorNum?: number; message?: string } | null;
+  return (
+    failure?.errorNum === 1 &&
+    /\bUX_CINEMAS_ACTIVE_NAME\b/iu.test(failure.message ?? '')
+  );
+};
 
 // "SU-001", "su001", "001" and "1" all point to branch 1.
 const BRANCH_ID_SEARCH = /^(?:su-?)?(\d{1,15})$/iu;
@@ -146,6 +157,70 @@ export class CinemasRepository {
       companyName: row.COMPANY_NAME,
       status: row.STATUS,
     };
+  }
+
+  /** Creates an active branch, unless the company is unusable or the name is taken. */
+  async createCinema(
+    data: CreateCinemaDto,
+  ): Promise<number | 'company' | 'duplicate'> {
+    return this.db.transaction(async (connection) => {
+      if (!(await this.companyIsUsable(connection, data.companyId)))
+        return 'company';
+      if (await this.nameIsTaken(connection, data.name)) return 'duplicate';
+      let result: oracle.Result<{ id?: unknown }>;
+      try {
+        result = await connection.execute<{ id?: unknown }>(
+          `INSERT INTO CINEMAS (NAME, COMPANY_ID)
+           VALUES (:name, :companyId)
+           RETURNING BRANCH_ID INTO :id`,
+          {
+            name: { val: data.name, type: oracle.STRING },
+            companyId: { val: data.companyId, type: oracle.NUMBER },
+            id: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
+          },
+          { autoCommit: false },
+        );
+      } catch (error) {
+        if (isTakenName(error)) return 'duplicate';
+        throw error;
+      }
+      const ids = result.outBinds?.id;
+      const id: unknown = Array.isArray(ids) ? ids[0] : undefined;
+      if (result.rowsAffected !== 1 || typeof id !== 'number')
+        throw new Error('Oracle did not return a single created branch.');
+      return id;
+    });
+  }
+
+  // A company without a name cannot be told apart in the form, so it is not accepted.
+  private async companyIsUsable(
+    connection: oracle.Connection,
+    companyId: number,
+  ): Promise<boolean> {
+    const company = await connection.execute(
+      `SELECT 1 FROM COMPANIES
+       WHERE COMPANY_ID = :companyId AND TRIM(NAME) IS NOT NULL`,
+      { companyId: { val: companyId, type: oracle.NUMBER } },
+      { autoCommit: false },
+    );
+    return !!company.rows?.length;
+  }
+
+  // Two active branches cannot share a name, ignoring case and accents. Inactive
+  // branches do not count, so a deactivated branch frees its name.
+  private async nameIsTaken(
+    connection: oracle.Connection,
+    name: string,
+  ): Promise<boolean> {
+    const taken = await connection.execute(
+      `SELECT 1 FROM CINEMAS
+       WHERE STATUS = 'ACTIVE'
+         AND ${foldSql('TRIM(NAME)')} = ${foldSql(':name')}
+         AND ROWNUM = 1`,
+      { name: { val: name, type: oracle.STRING } },
+      { autoCommit: false },
+    );
+    return !!taken.rows?.length;
   }
 
   async listCompanies(): Promise<CompanyOptionDto[]> {

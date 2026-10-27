@@ -1,7 +1,74 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CinemaIdParamsDto } from './cinema-id-params.dto';
+import { CreateCinemaDto } from './create-cinema.dto';
 import { ListCinemasQueryDto } from './list-cinemas-query.dto';
+
+const messages = async (payload: object) =>
+  (await validate(plainToInstance(CreateCinemaDto, payload))).flatMap((error) =>
+    Object.values(error.constraints ?? {}),
+  );
+
+describe('Branch form DTO', () => {
+  const company = { companyId: 21 };
+
+  it.each([
+    ['A'],
+    ['Sucursal Gran Centro Comercial Heredia Norte Oeste'],
+    ['Sucursal Peñas Blancas San Ramón'],
+  ])('accepts the name %p (UT-007, UT-008, UT-010)', async (name) => {
+    const data = plainToInstance(CreateCinemaDto, { name, ...company });
+    expect(await validate(data)).toEqual([]);
+    expect(data.name).toBe(name);
+  });
+
+  it('trims the name and joins accents written as separate marks', async () => {
+    const data = plainToInstance(CreateCinemaDto, {
+      name: '  San Ra\u0301mo\u0301n  ',
+      ...company,
+    });
+    expect(await validate(data)).toEqual([]);
+    expect(data.name).toBe('San Rámón');
+  });
+
+  it.each([[''], ['   '], [undefined], [null], [5]])(
+    'requires a name (%p)',
+    async (name) => {
+      expect(await messages({ name, ...company })).toContain(
+        'El nombre es obligatorio',
+      );
+    },
+  );
+
+  it.each([
+    ['Sucursal 01'],
+    ['Heredia@Centro#'],
+    ['Sucursal-Norte.'],
+    ['A\tB'],
+  ])('only accepts letters and spaces (%p)', async (name) => {
+    expect(await messages({ name, ...company })).toEqual([
+      'El nombre solo puede contener letras y espacios',
+    ]);
+  });
+
+  it('rejects a name of 51 characters (UT-009)', async () => {
+    expect(
+      await messages({
+        name: 'Sucursal Gran Centro Comercial Heredia Norte Oestes',
+        ...company,
+      }),
+    ).toEqual(['El nombre debe tener entre 1 y 50 caracteres']);
+  });
+
+  it.each([[undefined], [null], [''], ['21'], [0], [1.5]])(
+    'requires a company (%p)',
+    async (companyId) => {
+      expect(await messages({ name: 'Sucursal Cartago', companyId })).toContain(
+        'Debe seleccionar una compañía',
+      );
+    },
+  );
+});
 
 describe('Branch request DTOs', () => {
   const list = (payload: object) =>

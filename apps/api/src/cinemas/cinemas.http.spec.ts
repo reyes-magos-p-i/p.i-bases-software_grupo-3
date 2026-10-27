@@ -30,6 +30,7 @@ describe('Branches HTTP contracts', () => {
     listCinemas: jest.fn(),
     listCompanies: jest.fn(),
     findCinemaById: jest.fn(),
+    createCinema: jest.fn(),
   };
   const page = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
   const get = (path: string, authenticated = true) => {
@@ -40,6 +41,34 @@ describe('Branches HTTP contracts', () => {
           `${EMPLOYEE_SESSION_COOKIE}=${jwt.sign({ sub: 21, type: 'employee' })}`,
         )
       : call;
+  };
+
+  const origin = 'http://localhost:5173';
+  const send = (
+    method: 'post' | 'patch',
+    path: string,
+    body: object,
+    headers: { origin?: string } = {},
+  ) => {
+    const server = request(app.getHttpServer());
+    const call =
+      method === 'post'
+        ? server.post('/api' + path)
+        : server.patch('/api' + path);
+    return call
+      .set('Origin', headers.origin ?? origin)
+      .set(
+        'Cookie',
+        `${EMPLOYEE_SESSION_COOKIE}=${jwt.sign({ sub: 21, type: 'employee' })}`,
+      )
+      .send(body);
+  };
+  const created = {
+    id: 30,
+    name: 'Sucursal Heredia Centro',
+    companyId: 21,
+    companyName: 'Cinetadel S.A',
+    status: 'ACTIVE',
   };
 
   beforeAll(async () => {
@@ -186,5 +215,74 @@ describe('Branches HTTP contracts', () => {
     const response = await get('/cinemas/list').expect(403);
     expect(response.body.code).toBe('PASSWORD_EXPIRED');
     expect(repository.listCinemas).not.toHaveBeenCalled();
+  });
+
+  describe('POST /cinemas', () => {
+    const valid = { name: '  Sucursal Heredia Centro ', companyId: 21 };
+
+    it('creates an active branch and answers 201 with its detail (UT-015)', async () => {
+      repository.createCinema.mockResolvedValue(30);
+      repository.findCinemaById.mockResolvedValue(created);
+      await send('post', '/cinemas', valid).expect(201, created);
+      expect(repository.createCinema).toHaveBeenCalledWith({
+        name: 'Sucursal Heredia Centro',
+        companyId: 21,
+      });
+    });
+
+    it('answers 400 when the company does not exist or has no name', async () => {
+      repository.createCinema.mockResolvedValue('company');
+      const response = await send('post', '/cinemas', valid).expect(400);
+      expect(response.body.message).toBe('Debe seleccionar una compañía');
+    });
+
+    it('answers 409 when an active branch already has the name', async () => {
+      repository.createCinema.mockResolvedValue('duplicate');
+      const response = await send('post', '/cinemas', valid).expect(409);
+      expect(response.body.message).toBe(
+        'Ya existe una sucursal activa con ese nombre',
+      );
+    });
+
+    it('reports every invalid field at once (UT-013)', async () => {
+      const response = await send('post', '/cinemas', { name: '' }).expect(400);
+      expect(response.body.message).toEqual(
+        expect.arrayContaining([
+          'El nombre es obligatorio',
+          'Debe seleccionar una compañía',
+        ]),
+      );
+      expect(repository.createCinema).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [{ ...valid, status: 'INACTIVE' }],
+      [{ ...valid, id: 99 }],
+      [{ name: 'Sucursal 01', companyId: 21 }],
+    ])('rejects %p without saving', async (body) => {
+      await send('post', '/cinemas', body).expect(400);
+      expect(repository.createCinema).not.toHaveBeenCalled();
+    });
+
+    it('rejects requests from a foreign origin', async () => {
+      await send('post', '/cinemas', valid, {
+        origin: 'https://evil.example',
+      }).expect(403);
+      expect(repository.createCinema).not.toHaveBeenCalled();
+    });
+
+    it('answers 403 to a regular employee and 401 without a session', async () => {
+      users.findEmployeeIdentityById.mockResolvedValue({
+        id: 21,
+        role: 'EMPLOYEE',
+      });
+      await send('post', '/cinemas', valid).expect(403);
+      await request(app.getHttpServer())
+        .post('/api/cinemas')
+        .set('Origin', origin)
+        .send(valid)
+        .expect(401);
+      expect(repository.createCinema).not.toHaveBeenCalled();
+    });
   });
 });

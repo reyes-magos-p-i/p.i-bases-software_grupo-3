@@ -29,6 +29,12 @@ export interface CompanyOption {
   name: string | null
 }
 
+/** Body of POST /cinemas. */
+export interface BranchRequest {
+  name: string
+  companyId: number
+}
+
 export type BranchStatus = 'ACTIVE' | 'INACTIVE'
 
 export interface BranchDetail extends BranchListItem {

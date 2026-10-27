@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CinemasController } from './cinemas.controller';
 import { CinemasService } from './cinemas.service';
+import { EmployeeSessionOriginGuard } from '../auth/guards/employee-session-origin.guard';
 
 describe('CinemasController', () => {
   let controller: CinemasController;
@@ -9,6 +10,7 @@ describe('CinemasController', () => {
     listCinemas: jest.fn(),
     listCompanies: jest.fn(),
     getCinema: jest.fn(),
+    createCinema: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -16,7 +18,10 @@ describe('CinemasController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CinemasController],
       providers: [{ provide: CinemasService, useValue: service }],
-    }).compile();
+    })
+      .overrideGuard(EmployeeSessionOriginGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
     controller = module.get<CinemasController>(CinemasController);
   });
 
@@ -35,5 +40,12 @@ describe('CinemasController', () => {
     await expect(controller.getCinema({ id: 4 })).resolves.toEqual({ id: 4 });
     expect(service.listCinemas).toHaveBeenCalledWith(query);
     expect(service.getCinema).toHaveBeenCalledWith(4);
+  });
+
+  it('creates a branch through the service', async () => {
+    const data = { name: 'Sucursal Heredia Centro', companyId: 21 };
+    service.createCinema.mockResolvedValue({ id: 30 });
+    await expect(controller.createCinema(data)).resolves.toEqual({ id: 30 });
+    expect(service.createCinema).toHaveBeenCalledWith(data);
   });
 });

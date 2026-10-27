@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { create, get } = vi.hoisted(() => ({ create: vi.fn(), get: vi.fn() }))
+const { create, get, post } = vi.hoisted(() => ({ create: vi.fn(), get: vi.fn(), post: vi.fn() }))
 
 vi.mock('axios', () => ({ default: { create } }))
 
@@ -9,7 +9,7 @@ describe('branch service', () => {
     vi.resetModules()
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
-    create.mockImplementation((defaults) => ({ defaults, get }))
+    create.mockImplementation((defaults) => ({ defaults, get, post }))
   })
 
   afterEach(() => vi.unstubAllEnvs())
@@ -50,6 +50,16 @@ describe('branch service', () => {
     await expect(getBranch(7)).resolves.toBe(branch)
     expect(get).toHaveBeenCalledWith('/cinemas/companies', { signal: undefined, timeout: 10000 })
     expect(get).toHaveBeenCalledWith('/cinemas/7', { signal: undefined, timeout: 10000 })
+  })
+
+  it('creates a branch with POST /cinemas', async () => {
+    const branch = { id: 30, name: 'Sucursal Heredia Centro', companyId: 21 }
+    post.mockResolvedValue({ data: branch })
+    const { createBranch } = await import('@/services/branch.service')
+    const data = { name: 'Sucursal Heredia Centro', companyId: 21 }
+
+    await expect(createBranch(data)).resolves.toBe(branch)
+    expect(post).toHaveBeenCalledWith('/cinemas', data, { timeout: 10000 })
   })
 
   it('propagates request failures', async () => {

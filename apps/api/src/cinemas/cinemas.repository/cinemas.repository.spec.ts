@@ -5,7 +5,7 @@ import { CinemasRepository } from './cinemas.repository';
 
 describe('CinemasRepository', () => {
   let repository: CinemasRepository;
-  let databaseService: { query: jest.Mock };
+  let databaseService: { query: jest.Mock; transaction: jest.Mock };
   const query = { page: 1, pageSize: 10 as const };
   const row = {
     ID: 1,
@@ -26,7 +26,7 @@ describe('CinemasRepository', () => {
     ];
 
   beforeEach(async () => {
-    databaseService = { query: jest.fn() };
+    databaseService = { query: jest.fn(), transaction: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CinemasRepository,
@@ -257,6 +257,118 @@ describe('CinemasRepository', () => {
       async (rows) => {
         databaseService.query.mockResolvedValue({ rows });
         await expect(repository.listCompanies()).resolves.toEqual([]);
+      },
+    );
+  });
+
+  describe('createCinema', () => {
+    const connection = { execute: jest.fn() };
+    const data = { name: 'Sucursal Heredia Centro', companyId: 21 };
+
+    beforeEach(() => {
+      connection.execute.mockReset();
+      databaseService.transaction.mockImplementation(
+        (work: (conn: typeof connection) => Promise<unknown>) =>
+          work(connection),
+      );
+    });
+
+    it('checks the company and the name, then inserts an active branch in one transaction', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rowsAffected: 1, outBinds: { id: [30] } });
+
+      await expect(repository.createCinema(data)).resolves.toBe(30);
+      const [companySql, companyBinds, companyOptions] =
+        connection.execute.mock.calls[0];
+      expect(companySql).toContain('TRIM(NAME) IS NOT NULL');
+      expect(companyBinds).toEqual({
+        companyId: { val: 21, type: oracle.NUMBER },
+      });
+      expect(companyOptions).toEqual({ autoCommit: false });
+      const [nameSql, nameBinds, nameOptions] =
+        connection.execute.mock.calls[1];
+      expect(nameSql).toContain("STATUS = 'ACTIVE'");
+      expect(nameSql).toContain(
+        "TRANSLATE(LOWER(TRIM(NAME)), 'áéíóúüñ', 'aeiouun') = TRANSLATE(LOWER(:name), 'áéíóúüñ', 'aeiouun')",
+      );
+      expect(nameBinds).toEqual({
+        name: { val: 'Sucursal Heredia Centro', type: oracle.STRING },
+      });
+      expect(nameOptions).toEqual({ autoCommit: false });
+      const [insertSql, insertBinds, insertOptions] =
+        connection.execute.mock.calls[2];
+      expect(insertSql).toContain('INSERT INTO CINEMAS (NAME, COMPANY_ID)');
+      expect(insertBinds).toEqual({
+        name: { val: 'Sucursal Heredia Centro', type: oracle.STRING },
+        companyId: { val: 21, type: oracle.NUMBER },
+        id: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
+      });
+      expect(insertOptions).toEqual({ autoCommit: false });
+    });
+
+    it.each([undefined, []])(
+      'does not insert when the company is unusable (rows %p)',
+      async (rows) => {
+        connection.execute.mockResolvedValueOnce({ rows });
+        await expect(repository.createCinema(data)).resolves.toBe('company');
+        expect(connection.execute).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('does not insert when an active branch already has the name', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] });
+      await expect(repository.createCinema(data)).resolves.toBe('duplicate');
+      expect(connection.execute).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports the name as taken when the unique index rejects a concurrent insert', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
+        .mockResolvedValueOnce({ rows: undefined })
+        .mockRejectedValueOnce(
+          Object.assign(
+            new Error(
+              'ORA-00001: unique constraint (PRODUCTION.UX_CINEMAS_ACTIVE_NAME) violated',
+            ),
+            { errorNum: 1 },
+          ),
+        );
+      await expect(repository.createCinema(data)).resolves.toBe('duplicate');
+    });
+
+    it.each([
+      Object.assign(new Error('ORA-00001: unique constraint (PK_CINEMAS)'), {
+        errorNum: 1,
+      }),
+      Object.assign(new Error('ORA-03113: end-of-file'), { errorNum: 3113 }),
+      { errorNum: 1 },
+      null,
+    ])('propagates other insert errors (%p)', async (error) => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockRejectedValueOnce(error);
+      await expect(repository.createCinema(data)).rejects.toBe(error);
+    });
+
+    it.each([
+      { rowsAffected: 0, outBinds: { id: [30] } },
+      { rowsAffected: 1, outBinds: { id: [] } },
+      { rowsAffected: 1 },
+    ])(
+      'fails when Oracle does not confirm one new branch (%p)',
+      async (result) => {
+        connection.execute
+          .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
+          .mockResolvedValueOnce({ rows: [] })
+          .mockResolvedValueOnce(result);
+        await expect(repository.createCinema(data)).rejects.toThrow(
+          'Oracle did not return a single created branch.',
+        );
       },
     );
   });

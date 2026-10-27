@@ -5,17 +5,20 @@ import BranchesSection from '@/components/branches/BranchesSection.vue'
 import BranchDetailDialog from '@/components/branches/BranchDetailDialog.vue'
 import type { BranchListItem, BranchListResult } from '@/types/branch'
 
-const { getBranches, getCompanies, sessionExpired, refreshPermissions } = vi.hoisted(() => ({
-  getBranches: vi.fn(),
-  getCompanies: vi.fn(),
-  sessionExpired: vi.fn(),
-  refreshPermissions: vi.fn(),
-}))
+const { getBranches, getCompanies, createBranch, sessionExpired, refreshPermissions } = vi.hoisted(
+  () => ({
+    getBranches: vi.fn(),
+    getCompanies: vi.fn(),
+    createBranch: vi.fn(),
+    sessionExpired: vi.fn(),
+    refreshPermissions: vi.fn(),
+  }),
+)
 vi.mock('@/services/branch.service', async () => {
   const actual = await vi.importActual<typeof import('@/services/branch.service')>(
     '@/services/branch.service',
   )
-  return { ...actual, getBranches, getCompanies }
+  return { ...actual, getBranches, getCompanies, createBranch }
 })
 vi.mock('@/composables/useEmployeeSessionRecovery', () => ({
   useEmployeeSessionRecovery: () => ({
@@ -92,7 +95,7 @@ describe('BranchesSection', () => {
 
   it('keeps the actions of other stories visible but disabled', async () => {
     const view = await render()
-    expect(button(view, 'Agregar Sucursal').attributes('disabled')).toBeDefined()
+    expect(button(view, 'Crear sucursal').attributes('disabled')).toBeUndefined()
     for (const label of ['Modificar sucursal (Pendiente)', 'Desactivar sucursal (Pendiente)']) {
       const actions = view.findAll(`[aria-label="${label}"]`)
       expect(actions).toHaveLength(3)
@@ -145,7 +148,9 @@ describe('BranchesSection', () => {
 
   it('filters by company and names the companies without a name', async () => {
     const view = await render()
-    const options = view.findAll('select[name="companyId"] option').map((option) => option.text())
+    const options = view
+      .findAll('.filters select[name="companyId"] option')
+      .map((option) => option.text())
     expect(options).toEqual(['Todas', 'Cinetadel S.A', 'Sin nombre registrado'])
     await view.get('select[name="companyId"]').setValue('2')
     await flushPromises()
@@ -246,5 +251,141 @@ describe('BranchesSection', () => {
     resolveFirst(result())
     await flushPromises()
     expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+  })
+})
+
+describe('BranchesSection · Crear sucursal', () => {
+  const created = {
+    id: 30,
+    name: 'Sucursal Heredia Centro',
+    companyId: 2,
+    companyName: 'Cinetadel S.A',
+    status: 'ACTIVE',
+  }
+  const dialog = (view: VueWrapper) => view.get('form.branch-form')
+
+  async function openAndFill(view: VueWrapper, name = 'Sucursal Heredia Centro') {
+    await button(view, 'Crear sucursal').trigger('click')
+    await dialog(view).get('input[name="name"]').setValue(name)
+    await dialog(view).get('select[name="companyId"]').setValue('2')
+    await dialog(view).trigger('submit')
+    await flushPromises()
+  }
+
+  beforeEach(() => {
+    createBranch.mockReset()
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value: vi.fn(),
+    })
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+      configurable: true,
+      value: vi.fn(),
+    })
+  })
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
+  })
+
+  it('creates the branch, shows the success toast and reloads the list (UT-015)', async () => {
+    let finish!: (value: typeof created) => void
+    createBranch.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
+    const view = await render()
+    await openAndFill(view)
+    expect(createBranch).toHaveBeenCalledWith({ name: 'Sucursal Heredia Centro', companyId: 2 })
+    expect(view.emitted('busy')).toEqual([[true]])
+    expect(button(view, 'Crear sucursal').attributes('disabled')).toBeDefined()
+
+    const loads = getBranches.mock.calls.length
+    finish(created)
+    await flushPromises()
+    expect(view.emitted('busy')).toEqual([[true], [false]])
+    expect(view.get('.branch-notification').text()).toContain('Sucursal creada con éxito')
+    expect(getBranches.mock.calls.length).toBe(loads + 1)
+    expect((dialog(view).get('input[name="name"]').element as HTMLInputElement).value).toBe('')
+
+    await view.get('.branch-notification .notification-popup').trigger('click')
+    expect(view.find('.branch-notification').exists()).toBe(false)
+  })
+
+  it('keeps the form data and shows the error when saving fails (UT-014)', async () => {
+    createBranch.mockRejectedValueOnce(new Error('Network Error'))
+    const view = await render()
+    await openAndFill(view, 'Sucursal Liberia')
+    expect(dialog(view).get('.form-error').text()).toBe(
+      'No se pudo crear la sucursal, intenta de nuevo',
+    )
+    expect((dialog(view).get('input[name="name"]').element as HTMLInputElement).value).toBe(
+      'Sucursal Liberia',
+    )
+    expect(view.find('.branch-notification').exists()).toBe(false)
+  })
+
+  it('shows the API field errors under their fields', async () => {
+    const error = failure(400)
+    error.response!.data = { message: 'Debe seleccionar una compañía' }
+    createBranch.mockRejectedValueOnce(error)
+    const view = await render()
+    await openAndFill(view)
+    const select = dialog(view).get('select[name="companyId"]')
+    expect(select.attributes('aria-invalid')).toBe('true')
+    expect(dialog(view).find('.form-error').exists()).toBe(false)
+  })
+
+  it('shows a name already used by an active branch under the name field', async () => {
+    const error = failure(409)
+    error.response!.data = { message: 'Ya existe una sucursal activa con ese nombre' }
+    createBranch.mockRejectedValueOnce(error)
+    const view = await render()
+    await openAndFill(view, 'Sucursal Heredia Oeste')
+    const name = dialog(view).get('input[name="name"]')
+    expect(name.attributes('aria-invalid')).toBe('true')
+    expect(dialog(view).get('.field-error').text()).toBe(
+      'Ya existe una sucursal activa con ese nombre',
+    )
+    expect((name.element as HTMLInputElement).value).toBe('Sucursal Heredia Oeste')
+    expect(dialog(view).find('.form-error').exists()).toBe(false)
+  })
+
+  it.each([
+    [403, 'No tiene permisos para acceder a esta sección'],
+    [400, 'No se pudo crear la sucursal, intenta de nuevo'],
+  ])('shows the message for a %i answer', async (status, message) => {
+    createBranch.mockRejectedValueOnce(failure(status))
+    const view = await render()
+    await openAndFill(view)
+    expect(dialog(view).get('.form-error').text()).toBe(message)
+    if (status === 403) expect(refreshPermissions).toHaveBeenCalled()
+  })
+
+  it('leaves the dashboard when the session expired while saving', async () => {
+    createBranch.mockRejectedValueOnce(failure(401))
+    const view = await render()
+    await openAndFill(view)
+    expect(sessionExpired).toHaveBeenCalled()
+  })
+
+  it('reloads the companies when the form opens after they failed', async () => {
+    getCompanies.mockRejectedValueOnce(failure(500))
+    const view = await render()
+    await button(view, 'Crear sucursal').trigger('click')
+    await flushPromises()
+    expect(getCompanies).toHaveBeenCalledTimes(2)
+    expect(
+      dialog(view)
+        .findAll('select[name="companyId"] option')
+        .map((option) => option.text()),
+    ).toEqual(['Selecciona una compañía', 'Cinetadel S.A'])
+  })
+
+  it('does not open the form while the dashboard is busy', async () => {
+    wrapper = mount(BranchesSection, {
+      props: { disabled: true },
+      global: { stubs: { BranchDetailDialog: true } },
+    })
+    await flushPromises()
+    await button(wrapper, 'Crear sucursal').trigger('click')
+    expect(HTMLDialogElement.prototype.showModal).not.toHaveBeenCalled()
   })
 })

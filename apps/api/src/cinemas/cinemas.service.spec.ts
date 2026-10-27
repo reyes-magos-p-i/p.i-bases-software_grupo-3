@@ -1,4 +1,8 @@
-import { NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CinemasService } from './cinemas.service';
 import { CinemasRepository } from './cinemas.repository/cinemas.repository';
@@ -10,6 +14,7 @@ describe('CinemasService', () => {
     listCinemas: jest.fn(),
     listCompanies: jest.fn(),
     findCinemaById: jest.fn(),
+    createCinema: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -54,5 +59,43 @@ describe('CinemasService', () => {
     await expect(failure).rejects.toThrow(
       'La sucursal seleccionada no existe.',
     );
+  });
+
+  it('creates a branch and returns its detail', async () => {
+    const branch = {
+      id: 30,
+      name: 'Sucursal Heredia Centro',
+      status: 'ACTIVE',
+    };
+    const data = { name: 'Sucursal Heredia Centro', companyId: 21 };
+    repository.createCinema.mockResolvedValue(30);
+    repository.findCinemaById.mockResolvedValue(branch);
+    await expect(service.createCinema(data)).resolves.toBe(branch);
+    expect(repository.createCinema).toHaveBeenCalledWith(data);
+    expect(repository.findCinemaById).toHaveBeenCalledWith(30);
+  });
+
+  it('rejects a company that does not exist or has no name', async () => {
+    repository.createCinema.mockResolvedValue('company');
+    const failure = service.createCinema({
+      name: 'Sucursal Cartago',
+      companyId: 99,
+    });
+    await expect(failure).rejects.toBeInstanceOf(BadRequestException);
+    await expect(failure).rejects.toThrow('Debe seleccionar una compañía');
+    expect(repository.findCinemaById).not.toHaveBeenCalled();
+  });
+
+  it('answers 409 when an active branch already has the name', async () => {
+    repository.createCinema.mockResolvedValue('duplicate');
+    const failure = service.createCinema({
+      name: 'Sucursal Heredia Oeste',
+      companyId: 21,
+    });
+    await expect(failure).rejects.toBeInstanceOf(ConflictException);
+    await expect(failure).rejects.toThrow(
+      'Ya existe una sucursal activa con ese nombre',
+    );
+    expect(repository.findCinemaById).not.toHaveBeenCalled();
   });
 });
