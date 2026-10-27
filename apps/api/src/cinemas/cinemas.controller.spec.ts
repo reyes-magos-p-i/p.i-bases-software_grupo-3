@@ -4,17 +4,36 @@ import { CinemasService } from './cinemas.service';
 
 describe('CinemasController', () => {
   let controller: CinemasController;
+  const service = {
+    findAll: jest.fn(),
+    listCinemas: jest.fn(),
+    listCompanies: jest.fn(),
+    getCinema: jest.fn(),
+  };
 
   beforeEach(async () => {
+    jest.resetAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CinemasController],
-      providers: [{ provide: CinemasService, useValue: {} }],
+      providers: [{ provide: CinemasService, useValue: service }],
     }).compile();
-
     controller = module.get<CinemasController>(CinemasController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('delegates every route to the service', async () => {
+    const query = { page: 2, pageSize: 20 as const, companyId: 3 };
+    service.findAll.mockResolvedValue([]);
+    service.listCinemas.mockResolvedValue({ items: [] });
+    service.listCompanies.mockResolvedValue([]);
+    service.getCinema.mockResolvedValue({ id: 4 });
+
+    await expect(controller.findAll()).resolves.toEqual([]);
+    await expect(controller.listCinemas(query)).resolves.toEqual({
+      items: [],
+    });
+    await expect(controller.listCompanies()).resolves.toEqual([]);
+    await expect(controller.getCinema({ id: 4 })).resolves.toEqual({ id: 4 });
+    expect(service.listCinemas).toHaveBeenCalledWith(query);
+    expect(service.getCinema).toHaveBeenCalledWith(4);
   });
 });

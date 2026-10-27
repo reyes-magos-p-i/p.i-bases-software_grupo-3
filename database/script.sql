@@ -6,7 +6,6 @@
 -- the tables it references). Incremental changes go in migrations/.
 --
 -- Pending (marked PENDING below, not applied to PRODUCTION yet):
---   migrations/20261016_cinemas_status.sql
 --   migrations/20261016_sales_invoices_products.sql
 -- =========================================================
 
@@ -60,7 +59,7 @@ CREATE TABLE Cinemas (
     branch_id       NUMBER GENERATED ALWAYS AS IDENTITY,
     name            VARCHAR2(150) NOT NULL,
     company_id      NUMBER NOT NULL,
-    status          VARCHAR2(8 CHAR) DEFAULT 'ACTIVE' NOT NULL,  -- PENDING: migrations/20261016_cinemas_status.sql
+    status          VARCHAR2(8 CHAR) DEFAULT 'ACTIVE' NOT NULL,
     CONSTRAINT pk_cinemas PRIMARY KEY (branch_id),
     CONSTRAINT ck_cinemas_status
         CHECK (status IN ('ACTIVE', 'INACTIVE')),
