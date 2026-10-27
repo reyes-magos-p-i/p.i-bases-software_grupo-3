@@ -231,7 +231,11 @@ defineExpose({ clearSelection })
 </template>
 
 <style scoped>
+
+
 .seat-selector {
+  box-sizing: border-box;
+  width: 100%;
   --seat-width: 56px;
   --seat-height: 64px;
   --seat-gap: 14px;
@@ -243,11 +247,16 @@ defineExpose({ clearSelection })
   border: 1px solid #dce2eb;
   border-radius: 12px;
 }
-.seat-scroll { overflow-x: auto; padding: 12px 10px 20px; }
+.seat-scroll {
+  box-sizing: border-box;
+  width: 100%;
+  overflow-x: auto;
+  padding: 12px 10px 20px;
+}
 .seat-scroll:focus-visible { outline: 2px solid #2563eb; }
 .theater { width: max-content; min-width: 100%; }
 .screen {
-  margin: 0 0 32px;
+  margin: 0 0 60px;
   padding: 10px;
   color: #475569;
   background: #e8edf5;

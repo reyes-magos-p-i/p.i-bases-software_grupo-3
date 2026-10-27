@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import SeatSelector from './SeatSelector.vue'
 import type { Seat } from '@/types/seats.ts'
-import { getTheaterSeats } from '@/services/theater.service.ts'
+
 
 const theaterId = ref(7)
 const dimensionX = ref(6)

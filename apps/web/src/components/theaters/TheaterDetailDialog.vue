@@ -77,7 +77,7 @@ watch(
 </script>
 
 <template>
-  <TheaterDialogShell ref="shell" title="Detalle de sala" close-label="Cerrar" @close="emit('close')">
+  <TheaterDialogShell ref="shell" title="Detalle de sala" close-label="Cerrar" width="1100px" @close="emit('close')">
     <div v-if="theater || error" class="theater-detail-content">
       <p v-if="!theater" class="detail-error" role="alert">{{ error }}</p>
       <div v-else class="detail-grid">
