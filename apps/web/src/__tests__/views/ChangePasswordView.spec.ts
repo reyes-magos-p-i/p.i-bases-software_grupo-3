@@ -539,7 +539,7 @@ describe('ChangePasswordView.vue', () => {
     wrapper.unmount()
   })
   it('returns embedded clients to their profile after updating the password', async () => {
-    vi.mocked(getClientPasswordStatus).mockResolvedValue('valid')
+    vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('valid'))
     vi.mocked(changeClientPassword).mockResolvedValue(undefined)
     const wrapper = mountView({ embedded: true, accountType: 'client' })
     await flushPromises()

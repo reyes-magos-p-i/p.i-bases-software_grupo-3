@@ -125,7 +125,7 @@ describe('requireClientSession', () => {
   })
   it('keeps email confirmation public without checking an old session password', async () => {
     clientSession.user.value = { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: '' }
-    vi.mocked(getClientPasswordStatus).mockResolvedValue('expired')
+    vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))
     await expect(
       requireClientSession(route('/account/confirm-email'), route('/'), vi.fn()),
     ).resolves.toBe(true)

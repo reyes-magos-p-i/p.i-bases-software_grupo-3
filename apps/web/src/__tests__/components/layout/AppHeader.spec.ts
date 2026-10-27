@@ -588,7 +588,7 @@ describe('AppHeader authentication navigation', () => {
       firstName: 'Ana',
       lastName: '',
     })
-    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue('expired')
+    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue(expiry('expired'))
     wrapper = renderHeader()
     await flushPromises()
     expect(getClientPasswordStatus).not.toHaveBeenCalled()
