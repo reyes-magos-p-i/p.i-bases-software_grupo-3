@@ -224,6 +224,16 @@ export class CinemasRepository {
     });
   }
 
+  /** Marks an active branch as INACTIVE; false when it is missing or already inactive. */
+  async deactivateCinema(id: number): Promise<boolean> {
+    const result = await this.db.query(
+      `UPDATE CINEMAS SET STATUS = 'INACTIVE'
+       WHERE BRANCH_ID = :id AND STATUS = 'ACTIVE'`,
+      { id: { val: id, type: oracle.NUMBER } },
+    );
+    return result.rowsAffected === 1;
+  }
+
   // A company without a name cannot be told apart in the form, so it is not accepted.
   private async companyIsUsable(
     connection: oracle.Connection,

@@ -32,6 +32,7 @@ describe('Branches HTTP contracts', () => {
     findCinemaById: jest.fn(),
     createCinema: jest.fn(),
     updateCinema: jest.fn(),
+    deactivateCinema: jest.fn(),
   };
   const page = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
   const get = (path: string, authenticated = true) => {
@@ -339,6 +340,47 @@ describe('Branches HTTP contracts', () => {
       });
       await send('patch', '/cinemas/26', changes).expect(403);
       expect(repository.updateCinema).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /cinemas/:id/deactivate', () => {
+    it('deactivates the branch and answers 204 (UT-037)', async () => {
+      repository.deactivateCinema.mockResolvedValue(true);
+      await send('patch', '/cinemas/21/deactivate', {}).expect(204);
+      expect(repository.deactivateCinema).toHaveBeenCalledWith(21);
+    });
+
+    it('answers 404 for a branch already deactivated elsewhere (UT-040)', async () => {
+      repository.deactivateCinema.mockResolvedValue(false);
+      const response = await send('patch', '/cinemas/21/deactivate', {}).expect(
+        404,
+      );
+      expect(response.body.message).toBe(
+        'La sucursal no existe o ya fue desactivada',
+      );
+    });
+
+    it('has no way to activate a branch again (UT-042)', async () => {
+      await send('patch', '/cinemas/21', { status: 'ACTIVE' }).expect(400);
+      await send('patch', '/cinemas/21/activate', {}).expect(404);
+      expect(repository.updateCinema).not.toHaveBeenCalled();
+    });
+
+    it('rejects a foreign origin and a regular employee', async () => {
+      await send(
+        'patch',
+        '/cinemas/21/deactivate',
+        {},
+        {
+          origin: 'https://evil.example',
+        },
+      ).expect(403);
+      users.findEmployeeIdentityById.mockResolvedValue({
+        id: 21,
+        role: 'EMPLOYEE',
+      });
+      await send('patch', '/cinemas/21/deactivate', {}).expect(403);
+      expect(repository.deactivateCinema).not.toHaveBeenCalled();
     });
   });
 });

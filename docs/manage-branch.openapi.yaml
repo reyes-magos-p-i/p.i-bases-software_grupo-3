@@ -3,9 +3,10 @@ info:
   title: Administrar sucursales
   version: 1.0.0
   description: >-
-    Crear y modificar sucursales (tabla CINEMAS) para administradores (SCRUM-32 y
-    SCRUM-33). Las consultas están en view-branch.openapi.yaml. Las escrituras exigen
-    el header Origin del frontend (FRONTEND_URL); con otro origen responden 403.
+    Crear, modificar y desactivar sucursales (tabla CINEMAS) para administradores
+    (SCRUM-32, SCRUM-33 y SCRUM-34). Las consultas están en view-branch.openapi.yaml.
+    Las escrituras exigen el header Origin del frontend (FRONTEND_URL); con otro
+    origen responden 403.
 servers:
   - url: /api
 security:
@@ -83,6 +84,34 @@ paths:
           $ref: "#/components/responses/BranchGone"
         "409":
           $ref: "#/components/responses/NameTaken"
+        "500":
+          $ref: "view-branch.openapi.yaml#/components/responses/Unavailable"
+  /cinemas/{id}/deactivate:
+    patch:
+      summary: Desactivar una sucursal
+      description: >-
+        Cambia una sucursal activa a STATUS = 'INACTIVE'. No se borra, deja de aparecer
+        en el listado y no se puede volver a activar. No recibe cuerpo.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID numérico (BRANCH_ID), sin el prefijo SU-.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+      responses:
+        "204":
+          description: Sucursal desactivada.
+        "400":
+          $ref: "view-branch.openapi.yaml#/components/responses/BadRequest"
+        "401":
+          $ref: "view-branch.openapi.yaml#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/BranchGone"
         "500":
           $ref: "view-branch.openapi.yaml#/components/responses/Unavailable"
 components:

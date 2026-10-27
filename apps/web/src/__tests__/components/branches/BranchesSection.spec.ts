@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { AxiosError, type AxiosResponse } from 'axios'
 import BranchesSection from '@/components/branches/BranchesSection.vue'
 import BranchDetailDialog from '@/components/branches/BranchDetailDialog.vue'
@@ -10,6 +10,7 @@ const {
   getCompanies,
   createBranch,
   updateBranch,
+  deactivateBranch,
   sessionExpired,
   refreshPermissions,
 } = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ const {
   getCompanies: vi.fn(),
   createBranch: vi.fn(),
   updateBranch: vi.fn(),
+  deactivateBranch: vi.fn(),
   sessionExpired: vi.fn(),
   refreshPermissions: vi.fn(),
 }))
@@ -24,7 +26,7 @@ vi.mock('@/services/branch.service', async () => {
   const actual = await vi.importActual<typeof import('@/services/branch.service')>(
     '@/services/branch.service',
   )
-  return { ...actual, getBranches, getCompanies, createBranch, updateBranch }
+  return { ...actual, getBranches, getCompanies, createBranch, updateBranch, deactivateBranch }
 })
 vi.mock('@/composables/useEmployeeSessionRecovery', () => ({
   useEmployeeSessionRecovery: () => ({
@@ -99,15 +101,16 @@ describe('BranchesSection', () => {
     expect(view.get('.result-count').text()).toBe('1 sucursal')
   })
 
-  it('keeps the actions of other stories visible but disabled', async () => {
+  it('enables every action of the row', async () => {
     const view = await render()
     expect(button(view, 'Crear sucursal').attributes('disabled')).toBeUndefined()
     const modify = view.findAll('[aria-label="Modificar sucursal"]')
     expect(modify).toHaveLength(3)
     expect(modify.every((action) => action.attributes('disabled') === undefined)).toBe(true)
-    const deactivate = view.findAll('[aria-label="Desactivar sucursal (Pendiente)"]')
+    const deactivate = view.findAll('[aria-label="Desactivar sucursal"]')
     expect(deactivate).toHaveLength(3)
-    expect(deactivate.every((action) => action.attributes('disabled') !== undefined)).toBe(true)
+    expect(deactivate.every((action) => action.attributes('disabled') === undefined)).toBe(true)
+    expect(view.text()).not.toContain('Pendiente')
   })
 
   it('opens the detail of the selected branch and closes it', async () => {
@@ -490,6 +493,103 @@ describe('BranchesSection · Crear sucursal', () => {
       await flushPromises()
       expect(view.get('.theater-dialog h2').text()).toBe('Modificar sucursal')
       expect(view.getComponent(BranchDetailDialog).props('branchId')).toBeNull()
+    })
+  })
+
+  describe('Desactivar sucursal', () => {
+    const page = new DOMWrapper(document.body)
+    const confirmButton = () =>
+      page
+        .findAll('.branch-deactivation-content button')
+        .find((item) => item.text() === 'Confirmar')!
+    async function ask(view: VueWrapper, index = 0) {
+      await view.findAll('[aria-label="Desactivar sucursal"]')[index]!.trigger('click')
+      await flushPromises()
+    }
+
+    beforeEach(() => deactivateBranch.mockReset())
+
+    it('confirms, deactivates, shows the toast and reloads (UT-037, UT-041)', async () => {
+      deactivateBranch.mockResolvedValueOnce(undefined)
+      getBranches
+        .mockResolvedValueOnce(result())
+        .mockResolvedValueOnce(result({ items: [branches[1]!, branches[2]!], total: 2 }))
+      const view = await render()
+      await ask(view)
+      expect(page.get('.question').text()).toBe(
+        '¿Está seguro de que desea desactivar la sucursal Sucursal Heredia Centro?',
+      )
+      await confirmButton().trigger('click')
+      await flushPromises()
+      expect(deactivateBranch).toHaveBeenCalledWith(1)
+      expect(view.emitted('busy')).toEqual([[true], [false]])
+      expect(page.find('.branch-deactivation-content').exists()).toBe(false)
+      expect(view.get('.branch-notification').text()).toContain('Sucursal desactivada con éxito')
+      expect(view.text()).not.toContain('Sucursal Heredia Centro')
+      expect(view.get('.result-count').text()).toBe('2 sucursales')
+    })
+
+    it('does nothing when the administrator cancels (UT-038)', async () => {
+      const view = await render()
+      await ask(view)
+      await page
+        .findAll('.branch-deactivation-content button')
+        .find((item) => item.text() === 'Cancelar')!
+        .trigger('click')
+      await flushPromises()
+      expect(deactivateBranch).not.toHaveBeenCalled()
+      expect(page.find('.branch-deactivation-content').exists()).toBe(false)
+      expect(view.find('.branch-notification').exists()).toBe(false)
+    })
+
+    it('keeps the branch and allows a retry when the request fails (UT-039)', async () => {
+      deactivateBranch.mockRejectedValueOnce(new Error('Network Error'))
+      const view = await render()
+      await ask(view)
+      await confirmButton().trigger('click')
+      await flushPromises()
+      expect(page.get('.deactivation-error').text()).toBe(
+        'No se pudo desactivar la sucursal, intenta de nuevo',
+      )
+      expect(confirmButton().attributes('disabled')).toBeUndefined()
+      expect(view.find('.branch-notification').exists()).toBe(false)
+    })
+
+    it('reports a branch deactivated in another session and reloads (UT-040)', async () => {
+      deactivateBranch.mockRejectedValueOnce(failure(404))
+      const view = await render()
+      const loads = getBranches.mock.calls.length
+      await ask(view)
+      await confirmButton().trigger('click')
+      await flushPromises()
+      expect(page.get('.deactivation-error').text()).toBe(
+        'La sucursal no existe o ya fue desactivada',
+      )
+      expect(confirmButton().attributes('disabled')).toBeDefined()
+      expect(getBranches.mock.calls.length).toBe(loads + 1)
+      expect(view.find('.branch-notification').exists()).toBe(false)
+    })
+
+    it('shows the permission message and rechecks the session on 403', async () => {
+      deactivateBranch.mockRejectedValueOnce(failure(403))
+      const view = await render()
+      await ask(view)
+      await confirmButton().trigger('click')
+      await flushPromises()
+      expect(page.get('.deactivation-error').text()).toBe(
+        'No tiene permisos para acceder a esta sección',
+      )
+      expect(refreshPermissions).toHaveBeenCalled()
+    })
+
+    it('does not open the confirmation while the dashboard is busy', async () => {
+      wrapper = mount(BranchesSection, {
+        props: { disabled: true },
+        global: { stubs: { BranchDetailDialog: true } },
+      })
+      await flushPromises()
+      await ask(wrapper)
+      expect(page.find('.branch-deactivation-content').exists()).toBe(false)
     })
   })
 })

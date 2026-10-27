@@ -60,4 +60,11 @@ export class CinemasController {
   ) {
     return this.cinemasService.updateCinema(params.id, data);
   }
+
+  @Patch(':id/deactivate')
+  @UseGuards(EmployeeSessionOriginGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deactivateCinema(@Param() params: CinemaIdParamsDto) {
+    return this.cinemasService.deactivateCinema(params.id);
+  }
 }

@@ -462,4 +462,23 @@ describe('CinemasRepository', () => {
       await expect(repository.updateCinema(26, data)).rejects.toBe(error);
     });
   });
+
+  describe('deactivateCinema', () => {
+    it('marks only an active branch as INACTIVE', async () => {
+      databaseService.query.mockResolvedValue({ rowsAffected: 1 });
+      await expect(repository.deactivateCinema(21)).resolves.toBe(true);
+      const [sql, binds] = call(0);
+      expect(sql).toContain("UPDATE CINEMAS SET STATUS = 'INACTIVE'");
+      expect(sql).toContain("STATUS = 'ACTIVE'");
+      expect(binds).toEqual({ id: { val: 21, type: oracle.NUMBER } });
+    });
+
+    it.each([0, undefined])(
+      'reports a missing or inactive branch (rowsAffected %p)',
+      async (rowsAffected) => {
+        databaseService.query.mockResolvedValue({ rowsAffected });
+        await expect(repository.deactivateCinema(21)).resolves.toBe(false);
+      },
+    );
+  });
 });

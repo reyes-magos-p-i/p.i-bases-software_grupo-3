@@ -77,6 +77,14 @@ describe('branch service', () => {
     expect(patch).toHaveBeenCalledWith('/cinemas/26', data, { timeout: 10000 })
   })
 
+  it('deactivates a branch with PATCH /cinemas/:id/deactivate', async () => {
+    patch.mockResolvedValue({ data: '' })
+    const { deactivateBranch } = await import('@/services/branch.service')
+
+    await expect(deactivateBranch(21)).resolves.toBeUndefined()
+    expect(patch).toHaveBeenCalledWith('/cinemas/21/deactivate', undefined, { timeout: 10000 })
+  })
+
   it('propagates request failures', async () => {
     const failure = new Error('Network Error')
     get.mockRejectedValue(failure)

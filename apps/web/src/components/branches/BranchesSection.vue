@@ -5,10 +5,12 @@ import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import BranchDetailDialog from '@/components/branches/BranchDetailDialog.vue'
 import BranchFormDialog from '@/components/branches/BranchFormDialog.vue'
+import DeactivateBranchDialog from '@/components/branches/DeactivateBranchDialog.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import {
   createBranch,
+  deactivateBranch,
   formatBranchId,
   getBranches,
   getCompanies,
@@ -27,8 +29,6 @@ import type {
 const PAGE_SIZES: readonly BranchPageSize[] = [10, 20, 50]
 const NO_NAME = 'Sin nombre registrado'
 const NO_COMPANY = 'Sin compañía asignada'
-// Deactivating belongs to SCRUM-34; it stays visible but disabled.
-const PENDING = '(Pendiente)'
 const NO_PERMISSION = 'No tiene permisos para acceder a esta sección'
 const BRANCH_GONE = 'La sucursal no existe o ya fue desactivada'
 
@@ -55,6 +55,9 @@ const submissionError = ref('')
 const submissionFieldErrors = ref<BranchFormErrors>({})
 const notice = ref('')
 const editingBranch = ref<BranchListItem | null>(null)
+const deactivatingBranch = ref<BranchListItem | null>(null)
+const deactivationError = ref('')
+const deactivationBlocked = ref(false)
 let listRequest: AbortController | undefined
 let companiesRequest: AbortController | undefined
 
@@ -184,6 +187,44 @@ function openForm(branch: BranchListItem | null = null) {
 function modifyBranch(row: { [key: string]: unknown }) {
   const branch = (row as { branch?: BranchListItem }).branch
   if (branch) openForm(branch)
+}
+function askDeactivation(row: { [key: string]: unknown }) {
+  const branch = (row as { branch?: BranchListItem }).branch
+  if (!branch || props.disabled || submitting.value) return
+  deactivationError.value = ''
+  deactivationBlocked.value = false
+  deactivatingBranch.value = branch
+}
+function closeDeactivation() {
+  if (!submitting.value) deactivatingBranch.value = null
+}
+async function confirmDeactivation() {
+  const branch = deactivatingBranch.value
+  if (!branch || submitting.value || props.disabled || deactivationBlocked.value) return
+  submitting.value = true
+  emit('busy', true)
+  deactivationError.value = ''
+  try {
+    await deactivateBranch(branch.id)
+    if (state.disposed) return
+    deactivatingBranch.value = null
+    notice.value = 'Sucursal desactivada con éxito'
+    void load()
+  } catch (error) {
+    if (state.disposed) return
+    const status = failed(error)
+    // Retrying cannot help when the branch is gone or the permission was removed.
+    deactivationBlocked.value = status === 404 || status === 403
+    if (status === 404) {
+      deactivationError.value = BRANCH_GONE
+      void load()
+    } else
+      deactivationError.value =
+        status === 403 ? NO_PERMISSION : 'No se pudo desactivar la sucursal, intenta de nuevo'
+  } finally {
+    submitting.value = false
+    emit('busy', false)
+  }
 }
 async function submitForm(data: BranchRequest) {
   if (submitting.value || props.disabled) return
@@ -340,8 +381,14 @@ onBeforeUnmount(() => {
                   <i class="bi bi-pencil-square" aria-hidden="true"></i>
                 </button>
               </span>
-              <span :title="`Desactivar ${PENDING}`" class="action-hint">
-                <button type="button" :aria-label="`Desactivar sucursal ${PENDING}`" disabled>
+              <span title="Desactivar" class="action-hint">
+                <button
+                  type="button"
+                  aria-label="Desactivar sucursal"
+                  aria-haspopup="dialog"
+                  :disabled="disabled || submitting"
+                  @click="askDeactivation(row)"
+                >
                   <i class="bi bi-x-circle" aria-hidden="true"></i>
                 </button>
               </span>
@@ -414,6 +461,14 @@ onBeforeUnmount(() => {
       @modify="openForm"
       @session-expired="sessionExpired"
       @forbidden="refreshPermissions"
+    />
+    <DeactivateBranchDialog
+      :branch="deactivatingBranch"
+      :saving="submitting"
+      :error="deactivationError"
+      :blocked="deactivationBlocked"
+      @close="closeDeactivation"
+      @confirm="confirmDeactivation"
     />
   </section>
 </template>

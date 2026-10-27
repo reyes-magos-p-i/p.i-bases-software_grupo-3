@@ -12,6 +12,7 @@ describe('CinemasController', () => {
     getCinema: jest.fn(),
     createCinema: jest.fn(),
     updateCinema: jest.fn(),
+    deactivateCinema: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -57,5 +58,13 @@ describe('CinemasController', () => {
       id: 26,
     });
     expect(service.updateCinema).toHaveBeenCalledWith(26, data);
+  });
+
+  it('deactivates a branch through the service', async () => {
+    service.deactivateCinema.mockResolvedValue(undefined);
+    await expect(
+      controller.deactivateCinema({ id: 21 }),
+    ).resolves.toBeUndefined();
+    expect(service.deactivateCinema).toHaveBeenCalledWith(21);
   });
 });

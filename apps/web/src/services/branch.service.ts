@@ -46,3 +46,8 @@ export async function updateBranch(id: number, data: BranchRequest): Promise<Bra
   const response = await getApi().patch<BranchDetail>(`/cinemas/${id}`, data, { timeout: 10000 })
   return response.data
 }
+
+/** Deactivating is final: the branch leaves the list and cannot be activated again. */
+export async function deactivateBranch(id: number): Promise<void> {
+  await getApi().patch(`/cinemas/${id}/deactivate`, undefined, { timeout: 10000 })
+}

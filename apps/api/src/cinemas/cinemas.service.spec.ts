@@ -16,6 +16,7 @@ describe('CinemasService', () => {
     findCinemaById: jest.fn(),
     createCinema: jest.fn(),
     updateCinema: jest.fn(),
+    deactivateCinema: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -140,6 +141,23 @@ describe('CinemasService', () => {
         'Ya existe una sucursal activa con ese nombre',
       );
       expect(repository.findCinemaById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deactivateCinema', () => {
+    it('deactivates an active branch', async () => {
+      repository.deactivateCinema.mockResolvedValue(true);
+      await expect(service.deactivateCinema(21)).resolves.toBeUndefined();
+      expect(repository.deactivateCinema).toHaveBeenCalledWith(21);
+    });
+
+    it('answers 404 when it is missing or already inactive (UT-040)', async () => {
+      repository.deactivateCinema.mockResolvedValue(false);
+      const failure = service.deactivateCinema(21);
+      await expect(failure).rejects.toBeInstanceOf(NotFoundException);
+      await expect(failure).rejects.toThrow(
+        'La sucursal no existe o ya fue desactivada',
+      );
     });
   });
 });

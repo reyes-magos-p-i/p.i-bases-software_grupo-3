@@ -1,8 +1,8 @@
-# Administrar sucursales (SCRUM-32 y SCRUM-33)
+# Administrar sucursales (SCRUM-32, SCRUM-33 y SCRUM-34)
 
-Desde la sección Sucursales del dashboard, el administrador crea y modifica
-sucursales. El listado y el detalle están en [view-branch.md](view-branch.md). El
-contrato está en [`manage-branch.openapi.yaml`](manage-branch.openapi.yaml).
+Desde la sección Sucursales del dashboard, el administrador crea, modifica y
+desactiva sucursales. El listado y el detalle están en [view-branch.md](view-branch.md).
+El contrato está en [`manage-branch.openapi.yaml`](manage-branch.openapi.yaml).
 
 Las rutas son solo para administradores, pasan por el bloqueo de contraseña vencida
 y, por ser escrituras con la cookie de sesión, exigen el `Origin` del frontend.
@@ -69,6 +69,27 @@ ambos datos y responde `200` con el detalle.
 - Solo se modifican sucursales activas. Si la sucursal ya no existe o se desactivó en
   otra sesión, responde `404` «La sucursal no existe o ya fue desactivada» y el
   listado se recarga.
+
+## Desactivar (SCRUM-34)
+
+El ícono Desactivar de cada fila siempre pide confirmación: «¿Está seguro de que
+desea desactivar la sucursal {nombre}?», con «Confirmar» y «Cancelar» (si el nombre
+es solo espacios, se usa su ID, por ejemplo SU-025). El diálogo también avisa que la
+acción es irreversible. `PATCH /api/cinemas/:id/deactivate` responde `204`.
+
+- La sucursal no se borra: queda con `STATUS = 'INACTIVE'` y deja de aparecer en el
+  listado (UT-041). No existe ninguna opción ni ruta para activarla de nuevo (UT-042).
+- Éxito: el diálogo se cierra, el listado se recarga y aparece «Sucursal desactivada
+  con éxito».
+- Cancelar cierra el diálogo sin cambios (UT-038).
+- Error de red o del servidor: «No se pudo desactivar la sucursal, intenta de nuevo».
+  La sucursal sigue activa y se puede volver a confirmar (UT-039).
+- Si ya se desactivó en otra sesión o no existe, responde `404` «La sucursal no
+  existe o ya fue desactivada», se bloquea «Confirmar» y el listado se recarga
+  (UT-040).
+- Fuera de alcance: las salas y los empleados de una sucursal desactivada no cambian.
+  `GET /api/cinemas` (usado por Salas) sigue devolviendo todas las sucursales, también
+  las inactivas, para no cambiar su contrato.
 
 ## Datos de prueba
 

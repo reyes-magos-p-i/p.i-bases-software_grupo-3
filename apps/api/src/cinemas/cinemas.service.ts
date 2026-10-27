@@ -50,4 +50,10 @@ export class CinemasService {
     if (result === 'missing') throw new NotFoundException(BRANCH_GONE);
     return this.getCinema(id);
   }
+
+  // A deactivated branch is kept, leaves the list and cannot be activated again.
+  async deactivateCinema(id: number): Promise<void> {
+    if (!(await this.cinemasRepository.deactivateCinema(id)))
+      throw new NotFoundException(BRANCH_GONE);
+  }
 }
