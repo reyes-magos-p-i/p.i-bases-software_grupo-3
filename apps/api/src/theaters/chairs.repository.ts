@@ -65,4 +65,29 @@ async createForTheater(
 
     return this.db.transaction(insertChairs);
   }
+
+  async deleteForTheater(
+    theaterId: number,
+    conn?: oracledb.Connection,
+  ): Promise<void> {
+    if (!Number.isSafeInteger(theaterId) || theaterId <= 0) {
+      throw new BadRequestException(
+        'theaterId must be a positive safe integer',
+      );
+    }
+
+    const deleteSeats = async (connection: oracledb.Connection) => {
+      await connection.execute(
+        `DELETE FROM SEATS WHERE THEATER_ID = :theaterId`,
+        { theaterId },
+        { autoCommit: false },
+      );
+    };
+
+    if (conn) {
+      await deleteSeats(conn);
+    } else {
+      await this.db.transaction(deleteSeats);
+    }
+  }
 }
