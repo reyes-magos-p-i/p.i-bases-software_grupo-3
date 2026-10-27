@@ -16,6 +16,7 @@ import MovieCatalog from '@/components/landing/MovieCatalog.vue'
     <MovieCatalog />
     <Movie/>
   </main>
+
   <AppFooter />
 </template>
 
