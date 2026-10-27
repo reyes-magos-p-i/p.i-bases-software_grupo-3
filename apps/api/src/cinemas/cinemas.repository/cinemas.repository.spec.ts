@@ -290,6 +290,7 @@ describe('CinemasRepository', () => {
       const [nameSql, nameBinds, nameOptions] =
         connection.execute.mock.calls[1];
       expect(nameSql).toContain("STATUS = 'ACTIVE'");
+      expect(nameSql).not.toContain(':exceptId');
       expect(nameSql).toContain(
         "TRANSLATE(LOWER(TRIM(NAME)), 'áéíóúüñ', 'aeiouun') = TRANSLATE(LOWER(:name), 'áéíóúüñ', 'aeiouun')",
       );
@@ -371,5 +372,94 @@ describe('CinemasRepository', () => {
         );
       },
     );
+  });
+
+  describe('updateCinema', () => {
+    const connection = { execute: jest.fn() };
+    const data = { name: 'Sucursal Heredia Oeste', companyId: 23 };
+
+    beforeEach(() => {
+      connection.execute.mockReset();
+      databaseService.transaction.mockImplementation(
+        (work: (conn: typeof connection) => Promise<unknown>) =>
+          work(connection),
+      );
+    });
+
+    it('changes the name and company of an active branch', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+      await expect(repository.updateCinema(26, data)).resolves.toBe('updated');
+      const [nameSql, nameBinds] = connection.execute.mock.calls[1];
+      expect(nameSql).toContain("STATUS = 'ACTIVE'");
+      expect(nameSql).toContain('AND BRANCH_ID <> :exceptId');
+      expect(nameBinds).toEqual({
+        name: { val: 'Sucursal Heredia Oeste', type: oracle.STRING },
+        exceptId: { val: 26, type: oracle.NUMBER },
+      });
+      const [sql, binds, options] = connection.execute.mock.calls[2];
+      expect(sql).toContain(
+        'UPDATE CINEMAS SET NAME = :name, COMPANY_ID = :companyId',
+      );
+      expect(sql).toContain("STATUS = 'ACTIVE'");
+      expect(binds).toEqual({
+        id: { val: 26, type: oracle.NUMBER },
+        name: { val: 'Sucursal Heredia Oeste', type: oracle.STRING },
+        companyId: { val: 23, type: oracle.NUMBER },
+      });
+      expect(options).toEqual({ autoCommit: false });
+    });
+
+    it('reports a missing or inactive branch', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rowsAffected: 0 });
+      await expect(repository.updateCinema(99, data)).resolves.toBe('missing');
+    });
+
+    it('does not update when the company is unusable', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [] });
+      await expect(repository.updateCinema(26, data)).resolves.toBe('company');
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not update when another active branch has the name', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] });
+      await expect(repository.updateCinema(26, data)).resolves.toBe(
+        'duplicate',
+      );
+      expect(connection.execute).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports the name as taken when the unique index rejects a concurrent update', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockRejectedValueOnce(
+          Object.assign(
+            new Error(
+              'ORA-00001: unique constraint (PRODUCTION.UX_CINEMAS_ACTIVE_NAME) violated',
+            ),
+            { errorNum: 1 },
+          ),
+        );
+      await expect(repository.updateCinema(26, data)).resolves.toBe(
+        'duplicate',
+      );
+    });
+
+    it('propagates other update errors', async () => {
+      const error = Object.assign(new Error('ORA-03113'), { errorNum: 3113 });
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockRejectedValueOnce(error);
+      await expect(repository.updateCinema(26, data)).rejects.toBe(error);
+    });
   });
 });

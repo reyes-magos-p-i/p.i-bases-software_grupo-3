@@ -7,9 +7,16 @@ import BranchDetailDialog from '@/components/branches/BranchDetailDialog.vue'
 import BranchFormDialog from '@/components/branches/BranchFormDialog.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
-import { createBranch, formatBranchId, getBranches, getCompanies } from '@/services/branch.service'
+import {
+  createBranch,
+  formatBranchId,
+  getBranches,
+  getCompanies,
+  updateBranch,
+} from '@/services/branch.service'
 import { branchErrorsFromApi, type BranchFormErrors } from '@/utils/branch-validation'
 import type {
+  BranchListItem,
   BranchListQuery,
   BranchRequest,
   BranchListResult,
@@ -20,9 +27,10 @@ import type {
 const PAGE_SIZES: readonly BranchPageSize[] = [10, 20, 50]
 const NO_NAME = 'Sin nombre registrado'
 const NO_COMPANY = 'Sin compañía asignada'
-// Modify and deactivate belong to SCRUM-33/34; they stay visible but disabled.
+// Deactivating belongs to SCRUM-34; it stays visible but disabled.
 const PENDING = '(Pendiente)'
 const NO_PERMISSION = 'No tiene permisos para acceder a esta sección'
+const BRANCH_GONE = 'La sucursal no existe o ya fue desactivada'
 
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
@@ -46,6 +54,7 @@ const submitting = ref(false)
 const submissionError = ref('')
 const submissionFieldErrors = ref<BranchFormErrors>({})
 const notice = ref('')
+const editingBranch = ref<BranchListItem | null>(null)
 let listRequest: AbortController | undefined
 let companiesRequest: AbortController | undefined
 
@@ -162,24 +171,34 @@ function clearFilters() {
 function viewBranch(row: { [key: string]: unknown }) {
   if (typeof row.id === 'number') selectedBranchId.value = row.id
 }
-function openCreate() {
+/** Opens the form to create a branch, or to modify the given one. */
+function openForm(branch: BranchListItem | null = null) {
   if (props.disabled || submitting.value) return
+  selectedBranchId.value = null
+  editingBranch.value = branch
   submissionError.value = ''
   submissionFieldErrors.value = {}
-  formDialog.value?.open()
+  formDialog.value?.open(branch)
   if (companiesError.value || !companies.value.length) void loadCompanies()
 }
-async function submitCreate(data: BranchRequest) {
+function modifyBranch(row: { [key: string]: unknown }) {
+  const branch = (row as { branch?: BranchListItem }).branch
+  if (branch) openForm(branch)
+}
+async function submitForm(data: BranchRequest) {
   if (submitting.value || props.disabled) return
+  const branch = editingBranch.value
   submitting.value = true
   emit('busy', true)
   submissionError.value = ''
   submissionFieldErrors.value = {}
   try {
-    await createBranch(data)
+    if (branch) await updateBranch(branch.id, data)
+    else await createBranch(data)
     if (state.disposed) return
     formDialog.value?.complete()
-    notice.value = 'Sucursal creada con éxito'
+    editingBranch.value = null
+    notice.value = branch ? 'Sucursal modificada con éxito' : 'Sucursal creada con éxito'
     void load()
   } catch (error) {
     if (state.disposed) return
@@ -189,9 +208,14 @@ async function submitCreate(data: BranchRequest) {
         ? branchErrorsFromApi(error.response?.data?.message)
         : {}
     if (fieldErrors.name || fieldErrors.companyId) submissionFieldErrors.value = fieldErrors
-    else
+    else if (status === 404 && branch) {
+      submissionError.value = BRANCH_GONE
+      void load()
+    } else
       submissionError.value =
-        status === 403 ? NO_PERMISSION : 'No se pudo crear la sucursal, intenta de nuevo'
+        status === 403
+          ? NO_PERMISSION
+          : `No se pudo ${branch ? 'modificar' : 'crear'} la sucursal, intenta de nuevo`
   } finally {
     submitting.value = false
     emit('busy', false)
@@ -221,7 +245,7 @@ onBeforeUnmount(() => {
         class="add-user-button"
         aria-haspopup="dialog"
         :disabled="disabled || submitting"
-        @click="openCreate"
+        @click="openForm()"
       >
         <i class="bi bi-plus-lg" aria-hidden="true"></i>
         Crear sucursal
@@ -305,8 +329,14 @@ onBeforeUnmount(() => {
                   <i class="bi bi-eye" aria-hidden="true"></i>
                 </button>
               </span>
-              <span :title="`Modificar ${PENDING}`" class="action-hint">
-                <button type="button" :aria-label="`Modificar sucursal ${PENDING}`" disabled>
+              <span title="Modificar" class="action-hint">
+                <button
+                  type="button"
+                  aria-label="Modificar sucursal"
+                  aria-haspopup="dialog"
+                  :disabled="disabled || submitting"
+                  @click="modifyBranch(row)"
+                >
                   <i class="bi bi-pencil-square" aria-hidden="true"></i>
                 </button>
               </span>
@@ -372,7 +402,8 @@ onBeforeUnmount(() => {
       :submission-error="submissionError"
       :submission-field-errors="submissionFieldErrors"
       @retry-companies="loadCompanies"
-      @submit="submitCreate"
+      @close="editingBranch = null"
+      @submit="submitForm"
     />
     <div v-if="notice" class="branch-notification">
       <NotificationPopup type="success" :message="notice" @close="notice = ''" />
@@ -380,6 +411,7 @@ onBeforeUnmount(() => {
     <BranchDetailDialog
       :branch-id="selectedBranchId"
       @close="selectedBranchId = null"
+      @modify="openForm"
       @session-expired="sessionExpired"
       @forbidden="refreshPermissions"
     />

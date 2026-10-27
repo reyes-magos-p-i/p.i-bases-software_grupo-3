@@ -7,7 +7,7 @@ import {
   validateBranchForm,
   type BranchFormErrors,
 } from '@/utils/branch-validation'
-import type { BranchRequest, CompanyOption } from '@/types/branch'
+import type { BranchListItem, BranchRequest, CompanyOption } from '@/types/branch'
 
 const props = withDefaults(
   defineProps<{
@@ -35,6 +35,9 @@ const shell = useTemplateRef('shell')
 const form = useTemplateRef<HTMLFormElement>('form')
 const draft = reactive<{ name: string; companyId: number | '' }>({ name: '', companyId: '' })
 const errors = ref<BranchFormErrors>({})
+/** The branch being modified; null while creating. */
+const editing = ref<BranchListItem | null>(null)
+const title = computed(() => (editing.value ? 'Modificar sucursal' : 'Crear sucursal'))
 // A company without a name cannot be told apart, so it is not offered.
 const companyOptions = computed(() =>
   props.companies.filter((company): company is CompanyOption & { name: string } => !!company.name),
@@ -61,8 +64,15 @@ function reset() {
   errors.value = {}
 }
 
-function open() {
+/** Opens the form empty, or with the current data of the branch to modify. */
+function open(branch: BranchListItem | null = null) {
   reset()
+  editing.value = branch
+  if (branch) {
+    draft.name = branch.name ?? ''
+    // A company without a name is not offered, so the administrator must pick one.
+    draft.companyId = branch.companyName ? branch.companyId : ''
+  }
   shell.value?.open()
 }
 
@@ -93,7 +103,7 @@ defineExpose({ open, complete })
 <template>
   <TheaterDialogShell
     ref="shell"
-    title="Crear sucursal"
+    :title="title"
     :close-disabled="submitting"
     @close="emit('close')"
   >

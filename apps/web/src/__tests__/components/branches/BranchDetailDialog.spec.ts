@@ -134,11 +134,12 @@ describe('BranchDetailDialog', () => {
     expect(field('Estado')).toBe('Inactiva')
   })
 
-  it('keeps Modificar visible but disabled until SCRUM-33', async () => {
-    await render()
+  it('asks to modify the loaded branch (SCRUM-33)', async () => {
+    const view = await render()
     const modify = page.findAll('button').find((button) => button.text().includes('Modificar'))
-    expect(modify?.attributes('disabled')).toBeDefined()
-    expect(modify?.element.parentElement?.getAttribute('title')).toBe('Modificar (Pendiente)')
+    expect(modify?.attributes('disabled')).toBeUndefined()
+    await modify!.trigger('click')
+    expect(view.emitted('modify')).toEqual([[branch]])
   })
 
   it('shows the loading state while the detail is requested', async () => {

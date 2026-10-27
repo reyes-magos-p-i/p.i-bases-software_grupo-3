@@ -31,6 +31,7 @@ describe('Branches HTTP contracts', () => {
     listCompanies: jest.fn(),
     findCinemaById: jest.fn(),
     createCinema: jest.fn(),
+    updateCinema: jest.fn(),
   };
   const page = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
   const get = (path: string, authenticated = true) => {
@@ -283,6 +284,61 @@ describe('Branches HTTP contracts', () => {
         .send(valid)
         .expect(401);
       expect(repository.createCinema).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /cinemas/:id', () => {
+    const changes = { name: 'Sucursal Heredia Oeste', companyId: 23 };
+
+    it('modifies an active branch and returns its detail (UT-036)', async () => {
+      const modified = {
+        ...created,
+        id: 26,
+        ...changes,
+        companyName: 'Cinetadel del Pacifico',
+      };
+      repository.updateCinema.mockResolvedValue('updated');
+      repository.findCinemaById.mockResolvedValue(modified);
+      await send('patch', '/cinemas/26', changes).expect(200, modified);
+      expect(repository.updateCinema).toHaveBeenCalledWith(26, changes);
+    });
+
+    it('answers 404 when the branch is missing or inactive', async () => {
+      repository.updateCinema.mockResolvedValue('missing');
+      const response = await send('patch', '/cinemas/26', changes).expect(404);
+      expect(response.body.message).toBe(
+        'La sucursal no existe o ya fue desactivada',
+      );
+    });
+
+    it('answers 409 when another active branch has the name', async () => {
+      repository.updateCinema.mockResolvedValue('duplicate');
+      const response = await send('patch', '/cinemas/26', changes).expect(409);
+      expect(response.body.message).toBe(
+        'Ya existe una sucursal activa con ese nombre',
+      );
+    });
+
+    it.each([
+      [{ name: 'Heredia Centro 2', companyId: 21 }],
+      [{ name: 'Sucursal Heredia Centro' }],
+      [{ ...changes, status: 'INACTIVE' }],
+    ])('rejects %p without saving (UT-027, UT-034)', async (body) => {
+      await send('patch', '/cinemas/26', body).expect(400);
+      expect(repository.updateCinema).not.toHaveBeenCalled();
+    });
+
+    it('rejects a foreign origin, a regular employee and an invalid ID', async () => {
+      await send('patch', '/cinemas/26', changes, {
+        origin: 'https://evil.example',
+      }).expect(403);
+      await send('patch', '/cinemas/abc', changes).expect(400);
+      users.findEmployeeIdentityById.mockResolvedValue({
+        id: 21,
+        role: 'EMPLOYEE',
+      });
+      await send('patch', '/cinemas/26', changes).expect(403);
+      expect(repository.updateCinema).not.toHaveBeenCalled();
     });
   });
 });

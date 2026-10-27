@@ -15,6 +15,7 @@ describe('CinemasService', () => {
     listCompanies: jest.fn(),
     findCinemaById: jest.fn(),
     createCinema: jest.fn(),
+    updateCinema: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -97,5 +98,48 @@ describe('CinemasService', () => {
       'Ya existe una sucursal activa con ese nombre',
     );
     expect(repository.findCinemaById).not.toHaveBeenCalled();
+  });
+
+  describe('updateCinema', () => {
+    const data = { name: 'Sucursal Heredia Oeste', companyId: 23 };
+
+    it('returns the modified branch', async () => {
+      const branch = {
+        id: 26,
+        name: 'Sucursal Heredia Oeste',
+        status: 'ACTIVE',
+      };
+      repository.updateCinema.mockResolvedValue('updated');
+      repository.findCinemaById.mockResolvedValue(branch);
+      await expect(service.updateCinema(26, data)).resolves.toBe(branch);
+      expect(repository.updateCinema).toHaveBeenCalledWith(26, data);
+    });
+
+    it('answers 404 for a missing or inactive branch', async () => {
+      repository.updateCinema.mockResolvedValue('missing');
+      const failure = service.updateCinema(26, data);
+      await expect(failure).rejects.toBeInstanceOf(NotFoundException);
+      await expect(failure).rejects.toThrow(
+        'La sucursal no existe o ya fue desactivada',
+      );
+    });
+
+    it('answers 400 for an unusable company', async () => {
+      repository.updateCinema.mockResolvedValue('company');
+      await expect(service.updateCinema(26, data)).rejects.toThrow(
+        'Debe seleccionar una compañía',
+      );
+      expect(repository.findCinemaById).not.toHaveBeenCalled();
+    });
+
+    it('answers 409 when another active branch has the name', async () => {
+      repository.updateCinema.mockResolvedValue('duplicate');
+      const failure = service.updateCinema(26, data);
+      await expect(failure).rejects.toBeInstanceOf(ConflictException);
+      await expect(failure).rejects.toThrow(
+        'Ya existe una sucursal activa con ese nombre',
+      );
+      expect(repository.findCinemaById).not.toHaveBeenCalled();
+    });
   });
 });

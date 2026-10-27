@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -17,6 +18,7 @@ import { EmployeeSessionOriginGuard } from '../auth/guards/employee-session-orig
 import { ListCinemasQueryDto } from './dto/list-cinemas-query.dto';
 import { CinemaIdParamsDto } from './dto/cinema-id-params.dto';
 import { CreateCinemaDto } from './dto/create-cinema.dto';
+import { UpdateCinemaDto } from './dto/update-cinema.dto';
 
 @UseGuards(AuthGuard('jwt'), AdministratorGuard, PasswordStatusGuard)
 @Controller('cinemas')
@@ -48,5 +50,14 @@ export class CinemasController {
   @HttpCode(HttpStatus.CREATED)
   createCinema(@Body() data: CreateCinemaDto) {
     return this.cinemasService.createCinema(data);
+  }
+
+  @Patch(':id')
+  @UseGuards(EmployeeSessionOriginGuard)
+  updateCinema(
+    @Param() params: CinemaIdParamsDto,
+    @Body() data: UpdateCinemaDto,
+  ) {
+    return this.cinemasService.updateCinema(params.id, data);
   }
 }

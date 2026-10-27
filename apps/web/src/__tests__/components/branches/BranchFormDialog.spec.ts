@@ -168,4 +168,60 @@ describe('BranchFormDialog', () => {
     expect((view.get('input[name="name"]').element as HTMLInputElement).value).toBe('')
     expect(view.find('[aria-invalid="true"]').exists()).toBe(false)
   })
+
+  describe('Modificar sucursal', () => {
+    const current = {
+      id: 26,
+      name: 'Sucursal Heredia Centro',
+      companyId: 21,
+      companyName: 'Cinetadel S.A',
+    }
+
+    it('shows the current Nombre and Compañía, both editable (UT-024)', async () => {
+      wrapper = mount(BranchFormDialog, { props: { companies }, attachTo: document.body })
+      wrapper.vm.open(current)
+      await wrapper.vm.$nextTick()
+      expect(wrapper.get('h2').text()).toBe('Modificar sucursal')
+      const name = wrapper.get('input[name="name"]')
+      expect((name.element as HTMLInputElement).value).toBe('Sucursal Heredia Centro')
+      expect(name.attributes('disabled')).toBeUndefined()
+      const select = wrapper.get('select[name="companyId"]')
+      expect((select.element as HTMLSelectElement).value).toBe('21')
+      expect(select.findAll('option').map((option) => option.text())).toEqual([
+        'Selecciona una compañía',
+        'Cinetadel S.A',
+        'Cinetadel del Pacifico',
+        'Cinetadel del Caribe',
+      ])
+    })
+
+    it('sends the new values (UT-036)', async () => {
+      wrapper = mount(BranchFormDialog, { props: { companies }, attachTo: document.body })
+      wrapper.vm.open(current)
+      await fill(wrapper, 'Sucursal Heredia Oeste', 23)
+      expect(wrapper.emitted('submit')).toEqual([
+        [{ name: 'Sucursal Heredia Oeste', companyId: 23 }],
+      ])
+    })
+
+    it('starts with empty fields when the stored values are only spaces', async () => {
+      wrapper = mount(BranchFormDialog, { props: { companies }, attachTo: document.body })
+      wrapper.vm.open({ id: 27, name: null, companyId: 22, companyName: null })
+      await wrapper.vm.$nextTick()
+      expect((wrapper.get('input[name="name"]').element as HTMLInputElement).value).toBe('')
+      expect((wrapper.get('select[name="companyId"]').element as HTMLSelectElement).value).toBe('')
+      await wrapper.get('form').trigger('submit')
+      expect(nameError(wrapper)).toBe('El nombre es obligatorio')
+      expect(companyError(wrapper)).toBe('Debe seleccionar una compañía')
+    })
+
+    it('goes back to Crear sucursal when opened without a branch', async () => {
+      wrapper = mount(BranchFormDialog, { props: { companies }, attachTo: document.body })
+      wrapper.vm.open(current)
+      wrapper.vm.open()
+      await wrapper.vm.$nextTick()
+      expect(wrapper.get('h2').text()).toBe('Crear sucursal')
+      expect((wrapper.get('input[name="name"]').element as HTMLInputElement).value).toBe('')
+    })
+  })
 })

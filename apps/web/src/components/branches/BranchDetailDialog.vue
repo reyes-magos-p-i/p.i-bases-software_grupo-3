@@ -6,7 +6,12 @@ import { formatBranchId, getBranch } from '@/services/branch.service'
 import type { BranchDetail } from '@/types/branch'
 
 const props = defineProps<{ branchId: number | null }>()
-const emit = defineEmits<{ close: []; 'session-expired': []; forbidden: [] }>()
+const emit = defineEmits<{
+  close: []
+  modify: [branch: BranchDetail]
+  'session-expired': []
+  forbidden: []
+}>()
 const branch = ref<BranchDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
@@ -131,12 +136,15 @@ onBeforeUnmount(() => request?.abort())
       </template>
       <footer class="detail-footer">
         <button type="button" class="detail-button" @click="close">Cerrar</button>
-        <!-- Modifying a branch is SCRUM-33. -->
-        <span v-if="branch" title="Modificar (Pendiente)" class="action-hint">
-          <button type="button" class="detail-button primary" disabled>
-            <i class="bi bi-pencil-square" aria-hidden="true"></i> Modificar
-          </button>
-        </span>
+        <button
+          v-if="branch"
+          type="button"
+          class="detail-button primary"
+          aria-haspopup="dialog"
+          @click="emit('modify', branch)"
+        >
+          <i class="bi bi-pencil-square" aria-hidden="true"></i> Modificar
+        </button>
       </footer>
     </div>
   </BaseModal>
@@ -287,9 +295,6 @@ dd {
   justify-content: flex-end;
   gap: 12px;
   padding-top: 4px;
-}
-.action-hint {
-  display: inline-flex;
 }
 .detail-button {
   display: inline-flex;

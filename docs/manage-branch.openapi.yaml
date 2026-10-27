@@ -3,9 +3,9 @@ info:
   title: Administrar sucursales
   version: 1.0.0
   description: >-
-    Crear sucursales (tabla CINEMAS) para administradores (SCRUM-32). Las consultas
-    están en view-branch.openapi.yaml. Las escrituras exigen el header Origin del
-    frontend (FRONTEND_URL); con otro origen responden 403.
+    Crear y modificar sucursales (tabla CINEMAS) para administradores (SCRUM-32 y
+    SCRUM-33). Las consultas están en view-branch.openapi.yaml. Las escrituras exigen
+    el header Origin del frontend (FRONTEND_URL); con otro origen responden 403.
 servers:
   - url: /api
 security:
@@ -41,6 +41,46 @@ paths:
           $ref: "view-branch.openapi.yaml#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/NameTaken"
+        "500":
+          $ref: "view-branch.openapi.yaml#/components/responses/Unavailable"
+  /cinemas/{id}:
+    patch:
+      summary: Modificar una sucursal
+      description: >-
+        Cambia el nombre y la compañía de una sucursal activa, con las mismas reglas
+        que crear. Conservar su propio nombre no cuenta como repetido.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID numérico (BRANCH_ID), sin el prefijo SU-.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BranchRequest"
+      responses:
+        "200":
+          description: Sucursal modificada.
+          content:
+            application/json:
+              schema:
+                $ref: "view-branch.openapi.yaml#/components/schemas/BranchDetail"
+        "400":
+          $ref: "#/components/responses/InvalidBranch"
+        "401":
+          $ref: "view-branch.openapi.yaml#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/BranchGone"
         "409":
           $ref: "#/components/responses/NameTaken"
         "500":
@@ -107,3 +147,13 @@ components:
             statusCode: 409
             message: Ya existe una sucursal activa con ese nombre
             error: Conflict
+    BranchGone:
+      description: La sucursal no existe o está inactiva.
+      content:
+        application/json:
+          schema:
+            $ref: "view-branch.openapi.yaml#/components/schemas/Error"
+          example:
+            statusCode: 404
+            message: La sucursal no existe o ya fue desactivada
+            error: Not Found

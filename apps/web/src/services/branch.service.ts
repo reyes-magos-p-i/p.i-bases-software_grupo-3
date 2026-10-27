@@ -41,3 +41,8 @@ export async function createBranch(data: BranchRequest): Promise<BranchDetail> {
   const response = await getApi().post<BranchDetail>('/cinemas', data, { timeout: 10000 })
   return response.data
 }
+
+export async function updateBranch(id: number, data: BranchRequest): Promise<BranchDetail> {
+  const response = await getApi().patch<BranchDetail>(`/cinemas/${id}`, data, { timeout: 10000 })
+  return response.data
+}

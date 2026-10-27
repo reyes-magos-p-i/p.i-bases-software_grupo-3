@@ -5,20 +5,26 @@ import BranchesSection from '@/components/branches/BranchesSection.vue'
 import BranchDetailDialog from '@/components/branches/BranchDetailDialog.vue'
 import type { BranchListItem, BranchListResult } from '@/types/branch'
 
-const { getBranches, getCompanies, createBranch, sessionExpired, refreshPermissions } = vi.hoisted(
-  () => ({
-    getBranches: vi.fn(),
-    getCompanies: vi.fn(),
-    createBranch: vi.fn(),
-    sessionExpired: vi.fn(),
-    refreshPermissions: vi.fn(),
-  }),
-)
+const {
+  getBranches,
+  getCompanies,
+  createBranch,
+  updateBranch,
+  sessionExpired,
+  refreshPermissions,
+} = vi.hoisted(() => ({
+  getBranches: vi.fn(),
+  getCompanies: vi.fn(),
+  createBranch: vi.fn(),
+  updateBranch: vi.fn(),
+  sessionExpired: vi.fn(),
+  refreshPermissions: vi.fn(),
+}))
 vi.mock('@/services/branch.service', async () => {
   const actual = await vi.importActual<typeof import('@/services/branch.service')>(
     '@/services/branch.service',
   )
-  return { ...actual, getBranches, getCompanies, createBranch }
+  return { ...actual, getBranches, getCompanies, createBranch, updateBranch }
 })
 vi.mock('@/composables/useEmployeeSessionRecovery', () => ({
   useEmployeeSessionRecovery: () => ({
@@ -96,11 +102,12 @@ describe('BranchesSection', () => {
   it('keeps the actions of other stories visible but disabled', async () => {
     const view = await render()
     expect(button(view, 'Crear sucursal').attributes('disabled')).toBeUndefined()
-    for (const label of ['Modificar sucursal (Pendiente)', 'Desactivar sucursal (Pendiente)']) {
-      const actions = view.findAll(`[aria-label="${label}"]`)
-      expect(actions).toHaveLength(3)
-      expect(actions.every((action) => action.attributes('disabled') !== undefined)).toBe(true)
-    }
+    const modify = view.findAll('[aria-label="Modificar sucursal"]')
+    expect(modify).toHaveLength(3)
+    expect(modify.every((action) => action.attributes('disabled') === undefined)).toBe(true)
+    const deactivate = view.findAll('[aria-label="Desactivar sucursal (Pendiente)"]')
+    expect(deactivate).toHaveLength(3)
+    expect(deactivate.every((action) => action.attributes('disabled') !== undefined)).toBe(true)
   })
 
   it('opens the detail of the selected branch and closes it', async () => {
@@ -387,5 +394,102 @@ describe('BranchesSection · Crear sucursal', () => {
     await flushPromises()
     await button(wrapper, 'Crear sucursal').trigger('click')
     expect(HTMLDialogElement.prototype.showModal).not.toHaveBeenCalled()
+  })
+
+  describe('Modificar sucursal', () => {
+    const modifyRow = (view: VueWrapper, index = 0) =>
+      view.findAll('[aria-label="Modificar sucursal"]')[index]!.trigger('click')
+    async function save(view: VueWrapper, name: string) {
+      await dialog(view).get('input[name="name"]').setValue(name)
+      await dialog(view).trigger('submit')
+      await flushPromises()
+    }
+
+    beforeEach(() => updateBranch.mockReset())
+
+    it('opens the form with the current data of the row (UT-024)', async () => {
+      const view = await render()
+      await modifyRow(view)
+      expect(view.get('.theater-dialog h2').text()).toBe('Modificar sucursal')
+      expect((dialog(view).get('input[name="name"]').element as HTMLInputElement).value).toBe(
+        'Sucursal Heredia Centro',
+      )
+      expect(
+        (dialog(view).get('select[name="companyId"]').element as HTMLSelectElement).value,
+      ).toBe('2')
+    })
+
+    it('saves the changes, shows the toast and reloads (UT-036)', async () => {
+      updateBranch.mockResolvedValueOnce({ ...created, id: 1, name: 'Sucursal Heredia Oeste' })
+      const view = await render()
+      const loads = getBranches.mock.calls.length
+      await modifyRow(view)
+      await save(view, 'Sucursal Heredia Oeste')
+      expect(updateBranch).toHaveBeenCalledWith(1, { name: 'Sucursal Heredia Oeste', companyId: 2 })
+      expect(createBranch).not.toHaveBeenCalled()
+      expect(view.get('.branch-notification').text()).toContain('Sucursal modificada con éxito')
+      expect(getBranches.mock.calls.length).toBe(loads + 1)
+      expect(view.emitted('busy')).toEqual([[true], [false]])
+    })
+
+    it('keeps the data and shows the error when saving fails (UT-035)', async () => {
+      updateBranch.mockRejectedValueOnce(new Error('Network Error'))
+      const view = await render()
+      await modifyRow(view)
+      await save(view, 'Sucursal Heredia Oeste')
+      expect(dialog(view).get('.form-error').text()).toBe(
+        'No se pudo modificar la sucursal, intenta de nuevo',
+      )
+      expect((dialog(view).get('input[name="name"]').element as HTMLInputElement).value).toBe(
+        'Sucursal Heredia Oeste',
+      )
+    })
+
+    it('explains that the branch is gone and reloads the list', async () => {
+      updateBranch.mockRejectedValueOnce(failure(404))
+      const view = await render()
+      const loads = getBranches.mock.calls.length
+      await modifyRow(view)
+      await save(view, 'Sucursal Heredia Oeste')
+      expect(dialog(view).get('.form-error').text()).toBe(
+        'La sucursal no existe o ya fue desactivada',
+      )
+      expect(getBranches.mock.calls.length).toBe(loads + 1)
+    })
+
+    it('shows a name used by another active branch under the name field', async () => {
+      const error = failure(409)
+      error.response!.data = { message: 'Ya existe una sucursal activa con ese nombre' }
+      updateBranch.mockRejectedValueOnce(error)
+      const view = await render()
+      const loads = getBranches.mock.calls.length
+      await modifyRow(view)
+      await save(view, 'Sucursal Peñas Blancas')
+      expect(dialog(view).get('.field-error').text()).toBe(
+        'Ya existe una sucursal activa con ese nombre',
+      )
+      expect(dialog(view).find('.form-error').exists()).toBe(false)
+      expect(getBranches.mock.calls.length).toBe(loads)
+    })
+
+    it('creates again after closing a modification', async () => {
+      createBranch.mockResolvedValueOnce(created)
+      const view = await render()
+      await modifyRow(view)
+      await view.get('.theater-dialog .close-button').trigger('click')
+      await openAndFill(view)
+      expect(createBranch).toHaveBeenCalled()
+      expect(updateBranch).not.toHaveBeenCalled()
+    })
+
+    it('modifies the branch opened in the detail', async () => {
+      const view = await render()
+      view
+        .getComponent(BranchDetailDialog)
+        .vm.$emit('modify', { ...branches[1]!, status: 'ACTIVE' })
+      await flushPromises()
+      expect(view.get('.theater-dialog h2').text()).toBe('Modificar sucursal')
+      expect(view.getComponent(BranchDetailDialog).props('branchId')).toBeNull()
+    })
   })
 })

@@ -11,6 +11,7 @@ describe('CinemasController', () => {
     listCompanies: jest.fn(),
     getCinema: jest.fn(),
     createCinema: jest.fn(),
+    updateCinema: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -47,5 +48,14 @@ describe('CinemasController', () => {
     service.createCinema.mockResolvedValue({ id: 30 });
     await expect(controller.createCinema(data)).resolves.toEqual({ id: 30 });
     expect(service.createCinema).toHaveBeenCalledWith(data);
+  });
+
+  it('modifies a branch through the service', async () => {
+    const data = { name: 'Sucursal Heredia Oeste', companyId: 23 };
+    service.updateCinema.mockResolvedValue({ id: 26 });
+    await expect(controller.updateCinema({ id: 26 }, data)).resolves.toEqual({
+      id: 26,
+    });
+    expect(service.updateCinema).toHaveBeenCalledWith(26, data);
   });
 });

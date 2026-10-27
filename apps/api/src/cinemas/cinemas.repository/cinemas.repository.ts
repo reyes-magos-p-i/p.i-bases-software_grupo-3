@@ -6,6 +6,7 @@ import { likePattern } from '../../users/user-search.util';
 import type { CinemaDetailDto, CinemaStatus } from '../dto/cinema-detail.dto';
 import type { ListCinemasQueryDto } from '../dto/list-cinemas-query.dto';
 import type { CreateCinemaDto } from '../dto/create-cinema.dto';
+import type { UpdateCinemaDto } from '../dto/update-cinema.dto';
 import type {
   CompanyOptionDto,
   ListedCinemasDto,
@@ -192,6 +193,37 @@ export class CinemasRepository {
     });
   }
 
+  /** Changes an active branch; inactive branches cannot be modified. */
+  async updateCinema(
+    id: number,
+    data: UpdateCinemaDto,
+  ): Promise<'updated' | 'company' | 'duplicate' | 'missing'> {
+    return this.db.transaction(async (connection) => {
+      if (!(await this.companyIsUsable(connection, data.companyId)))
+        return 'company';
+      // The branch keeps its own name, so it is left out of the check.
+      if (await this.nameIsTaken(connection, data.name, id))
+        return 'duplicate';
+      let result: oracle.Result<unknown>;
+      try {
+        result = await connection.execute(
+          `UPDATE CINEMAS SET NAME = :name, COMPANY_ID = :companyId
+           WHERE BRANCH_ID = :id AND STATUS = 'ACTIVE'`,
+          {
+            id: { val: id, type: oracle.NUMBER },
+            name: { val: data.name, type: oracle.STRING },
+            companyId: { val: data.companyId, type: oracle.NUMBER },
+          },
+          { autoCommit: false },
+        );
+      } catch (error) {
+        if (isTakenName(error)) return 'duplicate';
+        throw error;
+      }
+      return result.rowsAffected === 1 ? 'updated' : 'missing';
+    });
+  }
+
   // A company without a name cannot be told apart in the form, so it is not accepted.
   private async companyIsUsable(
     connection: oracle.Connection,
@@ -211,13 +243,20 @@ export class CinemasRepository {
   private async nameIsTaken(
     connection: oracle.Connection,
     name: string,
+    exceptId?: number,
   ): Promise<boolean> {
+    const binds: oracle.BindParameters = {
+      name: { val: name, type: oracle.STRING },
+    };
+    if (exceptId !== undefined)
+      binds.exceptId = { val: exceptId, type: oracle.NUMBER };
     const taken = await connection.execute(
       `SELECT 1 FROM CINEMAS
        WHERE STATUS = 'ACTIVE'
          AND ${foldSql('TRIM(NAME)')} = ${foldSql(':name')}
+         ${exceptId === undefined ? '' : 'AND BRANCH_ID <> :exceptId'}
          AND ROWNUM = 1`,
-      { name: { val: name, type: oracle.STRING } },
+      binds,
       { autoCommit: false },
     );
     return !!taken.rows?.length;

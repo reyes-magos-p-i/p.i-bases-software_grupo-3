@@ -40,15 +40,15 @@ Requiere la migración `20261016_cinemas_status.sql` (columna `CINEMAS.STATUS`).
   «No hay sucursales registradas».
 - Error al consultar: «No se pudieron cargar las sucursales» con Reintentar.
   Sin permiso: «No tiene permisos para acceder a esta sección».
-- «Crear sucursal» abre el formulario de SCRUM-32 ([manage-branch.md](manage-branch.md)).
-  Modificar y Desactivar se muestran deshabilitados con el aviso «Pendiente» hasta
-  SCRUM-33 y SCRUM-34.
+- «Crear sucursal» y Modificar abren el formulario de SCRUM-32 y SCRUM-33
+  ([manage-branch.md](manage-branch.md)). Desactivar se muestra deshabilitado con el
+  aviso «Pendiente» hasta SCRUM-34.
 
 ## Detalle
 
 El ícono Ver abre «Detalle de sucursal» con ID Sucursal, Estado, Nombre y
 Compañía, todos de solo lectura. Los nombres se muestran completos, sin recortar.
-El botón Modificar se muestra deshabilitado hasta SCRUM-33.
+El botón Modificar abre el formulario de SCRUM-33 con esa sucursal.
 
 En la base de datos el nombre de la sucursal y el de su compañía son obligatorios
 (`NOT NULL`). Por eso un dato «vacío» es un texto de solo espacios. La API aplica
