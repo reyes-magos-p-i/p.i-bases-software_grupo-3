@@ -102,4 +102,17 @@ describe('requireClientSession', () => {
     expect(result).toBe(false)
     expect(localStorage.getItem('accessToken')).toBe('new-token')
   })
+  it('keeps email confirmation public without checking an old session password', async () => {
+    clientSession.user.value = { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: '' }
+    vi.mocked(getClientPasswordStatus).mockResolvedValue('expired')
+    await expect(
+      requireClientSession(route('/account/confirm-email'), route('/'), vi.fn()),
+    ).resolves.toBe(true)
+    expect(getClientPasswordStatus).not.toHaveBeenCalled()
+    expect(getClientSession).not.toHaveBeenCalled()
+  })
+  it('protects the profile when there is no client session', async () => {
+    const result = await requireClientSession(route('/account/profile', true), route('/'), vi.fn())
+    expect(result).toEqual({ path: '/', query: { login: 'client', reason: 'required' } })
+  })
 })

@@ -73,7 +73,7 @@ export class ClientsRepository {
 
   async updateClient(
     id: number,
-    data: UpdateClientDto,
+    data: UpdateClientDto & { gender?: string | null },
   ): Promise<UpdatedUserDto> {
     try {
       return await this.db.transaction(async (connection) => {
@@ -116,6 +116,7 @@ export class ClientsRepository {
           ['secondSurname', 'SECOND_SURNAME'],
           ['email', 'EMAIL'],
           ['phoneNumber', 'PHONE_NUMBER'],
+          ['gender', 'GENDER'],
         ] as const) {
           if (data[field] !== undefined) {
             changes.push(`${column} = :${field}`);
@@ -149,8 +150,98 @@ export class ClientsRepository {
           'El correo electrónico ya está registrado para otro cliente.',
         );
       }
-      if (failure?.errorNum === 2291)
-        throw new BadRequestException('El distrito de la dirección no existe.');
+      this.rethrowCatalogError(error);
+    }
+  }
+
+  async getEmailChangeSnapshot(
+    id: number,
+  ): Promise<{ email: string; sessionVersion: string | null } | null> {
+    const result = await this.db.query<{
+      EMAIL: string;
+      SESSION_VERSION: string | null;
+    }>(
+      `SELECT c.EMAIL, TO_CHAR(r.RESET_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF9') AS SESSION_VERSION
+       FROM CLIENTS c LEFT JOIN PASSWORD_RECOVERIES r ON r.CLIENT_ID = c.CLIENT_ID
+       WHERE c.CLIENT_ID = :id AND c.STATUS = 'ACTIVE'`,
+      { id },
+      { outFormat: oracle.OUT_FORMAT_OBJECT },
+    );
+    const row = result.rows?.[0];
+    return row
+      ? { email: row.EMAIL, sessionVersion: row.SESSION_VERSION }
+      : null;
+  }
+
+  async isClientEmailTaken(email: string, id: number): Promise<boolean> {
+    const result = await this.db.query(
+      'SELECT 1 FROM CLIENTS WHERE EMAIL = :email AND CLIENT_ID <> :id AND ROWNUM = 1',
+      { email, id },
+    );
+    return Boolean(result.rows?.length);
+  }
+
+  async confirmEmailChange(
+    id: number,
+    email: string,
+    newEmail: string,
+    sessionVersion: string | null,
+  ): Promise<void> {
+    try {
+      await this.db.transaction(async (connection) => {
+        const current = await connection.execute<{
+          EMAIL: string;
+          STATUS: string;
+        }>(
+          'SELECT EMAIL, STATUS FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
+          { id },
+          { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+        );
+        const version = await connection.execute<{
+          SESSION_VERSION: string | null;
+        }>(
+          `SELECT TO_CHAR(RESET_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF9') AS SESSION_VERSION FROM PASSWORD_RECOVERIES WHERE CLIENT_ID = :id`,
+          { id },
+          { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+        );
+        const row = current.rows?.[0];
+        if (
+          row?.STATUS !== 'ACTIVE' ||
+          row.EMAIL !== email ||
+          (version.rows?.[0]?.SESSION_VERSION ?? null) !== sessionVersion
+        ) {
+          throw new BadRequestException(
+            'El enlace ya no es válido. Solicita otro cambio de correo desde tu perfil.',
+          );
+        }
+        const duplicate = await connection.execute(
+          'SELECT 1 FROM CLIENTS WHERE EMAIL = :email AND CLIENT_ID <> :id AND ROWNUM = 1',
+          { email: newEmail, id },
+          { autoCommit: false },
+        );
+        if (duplicate.rows?.length)
+          throw new ConflictException(
+            'Ese correo ya está registrado para otro cliente.',
+          );
+        const result = await connection.execute(
+          'UPDATE CLIENTS SET EMAIL = :email WHERE CLIENT_ID = :id',
+          { email: newEmail, id },
+          { autoCommit: false },
+        );
+        if (result.rowsAffected !== 1)
+          throw new Error('Oracle did not update a single client email.');
+        await revokeAccountSessions(connection, 'client', id);
+      });
+    } catch (error) {
+      const failure = error as { errorNum?: number; message?: string } | null;
+      if (
+        failure?.errorNum === 1 &&
+        /\bUQ_CLIENTS_EMAIL\b/u.test(failure.message ?? '')
+      ) {
+        throw new ConflictException(
+          'Ese correo ya está registrado para otro cliente.',
+        );
+      }
       throw error;
     }
   }
@@ -369,8 +460,20 @@ export class ClientsRepository {
       ) {
         throw new ConflictException('Este correo ya está registrado');
       }
-      throw error;
+      this.rethrowCatalogError(error);
     }
+  }
+
+  private rethrowCatalogError(error: unknown): never {
+    const failure = error as { errorNum?: number; message?: string } | null;
+    if (
+      failure?.errorNum === 2291 &&
+      /\bFK_ADDRESS_DISTRICT\b/u.test(failure.message ?? '')
+    )
+      throw new BadRequestException(
+        'El distrito seleccionado ya no existe. Selecciona otro distrito.',
+      );
+    throw error;
   }
 
   async insertClient(

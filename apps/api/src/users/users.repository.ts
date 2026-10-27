@@ -204,9 +204,7 @@ export class UsersRepository {
           'El correo electrónico ya está registrado para otro empleado.',
         );
       }
-      if (failure?.errorNum === 2291)
-        throw new BadRequestException('El distrito de la dirección no existe.');
-      throw error;
+      this.rethrowCatalogError(error);
     }
   }
 
@@ -474,7 +472,7 @@ export class UsersRepository {
     };
   }
 
-  async getCreationOptions(): Promise<UserCreationOptionsDto> {
+  async getAddressOptions(): Promise<Omit<UserCreationOptionsDto, 'branches'>> {
     const options = { outFormat: oracle.OUT_FORMAT_OBJECT };
     const provinces = await this.db.query<{
       ID_PROVINCE: number;
@@ -502,16 +500,7 @@ export class UsersRepository {
       {},
       options,
     );
-    const branches = await this.db.query<{
-      BRANCH_ID: number;
-      NAME: string;
-    }>(
-      'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
-      {},
-      options,
-    );
-
-    return new UserCreationOptionsDto({
+    return {
       provinces: (provinces.rows ?? []).map((row) => ({
         id: row.ID_PROVINCE,
         label: row.NAME,
@@ -526,6 +515,22 @@ export class UsersRepository {
         label: row.NAME,
         cantonId: row.ID_CANTON,
       })),
+    };
+  }
+
+  async getCreationOptions(): Promise<UserCreationOptionsDto> {
+    const address = await this.getAddressOptions();
+    const branches = await this.db.query<{
+      BRANCH_ID: number;
+      NAME: string;
+    }>(
+      'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
+      {},
+      { outFormat: oracle.OUT_FORMAT_OBJECT },
+    );
+
+    return new UserCreationOptionsDto({
+      ...address,
       branches: (branches.rows ?? []).map((row) => ({
         id: row.BRANCH_ID,
         label: row.NAME,
@@ -651,8 +656,23 @@ export class UsersRepository {
           'El correo electrónico ya está registrado para otro empleado.',
         );
       }
-      throw error;
+      this.rethrowCatalogError(error);
     }
+  }
+
+  private rethrowCatalogError(error: unknown): never {
+    const failure = error as { errorNum?: number; message?: string } | null;
+    if (failure?.errorNum === 2291) {
+      if (/\bFK_ADDRESS_DISTRICT\b/u.test(failure.message ?? ''))
+        throw new BadRequestException(
+          'El distrito seleccionado ya no existe. Selecciona otro distrito.',
+        );
+      if (/\bFK_EMPLOYEES_BRANCH\b/u.test(failure.message ?? ''))
+        throw new BadRequestException(
+          'La sucursal seleccionada ya no existe. Selecciona otra sucursal.',
+        );
+    }
+    throw error;
   }
 
   private async insertAddress(

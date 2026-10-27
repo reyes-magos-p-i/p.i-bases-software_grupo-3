@@ -1,3 +1,4 @@
+import DatePicker from '@/components/common/DatePicker.vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -157,7 +158,7 @@ describe('client form', () => {
       districtId: '111',
       details: 'Casa azul',
     }))
-      await view.get('[name="' + name + '"]').setValue(value)
+      await setFormField(view, name, value)
     await view.get('form').trigger('submit')
     expect(view.emitted('submit')).toEqual([
       [
@@ -269,13 +270,13 @@ describe('CreateUserDialog', () => {
     const view = await renderDialog()
     const field = view.get('[name="hireDate"]')
     expect(field.attributes('required')).toBeDefined()
-    await field.setValue('2026-10-01')
+    await setFormField(view, 'hireDate', '2026-10-01')
     await field.trigger('focusout')
     expect(field.attributes('aria-invalid')).toBe('false')
-    await field.setValue('0000-01-01')
+    await setFormField(view, 'hireDate', '0000-01-01')
     await field.trigger('focusout')
     expect(field.attributes('aria-invalid')).toBe('true')
-    await field.setValue('')
+    await setFormField(view, 'hireDate', '')
     await field.trigger('focusout')
     expect(field.attributes('aria-invalid')).toBe('true')
     await view.setProps({ mode: 'client' })
@@ -392,7 +393,7 @@ describe('CreateUserDialog', () => {
     expect(view.get('[name="secondName"]').attributes('required')).toBeUndefined()
     expect(view.get('[name="details"]').attributes('required')).toBeUndefined()
     expect(view.find('[name="addressId"]').exists()).toBe(false)
-    expect(view.get('[name="birthday"]').attributes('type')).toBe('date')
+    expect(view.get('[name="birthday"]').attributes('readonly')).toBeDefined()
     expect(view.get('[name="email"]').attributes('type')).toBe('email')
     expect(view.get('[name="phoneNumber"]').attributes('type')).toBe('tel')
     expect(view.find('input[type="password"]').exists()).toBe(false)
@@ -573,7 +574,7 @@ describe('CreateUserDialog', () => {
       districtId: '111',
       details: 'Casa azul',
     })) {
-      await view.get('[name="' + field + '"]').setValue(value)
+      await setFormField(view, field, value)
     }
     await view.get('form').trigger('submit')
     await view.get('form').trigger('submit')
@@ -598,7 +599,7 @@ describe('CreateUserDialog', () => {
     await view.setProps({ submitting: true })
     await view.setProps({ submitting: false, submissionErrors: ['Revisa el correo.'] })
     await nextTick()
-    expect(document.activeElement).toBe(view.get('[role="alert"]').element)
+    expect(document.activeElement?.contains(view.get('[role="alert"]').element)).toBe(true)
     expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('Ana')
   })
 
@@ -697,6 +698,8 @@ describe('CreateUserDialog', () => {
     expect(email.attributes('aria-invalid')).toBe('false')
     expect(email.attributes('aria-describedby')).toBeUndefined()
     await email.setValue('')
+    expect(email.attributes('aria-invalid')).toBe('false')
+    await email.trigger('focusout')
     expect(email.attributes('aria-invalid')).toBe('true')
     expect(view.text()).toContain('Este campo es obligatorio.')
   })
@@ -752,6 +755,7 @@ describe('CreateUserDialog', () => {
       expect(field.attributes('aria-invalid')).toBe('false')
 
       await field.setValue(boundary + 'a')
+      await field.trigger('focusout')
       expect(field.attributes('aria-invalid')).toBe('true')
       expect(view.text()).toContain('El texto es demasiado largo.')
       await field.setValue(boundary)
@@ -768,6 +772,7 @@ describe('CreateUserDialog', () => {
     expect(email.attributes('aria-invalid')).toBe('false')
 
     await email.setValue(prefix + 'c'.repeat(18) + '.com')
+    await email.trigger('focusout')
     expect(email.attributes('aria-invalid')).toBe('true')
     expect(view.text()).toContain('El texto es demasiado largo.')
   })
@@ -787,20 +792,19 @@ describe('CreateUserDialog', () => {
     expect(view.get('[name="details"]').attributes('aria-describedby')).toContain('-details-help')
   })
 
-  it('validates dates without imposing an age or a past-date rule', async () => {
+  it('rejects future births and hiring before birth, while allowing future hiring', async () => {
     const view = await renderDialog()
-    const birthday = view.get('[name="birthday"]')
-    await birthday.setValue('10000-01-01')
-    await birthday.trigger('focusout')
-    expect(birthday.attributes('aria-invalid')).toBe('true')
-    expect(view.text()).toContain('Introduce una fecha válida.')
-
-    await birthday.setValue('2000-02-29')
-    expect(birthday.attributes('aria-invalid')).toBe('false')
-    await birthday.setValue('2099-01-01')
-    expect(birthday.attributes('aria-invalid')).toBe('false')
-    await birthday.setValue('')
-    expect(birthday.attributes('aria-invalid')).toBe('true')
+    await setFormField(view, 'birthday', '2099-01-01')
+    await view.get('[name="birthday"]').trigger('focusout')
+    expect(view.text()).toContain('La fecha de nacimiento no puede ser futura.')
+    await setFormField(view, 'birthday', '2000-02-29')
+    await setFormField(view, 'hireDate', '1999-01-01')
+    await view.get('[name="hireDate"]').trigger('focusout')
+    expect(view.text()).toContain('La contratación no puede ser anterior al nacimiento.')
+    await setFormField(view, 'hireDate', '2099-01-01')
+    await view.get('[name="hireDate"]').trigger('focusout')
+    expect(view.get('[name="hireDate"]').attributes('aria-invalid')).toBe('false')
+    expect(view.findComponent(DatePicker).props('max')).toMatch(/^\d{4}-\d{2}-\d{2}$/u)
   })
 
   it('announces a partially entered native date as invalid', async () => {
@@ -877,10 +881,84 @@ describe('CreateUserDialog', () => {
     }
     const district = view.get('[name="districtId"]')
     await district.setValue('')
+    await district.trigger('focusout')
     expect(district.attributes('aria-invalid')).toBe('true')
     await view.get('[name="provinceId"]').setValue('2')
     expect(district.attributes('aria-invalid')).toBe('false')
     expect(district.attributes('disabled')).toBeDefined()
     expect(view.find('.field-error').exists()).toBe(false)
   })
+  it.each(['Ana123', 'Ana!', 'Ana-María', '🎬'])(
+    'validates names locally after blur: %s',
+    async (value) => {
+      const view = await renderDialog({ mode: 'client' })
+      const name = view.get('[name="firstName"]')
+      await name.setValue(value)
+      expect(view.find('.field-error').exists()).toBe(false)
+      await name.trigger('focusout')
+      expect(view.text()).toContain('Usa solo letras y espacios')
+      await view.get('[name="email"]').setValue('ana@example.com')
+      await view.get('form').trigger('submit')
+      expect(view.emitted('submit')).toBeUndefined()
+      expect(view.text()).not.toMatch(/bytes|UTF-8|Unicode/u)
+    },
+  )
+
+  it.each(['client', 'employee'] as const)(
+    'does not validate the %s form before cancelling or closing',
+    async (mode) => {
+      const view = await renderDialog({
+        mode,
+        provinces,
+        cantons,
+        districts,
+        branches: [{ id: 7, label: 'Centro' }],
+      })
+      for (const selector of ['.cancel-button', '.close-button']) {
+        const name = view.get<HTMLInputElement>('[name="firstName"]')
+        await name.setValue('Ana123')
+        name.element.focus()
+        const action = view.get<HTMLButtonElement>(selector)
+        action.element.dispatchEvent(
+          new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }),
+        )
+        action.element.focus()
+        await nextTick()
+        expect(name.attributes('aria-invalid')).toBe('false')
+        expect(view.find('.field-error').exists()).toBe(false)
+        await action.trigger('pointerup')
+        await action.trigger('click')
+        expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
+        expect(view.emitted('submit')).toBeUndefined()
+        view.vm.open()
+        await nextTick()
+      }
+    },
+  )
+
+  it('opens the reusable calendar without showing an unrelated name error', async () => {
+    const view = await renderDialog({ mode: 'client' })
+    const name = view.get<HTMLInputElement>('[name="firstName"]')
+    await name.setValue('Ana123')
+    name.element.focus()
+    const calendar = view.get<HTMLInputElement>('[name="birthday"]')
+    calendar.element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+    calendar.element.focus()
+    await nextTick()
+    expect(name.attributes('aria-invalid')).toBe('false')
+    await calendar.trigger('click')
+    expect(view.find('[role="dialog"]').exists()).toBe(true)
+    expect(view.emitted('submit')).toBeUndefined()
+  })
 })
+
+async function setFormField(view: VueWrapper, name: string, value: string) {
+  const picker = view
+    .findAllComponents(DatePicker)
+    .find((component) => component.vm.$attrs.name === name)
+  if (picker) {
+    picker.vm.$emit('update:modelValue', value)
+    await nextTick()
+    await view.get('[name="' + name + '"]').trigger('change')
+  } else await view.get('[name="' + name + '"]').setValue(value)
+}

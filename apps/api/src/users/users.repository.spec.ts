@@ -506,7 +506,13 @@ describe('UsersRepository', () => {
         { errorNum: 1, message: 'ORA-00001: (PRODUCTION.UQ_EMPLOYEES_EMAIL)' },
         409,
       ],
-      [{ errorNum: 2291 }, 400],
+      [
+        {
+          errorNum: 2291,
+          message: 'ORA-02291: (PRODUCTION.FK_ADDRESS_DISTRICT)',
+        },
+        400,
+      ],
     ])(
       'translates known Oracle errors without leaking database details',
       async (failure, expected) => {
@@ -1661,10 +1667,10 @@ describe('UsersRepository', () => {
 
   describe('foreign key failures', () => {
     it.each([
-      ['EMPLOYEE', 'FK_ADDRESSES_DISTRICT'],
+      ['EMPLOYEE', 'FK_ADDRESS_DISTRICT'],
       ['EMPLOYEE', 'FK_EMPLOYEES_ADDRESS'],
       ['EMPLOYEE', 'FK_EMPLOYEES_BRANCH'],
-      ['ADMINISTRATOR', 'FK_ADDRESSES_DISTRICT'],
+      ['ADMINISTRATOR', 'FK_ADDRESS_DISTRICT'],
       ['ADMINISTRATOR', 'FK_EMPLOYEES_ADDRESS'],
       ['ADMINISTRATOR', 'FK_EMPLOYEES_BRANCH'],
     ])(
@@ -1674,7 +1680,7 @@ describe('UsersRepository', () => {
           new Error('Parent key not found: ' + constraint),
           { errorNum: 2291 },
         );
-        if (constraint !== 'FK_ADDRESSES_DISTRICT')
+        if (constraint !== 'FK_ADDRESS_DISTRICT')
           connection.execute.mockResolvedValueOnce(insertedAddress);
         connection.execute.mockRejectedValueOnce(error);
         const data = {
@@ -1697,9 +1703,21 @@ describe('UsersRepository', () => {
             role === 'EMPLOYEE' ? UserRole.EMPLOYEE : UserRole.ADMINISTRATOR,
         });
 
-        await expect(creation).rejects.toBe(error);
+        if (
+          constraint === 'FK_ADDRESS_DISTRICT' ||
+          constraint === 'FK_EMPLOYEES_BRANCH'
+        ) {
+          await expect(creation).rejects.toMatchObject({
+            status: 400,
+            message: expect.stringContaining(
+              constraint === 'FK_EMPLOYEES_BRANCH' ? 'sucursal' : 'distrito',
+            ),
+          });
+        } else {
+          await expect(creation).rejects.toBe(error);
+        }
         expect(connection.execute).toHaveBeenCalledTimes(
-          constraint === 'FK_ADDRESSES_DISTRICT' ? 1 : 2,
+          constraint === 'FK_ADDRESS_DISTRICT' ? 1 : 2,
         );
         expect(connection.commit).not.toHaveBeenCalled();
         expect(connection.rollback).toHaveBeenCalledTimes(1);
@@ -1945,5 +1963,26 @@ describe('UsersRepository', () => {
     expect(connection.execute.mock.calls[0][0]).toContain(
       "r.RESET_AT AT TIME ZONE 'UTC'",
     );
+  });
+  it('loads only address catalogs for clients without exposing staff branches', async () => {
+    connection.execute
+      .mockResolvedValueOnce({ rows: [{ ID_PROVINCE: 1, NAME: 'San José' }] })
+      .mockResolvedValueOnce({
+        rows: [{ ID_CANTON: 2, NAME: 'Central', ID_PROVINCE: 1 }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ ID_DISTRICT: 3, NAME: 'Carmen', ID_CANTON: 2 }],
+      });
+    await expect(repository.getAddressOptions()).resolves.toEqual({
+      provinces: [{ id: 1, label: 'San José' }],
+      cantons: [{ id: 2, label: 'Central', provinceId: 1 }],
+      districts: [{ id: 3, label: 'Carmen', cantonId: 2 }],
+    });
+    expect(connection.execute).toHaveBeenCalledTimes(3);
+    expect(
+      connection.execute.mock.calls.every(
+        ([sql]: [string]) => !sql.includes('CINEMAS'),
+      ),
+    ).toBe(true);
   });
 });

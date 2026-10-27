@@ -1,3 +1,4 @@
+import DatePicker from '@/components/common/DatePicker.vue'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { DOMWrapper, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -69,7 +70,7 @@ describe('RegisterModal.vue', () => {
   })
 
   const createWrapper = (props = { open: true }) => {
-    return mount(RegisterModal, {
+    realWrapper = mount(RegisterModal, {
       props,
       global: {
         stubs: {
@@ -83,6 +84,7 @@ describe('RegisterModal.vue', () => {
         },
       },
     })
+    return realWrapper
   }
 
   it('shows independent controls to reveal and hide both password fields', async () => {
@@ -136,13 +138,15 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#phone').setValue('1234567')
     await wrapper.find('form').trigger('submit.prevent')
 
-    expect(wrapper.text()).toContain('Ingresa un teléfono costarricense válido de 8 dígitos')
+    expect(wrapper.text()).toContain(
+      'Ingresa un celular de Costa Rica de ocho dígitos que comience con 6, 7 u 8.',
+    )
     expect(registerUser).not.toHaveBeenCalled()
   })
 
   it('blocks registration for a user who has not turned 18', async () => {
     const wrapper = createWrapper()
-    await wrapper.find('#birthDate').setValue(dateOneDayBeforeTurningEighteen())
+    await setBirthDate(wrapper, dateOneDayBeforeTurningEighteen())
     await wrapper.find('form').trigger('submit.prevent')
 
     expect(wrapper.text()).toContain('Debes tener al menos 18 años para registrarte')
@@ -155,16 +159,16 @@ describe('RegisterModal.vue', () => {
 
     expect(registerUser).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Ingresa un correo válido')
-    expect(wrapper.text()).toContain('Requerido')
+    expect(wrapper.text()).toContain('Ingresa tu nombre.')
     expect(wrapper.text()).toContain('Debes aceptar los términos')
   })
-  it('accepts a landline while rejecting names exceeding the database byte limit', async () => {
+  it('rejects landlines and names exceeding the storage limit', async () => {
     const wrapper = createWrapper()
     await wrapper.find('#phone').setValue('22222222')
     await wrapper.find('#firstName').setValue('é'.repeat(51))
     await wrapper.find('form').trigger('submit.prevent')
-    expect(wrapper.get('#phone').classes()).not.toContain('is-invalid')
-    expect(wrapper.text()).toContain('100 bytes')
+    expect(wrapper.get('#phone').classes()).toContain('is-invalid')
+    expect(wrapper.text()).toContain('demasiado largo')
     expect(registerUser).not.toHaveBeenCalled()
   })
 
@@ -180,7 +184,7 @@ describe('RegisterModal.vue', () => {
 
   it('valida que la contraseña no sea igual al email o nombres', async () => {
     const wrapper = createWrapper()
-    const password = 'Password123!'
+    const password = 'password123!'
     await wrapper.find('#email').setValue(password)
     await wrapper.find('#password').setValue(password)
     await wrapper.find('#confirmPassword').setValue(password)
@@ -211,7 +215,7 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#lastName').setValue('Perez')
     await wrapper.find('#phone').setValue('8888-1234')
     await wrapper.find('#gender').setValue('M')
-    await wrapper.find('#birthDate').setValue('1990-01-01')
+    await setBirthDate(wrapper, '1990-01-01')
     await wrapper.find('#password').setValue('Password123!')
     await wrapper.find('#confirmPassword').setValue('Password123!')
     await wrapper.find('#terms').setValue(true)
@@ -245,7 +249,7 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#lastName').setValue('Perez')
     await wrapper.find('#phone').setValue('8888-1234')
     await wrapper.find('#gender').setValue('F')
-    await wrapper.find('#birthDate').setValue('1990-01-01')
+    await setBirthDate(wrapper, '1990-01-01')
     await wrapper.find('#password').setValue('Password123!')
     await wrapper.find('#confirmPassword').setValue('Password123!')
     await wrapper.find('#terms').setValue(true)
@@ -282,7 +286,7 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#lastName').setValue('User')
     await wrapper.find('#phone').setValue('8888-1234')
     await wrapper.find('#gender').setValue('F')
-    await wrapper.find('#birthDate').setValue('1995-05-05')
+    await setBirthDate(wrapper, '1995-05-05')
     await wrapper.find('#password').setValue('ValidPass1!')
     await wrapper.find('#confirmPassword').setValue('ValidPass1!')
     await wrapper.find('#terms').setValue(true)
@@ -301,7 +305,7 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#lastName').setValue('User')
     await wrapper.find('#phone').setValue('8888-1234')
     await wrapper.find('#gender').setValue('F')
-    await wrapper.find('#birthDate').setValue('1995-05-05')
+    await setBirthDate(wrapper, '1995-05-05')
     await wrapper.find('#password').setValue('ValidPass1!')
     await wrapper.find('#confirmPassword').setValue('ValidPass1!')
     await wrapper.find('#terms').setValue(true)
@@ -316,4 +320,74 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('#btn-close-modal').trigger('click')
     expect(wrapper.emitted('close')).toBeTruthy()
   })
+  it('validates a partially written email only on blur, then checks again before submitting', async () => {
+    const view = createWrapper()
+    const email = view.get('#email')
+    await email.setValue('ana@')
+    expect(email.classes()).not.toContain('is-invalid')
+    await email.trigger('focusout')
+    expect(email.classes()).toContain('is-invalid')
+    await email.setValue('ana@example..com')
+    expect(email.classes()).not.toContain('is-invalid')
+    await view.get('form').trigger('submit')
+    expect(email.classes()).toContain('is-invalid')
+    expect(registerUser).not.toHaveBeenCalled()
+  })
+  it('rejects invalid names, future birth dates and oversized passwords before making a request', async () => {
+    const view = createWrapper()
+    await view.get('#firstName').setValue('Ana123')
+    await view.get('#firstName').trigger('focusout')
+    expect(view.text()).toContain('Usa solo letras y espacios')
+    await setBirthDate(view, '2099-01-01')
+    await view.get('#password').setValue('Abc1!' + 'a'.repeat(124))
+    await view.get('form').trigger('submit')
+    expect(view.text()).toContain('fecha de nacimiento válida que no sea futura')
+    expect(view.text()).toContain('La contraseña no puede superar 128 caracteres.')
+    expect(registerUser).not.toHaveBeenCalled()
+    expect(view.text()).not.toMatch(/bytes|UTF-8|Unicode/u)
+  })
+
+  it('does not validate registration when closing with the native close button', async () => {
+    realWrapper = mount(RegisterModal, {
+      props: { open: true },
+      attachTo: document.body,
+      global: { stubs: { SocialAuthButtons: true } },
+    })
+    const page = new DOMWrapper(document.body)
+    await nextTick()
+    const email = page.get<HTMLInputElement>('#email')
+    await email.setValue('invalid')
+    email.element.focus()
+    const close = page.get<HTMLButtonElement>('.app-modal-close')
+    close.element.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'touch' }),
+    )
+    await email.trigger('focusout', { relatedTarget: null })
+    expect(email.classes()).not.toContain('is-invalid')
+    await close.trigger('pointerup')
+    await close.trigger('click')
+    expect(realWrapper.emitted('close')).toHaveLength(1)
+    expect(registerUser).not.toHaveBeenCalled()
+    await realWrapper.setProps({ open: false })
+  })
+
+  it('reveals the password without validating the field being left', async () => {
+    const wrapper = createWrapper()
+    const password = wrapper.get('#password')
+    await password.setValue('unfinished')
+    const toggle = wrapper.get('button[aria-controls="password"]')
+    await password.trigger('focusout', { relatedTarget: toggle.element })
+    expect(password.classes()).not.toContain('is-invalid')
+    await toggle.trigger('click')
+    expect(password.attributes('type')).toBe('text')
+    expect(registerUser).not.toHaveBeenCalled()
+    await wrapper.get('form').trigger('submit')
+    expect(password.classes()).toContain('is-invalid')
+    expect(registerUser).not.toHaveBeenCalled()
+  })
 })
+
+async function setBirthDate(wrapper: VueWrapper, value: string) {
+  wrapper.getComponent(DatePicker).vm.$emit('update:modelValue', value)
+  await nextTick()
+}

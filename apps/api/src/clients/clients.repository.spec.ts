@@ -306,7 +306,13 @@ describe('ClientsRepository', () => {
         { errorNum: 1, message: 'ORA-00001: (PRODUCTION.UQ_CLIENTS_EMAIL)' },
         409,
       ],
-      [{ errorNum: 2291 }, 400],
+      [
+        {
+          errorNum: 2291,
+          message: 'ORA-02291: (PRODUCTION.FK_ADDRESS_DISTRICT)',
+        },
+        400,
+      ],
     ])(
       'translates known Oracle errors after rollback',
       async (failure, expected) => {
@@ -945,14 +951,14 @@ describe('ClientsRepository', () => {
   });
 
   describe('foreign key failures', () => {
-    it.each(['FK_ADDRESSES_DISTRICT', 'FK_CLIENT_ADDRESS'])(
+    it.each(['FK_ADDRESS_DISTRICT', 'FK_CLIENT_ADDRESS'])(
       'rolls back client creation when Oracle rejects %s',
       async (constraint) => {
         const error = Object.assign(
           new Error('Parent key not found: ' + constraint),
           { errorNum: 2291 },
         );
-        if (constraint !== 'FK_ADDRESSES_DISTRICT')
+        if (constraint !== 'FK_ADDRESS_DISTRICT')
           connection.execute.mockResolvedValueOnce(insertedAddress);
         connection.execute.mockRejectedValueOnce(error);
         const data = {
@@ -968,9 +974,21 @@ describe('ClientsRepository', () => {
         };
         const creation = repository.createClient(data);
 
-        await expect(creation).rejects.toBe(error);
+        if (
+          constraint === 'FK_ADDRESS_DISTRICT' ||
+          constraint === 'FK_EMPLOYEES_BRANCH'
+        ) {
+          await expect(creation).rejects.toMatchObject({
+            status: 400,
+            message: expect.stringContaining(
+              constraint === 'FK_EMPLOYEES_BRANCH' ? 'sucursal' : 'distrito',
+            ),
+          });
+        } else {
+          await expect(creation).rejects.toBe(error);
+        }
         expect(connection.execute).toHaveBeenCalledTimes(
-          constraint === 'FK_ADDRESSES_DISTRICT' ? 1 : 2,
+          constraint === 'FK_ADDRESS_DISTRICT' ? 1 : 2,
         );
         expect(connection.commit).not.toHaveBeenCalled();
         expect(connection.rollback).toHaveBeenCalledTimes(1);
@@ -1345,5 +1363,173 @@ describe('ClientsRepository', () => {
     await expect(repository.findPasswordStatus(7)).rejects.toThrow(
       'Oracle returned invalid client password status.',
     );
+  });
+  describe('own profile email confirmation', () => {
+    const email = 'old@example.com';
+    const nextEmail = 'new@example.com';
+    const sessionVersion = '2026-10-21T12:00:00.123456789';
+    function queueConfirmation(version: string | null = sessionVersion) {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ EMAIL: email, STATUS: 'ACTIVE' }] })
+        .mockResolvedValueOnce({
+          rows: version === null ? [] : [{ SESSION_VERSION: version }],
+        })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+    }
+    it('loads a snapshot only for active accounts', async () => {
+      connection.execute.mockResolvedValueOnce({
+        rows: [{ EMAIL: email, SESSION_VERSION: sessionVersion }],
+      });
+      await expect(repository.getEmailChangeSnapshot(7)).resolves.toEqual({
+        email,
+        sessionVersion,
+      });
+      expect(connection.execute).toHaveBeenCalledWith(
+        expect.stringContaining("c.STATUS = 'ACTIVE'"),
+        { id: 7 },
+        expect.anything(),
+      );
+    });
+    it('returns null for missing snapshots', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [] });
+      await expect(repository.getEmailChangeSnapshot(7)).resolves.toBeNull();
+    });
+    it.each([[], [{ FOUND: 1 }]].map((rows) => ({ rows })))(
+      'checks reserved email addresses $rows',
+      async ({ rows }) => {
+        connection.execute.mockResolvedValueOnce({ rows });
+        await expect(repository.isClientEmailTaken(nextEmail, 7)).resolves.toBe(
+          rows.length > 0,
+        );
+      },
+    );
+    it.each([null, sessionVersion])(
+      'commits email and session revocation together for version %p',
+      async (version) => {
+        queueConfirmation(version);
+        await expect(
+          repository.confirmEmailChange(7, email, nextEmail, version),
+        ).resolves.toBeUndefined();
+        expect(connection.execute).toHaveBeenNthCalledWith(
+          1,
+          expect.stringContaining('FOR UPDATE'),
+          { id: 7 },
+          expect.anything(),
+        );
+        expect(connection.execute).toHaveBeenNthCalledWith(
+          4,
+          'UPDATE CLIENTS SET EMAIL = :email WHERE CLIENT_ID = :id',
+          { email: nextEmail, id: 7 },
+          { autoCommit: false },
+        );
+        expect(connection.execute).toHaveBeenNthCalledWith(
+          5,
+          expect.stringContaining('MERGE INTO PASSWORD_RECOVERIES'),
+          expect.anything(),
+          { autoCommit: false },
+        );
+        expect(connection.commit).toHaveBeenCalledTimes(1);
+      },
+    );
+    it.each(
+      [
+        [],
+        [{ EMAIL: email, STATUS: 'INACTIVE' }],
+        [{ EMAIL: nextEmail, STATUS: 'ACTIVE' }],
+      ].map((rows) => ({ rows })),
+    )(
+      'rejects changed account state $rows without committing',
+      async ({ rows }) => {
+        connection.execute
+          .mockResolvedValueOnce({ rows })
+          .mockResolvedValueOnce({
+            rows: [{ SESSION_VERSION: sessionVersion }],
+          });
+        await expect(
+          repository.confirmEmailChange(7, email, nextEmail, sessionVersion),
+        ).rejects.toMatchObject({ status: 400 });
+        expect(connection.rollback).toHaveBeenCalledTimes(1);
+        expect(connection.commit).not.toHaveBeenCalled();
+      },
+    );
+    it('rejects reused or revoked links even if the old email was restored', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ EMAIL: email, STATUS: 'ACTIVE' }] })
+        .mockResolvedValueOnce({ rows: [{ SESSION_VERSION: sessionVersion }] });
+      await expect(
+        repository.confirmEmailChange(7, email, nextEmail, null),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(connection.execute).toHaveBeenCalledTimes(2);
+    });
+    it('rechecks uniqueness inside the transaction', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ EMAIL: email, STATUS: 'ACTIVE' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ FOUND: 1 }] });
+      await expect(
+        repository.confirmEmailChange(7, email, nextEmail, null),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+    });
+    it.each([0, 2, undefined])(
+      'rolls back invalid email write count %p',
+      async (rowsAffected) => {
+        connection.execute
+          .mockResolvedValueOnce({ rows: [{ EMAIL: email, STATUS: 'ACTIVE' }] })
+          .mockResolvedValueOnce({ rows: [] })
+          .mockResolvedValueOnce({ rows: [] })
+          .mockResolvedValueOnce({ rowsAffected });
+        await expect(
+          repository.confirmEmailChange(7, email, nextEmail, null),
+        ).rejects.toThrow('single client email');
+        expect(connection.commit).not.toHaveBeenCalled();
+        expect(connection.rollback).toHaveBeenCalledTimes(1);
+      },
+    );
+    it('rolls back the email when session revocation fails', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ EMAIL: email, STATUS: 'ACTIVE' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rowsAffected: 1 })
+        .mockRejectedValueOnce(new Error('revocation failed'));
+      await expect(
+        repository.confirmEmailChange(7, email, nextEmail, null),
+      ).rejects.toThrow('revocation failed');
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
+    });
+    it('translates a concurrent email reservation into a conflict', async () => {
+      connection.execute.mockRejectedValueOnce({
+        errorNum: 1,
+        message: 'UQ_CLIENTS_EMAIL',
+      });
+      await expect(
+        repository.confirmEmailChange(7, email, nextEmail, null),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+    it('preserves unrelated Oracle errors', async () => {
+      connection.execute.mockRejectedValueOnce({
+        errorNum: 1,
+        message: 'OTHER_CONSTRAINT',
+      });
+      await expect(
+        repository.confirmEmailChange(7, email, nextEmail, null),
+      ).rejects.toEqual({ errorNum: 1, message: 'OTHER_CONSTRAINT' });
+    });
+    it('updates gender using a bound value without changing admin DTO permissions', async () => {
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ EMAIL: email, STATUS: 'ACTIVE' }] })
+        .mockResolvedValueOnce({ rowsAffected: 1 });
+      await repository.updateClient(7, { gender: 'N' });
+      expect(connection.execute).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('GENDER = :gender'),
+        expect.objectContaining({ gender: { val: 'N', type: oracle.STRING } }),
+        { autoCommit: false },
+      );
+    });
   });
 });

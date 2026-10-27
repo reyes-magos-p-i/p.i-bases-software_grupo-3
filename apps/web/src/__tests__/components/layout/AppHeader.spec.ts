@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
+import AccountMenu from '@/components/common/AccountMenu.vue'
+import { establishClientSession } from '@/services/client-session.service'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import LoginModal from '@/components/auth/LoginModal.vue'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
@@ -68,6 +70,8 @@ describe('AppHeader authentication navigation', () => {
       routes: [
         { path: '/', component: { template: '<p>Portal</p>' } },
         { path: '/dashboard', component: { template: '<p>Dashboard</p>' } },
+        { path: '/account/profile', component: { template: '<p>Perfil</p>' } },
+        { path: '/account/confirm-email', component: { template: '<p>Confirmar correo</p>' } },
         { path: '/account/password', component: { template: '<p>Cambiar contraseña</p>' } },
       ],
     })
@@ -181,7 +185,7 @@ describe('AppHeader authentication navigation', () => {
     expect(wrapper.find('.register-button').exists()).toBe(false)
     await wrapper.get('.account-avatar').trigger('click')
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
-    expect(wrapper.findAll('.account-actions button:disabled')).toHaveLength(2)
+    expect(wrapper.findAll('.account-actions button:disabled')).toHaveLength(1)
 
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
     await flushPromises()
@@ -509,5 +513,55 @@ describe('AppHeader authentication navigation', () => {
     expect(router.currentRoute.value.query).toEqual({ login: 'client', reason: 'expired' })
     expect(page.get('[role="alert"]').text()).toContain('Tu sesión terminó')
     expect(page.get('[role="alert"]').text()).not.toContain('401')
+  })
+  it('navigates to the profile from the existing account menu', async () => {
+    await flushPromises()
+    establishClientSession(
+      { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: '' },
+      'token',
+    )
+    await nextTick()
+    wrapper.getComponent(AccountMenu).vm.$emit('profile')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/account/profile')
+  })
+  it('does not enforce password status while confirming a new email', async () => {
+    await flushPromises()
+    wrapper.unmount()
+    await router.push('/account/confirm-email')
+    establishClientSession(
+      { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: '' },
+      'token',
+    )
+    vi.mocked(getClientSession).mockResolvedValue({
+      id: 7,
+      email: 'a@example.com',
+      firstName: 'Ana',
+      lastName: '',
+    })
+    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue('expired')
+    wrapper = renderHeader()
+    await flushPromises()
+    expect(getClientPasswordStatus).not.toHaveBeenCalled()
+    expect(router.currentRoute.value.path).toBe('/account/confirm-email')
+  })
+
+  it('closes the login modal on the first click without validating an unfinished email', async () => {
+    await wrapper.get('.login-button').trigger('click')
+    const email = page.get<HTMLInputElement>('[name="email"]')
+    await email.setValue('invalid')
+    email.element.focus()
+    const close = page.get<HTMLButtonElement>('.app-modal-close')
+    close.element.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }),
+    )
+    close.element.focus()
+    await nextTick()
+    expect(email.attributes('aria-invalid')).toBe('false')
+    await close.trigger('pointerup')
+    await close.trigger('click')
+    expect(page.find('dialog[open]').exists()).toBe(false)
+    expect(wrapper.getComponent(LoginModal).props('open')).toBe(false)
+    expect(loginClient).not.toHaveBeenCalled()
   })
 })

@@ -322,7 +322,7 @@ describe('UsersController (HTTP integration)', () => {
     expect(service.create).not.toHaveBeenCalled();
     expect(response.body.message).toEqual(
       expect.arrayContaining([
-        'El identificador del distrito es obligatorio.',
+        'Selecciona un distrito.',
         'El detalle de la dirección debe ser texto.',
       ]),
     );
