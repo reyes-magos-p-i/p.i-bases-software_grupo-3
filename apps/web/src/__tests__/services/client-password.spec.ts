@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
+  clientRequestOptions,
   changeClientPassword,
   getClientPasswordStatus,
   ChangePasswordError,
@@ -153,5 +154,15 @@ describe('client password service', () => {
     await expect(
       changeClientPassword({ newPassword: 'new', confirmNewPassword: 'new', expirationDays: 90 }),
     ).rejects.toThrow('Error 503:')
+  })
+  it('exports the existing credential transport for client-owned profile requests', () => {
+    expect(clientRequestOptions()).toEqual({
+      headers: { Authorization: 'Bearer token-123' },
+      adapter: 'fetch',
+      withCredentials: false,
+      timeout: 10000,
+    })
+    localStorage.removeItem('accessToken')
+    expect(() => clientRequestOptions()).toThrow(ChangePasswordError)
   })
 })
