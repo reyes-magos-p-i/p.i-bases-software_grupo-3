@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CreateTheaterRequest, Theater } from '@/types/theater'
+import type { Seat } from '@/types/seats'
 
 const { create, get, post, patch, del } = vi.hoisted(() => ({
   create: vi.fn(),
@@ -127,5 +128,57 @@ describe('theater service', () => {
 
     await expect(createTheater(payload)).rejects.toBe(failure)
     expect(post).toHaveBeenCalledExactlyOnceWith('/theaters', payload, { timeout: 30000 })
+  })
+
+  it('loads theater seats with the request signal and timeout', async () => {
+    const seats: Seat[] = [
+      {
+        theaterId: 17,
+        rowNumber: 1,
+        columnNumber: 2,
+        type: 'vip',
+        state: 'free',
+      },
+    ]
+    const controller = new AbortController()
+    get.mockResolvedValueOnce({ data: seats })
+
+    const { getTheaterSeats } = await import('@/services/theater.service')
+
+    await expect(
+      getTheaterSeats(17, controller.signal),
+    ).resolves.toBe(seats)
+
+    expect(get).toHaveBeenCalledExactlyOnceWith('/theaters/17/seats', {
+      signal: controller.signal,
+      timeout: 10000,
+    })
+  })
+
+  it('returns an empty array when the theater has no seats', async () => {
+    get.mockResolvedValueOnce({ data: [] })
+
+    const { getTheaterSeats } = await import('@/services/theater.service')
+
+    await expect(getTheaterSeats(17)).resolves.toEqual([])
+
+    expect(get).toHaveBeenCalledExactlyOnceWith('/theaters/17/seats', {
+      signal: undefined,
+      timeout: 10000,
+    })
+  })
+
+  it('propagates a seat request failure without retrying', async () => {
+    const failure = new Error('Seat request failed')
+    get.mockRejectedValueOnce(failure)
+
+    const { getTheaterSeats } = await import('@/services/theater.service')
+
+    await expect(getTheaterSeats(17)).rejects.toBe(failure)
+
+    expect(get).toHaveBeenCalledExactlyOnceWith('/theaters/17/seats', {
+      signal: undefined,
+      timeout: 10000,
+    })
   })
 })

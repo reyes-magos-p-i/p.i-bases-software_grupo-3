@@ -13,6 +13,7 @@ describe('TheatersController', () => {
     findOne: jest.Mock;
     update: jest.Mock;
     remove: jest.Mock;
+    getSeats: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -23,6 +24,7 @@ describe('TheatersController', () => {
       findOne: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
+      getSeats: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -107,5 +109,32 @@ describe('TheatersController', () => {
 
     expect(guards).toHaveLength(3);
     expect(guards).toEqual(expect.arrayContaining([AdministratorGuard, PasswordStatusGuard]));
+  });
+
+  describe('getSeats', () => {
+    it('delegates to the service and returns its seats', async () => {
+      const seats = [
+        {
+          theaterId: 7,
+          rowNumber: 1,
+          columnNumber: 2,
+          type: 'vip',
+          state: 'free',
+        },
+      ];
+
+      service.getSeats.mockResolvedValueOnce(seats);
+
+      await expect(controller.getSeats(7)).resolves.toEqual(seats);
+
+      expect(service.getSeats).toHaveBeenCalledWith(7);
+    });
+
+    it('propagates service errors', async () => {
+      const error = new Error('Seat retrieval failed');
+      service.getSeats.mockRejectedValueOnce(error);
+
+      await expect(controller.getSeats(7)).rejects.toBe(error);
+    });
   });
 });
