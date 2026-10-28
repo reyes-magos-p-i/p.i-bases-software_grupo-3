@@ -189,7 +189,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .section-subtitle {
   margin: 4px 0 0;
-  color: var(--text-secondary);
+  color: var(--text-on-dark-secondary);
 }
 .ticket-search {
   display: grid;
