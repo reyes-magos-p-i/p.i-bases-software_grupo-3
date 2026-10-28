@@ -6,3 +6,6 @@ export interface Ticket {
   endTime: string
   seat: string
 }
+
+/** A ticket shown in the detail dialog, with the number that was searched. */
+export type TicketDetail = Ticket & { id: number }

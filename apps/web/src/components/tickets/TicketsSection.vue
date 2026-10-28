@@ -4,9 +4,10 @@ import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import TicketDetailDialog from './TicketDetailDialog.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import { getTicket } from '@/services/ticket.service'
-import type { Ticket } from '@/types/ticket'
+import type { Ticket, TicketDetail } from '@/types/ticket'
 
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
@@ -18,6 +19,8 @@ const searchError = ref('')
 const notification = ref('')
 const searchedNumber = ref<number | null>(null)
 const ticket = ref<Ticket | null>(null)
+const selectedTicket = ref<TicketDetail | null>(null)
+const detailError = ref('')
 let request: AbortController | undefined
 
 const columns = [
@@ -28,6 +31,21 @@ const columns = [
   { key: 'endTime', label: 'Finalización' },
   { key: 'seat', label: 'Asiento' },
 ]
+
+function viewTicket() {
+  if (!ticket.value || searchedNumber.value === null) {
+    selectedTicket.value = null
+    detailError.value = 'No se pudo mostrar el detalle del ticket.'
+    return
+  }
+  selectedTicket.value = { ...ticket.value, id: searchedNumber.value }
+  detailError.value = ''
+}
+
+function closeDetail() {
+  selectedTicket.value = null
+  detailError.value = ''
+}
 
 /** "2026/10/10 18:00" -> "10/10/2026, 18:00" */
 function formatTicketDate(value: string) {
@@ -156,7 +174,7 @@ onBeforeUnmount(() => {
       <template #actions>
         <div class="default-actions">
           <span title="Ver detalle" class="action-hint">
-            <button type="button" aria-label="Ver detalle">
+            <button type="button" aria-label="Ver detalle" @click="viewTicket">
               <i class="bi bi-eye" aria-hidden="true"></i>
             </button>
           </span>
@@ -168,6 +186,8 @@ onBeforeUnmount(() => {
         </div>
       </template>
     </CrudTable>
+
+    <TicketDetailDialog :ticket="selectedTicket" :error="detailError" @close="closeDetail" />
   </section>
 </template>
 
