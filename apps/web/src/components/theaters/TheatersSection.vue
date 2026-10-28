@@ -58,7 +58,11 @@ const {
   clearFilters,
 } = useTheaterFilters(
   theaters,
-  computed(() => options.value?.statuses.map((status) => status.name) ?? []),
+  computed(() =>
+    (Array.isArray(options.value?.statuses) ? options.value.statuses : [])
+      .map((status) => status.name)
+      .filter((name): name is string => typeof name === 'string'),
+  ),
 )
 let request: AbortController | undefined
 let theatersRequest: AbortController | undefined
@@ -72,7 +76,7 @@ const columns = [
   { key: 'status', label: 'Estado' },
 ]
 
-const rows = () =>
+const rows = computed(() =>
   visibleTheaters.value.map((theater) => ({
     ...theater,
     theater,
@@ -80,7 +84,8 @@ const rows = () =>
     displayId: String(theater.theaterId),
     dimensions: `${theater.dimensionX} x ${theater.dimensionY}`,
     status: displayStatus(theater),
-  }))
+  })),
+)
 
 async function loadOptions() {
   if (optionsLoading.value || options.value) return
@@ -295,7 +300,7 @@ onBeforeUnmount(() => {
         <p v-if="!visibleTheaters.length" class="feedback">
           Ninguna sala coincide con los filtros seleccionados.
         </p>
-        <CrudTable :columns="columns" :rows="rows()" caption="Salas">
+        <CrudTable :columns="columns" :rows="rows" caption="Salas">
           <template #actions="{ row }">
             <div class="user-actions">
               <span title="Ver" class="action-hint">
@@ -355,6 +360,7 @@ onBeforeUnmount(() => {
       :submitting="submitting"
       :submission-errors="theaterSubmissionErrors"
       @retry-options="retryOptions"
+      @close="editingTheater = null"
       @submit="submitModify"
     />
     <TheaterDetailDialog

@@ -67,6 +67,8 @@ import { PasswordStatusGuard } from './password/password-status.guard';
     PasswordStatusGuard,
   ],
   exports: [
+    JwtModule,
+    EmailVerificationSender,
     PassportModule,
     EmployeeSessionService,
     EmployeeSessionOriginGuard,

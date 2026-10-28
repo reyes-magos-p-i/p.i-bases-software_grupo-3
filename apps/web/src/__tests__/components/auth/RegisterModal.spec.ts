@@ -346,6 +346,45 @@ describe('RegisterModal.vue', () => {
     expect(registerUser).not.toHaveBeenCalled()
     expect(view.text()).not.toMatch(/bytes|UTF-8|Unicode/u)
   })
+
+  it('does not validate registration when closing with the native close button', async () => {
+    realWrapper = mount(RegisterModal, {
+      props: { open: true },
+      attachTo: document.body,
+      global: { stubs: { SocialAuthButtons: true } },
+    })
+    const page = new DOMWrapper(document.body)
+    await nextTick()
+    const email = page.get<HTMLInputElement>('#email')
+    await email.setValue('invalid')
+    email.element.focus()
+    const close = page.get<HTMLButtonElement>('.app-modal-close')
+    close.element.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'touch' }),
+    )
+    await email.trigger('focusout', { relatedTarget: null })
+    expect(email.classes()).not.toContain('is-invalid')
+    await close.trigger('pointerup')
+    await close.trigger('click')
+    expect(realWrapper.emitted('close')).toHaveLength(1)
+    expect(registerUser).not.toHaveBeenCalled()
+    await realWrapper.setProps({ open: false })
+  })
+
+  it('reveals the password without validating the field being left', async () => {
+    const wrapper = createWrapper()
+    const password = wrapper.get('#password')
+    await password.setValue('unfinished')
+    const toggle = wrapper.get('button[aria-controls="password"]')
+    await password.trigger('focusout', { relatedTarget: toggle.element })
+    expect(password.classes()).not.toContain('is-invalid')
+    await toggle.trigger('click')
+    expect(password.attributes('type')).toBe('text')
+    expect(registerUser).not.toHaveBeenCalled()
+    await wrapper.get('form').trigger('submit')
+    expect(password.classes()).toContain('is-invalid')
+    expect(registerUser).not.toHaveBeenCalled()
+  })
 })
 
 async function setBirthDate(wrapper: VueWrapper, value: string) {
