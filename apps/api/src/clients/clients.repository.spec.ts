@@ -726,7 +726,8 @@ describe('ClientsRepository', () => {
           clientId: { val: 42, type: oracle.NUMBER },
           passwordHash: { val: data.passwordHash, type: oracle.STRING },
           salt: { val: data.salt, type: oracle.STRING },
-          expirationDays: { val: 90, type: oracle.NUMBER },
+          // New accounts start with the 120-day period (SCRUM-287, UT-076).
+          expirationDays: { val: 30, type: oracle.NUMBER },
         },
         { autoCommit: false },
       );
