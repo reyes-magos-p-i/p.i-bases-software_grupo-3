@@ -29,6 +29,7 @@ describe('TicketDetailDialog', () => {
 
     expect(wrapper.text()).toContain('Dune')
     expect(wrapper.text()).toContain('C5')
+    expect(wrapper.text()).toContain('10/10/2026, 18:00')
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
 

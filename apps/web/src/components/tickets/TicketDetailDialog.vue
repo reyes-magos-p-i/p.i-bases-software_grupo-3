@@ -2,6 +2,7 @@
 import { onMounted, useTemplateRef, watch } from 'vue'
 import TicketDialogShell from './TicketDialogShell.vue'
 import type { TicketDetail } from '@/types/ticket'
+import { formatTicketDate } from '@/utils/ticket-format'
 
 const props = withDefaults(defineProps<{ ticket: TicketDetail | null; error?: string }>(), {
   error: '',
@@ -19,31 +20,31 @@ watch(() => [props.ticket, props.error], syncDialog, { flush: 'post' })
 </script>
 
 <template>
-  <TicketDialogShell ref="shell" title="Detalle de ticket" close-label="Cerrar" @close="emit('close')">
+  <TicketDialogShell ref="shell" title="Detalle de tiquete" close-label="Cerrar" @close="emit('close')">
     <div v-if="ticket || error" class="ticket-detail-content">
       <p v-if="!ticket" class="detail-error" role="alert">{{ error }}</p>
-      <div v-else class="detail-grid">
-        <div class="readonly-field"><label>Número de ticket</label><div class="readonly-input">{{ ticket.id }}</div></div>
-        <div class="readonly-field"><label>Película</label><div class="readonly-input">{{ ticket.title }}</div></div>
-        <div class="readonly-field"><label>Sala</label><div class="readonly-input">{{ ticket.theaterId }}</div></div>
-        <div class="dimension-grid">
-          <div class="readonly-field"><label>Inicio</label><div class="readonly-input">{{ ticket.startTime }}</div></div>
-          <div class="readonly-field"><label>Finalización</label><div class="readonly-input">{{ ticket.endTime }}</div></div>
+      <template v-else>
+        <div class="detail-grid">
+          <div class="readonly-field"><label>ID</label><div class="readonly-input">{{ ticket.id }}</div></div>
+          <div class="readonly-field"><label>Película</label><div class="readonly-input">{{ ticket.title }}</div></div>
+          <div class="readonly-field"><label>Sala</label><div class="readonly-input">{{ ticket.theaterId }}</div></div>
+          <div class="readonly-field"><label>Inicio</label><div class="readonly-input">{{ formatTicketDate(ticket.startTime) }}</div></div>
+          <div class="readonly-field"><label>Finalización</label><div class="readonly-input">{{ formatTicketDate(ticket.endTime) }}</div></div>
+          <div class="readonly-field"><label>Asiento</label><div class="readonly-input">{{ ticket.seat }}</div></div>
         </div>
-        <div class="readonly-field"><label>Asiento</label><div class="readonly-input">{{ ticket.seat }}</div></div>
-      </div>
-      <footer class="dialog-actions">
-        <button type="button" class="secondary-button" @click="shell?.close(); emit('close')">Cerrar</button>
-      </footer>
+        <footer class="dialog-actions">
+          <button type="button" class="secondary-button" @click="shell?.close(); emit('close')">Cerrar</button>
+        </footer>
+      </template>
     </div>
   </TicketDialogShell>
 </template>
 
 <style scoped>
 .ticket-detail-content {
-  display: grid;
-  gap: 8px;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  padding: 15px 36px 17px 13px;
   overflow-y: auto;
   font: inherit;
 }
@@ -53,45 +54,45 @@ watch(() => [props.ticket, props.error], syncDialog, { flush: 'post' })
 }
 .detail-grid {
   display: grid;
-  gap: 8px;
-}
-.dimension-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 8px;
+  gap: 11px;
 }
 .readonly-field {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+}
+.readonly-field label {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
 }
 .readonly-input {
-  min-height: 42px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-small);
-  font: inherit;
+  display: flex;
+  align-items: center;
+  height: 42px;
+  padding: 0 12px;
+  border: 0.5px solid var(--text-primary);
+  border-radius: 4px;
+  font-size: 14px;
   background: var(--content-background);
   color: var(--text-primary);
 }
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
+  margin-top: 42px;
 }
 .secondary-button {
-  min-height: 42px;
-  padding: 9px 16px;
+  width: 118px;
+  height: 40px;
+  padding: 12px 14px;
   border: 1px solid var(--primary-color);
-  border-radius: var(--radius-small);
+  border-radius: 4px;
+  box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25);
   color: var(--text-primary);
   background: var(--content-background);
   font: inherit;
-}
-@media (max-width: 520px) {
-  .dimension-grid {
-    grid-template-columns: 1fr;
-  }
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
 }
 </style>

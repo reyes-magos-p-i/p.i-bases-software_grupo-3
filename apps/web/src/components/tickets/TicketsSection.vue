@@ -8,6 +8,7 @@ import TicketDetailDialog from './TicketDetailDialog.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import { getTicket } from '@/services/ticket.service'
 import type { Ticket, TicketDetail } from '@/types/ticket'
+import { formatTicketDate } from '@/utils/ticket-format'
 
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
@@ -45,12 +46,6 @@ function viewTicket() {
 function closeDetail() {
   selectedTicket.value = null
   detailError.value = ''
-}
-
-/** "2026/10/10 18:00" -> "10/10/2026, 18:00" */
-function formatTicketDate(value: string) {
-  const match = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}:\d{2})$/.exec(value)
-  return match ? `${match[3]}/${match[2]}/${match[1]}, ${match[4]}` : value
 }
 
 const rows = computed(() => {

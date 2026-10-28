@@ -52,9 +52,10 @@ defineExpose({ open, close })
 </template>
 
 <style scoped>
-.ticket-dialog { position: fixed; top: 50%; left: 50%; width: min(calc(100% - 32px), 620px); max-height: min(90dvh, 760px); margin: 0; padding: 0; border: 0; border-radius: var(--radius-medium); color: var(--text-primary); background: var(--dialog-background); transform: translate(-50%, -50%); }
+.ticket-dialog { position: fixed; top: 50%; left: 50%; width: min(calc(100% - 32px), 604px); max-height: min(90dvh, 760px); margin: 0; padding: 0; border: 1px solid var(--border-color); border-radius: 0; color: var(--text-primary); background: var(--dialog-background); transform: translate(-50%, -50%); }
 .ticket-dialog::backdrop { background: color-mix(in srgb, var(--page-background) 55%, transparent); }
-.dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 24px; color: var(--dialog-heading-text); background: var(--dialog-heading-background); }
-.dialog-heading h2 { margin: 0; font-size: 1.25rem; }
-.close-button { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: var(--radius-small); color: inherit; background: transparent; }
+.dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; height: 59px; padding: 0 12px 0 15px; color: var(--dialog-heading-text); background: var(--dialog-heading-background); }
+.dialog-heading h2 { margin: 0; font-size: 18px; font-weight: 500; }
+.close-button { display: grid; place-items: center; width: 40px; height: 40px; border: 0; color: inherit; background: transparent; }
+.close-button i { font-size: 28px; }
 </style>
