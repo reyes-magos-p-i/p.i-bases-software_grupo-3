@@ -21,6 +21,12 @@ import {
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
 import { clearClientSession } from '@/services/client-session.service'
+import type { PasswordExpiry } from '@/services/authService'
+import {
+  dismissPasswordExpiry,
+  passwordExpiryMessage,
+  passwordExpiryNotice,
+} from '@/services/password-expiry-notice'
 
 vi.mock('@/services/authService', async (original) => ({
   ...(await original<typeof import('@/services/authService')>()),
@@ -38,6 +44,12 @@ vi.mock('@/services/employee-session.service', async () => {
     restoreEmployeeSession: vi.fn(),
   }
 })
+
+const expiry = (
+  status: PasswordExpiry['status'],
+  expirationDays: number | null = 120,
+  expiresInDays: number | null = null,
+): PasswordExpiry => ({ status, expirationDays, expiresInDays })
 
 describe('AppHeader authentication navigation', () => {
   let wrapper: VueWrapper
@@ -57,7 +69,7 @@ describe('AppHeader authentication navigation', () => {
       .mockReset()
       .mockResolvedValue({ id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' })
     vi.mocked(getClientSession).mockReset().mockResolvedValue(null)
-    vi.mocked(getClientPasswordStatus).mockReset().mockResolvedValue('valid')
+    vi.mocked(getClientPasswordStatus).mockReset().mockResolvedValue(expiry('valid'))
     vi.mocked(closeEmployeeSession).mockResolvedValue(null)
     Object.assign(employeeSession.user, { value: null })
     Object.assign(employeeSession.status, { value: 'unknown' })
@@ -95,6 +107,7 @@ describe('AppHeader authentication navigation', () => {
   })
 
   afterEach(() => {
+    dismissPasswordExpiry()
     wrapper.unmount()
     router.options.history.destroy()
     vi.useRealTimers()
@@ -238,8 +251,26 @@ describe('AppHeader authentication navigation', () => {
     expect(page.findAll('dialog[open]')).toHaveLength(0)
   })
 
+  it('warns a client at login when the password expires within 72 hours (UT-081)', async () => {
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('valid', 30, 3))
+    localStorage.setItem('accessToken', 'client-token')
+    await wrapper.get('.login-button').trigger('click')
+    await page.get('[name="email"]').setValue('ana@example.com')
+    await page.get('[name="password"]').setValue('ValidPassword1!')
+    await page.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(router.currentRoute.value.fullPath).toBe('/')
+    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(3))
+
+    // Logging out removes a warning that is still on screen.
+    await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
+    await flushPromises()
+    expect(passwordExpiryNotice.message.value).toBe('')
+  })
+
   it('forces a client with an expired password to the password update page after login', async () => {
-    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('expired')
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('expired'))
     localStorage.setItem('accessToken', 'client-token')
     await wrapper.get('.login-button').trigger('click')
     await page.get('[name="email"]').setValue('ana@example.com')
@@ -253,7 +284,7 @@ describe('AppHeader authentication navigation', () => {
   })
 
   it('does not enforce an expired password after the client logs out during the status check', async () => {
-    let resolveStatus!: (status: 'expired') => void
+    let resolveStatus!: (value: PasswordExpiry) => void
     vi.mocked(getClientPasswordStatus).mockReturnValueOnce(
       new Promise((resolve) => {
         resolveStatus = resolve
@@ -268,12 +299,30 @@ describe('AppHeader authentication navigation', () => {
 
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
     await flushPromises()
-    resolveStatus('expired')
+    resolveStatus(expiry('expired'))
     await flushPromises()
 
     expect(router.currentRoute.value.path).toBe('/')
     expect(wrapper.find('.account-avatar').exists()).toBe(false)
     expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+
+  it('does not warn a client whose session is restored by a page refresh', async () => {
+    wrapper.unmount()
+    localStorage.setItem('accessToken', 'saved-token')
+    vi.mocked(getClientSession).mockResolvedValue({
+      id: 7,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Rojas',
+    })
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('valid', 30, 3))
+    wrapper = renderHeader()
+    await flushPromises()
+
+    expect(getClientPasswordStatus).toHaveBeenCalled()
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(passwordExpiryNotice.message.value).toBe('')
   })
 
   it('forces a restored client with an expired password to the password update page', async () => {
@@ -285,7 +334,7 @@ describe('AppHeader authentication navigation', () => {
       firstName: 'Ana',
       lastName: 'Rojas',
     })
-    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('expired')
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('expired'))
     wrapper = renderHeader()
     await flushPromises()
 
@@ -451,7 +500,7 @@ describe('AppHeader authentication navigation', () => {
       firstName: 'Ana',
       lastName: 'Rojas',
     })
-    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue('expired')
+    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue(expiry('expired'))
     wrapper = renderHeader()
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/recover-password')
@@ -539,7 +588,7 @@ describe('AppHeader authentication navigation', () => {
       firstName: 'Ana',
       lastName: '',
     })
-    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue('expired')
+    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue(expiry('expired'))
     wrapper = renderHeader()
     await flushPromises()
     expect(getClientPasswordStatus).not.toHaveBeenCalled()

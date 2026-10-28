@@ -15,6 +15,14 @@ import {
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
 import type { UserCreationOptions } from '@/types/user'
+import type { PasswordExpiry } from '@/services/authService'
+import { notifyPasswordBlocked } from '@/services/api'
+import {
+  dismissPasswordExpiry,
+  expectPasswordExpiryNotice,
+  passwordExpiryMessage,
+  passwordExpiryNotice,
+} from '@/services/password-expiry-notice'
 
 const {
   getUsers,
@@ -125,7 +133,7 @@ beforeEach(() => {
   getUsers
     .mockReset()
     .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 })
-  getEmployeePasswordStatus.mockReset().mockResolvedValue('valid')
+  getEmployeePasswordStatus.mockReset().mockResolvedValue(expiry('valid'))
   getEmployeeListOptions.mockReset().mockResolvedValue({ branches: [] })
   Object.assign(employeeSession.user, {
     value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana', email: 'ana@example.com' },
@@ -189,6 +197,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  dismissPasswordExpiry()
   wrapper?.unmount()
   wrapper = undefined
   for (const history of routeHistories.splice(0)) history.destroy()
@@ -218,6 +227,12 @@ async function renderDashboard() {
   wrapper = mount(DashboardView, { attachTo: document.body, global: { plugins: [router] } })
   return wrapper
 }
+
+const expiry = (
+  status: PasswordExpiry['status'],
+  expirationDays: number | null = 120,
+  expiresInDays: number | null = null,
+): PasswordExpiry => ({ status, expirationDays, expiresInDays })
 
 describe('DashboardView', () => {
   it('shows the password section to administrators and returns from its embedded view', async () => {
@@ -365,13 +380,91 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
   })
 
+  it('does not warn an employee who refreshes the dashboard', async () => {
+    getEmployeePasswordStatus.mockResolvedValueOnce(expiry('valid', 120, 1))
+    await renderDashboard()
+    await flushPromises()
+
+    expect(getEmployeePasswordStatus).toHaveBeenCalled()
+    expect(passwordExpiryNotice.message.value).toBe('')
+  })
+
+  it('warns an employee who just logged in during the last day of the password (UT-082)', async () => {
+    getEmployeePasswordStatus.mockResolvedValueOnce(expiry('valid', 120, 1))
+    // The header login marks the session as new before opening the dashboard.
+    expectPasswordExpiryNotice()
+    const view = await renderDashboard()
+    await flushPromises()
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).not.toBe(
+      'Cambiar contraseña',
+    )
+    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(1))
+    dismissPasswordExpiry()
+  })
+
   it('opens the password form when the employee password has expired', async () => {
-    getEmployeePasswordStatus.mockResolvedValueOnce('expired').mockResolvedValueOnce('expired')
+    getEmployeePasswordStatus
+      .mockResolvedValueOnce(expiry('expired'))
+      .mockResolvedValueOnce(expiry('expired'))
     const view = await renderDashboard()
     await flushPromises()
 
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
     expect(view.text()).toContain('Tu contraseña venció.')
+  })
+
+  it('keeps an employee with an expired password on the password change (UT-086)', async () => {
+    getEmployeePasswordStatus.mockResolvedValue(expiry('expired'))
+    const view = await renderDashboard()
+    await flushPromises()
+
+    // Every section can be requested, but only the password change is shown.
+    for (const section of ['Empleados', 'Clientes', 'Salas', 'Proyecciones', 'Películas']) {
+      const item = view.get(`[aria-label="${section}"]`)
+      expect(item.attributes('disabled')).toBeUndefined()
+      await item.trigger('click')
+      await flushPromises()
+      expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
+        'Cambiar contraseña',
+      )
+      expect(view.get('h1').text()).toBe('Cambiar contraseña')
+      expect(view.text()).toContain('Tu contraseña venció.')
+    }
+  })
+
+  it('locks the dashboard when any endpoint rejects an expired password', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
+
+    notifyPasswordBlocked({
+      isAxiosError: true,
+      response: { status: 403, data: { code: 'PASSWORD_EXPIRED' } },
+    })
+    await flushPromises()
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
+    await view.get('[aria-label="Empleados"]').trigger('click')
+    await flushPromises()
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
+  })
+
+  it('unlocks the sections only after the server confirms a valid password', async () => {
+    getEmployeePasswordStatus.mockResolvedValue(expiry('expired'))
+    const view = await renderDashboard()
+    await flushPromises()
+    const passwordView = view.getComponent(ChangePasswordView)
+
+    passwordView.vm.$emit('return-to-dashboard')
+    await flushPromises()
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
+
+    getEmployeePasswordStatus.mockResolvedValue(expiry('valid'))
+    passwordView.vm.$emit('return-to-dashboard')
+    await flushPromises()
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
+    expect(view.get('[aria-label="Salas"]').attributes('disabled')).toBeUndefined()
   })
 
   it('prevents section navigation and logout while the password change is pending', async () => {

@@ -699,6 +699,10 @@ describe('Employee authentication (HTTP integration)', () => {
       .get('/api/auth/password-status')
       .set('Cookie', cookie)
       .expect(200);
-    expect(status.body).toEqual({ status: 'expired' });
+    expect(status.body).toEqual({
+      status: 'expired',
+      expirationDays: 120,
+      expiresInDays: null,
+    });
   });
 });
