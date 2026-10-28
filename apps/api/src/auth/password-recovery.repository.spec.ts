@@ -180,9 +180,22 @@ describe('PasswordRecoveryRepository', () => {
           60,
         ),
       ).resolves.toBe(true);
-      const save =
-        type === 'client' ? clients.savePassword : users.saveEmployeePassword;
-      expect(save).toHaveBeenCalledWith(7, 'new-hash', 'salt', 60, connection);
+      // The chosen period only reaches clients; employees keep the fixed one.
+      if (type === 'client')
+        expect(clients.savePassword).toHaveBeenCalledWith(
+          7,
+          'new-hash',
+          'salt',
+          60,
+          connection,
+        );
+      else
+        expect(users.saveEmployeePassword).toHaveBeenCalledWith(
+          7,
+          'new-hash',
+          'salt',
+          connection,
+        );
       expect(connection.execute.mock.calls[1][0]).toContain('FOR UPDATE');
       expect(connection.execute).toHaveBeenLastCalledWith(
         expect.stringContaining('RESET_AT = SYSTIMESTAMP'),

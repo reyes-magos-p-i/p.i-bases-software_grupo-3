@@ -156,7 +156,7 @@ del flujo de creación. La comprobación en navegador complementa esas pruebas.
 ## Correcciones de continuidad de sesión
 
 La creación de empleados guarda explícitamente `PASSWORD_SET_AT = SYSTIMESTAMP`
-y `EXPIRATION_DAYS = 120` junto con el hash, dentro de la transacción existente.
+y `EXPIRATION_DAYS = 30` (vigencia fija del personal) junto con el hash, dentro de la transacción existente.
 Una contraseña con fecha desconocida en una cuenta anterior se considera vencida:
 la sesión puede comprobarse y el dashboard solicita cambiarla usando la contraseña
 actual. No se inventan fechas históricas ni se modifican registros automáticamente.
