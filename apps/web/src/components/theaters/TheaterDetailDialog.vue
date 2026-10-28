@@ -118,7 +118,8 @@ watch(
       :rows="theater.dimensionX"
       :columns="theater.dimensionY"
       :seats="seats"
-      max-selections="all"
+      max-selections="all" 
+      disabled
       :selectable-states="['free', 'unavailable', 'in-use', 'reserved']"
       @selection-change="handleSelection"
     />
