@@ -69,6 +69,7 @@ watch(() => [props.message, props.type, props.duration], startTimer)
     aria-atomic="true"
     @mouseenter="clearTimer"
     @mouseleave="startTimer"
+    @click="emit('close')"
   >
     <p :class="['d-flex', 'align-items-center', 'gap-1', 'mb-0', 'fw-bold', style.color]">
       <i :class="['bi', style.icon]" aria-hidden="true" />
