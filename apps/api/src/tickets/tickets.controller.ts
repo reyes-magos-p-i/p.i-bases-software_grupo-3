@@ -1,10 +1,20 @@
 //import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { Controller, Get, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { EmployeeGuard } from '../users/guards/employee.guard';
+import { PasswordStatusGuard } from '../auth/password/password-status.guard';
+import { ParseDecimalIdPipe } from '../common/pipes/parse-decimal-id.pipe';
 import { TicketsService } from './tickets.service';
 //import { CreateTicketDto } from './dto/create-ticket.dto';
 //import { UpdateTicketDto } from './dto/update-ticket.dto';
 
 @Controller('tickets')
+@UseGuards(AuthGuard('jwt'), EmployeeGuard, PasswordStatusGuard)
 export class TicketsController {
   constructor(private readonly ticketsService: TicketsService) {}
   /*
@@ -19,8 +29,8 @@ export class TicketsController {
   }
   */
   @Get(':id')
-  findOne(@Param('id') id: number) {
-    return this.ticketsService.findOne(+id);
+  findOne(@Param('id', ParseDecimalIdPipe) id: string) {
+    return this.ticketsService.findOne(Number(id));
   }
   /*
   @Patch(':id')
