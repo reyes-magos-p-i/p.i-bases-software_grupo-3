@@ -7,7 +7,12 @@ const { create, get, post, patch } = vi.hoisted(() => ({
   patch: vi.fn(),
 }))
 
-vi.mock('axios', () => ({ default: { create } }))
+// api.ts registers a response interceptor when it is first imported.
+const interceptors = { response: { use: vi.fn() } }
+
+vi.mock('axios', () => ({
+  default: { create: (defaults: unknown) => ({ interceptors, ...create(defaults) }) },
+}))
 
 describe('branch service', () => {
   beforeEach(() => {

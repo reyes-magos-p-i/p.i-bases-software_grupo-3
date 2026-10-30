@@ -7,6 +7,7 @@
 --
 -- Pending (marked PENDING below, not applied to PRODUCTION yet):
 --   migrations/20261016_sales_invoices_products.sql
+--   migrations/20261025_password_expiration_30_days.sql
 -- =========================================================
 
 -- =========================================================
@@ -167,6 +168,8 @@ END;
 --     the only business rule (that a client must have at least one login method)
 --     is validated in the application, not here.
 --   - Passwords expire EXPIRATION_DAYS after PASSWORD_SET_AT (SCRUM-287).
+--     Employees always have 30 days; clients start with 30 and may pick
+--     30, 60, 90 or 120.
 -- =========================================================
 CREATE TABLE Employee_local_credentials (
     credentials_id      NUMBER GENERATED ALWAYS AS IDENTITY,
@@ -174,11 +177,11 @@ CREATE TABLE Employee_local_credentials (
     password_hash       VARCHAR2(255) NOT NULL,
     salt                VARCHAR2(100) NOT NULL,
     password_set_at     TIMESTAMP WITH TIME ZONE,  -- NULL = unknown, treated as expired
-    expiration_days     NUMBER(3) DEFAULT 120 NOT NULL,
+    expiration_days     NUMBER(3) DEFAULT 30 NOT NULL,  -- PENDING: migrations/20261025_password_expiration_30_days.sql
     CONSTRAINT pk_emp_local_credentials PRIMARY KEY (credentials_id),
     CONSTRAINT uq_emp_local_cred_employee UNIQUE (employee_id),
     CONSTRAINT chk_employee_local_cred_expiration
-        CHECK (expiration_days IN (30, 60, 90, 120)),
+        CHECK (expiration_days = 30),  -- PENDING: migrations/20261025_password_expiration_30_days.sql
     CONSTRAINT fk_emp_local_cred_employee
         FOREIGN KEY (employee_id) REFERENCES Employees (employee_id)
 );
@@ -209,7 +212,7 @@ CREATE TABLE Client_local_credentials (
     password_hash       VARCHAR2(255) NOT NULL,
     salt                VARCHAR2(100) NOT NULL,
     password_set_at     TIMESTAMP WITH TIME ZONE NOT NULL,
-    expiration_days     NUMBER(3) NOT NULL,
+    expiration_days     NUMBER(3) DEFAULT 30 NOT NULL,  -- PENDING: migrations/20261025_password_expiration_30_days.sql
     CONSTRAINT chk_client_local_cred_expiration
         CHECK (expiration_days IN (30, 60, 90, 120)),
     CONSTRAINT fk_client_local_cred_client

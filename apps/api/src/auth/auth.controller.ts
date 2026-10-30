@@ -27,7 +27,7 @@ import { ConfirmEmailVerificationDto } from './dto/confirm-email-verification.dt
 import { ResendEmailVerificationDto } from './dto/resend-email-verification.dto';
 import { AllowExpiredPassword } from './password/allow-expired-password.decorator';
 import { ChangeClientPasswordDto } from './dto/change-client-password.dto';
-import { PasswordStatus } from './password/password-status';
+import type { PasswordExpiry } from './password/password-status';
 import { Client } from '../clients/client.model';
 import { ClientsService } from '../clients/clients.service';
 import { ChangeEmployeePasswordDto } from './dto/change-employee-password.dto';
@@ -86,6 +86,8 @@ export class AuthController {
   @Get('me')
   @Header('Cache-Control', 'no-store')
   @UseGuards(AuthGuard('jwt'))
+  // The web app restores the session with this route before redirecting to the password change.
+  @AllowExpiredPassword()
   me(@Req() req: Request) {
     const user = req.user as
       | { id?: number; role?: string; firstName?: string; email?: string }
@@ -126,13 +128,13 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @AllowExpiredPassword()
   @Get('password-status')
-  passwordStatus(@Req() req: Request): { status: PasswordStatus } {
-    if (req.passwordStatus === undefined) {
+  passwordStatus(@Req() req: Request): PasswordExpiry {
+    if (req.passwordExpiry === undefined) {
       throw new InternalServerErrorException(
         'Password status was not computed.',
       );
     }
-    return { status: req.passwordStatus };
+    return req.passwordExpiry;
   }
 
   @UseGuards(AuthGuard('jwt'), ThrottlerGuard)
