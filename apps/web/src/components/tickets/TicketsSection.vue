@@ -24,6 +24,7 @@ const ticketNumber = ref('')
 const searching = ref(false)
 const searchError = ref('')
 const notification = ref('')
+const successNotice = ref('')
 const searchedNumber = ref<number | null>(null)
 const ticket = ref<Ticket | null>(null)
 const selectedTicket = ref<TicketDetail | null>(null)
@@ -68,12 +69,13 @@ async function submitModify(data: UpdateTicketRequest) {
   if (searchedNumber.value === null || submitting.value) return
   submitting.value = true
   submissionErrors.value = []
+  successNotice.value = ''
   emit('busy', true)
   try {
     await updateTicket(searchedNumber.value, data)
     modifyDialog.value?.complete()
     await search()
-    notification.value = 'Ticket modificado exitosamente.'
+    successNotice.value = 'Ticket modificado exitosamente.'
   } catch (error) {
     const status = isAxiosError(error) ? error.response?.status : undefined
     if (status === 401) sessionExpired()
@@ -227,8 +229,12 @@ onBeforeUnmount(() => {
       />
     </div>
 
+    <div v-if="successNotice" class="ticket-notification">
+      <NotificationPopup type="success" :message="successNotice" @close="successNotice = ''" />
+    </div>
+
     <CrudTable
-      v-else-if="ticket"
+      v-if="ticket && !notification"
       caption="Tickets"
       :columns="columns"
       :rows="rows"
