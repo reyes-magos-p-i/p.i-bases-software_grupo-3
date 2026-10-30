@@ -1,4 +1,11 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ClientPreferencesRepository } from './preferences/client-preferences.repository';
+import { MoviesRepository } from '../../movies/movies.repository';
+import { MovieFunctionsRepository } from '../../movie-fuctions/movie-functions.repository/movie-functions.repository';
+import {
+  BadRequestException,
+  INestApplication,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
@@ -43,12 +50,41 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
   };
   const recovery = { sessionRevoked: jest.fn() };
   const sender = { send: jest.fn() };
+  const preferences = { getPreferences: jest.fn(), savePreferences: jest.fn() };
+  const movies = { findGenres: jest.fn(), findLanguages: jest.fn() };
+  const catalog = {
+    getCatalogCandidates: jest.fn(),
+    getMovieFunctions: jest.fn(),
+  };
+  let savedPreferences: { genreIds: number[]; languageIds: number[] };
   const origin = 'https://cinema.example';
   const token = (type = 'client') =>
     jwt.sign({ sub: 7, type, sessionVersion: null });
 
   beforeEach(async () => {
     jest.resetAllMocks();
+    savedPreferences = { genreIds: [2], languageIds: [3] };
+    preferences.getPreferences.mockImplementation(() =>
+      Promise.resolve(savedPreferences),
+    );
+    preferences.savePreferences.mockImplementation(
+      (_id: number, data: { genreIds: number[]; languageIds: number[] }) => {
+        savedPreferences = data;
+        return Promise.resolve(data);
+      },
+    );
+    movies.findGenres.mockResolvedValue([{ id: 2, name: 'Acción' }]);
+    movies.findLanguages.mockResolvedValue([{ id: 3, name: 'Español' }]);
+    catalog.getCatalogCandidates.mockResolvedValue(
+      Array.from({ length: 6 }, (_item, index) => ({
+        id: index + 1,
+        title: `Película ${index + 1}`,
+        posterImage: 'poster.jpg',
+        genreIds: index === 5 ? [2] : [],
+        languageIds: index === 5 ? [3] : [],
+      })),
+    );
+
     auth.findById.mockResolvedValue(identity);
     auth.findPasswordStatus.mockResolvedValue({
       setAt: new Date(),
@@ -98,6 +134,12 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
         query: jest.fn().mockResolvedValue({ rows: [] }),
         transaction: jest.fn(),
       })
+      .overrideProvider(ClientPreferencesRepository)
+      .useValue(preferences)
+      .overrideProvider(MoviesRepository)
+      .useValue(movies)
+      .overrideProvider(MovieFunctionsRepository)
+      .useValue(catalog)
       .overrideProvider(ClientsRepository)
       .useValue(clients)
       .overrideProvider(ClientsService)
@@ -306,5 +348,161 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
       .send({ email: 'new@example.com' });
     expect(response.status).toBe(429);
     expect(sender.send).toHaveBeenCalledTimes(5);
+  });
+  it('loads current preference catalogs and selections without caching personal data', async () => {
+    const response = await request(server)
+      .get('/api/clients/me/preferences')
+      .auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body).toMatchObject({
+      genres: [{ id: 2, name: 'Acción' }],
+      languages: [{ id: 3, name: 'Español' }],
+      selected: { genreIds: [2], languageIds: [3] },
+      maxSelections: 1000,
+    });
+    expect(preferences.getPreferences).toHaveBeenCalledWith(7);
+    movies.findGenres.mockResolvedValue([
+      { id: 2, name: 'Nombre nuevo' },
+      { id: 4, name: 'Drama' },
+    ]);
+    const updated = await request(server)
+      .get('/api/clients/me/preferences')
+      .auth(token(), { type: 'bearer' });
+    expect(updated.status).toBe(200);
+    expect(updated.body.genres).toHaveLength(2);
+    expect(updated.body.genres[0].name).toBe('Nombre nuevo');
+  });
+  it('stores and clears selections for the session account across new tokens', async () => {
+    const selected = { genreIds: [2, 4], languageIds: [3] };
+    const saved = await request(server)
+      .put('/api/clients/me/preferences')
+      .auth(token(), { type: 'bearer' })
+      .set('Origin', origin)
+      .send(selected);
+    expect(saved.status).toBe(200);
+    expect(preferences.savePreferences).toHaveBeenCalledWith(7, selected);
+    const reloaded = await request(server)
+      .get('/api/clients/me/preferences')
+      .auth(token(), { type: 'bearer' });
+    expect(reloaded.body.selected).toEqual(selected);
+    const cleared = await request(server)
+      .put('/api/clients/me/preferences')
+      .auth(token(), { type: 'bearer' })
+      .set('Origin', origin)
+      .send({ genreIds: [], languageIds: [] });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body).toEqual({ genreIds: [], languageIds: [] });
+    const unranked = await request(server)
+      .get('/api/clients/me/preferences/portal')
+      .auth(token(), { type: 'bearer' });
+    expect(unranked.status).toBe(200);
+    expect(unranked.body.map((movie: { id: number }) => movie.id)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+  });
+  it.each([
+    { genreIds: [2, 2], languageIds: [] },
+    { genreIds: ['2'], languageIds: [] },
+    { genreIds: [], languageIds: null },
+    { genreIds: [], languageIds: [], clientId: 8 },
+    {},
+  ])('rejects malformed preference changes %p', async (input) => {
+    const response = await request(server)
+      .put('/api/clients/me/preferences')
+      .auth(token(), { type: 'bearer' })
+      .set('Origin', origin)
+      .send(input);
+    expect(response.status).toBe(400);
+    expect(preferences.savePreferences).not.toHaveBeenCalled();
+  });
+  it('rejects untrusted preference writes and employee access', async () => {
+    const originFailure = await request(server)
+      .put('/api/clients/me/preferences')
+      .auth(token(), { type: 'bearer' })
+      .set('Origin', 'https://other.example')
+      .send({ genreIds: [], languageIds: [] });
+    expect(originFailure.status).toBe(403);
+    const employee = await request(server)
+      .get('/api/clients/me/preferences')
+      .auth(token('employee'), { type: 'bearer' });
+    expect(employee.status).toBe(403);
+    expect(preferences.savePreferences).not.toHaveBeenCalled();
+    expect(preferences.getPreferences).not.toHaveBeenCalled();
+  });
+  it('keeps the general complete catalog public and prioritizes only the own client portal', async () => {
+    const publicCatalog = await request(server).get(
+      '/api/movie-fuctions/catalog',
+    );
+    expect(publicCatalog.status).toBe(200);
+    expect(publicCatalog.body.map((movie: { id: number }) => movie.id)).toEqual(
+      [1, 2, 3, 4, 5, 6],
+    );
+    const privateCatalog = await request(server)
+      .get('/api/clients/me/preferences/portal')
+      .auth(token(), { type: 'bearer' });
+    expect(privateCatalog.status).toBe(200);
+    expect(
+      privateCatalog.body.map((movie: { id: number }) => movie.id),
+    ).toEqual([6, 1, 2, 3, 4, 5]);
+    expect(privateCatalog.headers['cache-control']).toBe('no-store');
+    expect(Object.keys(privateCatalog.body[0]).sort()).toEqual([
+      'id',
+      'posterImage',
+      'title',
+    ]);
+    expect(preferences.getPreferences).toHaveBeenCalledWith(7);
+  });
+  it.each([
+    '/api/clients/me/preferences',
+    '/api/clients/me/preferences/portal',
+  ])('requires a valid client session for %s', async (path) => {
+    const response = await request(server).get(path);
+    expect(response.status).toBe(401);
+    expect(preferences.getPreferences).not.toHaveBeenCalled();
+  });
+  it('reports options removed from the catalog without pretending preferences were saved', async () => {
+    preferences.savePreferences.mockRejectedValue(
+      new BadRequestException('Una de las opciones ya no está disponible.'),
+    );
+    const response = await request(server)
+      .put('/api/clients/me/preferences')
+      .auth(token(), { type: 'bearer' })
+      .set('Origin', origin)
+      .send({ genreIds: [99], languageIds: [] });
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('ya no está disponible');
+  });
+  it.each(['expired', 'revoked', 'inactive'])(
+    'rejects %s sessions before reading personal preference data',
+    async (kind) => {
+      let bearer = token();
+      if (kind === 'expired')
+        bearer = jwt.sign({ sub: 7, type: 'client' }, { expiresIn: -1 });
+      if (kind === 'revoked') recovery.sessionRevoked.mockResolvedValue(true);
+      if (kind === 'inactive') auth.findById.mockResolvedValue(null);
+      const response = await request(server)
+        .get('/api/clients/me/preferences/portal')
+        .auth(bearer, { type: 'bearer' });
+      expect(response.status).toBe(401);
+      expect(preferences.getPreferences).not.toHaveBeenCalled();
+    },
+  );
+  it('returns the same complete ordered catalog for guests and clients without preferences', async () => {
+    const guest = await request(server).get('/api/movie-fuctions/catalog');
+    expect(guest.status).toBe(200);
+    expect(guest.headers['cache-control']).toBe('no-store');
+    expect(guest.body).toHaveLength(6);
+    expect(preferences.getPreferences).not.toHaveBeenCalled();
+    expect(auth.findById).not.toHaveBeenCalled();
+    savedPreferences = { genreIds: [], languageIds: [] };
+    const client = await request(server)
+      .get('/api/clients/me/preferences/portal')
+      .auth(token(), { type: 'bearer' });
+    expect(client.status).toBe(200);
+    expect(client.body).toEqual(guest.body);
+    expect(guest.body.map((movie: { id: number }) => movie.id)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
   });
 });
