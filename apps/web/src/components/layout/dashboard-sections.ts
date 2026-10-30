@@ -3,6 +3,7 @@ import type { UserRole } from '@/types/user'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import ProjectionsSection from '@/components/projections/ProjectionsSection.vue'
 import TicketsSection from '@/components/tickets/TicketsSection.vue'
+import TransactionsSection from '@/components/transactions/TransactionsSection.vue'
 
 export type DashboardSectionId =
   | 'dashboard'
@@ -13,6 +14,7 @@ export type DashboardSectionId =
   | 'screenings'
   | 'tickets'
   | 'branches'
+  | 'transactions'
   | 'password'
   | 'account'
   | 'help'
@@ -67,6 +69,14 @@ export const dashboardSections: readonly DashboardSectionDefinition[] = [
     component: TicketsSection,
   },
   { id: 'branches', label: 'Sucursales', icon: 'bi-building', roles: [] },
+  {
+    id: 'transactions',
+    label: 'Transacciones',
+    icon: 'bi-receipt',
+    adminOnly: true,
+    roles: ['ADMINISTRATOR'],
+    component: TransactionsSection,
+  },
   {
     id: 'password',
     label: 'Cambiar contraseña',
