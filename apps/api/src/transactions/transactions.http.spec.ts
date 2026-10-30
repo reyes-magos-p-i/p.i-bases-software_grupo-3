@@ -145,7 +145,8 @@ describe('Transactions HTTP contracts', () => {
       movies: [{ id: 62, title: 'Ecos del Volcán' }],
     };
     repository.listFilterOptions.mockResolvedValue(options);
-    await get('/transactions/filter-options').expect(200, options);
+    const response = await get('/transactions/filter-options').expect(200);
+    expect(response.body).toEqual(options);
   });
 
   it('returns the detail of a transaction (UT-052)', async () => {
