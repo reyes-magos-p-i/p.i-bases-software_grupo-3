@@ -17,7 +17,7 @@ import { ThrottlerException, ThrottlerGuard } from '@nestjs/throttler';
 import { UsersRepository } from '../users/users.repository';
 import { UserRole } from '../users/enums/user-role.enum';
 import { EmployeeSessionService } from './employee-session.service';
-import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
+import { SessionOriginGuard } from './guards/session-origin.guard';
 import { EmailVerificationSender } from './notifications/email-verification-sender';
 
 describe('AuthModule', () => {
@@ -53,8 +53,8 @@ describe('AuthModule', () => {
         },
         {
           provide: 'ORIGIN_GUARD_CONSUMER',
-          inject: [EmployeeSessionOriginGuard],
-          useFactory: (guard: EmployeeSessionOriginGuard) => guard,
+          inject: [SessionOriginGuard],
+          useFactory: (guard: SessionOriginGuard) => guard,
         },
       ],
     })
@@ -86,7 +86,7 @@ describe('AuthModule', () => {
 
   it('wires AuthController, AuthService and ClientsService', () => {
     expect(module.get('ORIGIN_GUARD_CONSUMER')).toBeInstanceOf(
-      EmployeeSessionOriginGuard,
+      SessionOriginGuard,
     );
     expect(module.get('PROFILE_AUTH_CONSUMER')).toEqual({
       jwt: module.get(JwtService),
@@ -101,7 +101,7 @@ describe('AuthModule', () => {
     expect(module.get(EmployeeSessionService)).toBeInstanceOf(
       EmployeeSessionService,
     );
-    expect(module.get(EmployeeSessionOriginGuard)).toBeDefined();
+    expect(module.get(SessionOriginGuard)).toBeDefined();
   });
 
   it('keeps independent login quotas for different IP addresses', async () => {
