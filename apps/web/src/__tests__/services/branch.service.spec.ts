@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { create, get } = vi.hoisted(() => ({ create: vi.fn(), get: vi.fn() }))
 
-vi.mock('axios', () => ({ default: { create } }))
+// api.ts registers a response interceptor when it is first imported.
+const interceptors = { response: { use: vi.fn() } }
+
+vi.mock('axios', () => ({
+  default: { create: (defaults: unknown) => ({ interceptors, ...create(defaults) }) },
+}))
 
 describe('branch service', () => {
   beforeEach(() => {
