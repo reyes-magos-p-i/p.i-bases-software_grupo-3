@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { requireClientSession } from '@/router/client-session.guard'
+import {
+  redirectClientWhenPasswordBlocked,
+  requireClientSession,
+} from '@/router/client-session.guard'
+import { notifyPasswordBlocked } from '@/services/api'
+import type { Router } from 'vue-router'
 import { clientSession, clearClientSession } from '@/services/client-session.service'
 import { getClientPasswordStatus, getClientSession } from '@/services/authService'
+import type { PasswordExpiry } from '@/services/authService'
 
 vi.mock('@/services/authService', () => ({
   getClientPasswordStatus: vi.fn(),
@@ -11,6 +17,12 @@ vi.mock('@/services/authService', () => ({
 function route(path: string, requiresClient = false) {
   return { path, meta: { requiresClient } } as unknown as Parameters<typeof requireClientSession>[0]
 }
+
+const expiry = (
+  status: PasswordExpiry['status'],
+  expirationDays: number | null = 120,
+  expiresInDays: number | null = null,
+): PasswordExpiry => ({ status, expirationDays, expiresInDays })
 
 describe('requireClientSession', () => {
   beforeEach(() => {
@@ -31,7 +43,7 @@ describe('requireClientSession', () => {
 
   it('keeps recovery accessible even when an existing session has an expired password', async () => {
     clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
-    vi.mocked(getClientPasswordStatus).mockResolvedValue('expired')
+    vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))
     await expect(
       requireClientSession(route('/recover-password'), route('/'), vi.fn()),
     ).resolves.toBe(true)
@@ -43,9 +55,18 @@ describe('requireClientSession', () => {
     expect(result).toBe(true)
   })
 
+  it('restores a stored session on a direct page load and redirects before showing the page', async () => {
+    const identity = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
+    vi.mocked(getClientSession).mockResolvedValueOnce(identity)
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('expired'))
+    const result = await requireClientSession(route('/privacy-policy'), route('/', false), vi.fn())
+    expect(getClientSession).toHaveBeenCalledWith('saved-token')
+    expect(result).toEqual({ path: '/account/password', query: { reason: 'expired' } })
+  })
+
   it('forces a redirect to /account/password when the password is expired', async () => {
     clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
-    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('expired')
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('expired'))
     const result = await requireClientSession(route('/'), route('/', false), vi.fn())
     expect(result).toEqual({ path: '/account/password', query: { reason: 'expired' } })
   })
@@ -101,5 +122,54 @@ describe('requireClientSession', () => {
     const result = await requireClientSession(route('/'), route('/'), vi.fn())
     expect(result).toBe(false)
     expect(localStorage.getItem('accessToken')).toBe('new-token')
+  })
+  it('keeps email confirmation public without checking an old session password', async () => {
+    clientSession.user.value = { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: '' }
+    vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))
+    await expect(
+      requireClientSession(route('/account/confirm-email'), route('/'), vi.fn()),
+    ).resolves.toBe(true)
+    expect(getClientPasswordStatus).not.toHaveBeenCalled()
+    expect(getClientSession).not.toHaveBeenCalled()
+  })
+  it('protects the profile when there is no client session', async () => {
+    const result = await requireClientSession(route('/account/profile', true), route('/'), vi.fn())
+    expect(result).toEqual({ path: '/', query: { login: 'client', reason: 'required' } })
+  })
+})
+
+describe('redirectClientWhenPasswordBlocked', () => {
+  const blocked = (code: string) => ({
+    isAxiosError: true,
+    response: { status: 403, data: { code } },
+  })
+  const fakeRouter = (path: string) =>
+    ({ currentRoute: { value: { path } }, replace: vi.fn() }) as unknown as Router & {
+      replace: ReturnType<typeof vi.fn>
+    }
+
+  it.each([
+    ['PASSWORD_EXPIRED', 'expired'],
+    ['PASSWORD_MUST_SET', 'must_set'],
+  ])('sends a client to the password change when an endpoint answers %s', (code, reason) => {
+    localStorage.setItem('accessToken', 'saved-token')
+    const router = fakeRouter('/')
+    const stop = redirectClientWhenPasswordBlocked(router)
+    notifyPasswordBlocked(blocked(code))
+    stop()
+    expect(router.replace).toHaveBeenCalledWith({ path: '/account/password', query: { reason } })
+  })
+
+  it.each([
+    ['a staff session (no client token)', null, '/dashboard'],
+    ['a client already on the password change', 'saved-token', '/account/password'],
+  ])('does nothing for %s', (_, token, path) => {
+    if (token) localStorage.setItem('accessToken', token)
+    else localStorage.removeItem('accessToken')
+    const router = fakeRouter(path)
+    const stop = redirectClientWhenPasswordBlocked(router)
+    notifyPasswordBlocked(blocked('PASSWORD_EXPIRED'))
+    stop()
+    expect(router.replace).not.toHaveBeenCalled()
   })
 })

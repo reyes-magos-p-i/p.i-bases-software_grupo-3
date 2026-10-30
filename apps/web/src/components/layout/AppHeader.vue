@@ -24,6 +24,11 @@ import {
   clearClientSession,
 } from '@/services/client-session.service'
 import { authErrorMessage, authErrorStatus } from '@/utils/auth-errors'
+import {
+  announcePasswordExpiry,
+  dismissPasswordExpiry,
+  expectPasswordExpiryNotice,
+} from '@/services/password-expiry-notice'
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
@@ -61,15 +66,17 @@ async function enforceClientPasswordStatus() {
     !user ||
     !hasClientSession() ||
     route.path === PASSWORD_PATH ||
-    route.path === '/recover-password'
+    route.path === '/recover-password' ||
+    route.path === '/account/confirm-email'
   )
     return
 
   try {
-    const status = await getClientPasswordStatus()
+    const expiry = await getClientPasswordStatus()
     if (disposed || clientUser.value !== user || !hasClientSession()) return
-    if (status !== 'valid') {
-      await router.replace({ path: PASSWORD_PATH, query: { reason: status } })
+    announcePasswordExpiry(expiry)
+    if (expiry.status !== 'valid') {
+      await router.replace({ path: PASSWORD_PATH, query: { reason: expiry.status } })
     }
   } catch (error) {
     if (!disposed && clientUser.value === user && hasClientSession()) {
@@ -123,12 +130,15 @@ async function submitLogin(credentials: EmployeeLoginRequest) {
       if (disposed) return
       clientUser.value = identity
       activeModal.value = null
+      expectPasswordExpiryNotice()
       await router.push('/')
       await enforceClientPasswordStatus()
     } else {
       const identity = await authenticateEmployee(credentials)
       if (disposed || !identity) return
       activeModal.value = null
+      // The dashboard checks the password status when it opens.
+      expectPasswordExpiryNotice()
       await router.push('/dashboard')
     }
   } catch (error) {
@@ -206,12 +216,14 @@ async function handleClientLogin(identity?: ClientIdentity) {
   if (identity) {
     clientUser.value = identity
     loginError.value = ''
+    expectPasswordExpiryNotice()
     await router.push('/')
     await enforceClientPasswordStatus()
   }
 }
 
 async function logoutClient() {
+  dismissPasswordExpiry()
   try {
     await clearClientAuth()
     activeModal.value = null
@@ -241,6 +253,7 @@ function goToChangePassword() {
           :user="clientUser"
           @logout="logoutClient"
           @change-password="goToChangePassword"
+          @profile="router.push('/account/profile')"
         />
         <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
           >Ir al dashboard</RouterLink
@@ -285,11 +298,12 @@ function goToChangePassword() {
 <style scoped>
 .site-header {
   width: 100%;
-  background-color: transparent;
+  background-color: var(--navbar-background);
   color: var(--text-on-dark);
 }
 
 .site-header-overlay {
+  background-color: transparent;
   position: absolute;
   top: 0;
   left: 0;

@@ -31,6 +31,7 @@ const props = withDefaults(
 )
 const emit = defineEmits<{
   retryOptions: []
+  close: []
   submit: [data: CreateTheaterRequest]
 }>()
 
@@ -43,7 +44,9 @@ function open() {
 }
 
 function close() {
-  if (!props.submitting) shell.value?.close()
+  if (props.submitting) return
+  shell.value?.close()
+  emit('close')
 }
 
 function complete() {
@@ -55,7 +58,12 @@ defineExpose({ open, complete })
 </script>
 
 <template>
-  <TheaterDialogShell ref="shell" title="Crear sala" :close-disabled="submitting">
+  <TheaterDialogShell
+    ref="shell"
+    title="Crear sala"
+    :close-disabled="submitting"
+    @close="emit('close')"
+  >
     <TheaterForm
       ref="form"
       submit-label="Crear sala"
