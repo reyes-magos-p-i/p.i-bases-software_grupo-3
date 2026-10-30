@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import {
   changeClientPassword,
   changeEmployeePassword,
@@ -86,6 +87,83 @@ describe('ChangePasswordView.vue', () => {
       },
     })
   }
+
+  it('uses the shared blue indicator while loading security inside the client profile', async () => {
+    let finish!: (value: PasswordExpiry) => void
+    vi.mocked(getClientPasswordStatus).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const wrapper = mountView({ embedded: true, accountType: 'client' })
+    expect(wrapper.getComponent(LoadingState).props()).toMatchObject({
+      message: 'Cargando seguridad…',
+      surface: 'light',
+    })
+    expect(wrapper.get('[role="status"]').text()).toBe('Cargando seguridad…')
+    expect(wrapper.find('.loading-spinner').exists()).toBe(false)
+    expect(wrapper.find('form').exists()).toBe(false)
+    finish(expiry('valid'))
+    await flushPromises()
+    expect(wrapper.findComponent(LoadingState).exists()).toBe(false)
+    expect(wrapper.find('form').exists()).toBe(true)
+    expect(getEmployeePasswordStatus).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('replaces the profile security indicator with a retryable error after a failed lookup', async () => {
+    let fail!: (error: Error) => void
+    vi.mocked(getClientPasswordStatus)
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            fail = reject
+          }),
+      )
+      .mockResolvedValueOnce(expiry('valid'))
+    const wrapper = mountView({ embedded: true, accountType: 'client' })
+    expect(wrapper.findComponent(LoadingState).exists()).toBe(true)
+    fail(new Error('offline'))
+    await flushPromises()
+    expect(wrapper.findComponent(LoadingState).exists()).toBe(false)
+    expect(wrapper.get('[role="alert"]').text()).toContain('No se pudo comprobar')
+    expect(wrapper.find('form').exists()).toBe(false)
+    await wrapper.get('.form-card .primary-button').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(LoadingState).exists()).toBe(false)
+    expect(wrapper.find('form').exists()).toBe(true)
+    expect(getClientPasswordStatus).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it.each([
+    { embedded: false, accountType: 'client' as const },
+    { embedded: true, accountType: 'employee' as const },
+  ])(
+    'preserves the existing loading presentation outside the client profile: %p',
+    async (props) => {
+      let finish!: (value: PasswordExpiry) => void
+      const loadStatus =
+        props.accountType === 'employee' ? getEmployeePasswordStatus : getClientPasswordStatus
+      vi.mocked(loadStatus).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          }),
+      )
+      const wrapper = mountView(props)
+      expect(wrapper.findComponent(LoadingState).exists()).toBe(false)
+      expect(wrapper.find('.loading-spinner').exists()).toBe(true)
+      expect(wrapper.get('[role="status"]').text()).toContain(
+        'Comprobando el estado de tu contraseña',
+      )
+      finish(expiry('valid'))
+      await flushPromises()
+      expect(wrapper.find('form').exists()).toBe(true)
+      wrapper.unmount()
+    },
+  )
 
   it.each(['client', 'employee'] as const)(
     'recovers %s through the shared form and returns to the matching login',
