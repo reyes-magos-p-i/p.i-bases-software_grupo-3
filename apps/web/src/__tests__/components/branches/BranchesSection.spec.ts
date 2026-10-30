@@ -312,7 +312,7 @@ describe('BranchesSection · Crear sucursal', () => {
     await flushPromises()
     expect(view.emitted('busy')).toEqual([[true], [false]])
     expect(view.get('.branch-notification').text()).toContain('Sucursal creada con éxito')
-    expect(getBranches.mock.calls.length).toBe(loads + 1)
+    expect(getBranches.mock.calls).toHaveLength(loads + 1)
     expect((dialog(view).get('input[name="name"]').element as HTMLInputElement).value).toBe('')
 
     await view.get('.branch-notification .notification-popup').trigger('click')
@@ -431,7 +431,7 @@ describe('BranchesSection · Crear sucursal', () => {
       expect(updateBranch).toHaveBeenCalledWith(1, { name: 'Sucursal Heredia Oeste', companyId: 2 })
       expect(createBranch).not.toHaveBeenCalled()
       expect(view.get('.branch-notification').text()).toContain('Sucursal modificada con éxito')
-      expect(getBranches.mock.calls.length).toBe(loads + 1)
+      expect(getBranches.mock.calls).toHaveLength(loads + 1)
       expect(view.emitted('busy')).toEqual([[true], [false]])
     })
 
@@ -457,7 +457,7 @@ describe('BranchesSection · Crear sucursal', () => {
       expect(dialog(view).get('.form-error').text()).toBe(
         'La sucursal no existe o ya fue desactivada',
       )
-      expect(getBranches.mock.calls.length).toBe(loads + 1)
+      expect(getBranches.mock.calls).toHaveLength(loads + 1)
     })
 
     it('shows a name used by another active branch under the name field', async () => {
@@ -472,7 +472,7 @@ describe('BranchesSection · Crear sucursal', () => {
         'Ya existe una sucursal activa con ese nombre',
       )
       expect(dialog(view).find('.form-error').exists()).toBe(false)
-      expect(getBranches.mock.calls.length).toBe(loads)
+      expect(getBranches.mock.calls).toHaveLength(loads)
     })
 
     it('creates again after closing a modification', async () => {
@@ -566,7 +566,7 @@ describe('BranchesSection · Crear sucursal', () => {
         'La sucursal no existe o ya fue desactivada',
       )
       expect(confirmButton().attributes('disabled')).toBeDefined()
-      expect(getBranches.mock.calls.length).toBe(loads + 1)
+      expect(getBranches.mock.calls).toHaveLength(loads + 1)
       expect(view.find('.branch-notification').exists()).toBe(false)
     })
 

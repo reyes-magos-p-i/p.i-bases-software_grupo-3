@@ -14,7 +14,7 @@ import { CinemasService } from './cinemas.service';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { AuthGuard } from '@nestjs/passport';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
-import { EmployeeSessionOriginGuard } from '../auth/guards/employee-session-origin.guard';
+import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
 import { ListCinemasQueryDto } from './dto/list-cinemas-query.dto';
 import { CinemaIdParamsDto } from './dto/cinema-id-params.dto';
 import { CreateCinemaDto } from './dto/create-cinema.dto';
@@ -46,14 +46,14 @@ export class CinemasController {
   }
 
   @Post()
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   @HttpCode(HttpStatus.CREATED)
   createCinema(@Body() data: CreateCinemaDto) {
     return this.cinemasService.createCinema(data);
   }
 
   @Patch(':id')
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   updateCinema(
     @Param() params: CinemaIdParamsDto,
     @Body() data: UpdateCinemaDto,
@@ -62,7 +62,7 @@ export class CinemasController {
   }
 
   @Patch(':id/deactivate')
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   deactivateCinema(@Param() params: CinemaIdParamsDto) {
     return this.cinemasService.deactivateCinema(params.id);
