@@ -36,6 +36,19 @@ describe('transaction service', () => {
     })
   })
 
+  it('requests the detail of one transaction', async () => {
+    const detail = { id: 123 }
+    get.mockResolvedValue({ data: detail })
+    const controller = new AbortController()
+    const { getTransaction } = await import('@/services/transaction.service')
+
+    await expect(getTransaction(123, controller.signal)).resolves.toBe(detail)
+    expect(get).toHaveBeenCalledWith('/transactions/123', {
+      signal: controller.signal,
+      timeout: 10000,
+    })
+  })
+
   it('requests the filter options', async () => {
     const options = { branches: [], movies: [] }
     get.mockResolvedValue({ data: options })

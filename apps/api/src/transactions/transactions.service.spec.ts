@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { TransactionsRepository } from './transactions.repository';
 import { TransactionsService } from './transactions.service';
 
@@ -6,6 +6,7 @@ describe('TransactionsService', () => {
   const repository = {
     listTransactions: jest.fn(),
     listFilterOptions: jest.fn(),
+    findTransactionById: jest.fn(),
   };
   const service = new TransactionsService(
     repository as unknown as TransactionsRepository,
@@ -49,5 +50,21 @@ describe('TransactionsService', () => {
       ),
     );
     expect(repository.listTransactions).not.toHaveBeenCalled();
+  });
+
+  it('returns the detail of a transaction', async () => {
+    const detail = { id: 123 };
+    repository.findTransactionById.mockResolvedValue(detail);
+    await expect(service.getTransaction(123)).resolves.toBe(detail);
+    expect(repository.findTransactionById).toHaveBeenCalledWith(123);
+  });
+
+  it('answers 404 when the transaction does not exist (UT-054)', async () => {
+    repository.findTransactionById.mockResolvedValue(null);
+    const failure = service.getTransaction(125);
+    await expect(failure).rejects.toBeInstanceOf(NotFoundException);
+    await expect(failure).rejects.toThrow(
+      'No fue posible cargar el detalle de la transacción',
+    );
   });
 });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { AxiosError, type AxiosResponse } from 'axios'
 import TransactionsSection from '@/components/transactions/TransactionsSection.vue'
+import TransactionDetailDialog from '@/components/transactions/TransactionDetailDialog.vue'
 import type { TransactionListItem, TransactionListResult } from '@/types/transaction'
 
 const { getTransactions, getTransactionFilterOptions, sessionExpired, refreshPermissions } =
@@ -11,7 +12,11 @@ const { getTransactions, getTransactionFilterOptions, sessionExpired, refreshPer
     sessionExpired: vi.fn(),
     refreshPermissions: vi.fn(),
   }))
-vi.mock('@/services/transaction.service', () => ({ getTransactions, getTransactionFilterOptions }))
+vi.mock('@/services/transaction.service', () => ({
+  getTransactions,
+  getTransactionFilterOptions,
+  getTransaction: vi.fn(),
+}))
 vi.mock('@/composables/useEmployeeSessionRecovery', () => ({
   useEmployeeSessionRecovery: () => ({
     state: { disposed: false },
@@ -67,7 +72,10 @@ function failure(status?: number) {
 let wrapper: VueWrapper | undefined
 
 async function render(props: { disabled?: boolean } = {}) {
-  wrapper = mount(TransactionsSection, { props })
+  wrapper = mount(TransactionsSection, {
+    props,
+    global: { stubs: { TransactionDetailDialog: true } },
+  })
   await flushPromises()
   return wrapper
 }
@@ -155,12 +163,48 @@ describe('TransactionsSection', () => {
     expect(view.findAll('.status-badge.cancelled')).toHaveLength(2)
   })
 
-  it('keeps Ver detalle visible in every row but disabled until SCRUM-18', async () => {
+  it('opens the detail of the selected transaction and closes it (UT-052)', async () => {
     const view = await render()
+    const dialog = view.getComponent(TransactionDetailDialog)
+    expect(dialog.props('transactionId')).toBeNull()
     const actions = view.findAll('.detail-button')
     expect(actions).toHaveLength(5)
-    expect(actions[0]!.attributes('aria-label')).toBe('Ver detalle de FAC-000125 (Pendiente)')
-    expect(actions.every((action) => action.attributes('disabled') !== undefined)).toBe(true)
+    expect(actions[2]!.attributes('aria-label')).toBe('Ver detalle de FAC-000123')
+    await actions[2]!.trigger('click')
+    expect(dialog.props('transactionId')).toBe(123)
+    dialog.vm.$emit('session-expired')
+    dialog.vm.$emit('forbidden')
+    dialog.vm.$emit('close')
+    await flushPromises()
+    expect(dialog.props('transactionId')).toBeNull()
+    expect(sessionExpired).toHaveBeenCalledTimes(1)
+    expect(refreshPermissions).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens another transaction after closing one (UT-057)', async () => {
+    const view = await render()
+    const dialog = view.getComponent(TransactionDetailDialog)
+    await view.findAll('.detail-button')[2]!.trigger('click')
+    dialog.vm.$emit('close')
+    await flushPromises()
+    await view.findAll('.detail-button')[1]!.trigger('click')
+    expect(dialog.props('transactionId')).toBe(124)
+  })
+
+  it('reloads the list when the transaction no longer exists (UT-054)', async () => {
+    const view = await render()
+    const loads = getTransactions.mock.calls.length
+    view.getComponent(TransactionDetailDialog).vm.$emit('missing')
+    await flushPromises()
+    expect(getTransactions.mock.calls.length).toBe(loads + 1)
+  })
+
+  it('does not open the detail while the dashboard is busy', async () => {
+    const view = await render({ disabled: true })
+    const action = view.findAll('.detail-button')[0]!
+    expect(action.attributes('disabled')).toBeDefined()
+    await action.trigger('click')
+    expect(view.getComponent(TransactionDetailDialog).props('transactionId')).toBeNull()
   })
 
   it('uses the singular for one transaction and names a branch without name', async () => {

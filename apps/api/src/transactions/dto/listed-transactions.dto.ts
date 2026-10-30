@@ -27,6 +27,27 @@ export interface ListedTransactionsDto {
   totalPages: number;
 }
 
+export type PaymentMethod = 'CARD' | 'CASH';
+export type ProductType = 'TICKET' | 'FOOD';
+
+// UNIT_PRICE is what was charged, so later price changes do not alter it.
+export interface TransactionLineDto {
+  productId: number;
+  name: string;
+  type: ProductType;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+}
+
+// Card payments keep only the brand Stripe returns (e.g. "visa") and the last 4 digits.
+export interface TransactionDetailDto extends ListedTransactionDto {
+  paymentMethod: PaymentMethod;
+  cardBrand: string | null;
+  cardLast4: string | null;
+  lines: TransactionLineDto[];
+}
+
 export interface TransactionFilterOptionsDto {
   branches: { id: number; name: string | null }[];
   movies: { id: number; title: string }[];

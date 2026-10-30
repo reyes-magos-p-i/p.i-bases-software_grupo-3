@@ -3,8 +3,9 @@ info:
   title: Transacciones
   version: 1.0.0
   description: >-
-    Lista de transacciones (facturas pagadas y canceladas) para administradores
-    (SCRUM-17). Un empleado regular o un cliente recibe 403 sin datos.
+    Lista y detalle de transacciones (facturas pagadas y canceladas) para
+    administradores (SCRUM-17 y SCRUM-18). Un empleado regular o un cliente recibe
+    403 sin datos.
 servers:
   - url: /api
 security:
@@ -100,6 +101,46 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/Unavailable"
+  /transactions/{id}:
+    get:
+      summary: Detalle de una transacción
+      description: >-
+        Una factura pagada o cancelada con sus productos y su método de pago. Las
+        facturas pendientes o fallidas responden 404, igual que las que no existen.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: INVOICE_ID numérico, sin el prefijo FAC-.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+      responses:
+        "200":
+          description: Detalle de la transacción.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: La transacción no existe o no está pagada ni cancelada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                statusCode: 404
+                message: No fue posible cargar el detalle de la transacción
+                error: Not Found
+        "500":
+          $ref: "#/components/responses/Unavailable"
 components:
   securitySchemes:
     employeeCookie:
@@ -166,6 +207,45 @@ components:
           example: 3500
         status:
           $ref: "#/components/schemas/TransactionStatus"
+    TransactionDetail:
+      allOf:
+        - $ref: "#/components/schemas/Transaction"
+        - type: object
+          required: [paymentMethod, cardBrand, cardLast4, lines]
+          properties:
+            paymentMethod:
+              type: string
+              enum: [CARD, CASH]
+            cardBrand:
+              type: string
+              nullable: true
+              description: Marca que devuelve Stripe (visa, mastercard…). null en efectivo.
+            cardLast4:
+              type: string
+              nullable: true
+              pattern: "^[0-9]{4}$"
+            lines:
+              type: array
+              description: Boletos primero, después comestibles.
+              items:
+                type: object
+                required: [productId, name, type, quantity, unitPrice, subtotal]
+                properties:
+                  productId:
+                    type: integer
+                  name:
+                    type: string
+                    example: Boleto general
+                  type:
+                    type: string
+                    enum: [TICKET, FOOD]
+                  quantity:
+                    type: integer
+                  unitPrice:
+                    type: number
+                    description: Precio cobrado en la compra.
+                  subtotal:
+                    type: number
     TransactionPage:
       type: object
       required: [items, total, page, pageSize, totalPages]

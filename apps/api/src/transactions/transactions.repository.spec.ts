@@ -182,6 +182,103 @@ describe('TransactionsRepository', () => {
     });
   });
 
+  describe('findTransactionById', () => {
+    it('returns one paid or cancelled invoice with its lines, tickets first', async () => {
+      db.query
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              ...row,
+              ID: 122,
+              TICKETS: 2,
+              TOTAL: 11500,
+              STATUS: 'CANCELLED',
+              PAYMENT_METHOD: 'CARD',
+              CARD_BRAND: 'visa',
+              CARD_LAST4: '4242',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              PRODUCT_ID: 1,
+              NAME: 'Boleto general',
+              PRODUCT_TYPE: 'TICKET',
+              QUANTITY: 2,
+              UNIT_PRICE: 3500,
+            },
+            {
+              PRODUCT_ID: 4,
+              NAME: 'Agua',
+              PRODUCT_TYPE: 'FOOD',
+              QUANTITY: 3,
+              UNIT_PRICE: 0.1,
+            },
+          ],
+        });
+      const detail = await repository.findTransactionById(122);
+      expect(detail).toMatchObject({
+        id: 122,
+        clientName: 'Carlos Mora',
+        tickets: 2,
+        total: 11500,
+        status: 'CANCELLED',
+        paymentMethod: 'CARD',
+        cardBrand: 'visa',
+        cardLast4: '4242',
+        lines: [
+          {
+            productId: 1,
+            name: 'Boleto general',
+            type: 'TICKET',
+            quantity: 2,
+            unitPrice: 3500,
+            subtotal: 7000,
+          },
+          {
+            productId: 4,
+            name: 'Agua',
+            type: 'FOOD',
+            quantity: 3,
+            unitPrice: 0.1,
+            subtotal: 0.3,
+          },
+        ],
+      });
+      const [headerSql, headerBinds] = call(0);
+      expect(headerSql).toContain("i.STATUS IN ('PAID', 'CANCELLED')");
+      expect(headerSql).toContain('AND i.INVOICE_ID = :id');
+      expect(headerBinds).toEqual({ id: { val: 122, type: oracle.NUMBER } });
+      const [linesSql, linesBinds] = call(1);
+      expect(linesSql).toContain("CASE p.PRODUCT_TYPE WHEN 'TICKET' THEN 0");
+      expect(linesBinds).toEqual({ id: { val: 122, type: oracle.NUMBER } });
+    });
+
+    it('returns null without reading lines for a missing, pending or failed invoice', async () => {
+      db.query.mockResolvedValueOnce({ rows: [] });
+      await expect(repository.findTransactionById(126)).resolves.toBeNull();
+      expect(db.query).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats missing rows as no invoice and no lines', async () => {
+      db.query.mockResolvedValueOnce({});
+      await expect(repository.findTransactionById(1)).resolves.toBeNull();
+      db.query
+        .mockResolvedValueOnce({
+          rows: [
+            { ...row, PAYMENT_METHOD: 'CASH', CARD_BRAND: null, CARD_LAST4: null },
+          ],
+        })
+        .mockResolvedValueOnce({});
+      await expect(repository.findTransactionById(123)).resolves.toMatchObject({
+        paymentMethod: 'CASH',
+        cardBrand: null,
+        lines: [],
+      });
+    });
+  });
+
   describe('listFilterOptions', () => {
     it('lists the branches and movies that have transactions', async () => {
       db.query

@@ -1,4 +1,4 @@
-# Transacciones (SCRUM-17)
+# Transacciones (SCRUM-17 y SCRUM-18)
 
 Solo el administrador ve la sección «Transacciones» del dashboard. Cada transacción es
 una factura de la tabla `INVOICES`: una compra de un cliente para una función. El
@@ -12,7 +12,8 @@ contrato está en [`transactions.openapi.yaml`](transactions.openapi.yaml).
 - **Cliente:** el dashboard no le abre, porque la guarda de rutas lo saca (UT-048).
 - **Sin sesión:** cualquier ruta del dashboard lleva al inicio de sesión (UT-050).
 - **API:** pasa por `AuthGuard('jwt')`, `AdministratorGuard` y el bloqueo de contraseña
-  vencida. Un empleado regular o un cliente recibe `403` sin datos (UT-051).
+  vencida. Un empleado regular o un cliente recibe `403` sin datos, tanto en la lista
+  (UT-051) como en el detalle (UT-056).
 
 ## Lista
 
@@ -30,7 +31,7 @@ transacciones.
 | Boletos | Suma de las cantidades de las líneas de tipo `TICKET` | 1 |
 | Total | Total cobrado, en colones | ₡3500 |
 | Estado | «Pagada» o «Cancelada» | Pagada |
-| Acciones | «Ver detalle» (SCRUM-18) | |
+| Acciones | «Ver detalle» | |
 
 - El cliente ve la misma factura en su historial como `ORD-000123`.
 - Los montos se muestran como en el plan de pruebas, sin separador de miles (`₡11500`).
@@ -65,6 +66,32 @@ implementa.
 | `401` | Vuelve al inicio de sesión |
 | Fallan las opciones de filtros | No se pudieron cargar los filtros. (con «Reintentar») |
 
+## Detalle (SCRUM-18)
+
+«Ver detalle» abre el modal «Detalle de transacción», que consulta
+`GET /api/transactions/:id`. Muestra solo la transacción seleccionada: al abrir otra, se
+borran los datos anteriores antes de cargar la nueva (UT-057).
+
+| Grupo | Campos |
+|---|---|
+| 1 Resumen de la transacción | IdTransacción, Fecha, Hora de compra, Estado |
+| 2 Cliente | Cliente, Correo electrónico |
+| 3 Función | Película y función, Sucursal, Boletos |
+| 4 Productos y pago | Tabla de productos (Producto, Cantidad, Precio unitario, Subtotal y Total), Total y Método de pago |
+
+- **Método de pago:** con tarjeta, «Tarjeta Visa terminada en 4242» (solo se guardan la
+  marca y los últimos 4 dígitos); en efectivo, «Efectivo».
+- **Precio unitario:** es el precio cobrado en la compra, así que un cambio posterior de
+  precio no altera facturas viejas. Primero van los boletos y después los comestibles.
+
+| Situación | Texto |
+|---|---|
+| Error de red o del servidor (UT-053) | No se pudo cargar el detalle, intenta de nuevo (con «Reintentar») |
+| No existe, o está pendiente o fallida (UT-054) | No fue posible cargar el detalle de la transacción |
+| `403` | No tiene permisos para acceder a esta sección |
+
+Si la transacción ya no existe, además de mostrar el mensaje se recarga la lista.
+
 ## Base de datos
 
 - La migración [`20261016_sales_invoices_products.sql`](../database/migrations/20261016_sales_invoices_products.sql)
@@ -88,4 +115,4 @@ implementa.
 ## Verificación
 
 En `apps/api`: `npm test -- src/transactions`. En `apps/web`:
-`npx vitest run src/__tests__/components/transactions src/__tests__/utils/transaction-format.spec.ts`.
+`npx vitest run src/__tests__/components/transactions src/__tests__/utils/transaction-format.spec.ts src/__tests__/services/transaction.service.spec.ts`.
