@@ -198,7 +198,10 @@ describe('AppHeader authentication navigation', () => {
     expect(wrapper.find('.register-button').exists()).toBe(false)
     await wrapper.get('.account-avatar').trigger('click')
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
-    expect(wrapper.findAll('.account-actions button:disabled')).toHaveLength(1)
+    expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
+      'Mi perfil',
+      'Cambiar Contraseña',
+    ])
 
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
     await flushPromises()

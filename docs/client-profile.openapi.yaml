@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Perfil de cliente de Cinetadel
-  version: 1.0.0
+  version: 1.1.0
 servers:
   - url: /api
 security:
@@ -167,6 +167,75 @@ paths:
           description: Correo reservado por otro cliente antes de confirmar
         "429":
           $ref: "#/components/responses/RateLimited"
+  /clients/me/preferences:
+    get:
+      summary: Consultar catálogos vigentes y preferencias propias
+      responses:
+        "200":
+          description: Opciones actuales y selección guardada; Cache-Control no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferenceSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      summary: Reemplazar géneros e idiomas preferidos del cliente autenticado
+      description: Requiere Origin autorizado. Ambos arreglos son obligatorios y pueden estar vacíos. Valida las opciones actuales y reemplaza ambos grupos en una transacción; cualquier fallo conserva las preferencias anteriores. No admite identificadores de cuentas ni otras propiedades.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreferenceSelection"
+      responses:
+        "200":
+          description: Selección guardada; Cache-Control no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferenceSelection"
+        "400":
+          description: Datos inválidos u opción que ya no existe; mensaje en español indica que se debe corregir o volver a cargar la selección
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          description: No se pudo guardar; la transacción conserva las asociaciones anteriores
+  /clients/me/preferences/portal:
+    get:
+      summary: Consultar el catálogo completo priorizado por preferencias propias
+      description: Un punto por cada género e idioma preferido distinto coincidente. En empates conserva el orden por próxima función y luego ID. No excluye películas sin coincidencias. Devuelve películas con funciones futuras activas, sin límite; el carrusel usa las primeras cuatro.
+      responses:
+        "200":
+          description: Catálogo personalizado; Cache-Control no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PortalMovie"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /movie-fuctions/catalog:
+    get:
+      security: []
+      summary: Consultar el catálogo público completo
+      description: Películas con funciones futuras activas, una vez cada una, ordenadas por próxima función y luego ID. No consulta preferencias personales. Conserva el endpoint existente /movie-fuctions sin cambiar su formato.
+      responses:
+        "200":
+          description: Catálogo público; Cache-Control no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PortalMovie"
 components:
   securitySchemes:
     clientBearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -180,6 +249,49 @@ components:
     RateLimited:
       description: Demasiadas solicitudes; esperar el período indicado por Retry-After
   schemas:
+    PreferenceSelection:
+      type: object
+      additionalProperties: false
+      required: [genreIds, languageIds]
+      properties:
+        genreIds:
+          type: array
+          maxItems: 1000
+          uniqueItems: true
+          items: { type: integer, minimum: 1, maximum: 9007199254740991 }
+        languageIds:
+          type: array
+          maxItems: 1000
+          uniqueItems: true
+          items: { type: integer, minimum: 1, maximum: 9007199254740991 }
+    MovieOption:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+    PreferenceSettings:
+      type: object
+      required: [genres, languages, selected, maxSelections]
+      properties:
+        genres:
+          type: array
+          items:
+            $ref: "#/components/schemas/MovieOption"
+        languages:
+          type: array
+          items:
+            $ref: "#/components/schemas/MovieOption"
+        selected:
+          $ref: "#/components/schemas/PreferenceSelection"
+        maxSelections: { type: integer, enum: [1000] }
+    PortalMovie:
+      type: object
+      required: [id, title, posterImage]
+      properties:
+        id: { type: integer, minimum: 1 }
+        title: { type: string }
+        posterImage: { type: string }
     CatalogOption:
       type: object
       required: [id, label]
