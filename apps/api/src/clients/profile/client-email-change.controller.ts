@@ -7,7 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { EmployeeSessionOriginGuard } from '../../auth/guards/employee-session-origin.guard';
+import { SessionOriginGuard } from '../../auth/guards/session-origin.guard';
 import { ConfirmClientEmailChangeDto } from './client-email-change.dto';
 import { ClientEmailChangeService } from './client-email-change.service';
 
@@ -18,7 +18,7 @@ export class ClientEmailChangeController {
   @Post('confirm')
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
-  @UseGuards(EmployeeSessionOriginGuard, ThrottlerGuard)
+  @UseGuards(SessionOriginGuard, ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   confirm(@Body() data: ConfirmClientEmailChangeDto) {
     return this.email.confirm(data.token);
