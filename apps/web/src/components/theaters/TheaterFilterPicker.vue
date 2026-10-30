@@ -13,7 +13,7 @@ const selected = defineModel<string[]>({ required: true })
   <details class="filter-picker">
     <summary>
       {{ label }}
-      <span>{{ selected.length ? `${selected.length} seleccionados` : allLabel }}</span>
+      <span>{{ selected.length ? `${selected.length}/${options.length}` : allLabel }}</span>
     </summary>
     <fieldset class="checkbox-options">
       <legend class="visually-hidden">{{ legend }}</legend>
