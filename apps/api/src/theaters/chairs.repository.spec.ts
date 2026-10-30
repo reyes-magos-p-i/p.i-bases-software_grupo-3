@@ -7,12 +7,19 @@ describe('ChairsRepository', () => {
   let repository: ChairsRepository;
   let executeMany: jest.Mock;
   let transaction: jest.Mock;
+  let execute: jest.Mock;
+  let query: jest.Mock;
 
   beforeEach(() => {
+    execute = jest.fn().mockResolvedValue({ rowsAffected: 6 });
     executeMany = jest.fn().mockResolvedValue({ rowsAffected: 6 });
-    transaction = jest.fn(async (callback) => callback({ executeMany }));
+    query = jest.fn();
+    transaction = jest.fn(async (callback) =>
+      callback({ execute, executeMany }),
+    );
+
     repository = new ChairsRepository(
-      { transaction } as unknown as DatabaseService,
+      {query, transaction } as unknown as DatabaseService,
     );
   });
 
@@ -87,5 +94,126 @@ describe('ChairsRepository', () => {
     transaction.mockRejectedValueOnce(error);
     await expect(repository.createForTheater(7, 2, 3)).rejects.toBe(error);
     expect(executeMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes the seats using its own transaction', async () => {
+    await expect(
+      repository.deleteForTheater(7),
+    ).resolves.toBeUndefined();
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith(
+      'DELETE FROM SEATS WHERE THEATER_ID = :theaterId',
+      { theaterId: 7 },
+      { autoCommit: false },
+    );
+  });
+
+  it('uses the supplied connection without opening another transaction', async () => {
+    const suppliedExecute = jest.fn().mockResolvedValue({
+      rowsAffected: 6,
+    });
+
+    const conn = {
+      execute: suppliedExecute,
+    } as unknown as oracledb.Connection;
+
+    await expect(
+      repository.deleteForTheater(7, conn),
+    ).resolves.toBeUndefined();
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+
+    expect(suppliedExecute).toHaveBeenCalledWith(
+      'DELETE FROM SEATS WHERE THEATER_ID = :theaterId',
+      { theaterId: 7 },
+      { autoCommit: false },
+    );
+  });
+
+  it('succeeds when the theater has no seats', async () => {
+    execute.mockResolvedValueOnce({ rowsAffected: 0 });
+
+    await expect(
+      repository.deleteForTheater(7),
+    ).resolves.toBeUndefined();
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity])(
+    'rejects invalid theater ID %s',
+    async (theaterId) => {
+      await expect(
+        repository.deleteForTheater(theaterId),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(transaction).not.toHaveBeenCalled();
+      expect(execute).not.toHaveBeenCalled();
+    },
+  );
+
+  it('propagates seat deletion errors', async () => {
+    const error = new Error('Seat deletion failed');
+    execute.mockRejectedValueOnce(error);
+
+    await expect(repository.deleteForTheater(7)).rejects.toBe(error);
+  });
+
+  describe('findByTheater', () => {
+  it('returns the theater seats mapped for the selector', async () => {
+      query.mockResolvedValueOnce({
+        rows: [
+          {
+            THEATER_ID: 7,
+            ROW_NUMBER: 1,
+            COLUMN_NUMBER: 2,
+            SEAT_TYPE: 'vip',
+            SEAT_STATE: 'free',
+          },
+        ],
+      });
+
+      await expect(repository.findByTheater(7)).resolves.toEqual([
+        {
+          theaterId: 7,
+          rowNumber: 1,
+          columnNumber: 2,
+          type: 'vip',
+          state: 'free',
+        },
+      ]);
+
+      expect(query).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE THEATER_ID = :theaterId'),
+        { theaterId: 7 },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+    });
+
+    it.each([undefined, []])(
+      'returns an empty array when rows are %p',
+      async (rows) => {
+        query.mockResolvedValueOnce({ rows });
+
+        await expect(repository.findByTheater(7)).resolves.toEqual([]);
+      },
+    );
+
+    it.each([0, -1, 1.5, NaN, Infinity])(
+      'rejects invalid theater ID %s',
+      async (id) => {
+        await expect(repository.findByTheater(id))
+          .rejects.toBeInstanceOf(BadRequestException);
+
+        expect(query).not.toHaveBeenCalled();
+      },
+    );
+
+    it('propagates database errors', async () => {
+      const error = new Error('Database query failed');
+      query.mockRejectedValueOnce(error);
+
+      await expect(repository.findByTheater(7)).rejects.toBe(error);
+    });
   });
 });

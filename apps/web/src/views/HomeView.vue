@@ -22,5 +22,6 @@ const { movies, loading, error, warning, reload, dismissWarning } = usePortalMov
     />
     <MovieCatalog :movies="movies" :loading="loading" :error="error" @retry="reload" />
   </main>
+
   <AppFooter />
 </template>
