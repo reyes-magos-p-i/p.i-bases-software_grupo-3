@@ -1,0 +1,334 @@
+openapi: 3.0.3
+info:
+  title: Transacciones
+  version: 1.0.0
+  description: >-
+    Lista y detalle de transacciones (facturas pagadas y canceladas) para
+    administradores (SCRUM-17 y SCRUM-18). Un empleado regular o un cliente recibe
+    403 sin datos.
+servers:
+  - url: /api
+security:
+  - employeeCookie: []
+  - bearerAuth: []
+paths:
+  /transactions:
+    get:
+      summary: Listar transacciones
+      description: >-
+        Facturas con estado PAID o CANCELLED, de la compra más reciente a la más
+        antigua. La búsqueda no distingue mayúsculas ni tildes.
+      parameters:
+        - name: search
+          in: query
+          description: >-
+            ID (FAC-000123, fac123, 000123 o 123), nombre o correo del cliente, o
+            título de la película. Se recortan los espacios; máximo 100 caracteres.
+          schema:
+            type: string
+            maxLength: 100
+        - name: branchId
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: movieId
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/TransactionStatus"
+        - name: dateFrom
+          in: query
+          description: Fecha de compra mínima (inclusiva), hora de Costa Rica.
+          schema:
+            type: string
+            format: date
+          example: "2026-10-05"
+        - name: dateTo
+          in: query
+          description: >-
+            Fecha de compra máxima (inclusiva), hora de Costa Rica. No puede ser
+            anterior a dateFrom.
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          description: Si supera la última página, se devuelve la última.
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            enum: [10, 20, 50]
+            default: 10
+      responses:
+        "200":
+          description: Una página de transacciones.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/Unavailable"
+  /transactions/filter-options:
+    get:
+      summary: Opciones de los filtros
+      description: Sucursales y películas que tienen al menos una transacción.
+      responses:
+        "200":
+          description: Opciones de Sucursal y Película.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionFilterOptions"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/Unavailable"
+  /transactions/{id}:
+    get:
+      summary: Detalle de una transacción
+      description: >-
+        Una factura pagada o cancelada con sus productos y su método de pago. Las
+        facturas pendientes o fallidas responden 404, igual que las que no existen.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: INVOICE_ID numérico, sin el prefijo FAC-.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+      responses:
+        "200":
+          description: Detalle de la transacción.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: La transacción no existe o no está pagada ni cancelada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                statusCode: 404
+                message: No fue posible cargar el detalle de la transacción
+                error: Not Found
+        "500":
+          $ref: "#/components/responses/Unavailable"
+components:
+  securitySchemes:
+    employeeCookie:
+      type: apiKey
+      in: cookie
+      name: cinetadel_employee_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    TransactionStatus:
+      type: string
+      enum: [PAID, CANCELLED]
+      description: PAID se muestra como «Pagada» y CANCELLED como «Cancelada».
+    Transaction:
+      type: object
+      required:
+        - id
+        - purchasedAt
+        - clientName
+        - clientEmail
+        - movieTitle
+        - branchName
+        - theaterId
+        - functionStart
+        - tickets
+        - total
+        - status
+      properties:
+        id:
+          type: integer
+          description: INVOICE_ID. La UI lo muestra como FAC-000123.
+        purchasedAt:
+          type: string
+          description: Fecha y hora de compra en hora de Costa Rica (YYYY-MM-DDTHH:mm).
+          example: "2026-10-12T10:42"
+        clientName:
+          type: string
+          example: Carlos Mora
+        clientEmail:
+          type: string
+          example: cliente2.pruebas@cinetadel.shop
+        movieTitle:
+          type: string
+          example: Ecos del Volcán
+        branchName:
+          type: string
+          nullable: true
+          description: null si el nombre de la sucursal es solo espacios.
+        theaterId:
+          type: integer
+          description: La UI lo muestra como «Sala 1».
+        functionStart:
+          type: string
+          description: Inicio de la función (YYYY-MM-DDTHH:mm).
+          example: "2026-10-12T17:00"
+        tickets:
+          type: integer
+          description: Suma de las cantidades de las líneas de tipo TICKET.
+        total:
+          type: number
+          description: Total cobrado en colones.
+          example: 3500
+        status:
+          $ref: "#/components/schemas/TransactionStatus"
+    TransactionDetail:
+      allOf:
+        - $ref: "#/components/schemas/Transaction"
+        - type: object
+          required: [paymentMethod, cardBrand, cardLast4, lines]
+          properties:
+            paymentMethod:
+              type: string
+              enum: [CARD, CASH]
+            cardBrand:
+              type: string
+              nullable: true
+              description: Marca que devuelve Stripe (visa, mastercard…). null en efectivo.
+            cardLast4:
+              type: string
+              nullable: true
+              pattern: "^[0-9]{4}$"
+            lines:
+              type: array
+              description: Boletos primero, después comestibles.
+              items:
+                type: object
+                required: [productId, name, type, quantity, unitPrice, subtotal]
+                properties:
+                  productId:
+                    type: integer
+                  name:
+                    type: string
+                    example: Boleto general
+                  type:
+                    type: string
+                    enum: [TICKET, FOOD]
+                  quantity:
+                    type: integer
+                  unitPrice:
+                    type: number
+                    description: Precio cobrado en la compra.
+                  subtotal:
+                    type: number
+    TransactionPage:
+      type: object
+      required: [items, total, page, pageSize, totalPages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transaction"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalPages:
+          type: integer
+    TransactionFilterOptions:
+      type: object
+      required: [branches, movies]
+      properties:
+        branches:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+                nullable: true
+        movies:
+          type: array
+          items:
+            type: object
+            required: [id, title]
+            properties:
+              id:
+                type: integer
+              title:
+                type: string
+    Error:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        error:
+          type: string
+        code:
+          type: string
+          description: PASSWORD_EXPIRED cuando la contraseña del administrador venció.
+  responses:
+    BadRequest:
+      description: >-
+        Búsqueda, filtro o página inválidos, o fecha de inicio posterior a la de fin
+        («La fecha de inicio no puede ser posterior a la fecha de fin.»).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthenticated:
+      description: Sin sesión válida.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: >-
+        El usuario no es administrador (empleado regular o cliente) o su contraseña
+        venció. No se devuelve ningún dato.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unavailable:
+      description: Error del servidor o de la base de datos.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

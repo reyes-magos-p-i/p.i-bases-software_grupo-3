@@ -13,6 +13,7 @@ import { CinemasModule } from './cinemas/cinemas.module';
 import { ProjectorsModule } from './projectors/projectors.module';
 import { ProjectionsModule } from './projections/projections.module';
 import { TicketsModule } from './tickets/tickets.module';
+import { TransactionsModule } from './transactions/transactions.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { TicketsModule } from './tickets/tickets.module';
     ProjectorsModule,
     ProjectionsModule,
     TicketsModule,
+    TransactionsModule,
   ],
   controllers: [ImageController],
 })
