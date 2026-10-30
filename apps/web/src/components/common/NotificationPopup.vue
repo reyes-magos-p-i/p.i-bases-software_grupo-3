@@ -16,9 +16,8 @@ const props = withDefaults(
     title?: string
     /** Milliseconds before emitting `close`. Use 0 to keep the popup until dismissed. */
     duration?: number
-    placement?: 'inline' | 'bottom-right'
   }>(),
-  { type: 'success', title: undefined, duration: 4000, placement: 'inline' },
+  { type: 'success', title: undefined, duration: 4000 },
 )
 
 const emit = defineEmits<{ close: [] }>()
@@ -55,7 +54,6 @@ watch(() => [props.message, props.type, props.duration], startTimer)
     :class="[
       'notification-popup',
       `notification-popup--${type}`,
-      { 'notification-popup--floating': placement === 'bottom-right' },
       'bg-white',
       'rounded-4',
       'shadow',
@@ -69,7 +67,6 @@ watch(() => [props.message, props.type, props.duration], startTimer)
     aria-atomic="true"
     @mouseenter="clearTimer"
     @mouseleave="startTimer"
-    @click="emit('close')"
   >
     <p :class="['d-flex', 'align-items-center', 'gap-1', 'mb-0', 'fw-bold', style.color]">
       <i :class="['bi', style.icon]" aria-hidden="true" />
@@ -87,12 +84,5 @@ watch(() => [props.message, props.type, props.duration], startTimer)
 
 .notification-message {
   overflow-wrap: anywhere;
-}
-
-.notification-popup--floating {
-  position: fixed;
-  right: max(1rem, env(safe-area-inset-right));
-  bottom: max(1rem, env(safe-area-inset-bottom));
-  z-index: 1080;
 }
 </style>

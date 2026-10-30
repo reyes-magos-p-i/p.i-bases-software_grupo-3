@@ -413,27 +413,10 @@ describe('UsersModule (application HTTP integration)', () => {
       code: 'PASSWORD_EXPIRED',
     });
 
-    await browser.get('/auth/password-status').expect(200, {
-      status: 'expired',
-      expirationDays: 90,
-      expiresInDays: null,
-    });
+    await browser
+      .get('/auth/password-status')
+      .expect(200, { status: 'expired' });
     await browser.patch('/auth/employees/password').send({}).expect(400);
-  });
-
-  it('rejects an employee password change that tries to choose its period', async () => {
-    const response = await browser
-      .patch('/auth/employees/password')
-      .send({
-        currentPassword: 'Current!Password9',
-        newPassword: 'Cr0wn!River77',
-        confirmNewPassword: 'Cr0wn!River77',
-        expirationDays: 120,
-      })
-      .expect(400);
-    expect(JSON.stringify(response.body.message)).toContain(
-      'property expirationDays should not exist',
-    );
   });
 
   it('uses the current role rather than role claims or development flags', async () => {
@@ -660,7 +643,7 @@ describe('UsersModule (application HTTP integration)', () => {
       sql.startsWith('INSERT INTO EMPLOYEE_LOCAL_CREDENTIALS'),
     );
     expect(credentialsCall?.[0]).toContain('PASSWORD_SET_AT, EXPIRATION_DAYS');
-    expect(credentialsCall?.[1].expirationDays.val).toBe(30);
+    expect(credentialsCall?.[1].expirationDays.val).toBe(120);
     const storedHash = credentialsCall?.[1].passwordHash.val;
     const text = sendMail.mock.calls[0][0].text as string;
     const emailedPassword = /Contraseña inicial: ([^\r\n]+)/u.exec(text)?.[1];
@@ -669,7 +652,7 @@ describe('UsersModule (application HTTP integration)', () => {
     connection.execute.mockImplementation((sql: string) => {
       if (sql.includes('PASSWORD_SET_AT'))
         return Promise.resolve({
-          rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 30 }],
+          rows: [{ PASSWORD_SET_AT: new Date(), EXPIRATION_DAYS: 120 }],
         });
       return Promise.resolve({
         rows: [
@@ -704,10 +687,6 @@ describe('UsersModule (application HTTP integration)', () => {
       .get('/auth/password-status')
       .set('Cookie', cookie)
       .expect(200);
-    expect(status.body).toEqual({
-      status: 'valid',
-      expirationDays: 30,
-      expiresInDays: null,
-    });
+    expect(status.body).toEqual({ status: 'valid' });
   });
 });

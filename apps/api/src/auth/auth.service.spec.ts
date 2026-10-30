@@ -211,6 +211,7 @@ describe('AuthService', () => {
       currentPassword: 'Current!Password9',
       newPassword: 'Cr0wn!River77',
       confirmNewPassword: 'Cr0wn!River77',
+      expirationDays: 90,
     };
 
     beforeEach(() => {
@@ -218,7 +219,7 @@ describe('AuthService', () => {
       hasher.verify.mockResolvedValue(false);
     });
 
-    it('validates the current password and policy, then saves the new hash', async () => {
+    it('validates the current password and policy, then saves the new hash and expiration', async () => {
       hasher.verify.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
 
       await expect(
@@ -240,6 +241,7 @@ describe('AuthService', () => {
         21,
         'hashed-password',
         salt,
+        90,
       );
     });
 

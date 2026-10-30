@@ -1,17 +1,9 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ message: string; surface?: 'light' | 'dark' }>(), {
-  surface: 'light',
-})
+defineProps<{ message: string }>()
 </script>
 
 <template>
-  <div
-    class="loading-state"
-    :class="{ 'loading-state--dark': surface === 'dark' }"
-    role="status"
-    aria-live="polite"
-    aria-atomic="true"
-  >
+  <div class="loading-state" role="status" aria-live="polite" aria-atomic="true">
     <svg class="loading-indicator" viewBox="40 40 248 248" aria-hidden="true" focusable="false">
       <path
         d="
@@ -97,16 +89,6 @@ withDefaults(defineProps<{ message: string; surface?: 'light' | 'dark' }>(), {
   fill: var(--page-background);
   animation: loading-reveal 1.67s ease-in-out infinite;
   animation-delay: -0.26s;
-}
-
-.loading-state--dark {
-  border-color: transparent;
-  background: transparent;
-  color: var(--text-on-dark);
-}
-
-.loading-state--dark .loading-indicator {
-  fill: var(--text-on-dark);
 }
 
 .loading-message {

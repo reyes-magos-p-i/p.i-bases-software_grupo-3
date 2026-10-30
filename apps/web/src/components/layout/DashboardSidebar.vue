@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue'
 import type { UserRole } from '@/types/user'
-import { visibleSectionsFor } from '@/components/layout/dashboard-sections'
 
 const props = withDefaults(
   defineProps<{
@@ -23,7 +22,23 @@ const emit = defineEmits<{
 }>()
 
 const navigationId = useId()
-const visibleSections = computed(() => visibleSectionsFor(props.role))
+const sections = [
+  { id: 'dashboard', label: 'Tablero', icon: 'bi-grid', administratorOnly: true },
+  { id: 'theaters', label: 'Salas', icon: 'bi-display', administratorOnly: true },
+  { id: 'movies', label: 'Películas', icon: 'bi-film' },
+  { id: 'employees', label: 'Empleados', icon: 'bi-person-circle', administratorOnly: true },
+  { id: 'clients', label: 'Clientes', icon: 'bi-people' },
+  { id: 'screenings', label: 'Proyecciones', icon: 'bi-calendar-event' },
+  { id: 'branches', label: 'Sucursales', icon: 'bi-building' },
+  { id: 'password', label: 'Cambiar contraseña', icon: 'bi-key' },
+  { id: 'account', label: 'Ajustes de cuenta', icon: 'bi-gear' },
+  { id: 'help', label: 'Asistencia', icon: 'bi-question-circle' },
+]
+
+const visibleSections = computed(() => {
+  if (props.role !== 'ADMINISTRATOR' && props.role !== 'EMPLOYEE') return []
+  return sections.filter((section) => !section.administratorOnly || props.role === 'ADMINISTRATOR')
+})
 const title = computed(
   () =>
     visibleSections.value.find((section) => section.id === props.activeSection)?.label ??

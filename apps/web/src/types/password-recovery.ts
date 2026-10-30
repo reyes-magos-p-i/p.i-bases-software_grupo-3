@@ -13,6 +13,5 @@ export interface ResetPasswordRequest {
   temporaryPassword: string
   newPassword: string
   confirmNewPassword: string
-  /** Only for clients; employee passwords always last 30 days. */
-  expirationDays?: 30 | 60 | 90 | 120
+  expirationDays: 30 | 60 | 90 | 120
 }

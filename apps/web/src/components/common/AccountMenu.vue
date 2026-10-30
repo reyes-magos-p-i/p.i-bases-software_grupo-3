@@ -4,22 +4,13 @@ import defaultProfileImage from '@/assets/profile/profile-circle-svgrepo-com.svg
 import type { ClientIdentity } from '@/types/client-auth'
 
 const props = defineProps<{ user: ClientIdentity }>()
-const emit = defineEmits<{
-  (event: 'profile'): void
-  (event: 'logout'): void
-  (event: 'change-password'): void
-}>()
+const emit = defineEmits<{ (event: 'logout'): void; (event: 'change-password'): void }>()
 const menuOpen = ref(false)
 const root = ref<HTMLElement | null>(null)
 const dropdownId = useId()
 const fullName = computed(() =>
   [props.user.firstName, props.user.lastName].filter(Boolean).join(' '),
 )
-
-function openProfile() {
-  menuOpen.value = false
-  emit('profile')
-}
 
 function closeOnOutsideClick(event: PointerEvent) {
   if (event.target instanceof Node && !root.value?.contains(event.target)) {
@@ -74,9 +65,13 @@ onBeforeUnmount(() => {
         </p>
       </div>
       <div class="account-actions" aria-label="Opciones de cuenta">
-        <button type="button" @click="openProfile">
+        <button type="button" disabled title="Próximamente">
           <i class="bi bi-person-badge" aria-hidden="true"></i>
-          Mi perfil
+          Personalizar perfil
+        </button>
+        <button type="button" disabled title="Próximamente">
+          <i class="bi bi-gear" aria-hidden="true"></i>
+          Ajustes de Cuenta
         </button>
         <button type="button" @click="emit('change-password')">
           <i class="bi bi-key" aria-hidden="true"></i>
@@ -192,6 +187,10 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--text-primary);
   text-align: left;
+}
+
+.account-actions button:disabled {
+  color: var(--text-disabled);
 }
 
 .account-logout {

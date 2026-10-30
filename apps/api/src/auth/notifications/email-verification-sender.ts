@@ -1,8 +1,7 @@
 export abstract class EmailVerificationSender {
   abstract send(message: {
-    purpose?: 'registration' | 'email-change';
-    email: string;
-    confirmationUrl: string;
-    expiresInMinutes: number;
-  }): Promise<void>;
+    email: string
+    confirmationUrl: string
+    expiresInMinutes: number
+  }): Promise<void>
 }

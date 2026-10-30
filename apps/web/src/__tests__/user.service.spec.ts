@@ -13,9 +13,6 @@ const { create, post, get, patch } = vi.hoisted(() => ({
   patch: vi.fn(),
 }))
 
-// api.ts registers a response interceptor when it is first imported.
-const interceptors = { response: { use: vi.fn() } }
-
 vi.mock('axios', () => ({ default: { create } }))
 
 describe('createUser', () => {
@@ -44,7 +41,6 @@ describe('createUser', () => {
     vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com')
     create.mockImplementation((config: { baseURL?: string }) => ({
       defaults: config,
-      interceptors,
       post,
       get,
       patch,

@@ -144,6 +144,7 @@ export class AuthService {
       currentPassword: string;
       newPassword: string;
       confirmNewPassword: string;
+      expirationDays: number;
     },
   ): Promise<void> {
     const employee =
@@ -169,6 +170,7 @@ export class AuthService {
       employeeId,
       credentials.passwordHash,
       credentials.salt,
+      input.expirationDays,
     );
   }
 

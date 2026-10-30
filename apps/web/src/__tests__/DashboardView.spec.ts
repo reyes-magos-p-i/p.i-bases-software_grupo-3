@@ -15,14 +15,6 @@ import {
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
 import type { UserCreationOptions } from '@/types/user'
-import type { PasswordExpiry } from '@/services/authService'
-import { notifyPasswordBlocked } from '@/services/api'
-import {
-  dismissPasswordExpiry,
-  expectPasswordExpiryNotice,
-  passwordExpiryMessage,
-  passwordExpiryNotice,
-} from '@/services/password-expiry-notice'
 
 const {
   getUsers,
@@ -54,18 +46,6 @@ vi.mock('@/services/theater.service', () => ({
   getTheaters,
   createTheater,
   updateTheater: vi.fn(),
-}))
-vi.mock('@/services/branch.service', () => ({
-  formatBranchId: (id: number) => `SU-${String(id).padStart(3, '0')}`,
-  getBranches: vi.fn().mockResolvedValue({
-    items: [{ id: 1, name: 'Sucursal Heredia Centro', companyId: 2, companyName: 'Cinetadel S.A' }],
-    total: 1,
-    page: 1,
-    pageSize: 10,
-    totalPages: 1,
-  }),
-  getCompanies: vi.fn().mockResolvedValue([]),
-  getBranch: vi.fn(),
 }))
 vi.mock('@/services/authService', async () => {
   const actual =
@@ -133,7 +113,7 @@ beforeEach(() => {
   getUsers
     .mockReset()
     .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 })
-  getEmployeePasswordStatus.mockReset().mockResolvedValue(expiry('valid'))
+  getEmployeePasswordStatus.mockReset().mockResolvedValue('valid')
   getEmployeeListOptions.mockReset().mockResolvedValue({ branches: [] })
   Object.assign(employeeSession.user, {
     value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana', email: 'ana@example.com' },
@@ -197,7 +177,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  dismissPasswordExpiry()
   wrapper?.unmount()
   wrapper = undefined
   for (const history of routeHistories.splice(0)) history.destroy()
@@ -227,12 +206,6 @@ async function renderDashboard() {
   wrapper = mount(DashboardView, { attachTo: document.body, global: { plugins: [router] } })
   return wrapper
 }
-
-const expiry = (
-  status: PasswordExpiry['status'],
-  expirationDays: number | null = 120,
-  expiresInDays: number | null = null,
-): PasswordExpiry => ({ status, expirationDays, expiresInDays })
 
 describe('DashboardView', () => {
   it('shows the password section to administrators and returns from its embedded view', async () => {
@@ -380,91 +353,13 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
   })
 
-  it('does not warn an employee who refreshes the dashboard', async () => {
-    getEmployeePasswordStatus.mockResolvedValueOnce(expiry('valid', 120, 1))
-    await renderDashboard()
-    await flushPromises()
-
-    expect(getEmployeePasswordStatus).toHaveBeenCalled()
-    expect(passwordExpiryNotice.message.value).toBe('')
-  })
-
-  it('warns an employee who just logged in during the last day of the password (UT-082)', async () => {
-    getEmployeePasswordStatus.mockResolvedValueOnce(expiry('valid', 120, 1))
-    // The header login marks the session as new before opening the dashboard.
-    expectPasswordExpiryNotice()
-    const view = await renderDashboard()
-    await flushPromises()
-
-    expect(view.get('[aria-current="page"]').attributes('aria-label')).not.toBe(
-      'Cambiar contraseña',
-    )
-    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(1))
-    dismissPasswordExpiry()
-  })
-
   it('opens the password form when the employee password has expired', async () => {
-    getEmployeePasswordStatus
-      .mockResolvedValueOnce(expiry('expired'))
-      .mockResolvedValueOnce(expiry('expired'))
+    getEmployeePasswordStatus.mockResolvedValueOnce('expired').mockResolvedValueOnce('expired')
     const view = await renderDashboard()
     await flushPromises()
 
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
     expect(view.text()).toContain('Tu contraseña venció.')
-  })
-
-  it('keeps an employee with an expired password on the password change (UT-086)', async () => {
-    getEmployeePasswordStatus.mockResolvedValue(expiry('expired'))
-    const view = await renderDashboard()
-    await flushPromises()
-
-    // Every section can be requested, but only the password change is shown.
-    for (const section of ['Empleados', 'Clientes', 'Salas', 'Proyecciones', 'Películas']) {
-      const item = view.get(`[aria-label="${section}"]`)
-      expect(item.attributes('disabled')).toBeUndefined()
-      await item.trigger('click')
-      await flushPromises()
-      expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe(
-        'Cambiar contraseña',
-      )
-      expect(view.get('h1').text()).toBe('Cambiar contraseña')
-      expect(view.text()).toContain('Tu contraseña venció.')
-    }
-  })
-
-  it('locks the dashboard when any endpoint rejects an expired password', async () => {
-    const view = await renderDashboard()
-    await flushPromises()
-    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
-
-    notifyPasswordBlocked({
-      isAxiosError: true,
-      response: { status: 403, data: { code: 'PASSWORD_EXPIRED' } },
-    })
-    await flushPromises()
-
-    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
-    await view.get('[aria-label="Empleados"]').trigger('click')
-    await flushPromises()
-    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
-  })
-
-  it('unlocks the sections only after the server confirms a valid password', async () => {
-    getEmployeePasswordStatus.mockResolvedValue(expiry('expired'))
-    const view = await renderDashboard()
-    await flushPromises()
-    const passwordView = view.getComponent(ChangePasswordView)
-
-    passwordView.vm.$emit('return-to-dashboard')
-    await flushPromises()
-    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
-
-    getEmployeePasswordStatus.mockResolvedValue(expiry('valid'))
-    passwordView.vm.$emit('return-to-dashboard')
-    await flushPromises()
-    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
-    expect(view.get('[aria-label="Salas"]').attributes('disabled')).toBeUndefined()
   })
 
   it('prevents section navigation and logout while the password change is pending', async () => {
@@ -562,21 +457,6 @@ describe('DashboardView', () => {
     expect(view.find('[aria-label="Proyecciones"]').exists()).toBe(false)
   })
 
-  it('shows branches to administrators only', async () => {
-    const view = await renderDashboard()
-    await view.get('[aria-label="Sucursales"]').trigger('click')
-    await flushPromises()
-
-    expect(view.get('h1').text()).toBe('Sucursales')
-    expect(view.get('.result-count').text()).toBe('1 sucursal')
-    expect(view.text()).toContain('SU-001')
-
-    await setRole('EMPLOYEE')
-    expect(view.get('h1').text()).toBe('Clientes')
-    expect(view.find('[aria-label="Sucursales"]').exists()).toBe(false)
-    expect(view.getComponent(DashboardLayout).props('availableSections')).not.toContain('branches')
-  })
-
   it('moves to clients and hides administrator options when the server reports an employee role', async () => {
     const view = await renderDashboard()
 
@@ -587,8 +467,7 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
     expect(view.get('nav').text()).not.toContain('Tablero')
-    expect(view.get('nav').text()).not.toContain('Sucursales')
-    expect(view.get('nav').findAll('button')).toHaveLength(6)
+    expect(view.get('nav').findAll('button')).toHaveLength(7)
   })
 
   it('preserves clients as the current section across role changes', async () => {
@@ -607,7 +486,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(3)
+    expect(pending).toHaveLength(4)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')

@@ -7,10 +7,8 @@ La contraseña temporal sirve únicamente para completar la recuperación; no
 reemplaza la contraseña actual ni permite iniciar sesión.
 
 La pantalla reutiliza `ChangePasswordView.vue`, la confirmación de contraseña,
-las reglas del cambio autenticado y, solo para clientes, la selección de
-vigencia de 30, 60, 90 o 120 días (preseleccionado 30). El personal no elige:
-su contraseña siempre vence a los 30 días. Se conserva el estilo de la rama y
-sus variables de colores.
+las reglas del cambio autenticado y la selección de vigencia de 30, 60, 90 o
+120 días. Se conserva el estilo de la rama y sus variables de colores.
 
 ## Cuentas elegibles
 

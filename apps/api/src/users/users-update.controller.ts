@@ -13,7 +13,7 @@ import type { Request } from 'express';
 import type { UserIdentity } from './types/user-identity.type';
 import { AuthGuard } from '@nestjs/passport';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
-import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
+import { EmployeeSessionOriginGuard } from '../auth/guards/employee-session-origin.guard';
 import { AdministratorGuard } from './guards/administrator.guard';
 import { EmployeeGuard } from './guards/employee.guard';
 import { UserIdParamsDto } from './dto/user-id-params.dto';
@@ -32,7 +32,7 @@ export class UsersUpdateController {
 
   @Patch('clients/:id/deactivate')
   @HttpCode(204)
-  @UseGuards(SessionOriginGuard)
+  @UseGuards(EmployeeSessionOriginGuard)
   deactivateClient(@Param() params: UserIdParamsDto, @Body() body: unknown) {
     this.requireEmptyBody(body);
     return this.usersService.deactivateClient(params.id);
@@ -40,7 +40,7 @@ export class UsersUpdateController {
 
   @Patch('employees/:id/deactivate')
   @HttpCode(204)
-  @UseGuards(AdministratorGuard, SessionOriginGuard)
+  @UseGuards(AdministratorGuard, EmployeeSessionOriginGuard)
   deactivateEmployee(
     @Param() params: UserIdParamsDto,
     @Req() request: Request & { user: UserIdentity },
@@ -52,7 +52,7 @@ export class UsersUpdateController {
 
   @Patch('clients/:id/activate')
   @HttpCode(204)
-  @UseGuards(SessionOriginGuard)
+  @UseGuards(EmployeeSessionOriginGuard)
   activateClient(@Param() params: UserIdParamsDto, @Body() body: unknown) {
     this.requireEmptyBody(body);
     return this.usersService.activateClient(params.id);
@@ -60,7 +60,7 @@ export class UsersUpdateController {
 
   @Patch('employees/:id/activate')
   @HttpCode(204)
-  @UseGuards(AdministratorGuard, SessionOriginGuard)
+  @UseGuards(AdministratorGuard, EmployeeSessionOriginGuard)
   activateEmployee(
     @Param() params: UserIdParamsDto,
     @Req() request: Request & { user: UserIdentity },
@@ -84,7 +84,7 @@ export class UsersUpdateController {
   }
 
   @Patch('clients/:id')
-  @UseGuards(SessionOriginGuard)
+  @UseGuards(EmployeeSessionOriginGuard)
   updateClient(
     @Param() params: UserIdParamsDto,
     @Body() data: UpdateClientDto,
@@ -93,7 +93,7 @@ export class UsersUpdateController {
   }
 
   @Patch('employees/:id')
-  @UseGuards(AdministratorGuard, SessionOriginGuard)
+  @UseGuards(AdministratorGuard, EmployeeSessionOriginGuard)
   updateEmployee(
     @Param() params: UserIdParamsDto,
     @Body() data: UpdateEmployeeDto,

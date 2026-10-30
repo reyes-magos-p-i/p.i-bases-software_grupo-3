@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useBlurValidation } from '@/composables/useBlurValidation'
 import {
   computed,
   nextTick,
@@ -23,8 +22,6 @@ import {
   normalizeMobile,
 } from '@/utils/user-validation'
 import type { CantonOption, DistrictOption, ProvinceOption } from '@/types/address'
-
-const shouldValidateOnBlur = useBlurValidation()
 
 const props = withDefaults(
   defineProps<{
@@ -328,7 +325,6 @@ function onEdit(event: Event) {
 }
 
 function onBlur(event: FocusEvent) {
-  if (!shouldValidateOnBlur(event)) return
   const target = fieldControl(event)
   if (!target || !dirty[target.field]) return
   touched[target.field] = true

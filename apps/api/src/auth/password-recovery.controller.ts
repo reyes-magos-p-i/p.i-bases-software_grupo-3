@@ -8,14 +8,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { SessionOriginGuard } from './guards/session-origin.guard';
+import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 import { PasswordRecoveryService } from './password-recovery.service';
 import { RequestPasswordRecoveryDto } from './dto/request-password-recovery.dto';
 import { ValidatePasswordRecoveryDto } from './dto/validate-password-recovery.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth/password-recovery')
-@UseGuards(ThrottlerGuard, SessionOriginGuard)
+@UseGuards(ThrottlerGuard, EmployeeSessionOriginGuard)
 @Throttle({ default: { limit: 5, ttl: 60_000 } })
 export class PasswordRecoveryController {
   constructor(private readonly recovery: PasswordRecoveryService) {}

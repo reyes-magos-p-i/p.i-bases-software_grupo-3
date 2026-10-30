@@ -201,10 +201,9 @@ paths:
       operationId: getPasswordStatus
       summary: Consultar vigencia de la contraseña
       description: |
-        Disponible con contraseña vencida. Para personal y clientes, calcula el
-        estado con PASSWORD_SET_AT y EXPIRATION_DAYS según la hora del servidor;
-        se usa para dirigir al formulario de cambio antes de acceder a las rutas
-        protegidas y para avisar del vencimiento próximo (SCRUM-287).
+        Disponible con contraseña vencida. Para personal, calcula el estado con
+        PASSWORD_SET_AT y EXPIRATION_DAYS; se usa para dirigir al formulario de
+        cambio antes de acceder a las rutas protegidas.
       security:
         - employeeSession: []
         - bearerAuth: []
@@ -215,33 +214,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status, expirationDays, expiresInDays]
+                required: [status]
                 properties:
                   status:
                     type: string
                     enum: [valid, expired, must_set]
-                    description: |
-                      expired desde el instante exacto en que se cumple el
-                      periodo (30 días = 720 h).
-                  expirationDays:
-                    type: integer
-                    nullable: true
-                    enum: [30, 60, 90, 120, null]
-                    description: |
-                      Periodo configurado; null sin contraseña local. Para el
-                      personal siempre es 30.
-                  expiresInDays:
-                    type: integer
-                    nullable: true
-                    minimum: 1
-                    maximum: 3
-                    description: |
-                      Días restantes redondeados hacia arriba, solo con estado
-                      valid y en las últimas 72 h; null en otro caso.
-              example:
-                status: valid
-                expirationDays: 30
-                expiresInDays: 3
         "401":
           description: Sesión ausente o inválida.
         "500":
@@ -251,10 +228,9 @@ paths:
       operationId: changeEmployeePassword
       summary: Cambiar la contraseña propia de un empleado
       description: |
-        Requiere la contraseña actual. La vigencia del personal es fija de 30
-        días y no se puede elegir: enviar expirationDays responde 400. Está
-        disponible incluso cuando la contraseña expiró. El estado queda vigente
-        desde el momento de la actualización.
+        Requiere la contraseña actual y permite elegir una vigencia de 30, 60,
+        90 o 120 días. Está disponible incluso cuando la contraseña expiró.
+        El estado queda vigente desde el momento de la actualización.
       security:
         - employeeSession: []
         - bearerAuth: []
@@ -265,7 +241,7 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [currentPassword, newPassword, confirmNewPassword]
+              required: [currentPassword, newPassword, confirmNewPassword, expirationDays]
               properties:
                 currentPassword:
                   type: string
@@ -279,6 +255,9 @@ paths:
                   type: string
                   minLength: 1
                   writeOnly: true
+                expirationDays:
+                  type: integer
+                  enum: [30, 60, 90, 120]
       responses:
         "200":
           description: Contraseña actualizada.

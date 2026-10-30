@@ -40,7 +40,7 @@ export class ListClientsQueryDto {
     message: 'La búsqueda contiene caracteres de control no válidos.',
   })
   @MaxUtf8Bytes(400, {
-    message: 'La búsqueda es demasiado larga. Usa menos texto.',
+    message: 'La b?squeda es demasiado larga. Usa menos texto.',
   })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' && !/\p{Cc}/u.test(value)

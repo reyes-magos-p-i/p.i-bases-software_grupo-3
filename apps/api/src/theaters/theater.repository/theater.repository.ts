@@ -4,7 +4,6 @@ import { Theater, TheaterStatusOption } from '../entities/theater.entity';
 import { CreateTheaterDto } from '../dto/create-theater.dto';
 import { UpdateTheaterDto } from '../dto/update-theater.dto';
 import oracledb from 'oracledb';
-import { ChairsRepository } from '../chairs.repository';
 
 @Injectable()
 export class TheaterRepository {
@@ -23,10 +22,7 @@ export class TheaterRepository {
     return id;
   }
 
-  constructor(
-    private readonly db: DatabaseService,
-    private readonly chairsRepository: ChairsRepository,
-  ) {}
+  constructor(private readonly db: DatabaseService) {}
 
   async getAllTheaters(): Promise<Theater[]> {
     try {
@@ -129,18 +125,7 @@ export class TheaterRepository {
                 theaterId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
             },
           );
-          const createdTheaterId = (
-            theaterResult.outBinds as { theaterId: number[] }
-          ).theaterId[0];
-
-          await this.chairsRepository.createForTheater(
-            createdTheaterId,
-            dimensionX,
-            dimensionY,
-            conn,
-          );
-
-          return createdTheaterId;
+          return (theaterResult.outBinds as { theaterId: number[] }).theaterId[0];
         });
         return {
           theaterId,
