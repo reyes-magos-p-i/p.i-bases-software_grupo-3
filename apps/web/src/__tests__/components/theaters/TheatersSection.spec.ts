@@ -150,10 +150,11 @@ describe('TheatersSection search', () => {
     expect(view.get('tbody').text()).not.toContain('Heredia')
   })
 
-  it('shows a message when nothing matches and restores rows on clear', async () => {
+  it('shows no rows when nothing matches and restores rows on clear', async () => {
     const view = await renderLoaded()
     await view.get('#theater-search').setValue('zzz')
-    expect(view.text()).toContain('Ninguna sala coincide')
+    expect(view.text()).not.toContain('Ninguna sala coincide')
+    expect(view.find('tbody').text()).not.toContain('Heredia')
 
     await view.get('.filters .secondary-button').trigger('click')
     expect((view.get('#theater-search').element as HTMLInputElement).value).toBe('')

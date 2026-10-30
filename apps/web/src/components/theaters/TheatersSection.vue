@@ -297,9 +297,6 @@ onBeforeUnmount(() => {
           {{ visibleTheaters.length }}
           {{ visibleTheaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
         </p>
-        <p v-if="!visibleTheaters.length" class="feedback">
-          Ninguna sala coincide con los filtros seleccionados.
-        </p>
         <CrudTable :columns="columns" :rows="rows" caption="Salas">
           <template #actions="{ row }">
             <div class="user-actions">
