@@ -161,9 +161,9 @@ async createForTheater(
       async (connection: oracledb.Connection) => {
         const result = await connection.executeMany(
           `
-          UPDATE CHAIRS
-          SET STATUS = COALESCE(:state, STATUS),
-              TYPE = COALESCE(:type, TYPE)
+          UPDATE SEATS
+          SET SEAT_STATE = COALESCE(:state, SEAT_STATE),
+              SEAT_TYPE = COALESCE(:type, SEAT_TYPE)
           WHERE THEATER_ID = :theaterId
             AND ROW_NUMBER = :rowNumber
             AND COLUMN_NUMBER = :columnNumber

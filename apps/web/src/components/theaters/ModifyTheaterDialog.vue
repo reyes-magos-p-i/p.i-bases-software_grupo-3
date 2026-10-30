@@ -9,6 +9,7 @@ import type {
   TheaterStatusOption,
   UpdateTheaterRequest,
 } from '@/types/theater'
+import TheaterSeatEditor from './TheaterSeatEditor.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -66,6 +67,7 @@ defineExpose({ open, complete })
     ref="shell"
     title="Modificar sala"
     :close-disabled="submitting"
+    width="1100px"
     @close="emit('close')"
   >
     <TheaterForm
@@ -82,6 +84,14 @@ defineExpose({ open, complete })
       @retry-options="emit('retryOptions')"
       @cancel="close"
       @submit="emit('submit', $event)"
+    />
+    <TheaterSeatEditor
+      v-if="theater"
+      :key="theater.theaterId"
+      :theater-id="theater.theaterId"
+      :rows="theater.dimensionX"
+      :columns="theater.dimensionY"
+      :disabled="submitting"
     />
   </TheaterDialogShell>
 </template>

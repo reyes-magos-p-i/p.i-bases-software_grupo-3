@@ -34,12 +34,12 @@ export class UpdateSeatsDto {
   // Validate state when provided, or when neither field was provided.
   // This also rejects a request with no changes.
   @ValidateIf(dto => dto.state !== undefined || dto.type === undefined)
-  @IsIn(['free', 'unavailable', 'in-use', 'reserved'], {
+  @IsIn(['libre', 'indisponible', 'ocupado', 'reservado'], {
     message: 'Provide a valid state, or provide a type.',
   })
-  state?: 'free' | 'unavailable' | 'in-use' | 'reserved';
+  state?: 'libre' | 'indisponible' | 'ocupado' | 'reservado';
 
   @ValidateIf(dto => dto.type !== undefined)
-  @IsIn(['normal', 'vip', 'accessibility'])
-  type?: 'normal' | 'vip' | 'accessibility';
+  @IsIn(['normal', 'vip', 'accesibilidad'])
+  type?: 'normal' | 'vip' | 'accesibilidad';
 }

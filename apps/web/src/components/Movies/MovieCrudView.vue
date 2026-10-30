@@ -271,6 +271,7 @@ onBeforeUnmount(() => request?.abort())
               v-for="field in group.fields"
               :key="field.label"
               class="detail-field"
+              :class="{ 'detail-field-wide': field.label === 'Sinopsis' }"
             >
               <dt>{{ field.label }}</dt>
               <dd>{{ field.value }}</dd>
@@ -406,6 +407,10 @@ dd {
   .detail-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.detail-field-wide {
+  grid-column: 1 / -1;
 }
 </style>
 
