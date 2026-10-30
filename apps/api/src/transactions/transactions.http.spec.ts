@@ -33,9 +33,14 @@ describe('Transactions HTTP contracts', () => {
   const repository = {
     listTransactions: jest.fn(),
     listFilterOptions: jest.fn(),
+    findTransactionById: jest.fn(),
   };
   const page = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
-  const paths = ['/transactions', '/transactions/filter-options'];
+  const paths = [
+    '/transactions',
+    '/transactions/filter-options',
+    '/transactions/123',
+  ];
   const get = (path: string, authenticated = true) => {
     const call = request(app.getHttpServer()).get('/api' + path);
     return authenticated
@@ -48,6 +53,7 @@ describe('Transactions HTTP contracts', () => {
   const expectNoData = () => {
     expect(repository.listTransactions).not.toHaveBeenCalled();
     expect(repository.listFilterOptions).not.toHaveBeenCalled();
+    expect(repository.findTransactionById).not.toHaveBeenCalled();
   };
 
   beforeAll(async () => {
@@ -142,6 +148,29 @@ describe('Transactions HTTP contracts', () => {
     await get('/transactions/filter-options').expect(200, options);
   });
 
+  it('returns the detail of a transaction (UT-052)', async () => {
+    const detail = { id: 123, status: 'PAID', lines: [] };
+    repository.findTransactionById.mockResolvedValue(detail);
+    await get('/transactions/123').expect(200, detail);
+    expect(repository.findTransactionById).toHaveBeenCalledWith(123);
+  });
+
+  it('answers 404 for a transaction that no longer exists (UT-054)', async () => {
+    repository.findTransactionById.mockResolvedValue(null);
+    const response = await get('/transactions/125').expect(404);
+    expect(response.body.message).toBe(
+      'No fue posible cargar el detalle de la transacción',
+    );
+  });
+
+  it.each(['/transactions/0', '/transactions/abc', '/transactions/FAC-000123'])(
+    'rejects the invalid ID in %s',
+    async (path) => {
+      await get(path).expect(400);
+      expect(repository.findTransactionById).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     '/transactions?pageSize=15',
     '/transactions?page=0',
@@ -176,7 +205,7 @@ describe('Transactions HTTP contracts', () => {
     },
   );
 
-  it.each(paths)('answers 403 without data to a client on %s', async (path) => {
+  it.each(paths)('answers 403 without data to a client on %s (UT-056)', async (path) => {
     clients.findById.mockResolvedValue({ id: 7, email: 'a@a.com' });
     clients.isEmailVerificationPending.mockResolvedValue(false);
     clients.findPasswordStatus.mockResolvedValue({

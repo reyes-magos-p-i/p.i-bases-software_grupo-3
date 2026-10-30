@@ -5,6 +5,7 @@ import {
   formatDate,
   formatDateTime,
   formatFunction,
+  formatPaymentMethod,
   formatTransactionId,
 } from '@/utils/transaction-format'
 
@@ -39,6 +40,17 @@ describe('transaction formats', () => {
         functionStart: '2026-10-12T17:00',
       }),
     ).toBe('Ecos del Volcán – Sala 1, 12/10/2026 17:00')
+  })
+
+  it.each([
+    ['CARD', 'visa', '4242', 'Tarjeta Visa terminada en 4242'],
+    ['CARD', 'mastercard', '8210', 'Tarjeta Mastercard terminada en 8210'],
+    ['CARD', 'AMEX', '0005', 'Tarjeta American Express terminada en 0005'],
+    ['CARD', 'discover', '1117', 'Tarjeta Discover terminada en 1117'],
+    ['CARD', null, null, 'Tarjeta'],
+    ['CASH', null, null, 'Efectivo'],
+  ] as const)('describes the payment %s %s %s', (paymentMethod, cardBrand, cardLast4, label) => {
+    expect(formatPaymentMethod({ paymentMethod, cardBrand, cardLast4 })).toBe(label)
   })
 
   it('names the statuses in Spanish', () => {

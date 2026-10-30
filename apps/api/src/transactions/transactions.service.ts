@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { TransactionsRepository } from './transactions.repository';
 import type { ListTransactionsQueryDto } from './dto/list-transactions-query.dto';
 
@@ -17,5 +21,16 @@ export class TransactionsService {
 
   listFilterOptions() {
     return this.transactionsRepository.listFilterOptions();
+  }
+
+  // Pending or failed invoices are not transactions, so they answer 404 too.
+  async getTransaction(id: number) {
+    const transaction =
+      await this.transactionsRepository.findTransactionById(id);
+    if (!transaction)
+      throw new NotFoundException(
+        'No fue posible cargar el detalle de la transacción',
+      );
+    return transaction;
   }
 }

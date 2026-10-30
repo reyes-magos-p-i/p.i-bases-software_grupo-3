@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, reactive, ref, useId } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
+import TransactionDetailDialog from '@/components/transactions/TransactionDetailDialog.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import { getTransactionFilterOptions, getTransactions } from '@/services/transaction.service'
 import type {
@@ -23,8 +24,6 @@ import {
 
 const PAGE_SIZES: readonly TransactionPageSize[] = [10, 20, 50]
 const NO_NAME = 'Sin nombre registrado'
-// The detail modal belongs to SCRUM-18; the action stays visible but disabled.
-const PENDING = '(Pendiente)'
 const DATE_FILTERS = [
   { name: 'dateFrom', label: 'Fecha inicio' },
   { name: 'dateTo', label: 'Fecha fin' },
@@ -51,6 +50,7 @@ const listError = ref<'forbidden' | 'failed' | 'invalid' | ''>('')
 const options = ref<TransactionFilterOptions>({ branches: [], movies: [] })
 const optionsLoading = ref(false)
 const optionsError = ref(false)
+const selectedTransactionId = ref<number | null>(null)
 let listRequest: AbortController | undefined
 let optionsRequest: AbortController | undefined
 
@@ -188,6 +188,9 @@ function changePage(value: number) {
 function transactionOf(row: { [key: string]: unknown }) {
   return row.transaction as TransactionListItem
 }
+function viewTransaction(row: { [key: string]: unknown }) {
+  if (!props.disabled) selectedTransactionId.value = transactionOf(row).id
+}
 
 void load()
 void loadOptions()
@@ -321,16 +324,15 @@ onBeforeUnmount(() => {
             }}</span>
           </template>
           <template #actions="{ row }">
-            <span :title="`Ver detalle ${PENDING}`" class="action-hint">
-              <button
-                type="button"
-                class="detail-button"
-                :aria-label="`Ver detalle de ${row.displayId} ${PENDING}`"
-                disabled
-              >
-                <i class="bi bi-eye" aria-hidden="true"></i> Ver detalle
-              </button>
-            </span>
+            <button
+              type="button"
+              class="detail-button"
+              :aria-label="`Ver detalle de ${row.displayId}`"
+              :disabled="disabled"
+              @click="viewTransaction(row)"
+            >
+              <i class="bi bi-eye" aria-hidden="true"></i> Ver detalle
+            </button>
           </template>
         </CrudTable>
         <div v-else class="state-card">
@@ -372,6 +374,13 @@ onBeforeUnmount(() => {
         </button>
       </nav>
     </footer>
+    <TransactionDetailDialog
+      :transaction-id="selectedTransactionId"
+      @close="selectedTransactionId = null"
+      @session-expired="sessionExpired"
+      @forbidden="refreshPermissions"
+      @missing="load"
+    />
   </section>
 </template>
 
@@ -486,9 +495,6 @@ button:focus-visible {
   outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
-.action-hint {
-  display: inline-flex;
-}
 .detail-button {
   display: inline-flex;
   align-items: center;
@@ -499,9 +505,6 @@ button:focus-visible {
   background: transparent;
   color: var(--text-primary);
   white-space: nowrap;
-}
-.detail-button:disabled {
-  pointer-events: none;
 }
 .detail-button:not(:disabled):hover {
   background: var(--surface-hover);

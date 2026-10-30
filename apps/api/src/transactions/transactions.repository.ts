@@ -6,6 +6,9 @@ import type { ListTransactionsQueryDto } from './dto/list-transactions-query.dto
 import type {
   ListedTransactionDto,
   ListedTransactionsDto,
+  PaymentMethod,
+  ProductType,
+  TransactionDetailDto,
   TransactionFilterOptionsDto,
   TransactionStatus,
 } from './dto/listed-transactions.dto';
@@ -151,6 +154,55 @@ export class TransactionsRepository {
       page,
       pageSize: query.pageSize,
       totalPages,
+    };
+  }
+
+  /** One paid or cancelled invoice with its lines; null for any other invoice. */
+  async findTransactionById(id: number): Promise<TransactionDetailDto | null> {
+    const binds = { id: { val: id, type: oracle.NUMBER } };
+    const header = await this.db.query<
+      TransactionRow & {
+        PAYMENT_METHOD: PaymentMethod;
+        CARD_BRAND: string | null;
+        CARD_LAST4: string | null;
+      }
+    >(
+      `SELECT ${TRANSACTION_COLUMNS},
+              i.PAYMENT_METHOD, i.CARD_BRAND, i.CARD_LAST4
+       ${TRANSACTIONS}
+       AND i.INVOICE_ID = :id`,
+      binds,
+    );
+    const row = header.rows?.[0];
+    if (!row) return null;
+    const lines = await this.db.query<{
+      PRODUCT_ID: number;
+      NAME: string;
+      PRODUCT_TYPE: ProductType;
+      QUANTITY: number;
+      UNIT_PRICE: number;
+    }>(
+      `SELECT l.PRODUCT_ID, p.NAME, p.PRODUCT_TYPE, l.QUANTITY, l.UNIT_PRICE
+       FROM INVOICE_PRODUCTS l
+       JOIN PRODUCTS p ON p.PRODUCT_ID = l.PRODUCT_ID
+       WHERE l.INVOICE_ID = :id
+       ORDER BY CASE p.PRODUCT_TYPE WHEN 'TICKET' THEN 0 ELSE 1 END, p.NAME`,
+      binds,
+    );
+    return {
+      ...toTransaction(row),
+      paymentMethod: row.PAYMENT_METHOD,
+      cardBrand: row.CARD_BRAND,
+      cardLast4: row.CARD_LAST4,
+      lines: (lines.rows ?? []).map((line) => ({
+        productId: line.PRODUCT_ID,
+        name: line.NAME,
+        type: line.PRODUCT_TYPE,
+        quantity: line.QUANTITY,
+        unitPrice: line.UNIT_PRICE,
+        // Rounded to cents so 3 × 0.10 is 0.3, not 0.30000000000000004.
+        subtotal: Math.round(line.QUANTITY * line.UNIT_PRICE * 100) / 100,
+      })),
     };
   }
 

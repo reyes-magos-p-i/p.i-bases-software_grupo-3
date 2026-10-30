@@ -37,6 +37,23 @@ export interface TransactionListQuery {
   pageSize: TransactionPageSize
 }
 
+export interface TransactionLine {
+  productId: number
+  name: string
+  type: 'TICKET' | 'FOOD'
+  quantity: number
+  unitPrice: number
+  subtotal: number
+}
+
+// Card payments keep only the brand Stripe returns (e.g. "visa") and the last 4 digits.
+export interface TransactionDetail extends TransactionListItem {
+  paymentMethod: 'CARD' | 'CASH'
+  cardBrand: string | null
+  cardLast4: string | null
+  lines: TransactionLine[]
+}
+
 export interface TransactionFilterOptions {
   branches: { id: number; name: string | null }[]
   movies: { id: number; title: string }[]
