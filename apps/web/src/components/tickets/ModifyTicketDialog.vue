@@ -64,7 +64,7 @@ defineExpose({ open, complete })
       <select id="ticket-showtime" v-model="movieFunctionId" :disabled="submitting || optionsLoading">
         <option value="">Seleccione una proyección</option>
         <option v-for="s in showtimes" :key="s.movieFunctionId" :value="s.movieFunctionId">
-          {{ s.date }} {{ s.time }} · Sala {{ s.theaterId }} · Asiento {{ s.seatRow }}-{{ s.seatColumn }}
+          {{ s.date }}{{ '\t' }}{{ s.time }}
         </option>
       </select>
 
