@@ -159,6 +159,20 @@ describe('TicketsRepository', () => {
       );
     });
 
+    it('only lists alternatives in a theater of the same branch as the ticket', async () => {
+      databaseService.query.mockResolvedValue({ rows: [] });
+
+      await repository.getAlternativeShowtimesByTicketId(42);
+
+      const sql = databaseService.query.mock.calls[0][0] as string;
+      expect(sql).toMatch(
+        /JOIN PRODUCTION\.Theaters cur_th ON cur_th\.theater_id = cur\.theater_id/,
+      );
+      expect(sql).toMatch(
+        /JOIN PRODUCTION\.Theaters mf_th\s+ON mf_th\.theater_id\s+= mf\.theater_id\s+AND mf_th\.branch_id\s+= cur_th\.branch_id/,
+      );
+    });
+
     it.each([
       ['rows is empty', { rows: [] }],
       ['rows is undefined', {}],

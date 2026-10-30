@@ -65,6 +65,9 @@ FROM PRODUCTION.Tickets t
 JOIN PRODUCTION.Movie_functions cur ON cur.movie_function_id = t.movie_function_id
 JOIN PRODUCTION.Movie_functions mf  ON mf.movie_id = cur.movie_id
                                    AND mf.movie_function_id <> cur.movie_function_id
+JOIN PRODUCTION.Theaters cur_th ON cur_th.theater_id = cur.theater_id
+JOIN PRODUCTION.Theaters mf_th  ON mf_th.theater_id  = mf.theater_id
+                               AND mf_th.branch_id   = cur_th.branch_id
 CROSS APPLY (
     SELECT s.row_number AS seat_row,
            s.column_number AS seat_column
@@ -81,6 +84,7 @@ CROSS APPLY (
 WHERE t.tickets_id = :tickets_id
   AND mf.status = 'ACTIVE'
   AND mf.start_time >  SYSTIMESTAMP
+  AND mf.start_time >  cur.start_time
   AND mf.start_time <  SYSTIMESTAMP + INTERVAL '7' DAY
 ORDER BY mf.start_time`,
         { tickets_id: id },
