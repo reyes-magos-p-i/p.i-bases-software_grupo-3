@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
+// Unwired: ticket detail modal
+// import TicketDetailDialog from './TicketDetailDialog.vue'
+import ModifyTicketDialog from './ModifyTicketDialog.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
-import { getTicket } from '@/services/ticket.service'
-import type { Ticket } from '@/types/ticket'
+import { getAlternativeShowtimes, getTicket, updateTicket } from '@/services/ticket.service'
+import type { AlternativeShowtime, Ticket, UpdateTicketRequest } from '@/types/ticket'
+import { formatTicketDate } from '@/utils/ticket-format'
 
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ busy: [value: boolean] }>()
@@ -16,9 +20,75 @@ const ticketNumber = ref('')
 const searching = ref(false)
 const searchError = ref('')
 const notification = ref('')
+const successNotice = ref('')
 const searchedNumber = ref<number | null>(null)
 const ticket = ref<Ticket | null>(null)
+// const selectedTicket = ref<TicketDetail | null>(null)
+// const detailError = ref('')
 let request: AbortController | undefined
+
+const modifyDialog = useTemplateRef<InstanceType<typeof ModifyTicketDialog>>('modify-dialog')
+const showtimes = ref<AlternativeShowtime[]>([])
+const optionsLoading = ref(false)
+const optionsError = ref('')
+const submitting = ref(false)
+const submissionErrors = ref<string[]>([])
+
+async function loadShowtimes() {
+  if (searchedNumber.value === null) return
+  optionsLoading.value = true
+  optionsError.value = ''
+  try {
+    showtimes.value = await getAlternativeShowtimes(searchedNumber.value)
+  } catch (error) {
+    const status = isAxiosError(error) ? error.response?.status : undefined
+    if (status === 401) sessionExpired()
+    else if (status === 403) {
+      optionsError.value = 'No tienes permiso para modificar tickets.'
+      void refreshPermissions()
+    } else optionsError.value = 'No se pudieron cargar las funciones. Inténtalo nuevamente.'
+  } finally {
+    optionsLoading.value = false
+  }
+}
+
+async function editTicket() {
+  if (props.disabled || !ticket.value || searchedNumber.value === null) return
+  submissionErrors.value = []
+  showtimes.value = []
+  await nextTick()
+  modifyDialog.value?.open()
+  await loadShowtimes()
+}
+
+async function submitModify(data: UpdateTicketRequest) {
+  if (searchedNumber.value === null || submitting.value) return
+  submitting.value = true
+  submissionErrors.value = []
+  successNotice.value = ''
+  emit('busy', true)
+  try {
+    await updateTicket(searchedNumber.value, data)
+    modifyDialog.value?.complete()
+    await search()
+    successNotice.value = 'Ticket modificado exitosamente.'
+  } catch (error) {
+    const status = isAxiosError(error) ? error.response?.status : undefined
+    if (status === 401) sessionExpired()
+    else if (status === 403) {
+      submissionErrors.value = ['No tienes permiso para modificar tickets.']
+      void refreshPermissions()
+    } else if (status === 400 || status === 409) {
+      const message = isAxiosError(error) ? error.response?.data?.message : undefined
+      submissionErrors.value = [
+        typeof message === 'string' ? message : 'No se pudo modificar el ticket.',
+      ]
+    } else submissionErrors.value = ['No se pudo modificar el ticket. Inténtalo nuevamente.']
+  } finally {
+    submitting.value = false
+    emit('busy', false)
+  }
+}
 
 const columns = [
   { key: 'id', label: 'ID' },
@@ -29,11 +99,21 @@ const columns = [
   { key: 'seat', label: 'Asiento' },
 ]
 
-/** "2026/10/10 18:00" -> "10/10/2026, 18:00" */
-function formatTicketDate(value: string) {
-  const match = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}:\d{2})$/.exec(value)
-  return match ? `${match[3]}/${match[2]}/${match[1]}, ${match[4]}` : value
-}
+// Unwired: detail modal handlers (import type TicketDetail from '@/types/ticket' to restore)
+// function viewTicket() {
+//   if (!ticket.value || searchedNumber.value === null) {
+//     selectedTicket.value = null
+//     detailError.value = 'No se pudo mostrar el detalle del ticket.'
+//     return
+//   }
+//   selectedTicket.value = { ...ticket.value, id: searchedNumber.value }
+//   detailError.value = ''
+// }
+//
+// function closeDetail() {
+//   selectedTicket.value = null
+//   detailError.value = ''
+// }
 
 const rows = computed(() => {
   if (!ticket.value || searchedNumber.value === null) return []
@@ -146,8 +226,12 @@ onBeforeUnmount(() => {
       />
     </div>
 
+    <div v-if="successNotice" class="ticket-notification">
+      <NotificationPopup type="success" :message="successNotice" @close="successNotice = ''" />
+    </div>
+
     <CrudTable
-      v-else-if="ticket"
+      v-if="ticket && !notification"
       caption="Tickets"
       :columns="columns"
       :rows="rows"
@@ -155,26 +239,40 @@ onBeforeUnmount(() => {
     >
       <template #actions>
         <div class="default-actions">
-          <span title="Ver detalle" class="action-hint">
-            <button type="button" aria-label="Ver detalle">
-              <i class="bi bi-eye" aria-hidden="true"></i>
-            </button>
-          </span>
           <span title="Modificar" class="action-hint">
-            <button type="button" aria-label="Modificar">
+            <button type="button" aria-label="Modificar" @click="editTicket">
               <i class="bi bi-pencil-square" aria-hidden="true"></i>
             </button>
           </span>
         </div>
       </template>
+      <!-- Unwired: view-detail (eye) action
+        <span title="Ver detalle" class="action-hint">
+          <button type="button" aria-label="Ver detalle" @click="viewTicket">
+            <i class="bi bi-eye" aria-hidden="true"></i>
+          </button>
+        </span>
+      -->
     </CrudTable>
+
+    <!-- Unwired: <TicketDetailDialog :ticket="selectedTicket" :error="detailError" @close="closeDetail" /> -->
+    <ModifyTicketDialog
+      ref="modify-dialog"
+      :showtimes="showtimes"
+      :options-loading="optionsLoading"
+      :options-error="optionsError"
+      :submitting="submitting"
+      :submission-errors="submissionErrors"
+      @retry-options="loadShowtimes"
+      @submit="submitModify"
+    />
   </section>
 </template>
 
 <style scoped>
 .section-subtitle {
   margin: 4px 0 0;
-  color: var(--text-secondary);
+  color: var(--text-on-dark-secondary);
 }
 .ticket-search {
   display: grid;
