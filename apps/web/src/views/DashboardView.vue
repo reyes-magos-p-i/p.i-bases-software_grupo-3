@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, wa
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import { authErrorMessage } from '@/utils/auth-errors'
+import { announcePasswordExpiry, dismissPasswordExpiry } from '@/services/password-expiry-notice'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
@@ -27,6 +28,7 @@ import MovieCrud from '@/components/Movies/MovieCrud.vue'
 
 import { clearClientAuth } from '@/services/client-session.service'
 import { EmployeeAuthError, getEmployeePasswordStatus } from '@/services/authService'
+import { onPasswordBlocked } from '@/services/api'
 
 const router = useRouter()
 const identity = employeeSession.user
@@ -34,6 +36,9 @@ const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
 const activeSection = ref<DashboardSectionId>(
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
+// An expired or missing password keeps the dashboard on the password change.
+const passwordBlocked = ref(false)
+let stopPasswordBlocked: (() => void) | undefined
 const loggingOut = ref(false)
 const logoutError = ref('')
 const passwordStatusError = ref('')
@@ -67,11 +72,19 @@ function sessionExpired() {
   void router.replace({ path: '/', query: { login: 'employee', reason: 'expired' } })
 }
 
+function lockToPasswordChange() {
+  passwordBlocked.value = true
+  activeSection.value = 'password'
+}
+
 async function checkPasswordStatus() {
   passwordStatusError.value = ''
   try {
-    const status = await getEmployeePasswordStatus()
-    if (!disposed && status !== 'valid') activeSection.value = 'password'
+    const expiry = await getEmployeePasswordStatus()
+    if (disposed) return
+    announcePasswordExpiry(expiry)
+    if (expiry.status !== 'valid') lockToPasswordChange()
+    else passwordBlocked.value = false
   } catch (error) {
     if (disposed) return
     if (error instanceof EmployeeAuthError && error.status === 401) {
@@ -105,6 +118,7 @@ async function logout() {
   if (submitting.value || passwordChanging.value || loggingOut.value) return
   loggingOut.value = true
   logoutError.value = ''
+  dismissPasswordExpiry()
   try {
     await closeEmployeeSession()
     await clearClientAuth()
@@ -250,9 +264,12 @@ watch([role, activeSection], () => {
 })
 onBeforeUnmount(() => {
   disposed = true
+  stopPasswordBlocked?.()
   cancelCatalogRequest()
 })
 onMounted(() => {
+  // Any endpoint rejected for an expired password also locks the dashboard.
+  stopPasswordBlocked = onPasswordBlocked(lockToPasswordChange)
   void checkPasswordStatus()
 })
 const availableSections = computed(() => availableSectionsFor(role.value))
@@ -267,6 +284,11 @@ watch(role, () => {
   }
 })
 
+// Any section can be requested, but only the password change is shown until it is valid.
+watch(activeSection, (section) => {
+  if (passwordBlocked.value && section !== 'password') activeSection.value = 'password'
+})
+
 function navigate(section: string) {
   if (submitting.value || passwordChanging.value || sectionBusy.value || loggingOut.value) return
   if (availableSections.value.includes(section as DashboardSectionId)) {
@@ -275,7 +297,12 @@ function navigate(section: string) {
   }
 }
 
-function returnToDashboard() {
+async function returnToDashboard() {
+  // The lock ends only when the server confirms the new password.
+  if (passwordBlocked.value) {
+    await checkPasswordStatus()
+    if (disposed || passwordBlocked.value) return
+  }
   activeSection.value = role.value === 'ADMINISTRATOR' ? 'employees' : 'clients'
 }
 </script>
