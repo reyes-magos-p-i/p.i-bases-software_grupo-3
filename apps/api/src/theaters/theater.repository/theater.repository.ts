@@ -299,14 +299,19 @@ export class TheaterRepository {
 
   async deleteTheater(id: number): Promise<void> {
     try {
-      const result = await this.db.query(
-        `UPDATE Theaters SET is_active = 0 WHERE theater_id = :id`,
-        { id },
-      );
+      await this.db.transaction(async (conn) => {
+        const result = await conn.execute(
+          `UPDATE Theaters SET is_active = 0 WHERE theater_id = :id`,
+          { id },
+          { autoCommit: false },
+        );
 
-      if (result.rowsAffected === 0) {
-        throw new NotFoundException(`Theater not found: ${id}`);
-      }
+        if (result.rowsAffected === 0) {
+          throw new NotFoundException(`Theater not found: ${id}`);
+        }
+
+        await this.chairsRepository.deleteForTheater(id, conn);
+      });
     } catch (error) {
       this.logger.error('Error deleting theater', error as Error);
       throw error;

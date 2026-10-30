@@ -7,10 +7,16 @@ describe('ChairsRepository', () => {
   let repository: ChairsRepository;
   let executeMany: jest.Mock;
   let transaction: jest.Mock;
+  let execute: jest.Mock;
 
   beforeEach(() => {
+    execute = jest.fn().mockResolvedValue({ rowsAffected: 6 });
     executeMany = jest.fn().mockResolvedValue({ rowsAffected: 6 });
-    transaction = jest.fn(async (callback) => callback({ executeMany }));
+
+    transaction = jest.fn(async (callback) =>
+      callback({ execute, executeMany }),
+    );
+
     repository = new ChairsRepository(
       { transaction } as unknown as DatabaseService,
     );
@@ -87,5 +93,68 @@ describe('ChairsRepository', () => {
     transaction.mockRejectedValueOnce(error);
     await expect(repository.createForTheater(7, 2, 3)).rejects.toBe(error);
     expect(executeMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes the seats using its own transaction', async () => {
+    await expect(
+      repository.deleteForTheater(7),
+    ).resolves.toBeUndefined();
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith(
+      'DELETE FROM SEATS WHERE THEATER_ID = :theaterId',
+      { theaterId: 7 },
+      { autoCommit: false },
+    );
+  });
+
+  it('uses the supplied connection without opening another transaction', async () => {
+    const suppliedExecute = jest.fn().mockResolvedValue({
+      rowsAffected: 6,
+    });
+
+    const conn = {
+      execute: suppliedExecute,
+    } as unknown as oracledb.Connection;
+
+    await expect(
+      repository.deleteForTheater(7, conn),
+    ).resolves.toBeUndefined();
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+
+    expect(suppliedExecute).toHaveBeenCalledWith(
+      'DELETE FROM SEATS WHERE THEATER_ID = :theaterId',
+      { theaterId: 7 },
+      { autoCommit: false },
+    );
+  });
+
+  it('succeeds when the theater has no seats', async () => {
+    execute.mockResolvedValueOnce({ rowsAffected: 0 });
+
+    await expect(
+      repository.deleteForTheater(7),
+    ).resolves.toBeUndefined();
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity])(
+    'rejects invalid theater ID %s',
+    async (theaterId) => {
+      await expect(
+        repository.deleteForTheater(theaterId),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(transaction).not.toHaveBeenCalled();
+      expect(execute).not.toHaveBeenCalled();
+    },
+  );
+
+  it('propagates seat deletion errors', async () => {
+    const error = new Error('Seat deletion failed');
+    execute.mockRejectedValueOnce(error);
+
+    await expect(repository.deleteForTheater(7)).rejects.toBe(error);
   });
 });
