@@ -1,48 +1,30 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-
-import type { Movie } from '@/types/movie'
-import { getMovieFunctions, stripTrailingSlashes } from '@/services/movieFunctions'
+import type { PortalMovie } from '@/types/movie'
+import { stripTrailingSlashes } from '@/services/movieFunctions'
+import LoadingState from '@/components/common/LoadingState.vue'
 import placeholderImage from '../../assets/images/placeholder.svg'
+
+defineProps<{ movies: readonly PortalMovie[]; loading?: boolean; error?: string }>()
+const emit = defineEmits<{ retry: [] }>()
 const imagesBaseUrl = `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image`
-const movies = ref<Movie[]>([])
-const isLoading = ref(true)
-const errorMessage = ref('')
-
-function handleImageError(event: Event): void {
+function handleImageError(event: Event) {
   const img = event.target as HTMLImageElement
-
-  if (img.src === placeholderImage) return
-
-  img.src = placeholderImage
+  if (img.getAttribute('src') !== placeholderImage) img.src = placeholderImage
 }
-
-async function loadMovies(): Promise<void> {
-  try {
-    movies.value = await getMovieFunctions()
-  } catch {
-    errorMessage.value = 'No fue posible cargar las películas.'
-  } finally {
-    isLoading.value = false
-  }
-}
-
-onMounted(() => {
-  loadMovies()
-})
 </script>
 
 <template>
   <section class="movie-catalog">
     <div class="landing-container">
-      <p v-if="isLoading" class="status-message">Cargando películas...</p>
+      <LoadingState v-if="loading" message="Cargando películas..." surface="dark" />
 
-      <p v-else-if="errorMessage" class="status-message error-message">
-        {{ errorMessage }}
-      </p>
+      <div v-else-if="error" class="status-message error-message" role="alert">
+        <p>{{ error }}</p>
+        <button type="button" class="retry-button" @click="emit('retry')">Reintentar</button>
+      </div>
 
       <div v-else-if="movies.length" class="movie-grid">
-        <article v-for="movie in movies" :key="movie.title" class="movie-card">
+        <article v-for="movie in movies" :key="movie.id" class="movie-card">
           <img
             :src="`${imagesBaseUrl}/${movie.posterImage}`"
             :alt="movie.title"
@@ -70,13 +52,13 @@ onMounted(() => {
   margin: 32px 0 24px;
   padding: 32px 0;
 
-  background-color: #020617;
+  background-color: var(--page-background);
 }
 
 .movie-grid {
   display: grid;
 
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
 
   gap: 28px 24px;
 }
@@ -103,7 +85,7 @@ onMounted(() => {
 
   border-radius: inherit;
 
-  background-color: rgb(0 0 0 / 65%);
+  background-color: var(--overlay-background);
 
   opacity: 0;
 
@@ -154,8 +136,8 @@ onMounted(() => {
   line-height: 1.2;
 
   text-align: center;
-  text-shadow: 0 2px 6px rgb(0 0 0 / 80%);
-  color: #fff;
+  text-shadow: 0 2px 6px var(--shadow-strong-color);
+  color: var(--text-on-dark);
 }
 
 .buy-button {
@@ -172,14 +154,14 @@ onMounted(() => {
   text-decoration: none;
 
   cursor: pointer;
-  color: #1a1a1a;
-  background-color: #ffd60a;
+  color: var(--button-text);
+  background-color: var(--button-background);
 
   transition: background-color var(--transition-fast);
 }
 
 .buy-button:hover {
-  background-color: #ffe14d;
+  background-color: var(--button-hover-background);
 }
 
 .movie-poster {
@@ -202,5 +184,13 @@ onMounted(() => {
 .error-message {
   color: var(--error-color);
   background-color: var(--content-background);
+}
+.retry-button {
+  min-height: 44px;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-small);
+  background: var(--button-background);
+  color: var(--button-text);
 }
 </style>
