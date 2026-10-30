@@ -89,7 +89,7 @@ describe('ChangePasswordView.vue', () => {
   }
 
   it('uses the shared blue indicator while loading security inside the client profile', async () => {
-    let finish!: (status: 'valid') => void
+    let finish!: (value: PasswordExpiry) => void
     vi.mocked(getClientPasswordStatus).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -104,7 +104,7 @@ describe('ChangePasswordView.vue', () => {
     expect(wrapper.get('[role="status"]').text()).toBe('Cargando seguridad…')
     expect(wrapper.find('.loading-spinner').exists()).toBe(false)
     expect(wrapper.find('form').exists()).toBe(false)
-    finish('valid')
+    finish(expiry('valid'))
     await flushPromises()
     expect(wrapper.findComponent(LoadingState).exists()).toBe(false)
     expect(wrapper.find('form').exists()).toBe(true)
@@ -121,7 +121,7 @@ describe('ChangePasswordView.vue', () => {
             fail = reject
           }),
       )
-      .mockResolvedValueOnce('valid')
+      .mockResolvedValueOnce(expiry('valid'))
     const wrapper = mountView({ embedded: true, accountType: 'client' })
     expect(wrapper.findComponent(LoadingState).exists()).toBe(true)
     fail(new Error('offline'))
@@ -143,7 +143,7 @@ describe('ChangePasswordView.vue', () => {
   ])(
     'preserves the existing loading presentation outside the client profile: %p',
     async (props) => {
-      let finish!: (status: 'valid') => void
+      let finish!: (value: PasswordExpiry) => void
       const loadStatus =
         props.accountType === 'employee' ? getEmployeePasswordStatus : getClientPasswordStatus
       vi.mocked(loadStatus).mockImplementationOnce(
@@ -158,7 +158,7 @@ describe('ChangePasswordView.vue', () => {
       expect(wrapper.get('[role="status"]').text()).toContain(
         'Comprobando el estado de tu contraseña',
       )
-      finish('valid')
+      finish(expiry('valid'))
       await flushPromises()
       expect(wrapper.find('form').exists()).toBe(true)
       wrapper.unmount()
