@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import {
   ChangePasswordError,
   changeEmployeePassword,
@@ -278,10 +279,17 @@ function goHome() {
         </p>
       </header>
 
-      <p v-if="statusLoading" class="page-status" role="status">
-        <span class="loading-spinner" aria-hidden="true"></span>
-        Comprobando el estado de tu contraseña…
-      </p>
+      <template v-if="statusLoading">
+        <LoadingState
+          v-if="props.embedded && props.accountType === 'client'"
+          message="Cargando seguridad…"
+          surface="light"
+        />
+        <p v-else class="page-status" role="status">
+          <span class="loading-spinner" aria-hidden="true"></span>
+          Comprobando el estado de tu contraseña…
+        </p>
+      </template>
 
       <div v-else class="password-layout">
         <section class="form-card" aria-labelledby="password-form-title">
