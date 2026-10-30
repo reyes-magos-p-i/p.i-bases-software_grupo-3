@@ -10,6 +10,7 @@ import {
 import oracle from 'oracledb';
 import { buildUserSearch } from '../users/user-search.util';
 import { DatabaseService } from '../database/database.service';
+import { DEFAULT_PASSWORD_EXPIRATION_DAYS } from '../auth/password/password-status';
 import { UserRole } from '../users/enums/user-role.enum';
 import type { ClientDetailDto } from '../users/dto/user-detail.dto';
 import type {
@@ -411,7 +412,10 @@ export class ClientsRepository {
             clientId: { val: clientId, type: oracle.NUMBER },
             passwordHash: { val: data.passwordHash, type: oracle.STRING },
             salt: { val: data.salt, type: oracle.STRING },
-            expirationDays: { val: 90, type: oracle.NUMBER },
+            expirationDays: {
+              val: DEFAULT_PASSWORD_EXPIRATION_DAYS,
+              type: oracle.NUMBER,
+            },
           },
           { autoCommit: false },
         );
