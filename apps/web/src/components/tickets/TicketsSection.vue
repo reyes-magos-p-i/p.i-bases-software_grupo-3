@@ -4,10 +4,11 @@ import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
-import TicketDetailDialog from './TicketDetailDialog.vue'
+// Unwired: ticket detail modal
+// import TicketDetailDialog from './TicketDetailDialog.vue'
 import { useEmployeeSessionRecovery } from '@/composables/useEmployeeSessionRecovery'
 import { getTicket } from '@/services/ticket.service'
-import type { Ticket, TicketDetail } from '@/types/ticket'
+import type { Ticket } from '@/types/ticket'
 import { formatTicketDate } from '@/utils/ticket-format'
 
 const props = defineProps<{ disabled?: boolean }>()
@@ -20,8 +21,8 @@ const searchError = ref('')
 const notification = ref('')
 const searchedNumber = ref<number | null>(null)
 const ticket = ref<Ticket | null>(null)
-const selectedTicket = ref<TicketDetail | null>(null)
-const detailError = ref('')
+// const selectedTicket = ref<TicketDetail | null>(null)
+// const detailError = ref('')
 let request: AbortController | undefined
 
 const columns = [
@@ -33,20 +34,21 @@ const columns = [
   { key: 'seat', label: 'Asiento' },
 ]
 
-function viewTicket() {
-  if (!ticket.value || searchedNumber.value === null) {
-    selectedTicket.value = null
-    detailError.value = 'No se pudo mostrar el detalle del ticket.'
-    return
-  }
-  selectedTicket.value = { ...ticket.value, id: searchedNumber.value }
-  detailError.value = ''
-}
-
-function closeDetail() {
-  selectedTicket.value = null
-  detailError.value = ''
-}
+// Unwired: detail modal handlers (import type TicketDetail from '@/types/ticket' to restore)
+// function viewTicket() {
+//   if (!ticket.value || searchedNumber.value === null) {
+//     selectedTicket.value = null
+//     detailError.value = 'No se pudo mostrar el detalle del ticket.'
+//     return
+//   }
+//   selectedTicket.value = { ...ticket.value, id: searchedNumber.value }
+//   detailError.value = ''
+// }
+//
+// function closeDetail() {
+//   selectedTicket.value = null
+//   detailError.value = ''
+// }
 
 const rows = computed(() => {
   if (!ticket.value || searchedNumber.value === null) return []
@@ -168,11 +170,6 @@ onBeforeUnmount(() => {
     >
       <template #actions>
         <div class="default-actions">
-          <span title="Ver detalle" class="action-hint">
-            <button type="button" aria-label="Ver detalle" @click="viewTicket">
-              <i class="bi bi-eye" aria-hidden="true"></i>
-            </button>
-          </span>
           <span title="Modificar" class="action-hint">
             <button type="button" aria-label="Modificar">
               <i class="bi bi-pencil-square" aria-hidden="true"></i>
@@ -180,9 +177,16 @@ onBeforeUnmount(() => {
           </span>
         </div>
       </template>
+      <!-- Unwired: view-detail (eye) action
+        <span title="Ver detalle" class="action-hint">
+          <button type="button" aria-label="Ver detalle" @click="viewTicket">
+            <i class="bi bi-eye" aria-hidden="true"></i>
+          </button>
+        </span>
+      -->
     </CrudTable>
 
-    <TicketDetailDialog :ticket="selectedTicket" :error="detailError" @close="closeDetail" />
+    <!-- Unwired: <TicketDetailDialog :ticket="selectedTicket" :error="detailError" @close="closeDetail" /> -->
   </section>
 </template>
 
