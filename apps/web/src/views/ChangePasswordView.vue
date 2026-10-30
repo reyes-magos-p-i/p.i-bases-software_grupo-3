@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import {
   ChangePasswordError,
   changeEmployeePassword,
@@ -43,6 +44,11 @@ const user = computed(() =>
 )
 
 const EXPIRATION_OPTIONS = [30, 60, 90, 120] as const
+type ExpirationDays = (typeof EXPIRATION_OPTIONS)[number]
+/** New client accounts start here; employee passwords always use it. */
+const DEFAULT_EXPIRATION_DAYS: ExpirationDays = 30
+const isExpirationOption = (days: number | null): days is ExpirationDays =>
+  EXPIRATION_OPTIONS.some((option) => option === days)
 
 const status = ref<ClientPasswordStatus>('valid')
 const statusLoading = ref(true)
@@ -58,7 +64,8 @@ const form = reactive({
   currentPassword: '',
   newPassword: '',
   confirmNewPassword: '',
-  expirationDays: 90 as 30 | 60 | 90 | 120,
+  // Clients only; loadStatus selects the account's current period.
+  expirationDays: DEFAULT_EXPIRATION_DAYS as ExpirationDays,
 })
 const errors = reactive<{ currentPassword?: string; confirm?: string; form?: string }>({})
 const violationCodes = ref<string[]>([])
@@ -100,9 +107,11 @@ async function loadStatus() {
       })
       return
     }
-    status.value = isEmployee.value
+    const expiry = isEmployee.value
       ? await getEmployeePasswordStatus()
       : await getClientPasswordStatus()
+    status.value = expiry.status
+    if (isExpirationOption(expiry.expirationDays)) form.expirationDays = expiry.expirationDays
   } catch (error) {
     recoveryExpired.value =
       error instanceof ChangePasswordError && error.code === 'RECOVERY_INVALID'
@@ -143,19 +152,13 @@ async function submit() {
   loading.value = true
   emit('submission-state', true)
   try {
-    const payload: ChangeClientPasswordPayload = {
-      newPassword: form.newPassword,
-      confirmNewPassword: form.confirmNewPassword,
-      expirationDays: form.expirationDays,
-    }
-    if (!isMustSet.value) payload.currentPassword = form.currentPassword
     if (props.recovery) {
       await resetPassword({
         token: props.recoveryToken,
         temporaryPassword: form.currentPassword,
         newPassword: form.newPassword,
         confirmNewPassword: form.confirmNewPassword,
-        expirationDays: form.expirationDays,
+        ...(isEmployee.value ? {} : { expirationDays: form.expirationDays }),
       })
       form.currentPassword = ''
       form.newPassword = ''
@@ -167,11 +170,20 @@ async function submit() {
       )
     } else if (isEmployee.value) {
       const employeePayload: ChangeEmployeePasswordPayload = {
-        ...payload,
         currentPassword: form.currentPassword,
+        newPassword: form.newPassword,
+        confirmNewPassword: form.confirmNewPassword,
       }
       await changeEmployeePassword(employeePayload)
-    } else await changeClientPassword(payload)
+    } else {
+      const payload: ChangeClientPasswordPayload = {
+        newPassword: form.newPassword,
+        confirmNewPassword: form.confirmNewPassword,
+        expirationDays: form.expirationDays,
+      }
+      if (!isMustSet.value) payload.currentPassword = form.currentPassword
+      await changeClientPassword(payload)
+    }
     success.value = true
     status.value = 'valid'
   } catch (error) {
@@ -267,10 +279,17 @@ function goHome() {
         </p>
       </header>
 
-      <p v-if="statusLoading" class="page-status" role="status">
-        <span class="loading-spinner" aria-hidden="true"></span>
-        Comprobando el estado de tu contraseña…
-      </p>
+      <template v-if="statusLoading">
+        <LoadingState
+          v-if="props.embedded && props.accountType === 'client'"
+          message="Cargando seguridad…"
+          surface="light"
+        />
+        <p v-else class="page-status" role="status">
+          <span class="loading-spinner" aria-hidden="true"></span>
+          Comprobando el estado de tu contraseña…
+        </p>
+      </template>
 
       <div v-else class="password-layout">
         <section class="form-card" aria-labelledby="password-form-title">
@@ -296,13 +315,7 @@ function goHome() {
             <div class="success-state" role="status">
               <span class="success-icon"><i class="bi bi-check-lg" aria-hidden="true"></i></span>
               <h2 id="password-form-title">Contraseña actualizada</h2>
-              <p>
-                {{
-                  isEmployee
-                    ? 'Contraseña actualizada correctamente'
-                    : 'Tu contraseña se actualizó correctamente.'
-                }}
-              </p>
+              <p>Contraseña actualizada con éxito</p>
               <button type="button" class="primary-button continue-button" @click="goHome">
                 {{
                   props.recovery
@@ -439,7 +452,13 @@ function goHome() {
                 </p>
               </div>
 
-              <div class="form-field">
+              <div v-if="isEmployee" class="form-field">
+                <p class="field-label">Vigencia de la contraseña</p>
+                <p id="employee-expiration" class="field-hint">
+                  30 días. La vigencia de las contraseñas del personal es fija.
+                </p>
+              </div>
+              <div v-else class="form-field">
                 <label for="expirationDays">Vigencia de la contraseña</label>
                 <select
                   id="expirationDays"
@@ -624,12 +643,20 @@ function goHome() {
   gap: 20px;
 }
 
-.form-field label {
+.form-field label,
+.form-field .field-label {
   display: block;
   margin-bottom: 7px;
   color: var(--text-primary);
   font-size: 0.92rem;
   font-weight: 650;
+}
+
+.field-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .form-field input,

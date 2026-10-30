@@ -22,9 +22,12 @@ describe('AccountMenu.vue', () => {
     expect(wrapper.get('.account-dropdown').text()).toContain('Ana Perez')
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
     expect(wrapper.get('.account-dropdown').text()).toContain('Mi perfil')
-    expect(wrapper.get('.account-dropdown').text()).toContain('Ajustes de Cuenta')
+    expect(wrapper.get('.account-dropdown').text()).not.toContain('Ajustes de Cuenta')
     expect(wrapper.get('.account-dropdown').text()).toContain('Cambiar Contraseña')
-    expect(wrapper.findAll('.account-actions button:disabled')).toHaveLength(1)
+    expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
+      'Mi perfil',
+      'Cambiar Contraseña',
+    ])
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     await nextTick()
     expect(wrapper.find('.account-dropdown').exists()).toBe(false)
