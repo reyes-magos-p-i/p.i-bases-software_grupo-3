@@ -6,7 +6,6 @@
 -- the tables it references). Incremental changes go in migrations/.
 --
 -- Pending (marked PENDING below, not applied to PRODUCTION yet):
---   migrations/20261016_cinemas_status.sql
 --   migrations/20261016_sales_invoices_products.sql
 --   migrations/20261025_password_expiration_30_days.sql
 -- =========================================================
@@ -61,12 +60,20 @@ CREATE TABLE Cinemas (
     branch_id       NUMBER GENERATED ALWAYS AS IDENTITY,
     name            VARCHAR2(150) NOT NULL,
     company_id      NUMBER NOT NULL,
-    status          VARCHAR2(8 CHAR) DEFAULT 'ACTIVE' NOT NULL,  -- PENDING: migrations/20261016_cinemas_status.sql
+    status          VARCHAR2(8 CHAR) DEFAULT 'ACTIVE' NOT NULL,
     CONSTRAINT pk_cinemas PRIMARY KEY (branch_id),
     CONSTRAINT ck_cinemas_status
         CHECK (status IN ('ACTIVE', 'INACTIVE')),
     CONSTRAINT fk_cinemas_company
         FOREIGN KEY (company_id) REFERENCES Companies (company_id)
+);
+
+-- Two active branches cannot share a name, ignoring case, accents and outer
+-- spaces (SCRUM-32/33, migration 20261027_cinemas_active_name.sql).
+CREATE UNIQUE INDEX ux_cinemas_active_name ON Cinemas (
+    CASE WHEN status = 'ACTIVE'
+         THEN TRANSLATE(LOWER(TRIM(name)), 'áéíóúüñ', 'aeiouun')
+    END
 );
 
 -- =========================================================

@@ -3,6 +3,7 @@ import type { UserRole } from '@/types/user'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import ProjectionsSection from '@/components/projections/ProjectionsSection.vue'
 import TicketsSection from '@/components/tickets/TicketsSection.vue'
+import BranchesSection from '@/components/branches/BranchesSection.vue'
 
 export type DashboardSectionId =
   | 'dashboard'
@@ -66,7 +67,14 @@ export const dashboardSections: readonly DashboardSectionDefinition[] = [
     roles: ['ADMINISTRATOR'],
     component: TicketsSection,
   },
-  { id: 'branches', label: 'Sucursales', icon: 'bi-building', roles: [] },
+  {
+    id: 'branches',
+    label: 'Sucursales',
+    icon: 'bi-building',
+    adminOnly: true,
+    roles: ['ADMINISTRATOR'],
+    component: BranchesSection,
+  },
   {
     id: 'password',
     label: 'Cambiar contraseña',
