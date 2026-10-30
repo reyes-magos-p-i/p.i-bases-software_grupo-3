@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import * as oracledb from 'oracledb';
 import { DatabaseService } from '../database/database.service';
+import { UpdateSeatsDto } from './dto/update-seats.dto';
 
 @Injectable()
 export class ChairsRepository {
@@ -127,5 +128,78 @@ async createForTheater(
       type: row.SEAT_TYPE,
       state: row.SEAT_STATE,
     }));
+  }
+
+  async updateSelected(theaterId: number, dto: UpdateSeatsDto) {
+    if (!Number.isSafeInteger(theaterId) || theaterId <= 0) {
+      throw new BadRequestException(
+        'theaterId must be a positive safe integer',
+      );
+    }
+
+    const positions = new Map<
+      string,
+      { rowNumber: number; columnNumber: number }
+    >();
+
+    for (const seat of dto.seats) {
+      positions.set(
+        `${seat.rowNumber}:${seat.columnNumber}`,
+        seat,
+      );
+    }
+
+    const binds = [...positions.values()].map(seat => ({
+      theaterId,
+      rowNumber: seat.rowNumber,
+      columnNumber: seat.columnNumber,
+      state: dto.state ?? null,
+      type: dto.type ?? null,
+    }));
+
+    return this.db.transaction(
+      async (connection: oracledb.Connection) => {
+        const result = await connection.executeMany(
+          `
+          UPDATE CHAIRS
+          SET STATUS = COALESCE(:state, STATUS),
+              TYPE = COALESCE(:type, TYPE)
+          WHERE THEATER_ID = :theaterId
+            AND ROW_NUMBER = :rowNumber
+            AND COLUMN_NUMBER = :columnNumber
+          `,
+          binds,
+          {
+            autoCommit: false,
+            batchErrors: false,
+            dmlRowCounts: true,
+            bindDefs: {
+              theaterId: { type: oracledb.NUMBER },
+              rowNumber: { type: oracledb.NUMBER },
+              columnNumber: { type: oracledb.NUMBER },
+              state: { type: oracledb.STRING, maxSize: 32 },
+              type: { type: oracledb.STRING, maxSize: 32 },
+            },
+          },
+        );
+
+        const counts = result.dmlRowCounts;
+
+        if (
+          !counts ||
+          counts.length !== binds.length ||
+          counts.some(count => count !== 1)
+        ) {
+          throw new NotFoundException(
+            'One or more seats do not exist',
+          );
+        }
+
+        return {
+          theaterId,
+          seatsUpdated: binds.length,
+        };
+      },
+    );
   }
 }
