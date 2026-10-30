@@ -196,7 +196,7 @@ describe('TransactionsSection', () => {
     const loads = getTransactions.mock.calls.length
     view.getComponent(TransactionDetailDialog).vm.$emit('missing')
     await flushPromises()
-    expect(getTransactions.mock.calls.length).toBe(loads + 1)
+    expect(getTransactions.mock.calls).toHaveLength(loads + 1)
   })
 
   it('does not open the detail while the dashboard is busy', async () => {
