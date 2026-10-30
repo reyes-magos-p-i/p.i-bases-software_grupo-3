@@ -255,14 +255,14 @@ describe('TransactionsSection', () => {
     await view.get('input[name="search"]').setValue(search)
     await view.get('form').trigger('submit')
     expect(view.get('.feedback').text()).toBe(message)
-    expect(getTransactions.mock.calls.length).toBe(calls)
+    expect(getTransactions.mock.calls).toHaveLength(calls)
   })
 
   it('does not search while the dashboard is busy', async () => {
     const view = await render({ disabled: true })
     const calls = getTransactions.mock.calls.length
     await view.get('form').trigger('submit')
-    expect(getTransactions.mock.calls.length).toBe(calls)
+    expect(getTransactions.mock.calls).toHaveLength(calls)
   })
 
   it('filters by branch, movie, status and purchase dates', async () => {
@@ -296,7 +296,7 @@ describe('TransactionsSection', () => {
     const calls = getTransactions.mock.calls.length
     await view.get('input[name="dateFrom"]').setValue('2026-10-16')
     await flushPromises()
-    expect(getTransactions.mock.calls.length).toBe(calls)
+    expect(getTransactions.mock.calls).toHaveLength(calls)
     expect(view.get('.feedback').text()).toBe(
       'La fecha de inicio no puede ser posterior a la fecha de fin.',
     )
@@ -340,7 +340,7 @@ describe('TransactionsSection', () => {
     expect(button(view, 'Anterior').attributes('disabled')).toBeDefined()
     await button(view, 'Siguiente').trigger('click')
     await button(view, 'Anterior').trigger('click')
-    expect(getTransactions.mock.calls.length).toBe(calls)
+    expect(getTransactions.mock.calls).toHaveLength(calls)
   })
 
   it('ignores an answer that arrives after a newer request', async () => {
