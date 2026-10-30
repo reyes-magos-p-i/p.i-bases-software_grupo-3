@@ -302,7 +302,7 @@ describe('BranchesSection · Crear sucursal', () => {
     await flushPromises()
     expect(view.emitted('busy')).toEqual([[true], [false]])
     expect(view.get('.branch-notification').text()).toContain('Sucursal creada con éxito')
-    expect(getBranches.mock.calls.length).toBe(loads + 1)
+    expect(getBranches.mock.calls).toHaveLength(loads + 1)
     expect((dialog(view).get('input[name="name"]').element as HTMLInputElement).value).toBe('')
 
     await view.get('.branch-notification .notification-popup').trigger('click')

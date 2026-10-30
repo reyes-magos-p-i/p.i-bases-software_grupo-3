@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CinemasController } from './cinemas.controller';
 import { CinemasService } from './cinemas.service';
-import { EmployeeSessionOriginGuard } from '../auth/guards/employee-session-origin.guard';
+import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
 
 describe('CinemasController', () => {
   let controller: CinemasController;
@@ -19,7 +19,7 @@ describe('CinemasController', () => {
       controllers: [CinemasController],
       providers: [{ provide: CinemasService, useValue: service }],
     })
-      .overrideGuard(EmployeeSessionOriginGuard)
+      .overrideGuard(SessionOriginGuard)
       .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<CinemasController>(CinemasController);
