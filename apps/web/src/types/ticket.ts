@@ -7,5 +7,20 @@ export interface Ticket {
   seat: string
 }
 
+/** Item of GET /tickets/:id/alternative-showtimes. */
+export interface AlternativeShowtime {
+  movieFunctionId: number
+  theaterId: number
+  time: string
+  date: string
+  seatRow: number
+  seatColumn: number
+}
+
+/** Body of PATCH /tickets/:id. */
+export interface UpdateTicketRequest {
+  movieFunctionId: number
+}
+
 /** A ticket shown in the detail dialog, with the number that was searched. */
 export type TicketDetail = Ticket & { id: number }
