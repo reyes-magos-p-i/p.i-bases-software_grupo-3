@@ -35,5 +35,6 @@ export interface UpdateSeatStatusRequest {
     rowNumber: number
     columnNumber: number
   }[]
-  state: SeatState
+  state?: SeatState
+  type?: SeatType
 }

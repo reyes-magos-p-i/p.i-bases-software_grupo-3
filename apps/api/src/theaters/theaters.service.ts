@@ -73,15 +73,18 @@ export class TheatersService {
 
   async getSeats(theaterId: number) {
     const theater = await this.theatersRepository.getTheaterById(theaterId);
-
     if (!theater) {
       throw new NotFoundException(`Theater not found: ${theaterId}`);
     }
-
     return this.chairsRepository.findByTheater(theaterId);
   }
 
   async updateSelected(theaterId: number, dto: UpdateSeatsDto) {
+    const theater =
+      await this.theatersRepository.getTheaterById(theaterId);
+    if (!theater) {
+      throw new NotFoundException(`Theater not found: ${theaterId}`);
+    }
     return this.chairsRepository.updateSelected(theaterId, dto);
   }
 

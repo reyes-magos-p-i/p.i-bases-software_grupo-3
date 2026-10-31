@@ -1,79 +1,122 @@
-import {
-  BadRequestException,
-  ValidationPipe,
-} from '@nestjs/common';
+import 'reflect-metadata';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { UpdateSeatsDto } from './update-seats.dto';
 
 describe('UpdateSeatsDto', () => {
-  const pipe = new ValidationPipe({
-    transform: true,
-    whitelist: true,
-    forbidNonWhitelisted: true,
-  });
-
   const seats = [{ rowNumber: 1, columnNumber: 2 }];
 
-  function validate(body: unknown) {
-    return pipe.transform(body, {
-      type: 'body',
-      metatype: UpdateSeatsDto,
-    });
+  function validateDto(payload: object) {
+    return validate(plainToInstance(UpdateSeatsDto, payload));
   }
 
-  it.each([
-    { seats, state: 'free' },
-    { seats, type: 'vip' },
-    { seats, state: 'unavailable', type: 'accessibility' },
-  ])('accepts valid updates: %o', async body => {
-    const result = await validate(body);
+  it.each(['libre', 'indisponible', 'ocupado', 'reservado'])(
+    'accepts state "%s" without a type',
+    async state => {
+      const errors = await validateDto({ seats, state });
 
-    expect(result).toBeInstanceOf(UpdateSeatsDto);
-    expect(result).toEqual(body);
+      expect(errors).toHaveLength(0);
+    },
+  );
+
+  it.each(['normal', 'vip', 'accesibilidad'])(
+    'accepts type "%s" without a state',
+    async type => {
+      const errors = await validateDto({ seats, type });
+
+      expect(errors).toHaveLength(0);
+    },
+  );
+
+  it('accepts state and type together', async () => {
+    const errors = await validateDto({
+      seats,
+      state: 'libre',
+      type: 'vip',
+    });
+
+    expect(errors).toHaveLength(0);
   });
 
   it.each([
     { seats },
-    { seats, state: 'invalid' },
-    { seats, type: 'invalid' },
-    { seats, state: null },
-    { seats, type: null },
-    { seats: [], type: 'vip' },
-    { type: 'vip' },
-    {
-      seats: [{ rowNumber: 0, columnNumber: 1 }],
-      type: 'vip',
-    },
-    {
-      seats: [{ rowNumber: 1, columnNumber: 1.5 }],
-      type: 'vip',
-    },
-    {
-      seats: [{ rowNumber: '1', columnNumber: 2 }],
-      type: 'vip',
-    },
-    {
-      seats,
-      type: 'vip',
-      unexpected: true,
-    },
-    {
-      seats: [{ rowNumber: 1, columnNumber: 2, unexpected: true }],
-      type: 'vip',
-    },
-  ])('rejects invalid updates: %o', async body => {
-    await expect(validate(body))
-      .rejects.toBeInstanceOf(BadRequestException);
+    { seats, state: 'available' },
+    { seats, type: 'premium' },
+    { seats, state: null, type: 'vip' },
+    { seats, state: 'libre', type: null },
+    { seats, state: 'invalid', type: 'vip' },
+    { seats, state: 'libre', type: 'invalid' },
+  ])('rejects missing changes or invalid values: %j', async payload => {
+    const errors = await validateDto(payload);
+
+    expect(errors.length).toBeGreaterThan(0);
   });
 
-  it('rejects more than 10000 seats', async () => {
-    await expect(
-      validate({
-        seats: Array.from({ length: 10001 }, () => ({
-          rowNumber: 1,
-          columnNumber: 1,
-        })),
-        type: 'vip',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+  it.each([
+    { state: 'libre' },
+    { seats: [], state: 'libre' },
+    { seats: 'invalid', state: 'libre' },
+  ])('rejects missing, empty, or non-array seats: %j', async payload => {
+    const errors = await validateDto(payload);
+
+    expect(errors.some(error => error.property === 'seats')).toBe(true);
+  });
+
+  it('accepts 10,000 seats', async () => {
+    const errors = await validateDto({
+      seats: Array.from({ length: 10_000 }, () => ({
+        rowNumber: 1,
+        columnNumber: 1,
+      })),
+      state: 'libre',
+    });
+
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects more than 10,000 seats', async () => {
+    const errors = await validateDto({
+      seats: Array.from({ length: 10_001 }, () => ({
+        rowNumber: 1,
+        columnNumber: 1,
+      })),
+      state: 'libre',
+    });
+
+    expect(
+      errors.find(error => error.property === 'seats')?.constraints,
+    ).toHaveProperty('arrayMaxSize');
+  });
+
+  it.each(['rowNumber', 'columnNumber'])(
+    'accepts the maximum safe integer for %s',
+    async field => {
+      const errors = await validateDto({
+        seats: [{ ...seats[0], [field]: Number.MAX_SAFE_INTEGER }],
+        state: 'libre',
+      });
+
+      expect(errors).toHaveLength(0);
+    },
+  );
+
+  describe.each(['rowNumber', 'columnNumber'])('%s validation', field => {
+    it.each([0, -1, 1.5, '1', null, undefined, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects invalid coordinate %j',
+      async value => {
+        const errors = await validateDto({
+          seats: [{ ...seats[0], [field]: value }],
+          state: 'libre',
+        });
+
+        const seatErrors = errors.find(error => error.property === 'seats');
+
+        expect(seatErrors?.children?.[0]?.children).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ property: field }),
+          ]),
+        );
+      },
+    );
   });
 });

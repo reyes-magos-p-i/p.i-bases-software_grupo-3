@@ -14,6 +14,7 @@ import type {
   SeatState,
 } from '@/types/seats'
 
+
 export async function getTheaters(signal?: AbortSignal): Promise<Theater[]> {
   const response = await getApi().get<Theater[]>('/theaters', { signal, timeout: 10000 })
   return response.data
@@ -70,6 +71,12 @@ const seatStateToDb: Record<SeatState, DbSeatState> = {
   reserved: 'reservado',
 }
 
+const seatTypeToDb: Record<SeatType, DbSeatType> = {
+  normal: 'normal',
+  vip: 'vip',
+  accessibility: 'accesibilidad',
+}
+
 function normalizeSeat(seat: DbSeat): Seat {
   const state = seatStateFromDb[seat.state]
   const type = seatTypeFromDb[seat.type]
@@ -103,11 +110,25 @@ export async function updateSeatStatuses(
   theaterId: number,
   data: UpdateSeatStatusRequest,
 ): Promise<void> {
+  if (data.seats.length === 0) {
+    throw new Error('Seleccione al menos un asiento.')
+  }
+
+  if (data.state === undefined && data.type === undefined) {
+    throw new Error('Seleccione un estado o tipo.')
+  }
+
+
   await getApi().patch(
     `/theaters/${theaterId}/seats`,
     {
-      ...data,
-      state: seatStateToDb[data.state],
+      seats: data.seats,
+      ...(data.state !== undefined
+        ? { state: seatStateToDb[data.state] }
+        : {}),
+      ...(data.type !== undefined
+        ? { type: seatTypeToDb[data.type] }
+        : {}),
     },
     { timeout: 30000 },
   )

@@ -172,7 +172,6 @@ async createForTheater(
           {
             autoCommit: false,
             batchErrors: false,
-            dmlRowCounts: true,
             bindDefs: {
               theaterId: { type: oracledb.NUMBER },
               rowNumber: { type: oracledb.NUMBER },
@@ -183,13 +182,7 @@ async createForTheater(
           },
         );
 
-        const counts = result.dmlRowCounts;
-
-        if (
-          !counts ||
-          counts.length !== binds.length ||
-          counts.some(count => count !== 1)
-        ) {
+        if (result.rowsAffected !== binds.length) {
           throw new NotFoundException(
             'One or more seats do not exist',
           );
@@ -197,7 +190,7 @@ async createForTheater(
 
         return {
           theaterId,
-          seatsUpdated: binds.length,
+          seatsUpdated: result.rowsAffected,
         };
       },
     );

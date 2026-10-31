@@ -5,7 +5,15 @@ import {
   getTheaterSeats,
   updateSeatStatuses,
 } from '@/services/theater.service'
-import type { Seat, SeatState } from '@/types/seats.ts';
+import {
+  seatStateLabels,
+  seatTypeLabels,
+  type Seat,
+  type SeatState,
+  type SeatType,
+} from '@/types/seats.ts';
+import SimpleDropdown from '../common/SimpleDropdown.vue';
+import { isAxiosError } from 'axios'
 
 const props = withDefaults(
   defineProps<{
@@ -23,8 +31,8 @@ const props = withDefaults(
 
 const seats = ref<Seat[]>([])
 const selectedSeats = ref<Seat[]>([])
-const selectedState = ref<SeatState | ''>('')
-
+const selectedState = ref<SeatState | null>(null)
+const selectedType = ref<SeatType | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -37,6 +45,20 @@ const selectableStates: SeatState[] = [
   'in-use',
   'reserved',
 ]
+
+const stateOptions = (Object.keys(seatStateLabels) as SeatState[]).map(
+  id => ({
+    id,
+    name: seatStateLabels[id],
+  }),
+)
+
+const typeOptions = (Object.keys(seatTypeLabels) as SeatType[]).map(
+  id => ({
+    id,
+    name: seatTypeLabels[id],
+  }),
+)
 
 // Prevent an older request from replacing another theater's seats.
 let loadVersion = 0
@@ -70,7 +92,7 @@ async function saveStatus() {
     loading.value ||
     saving.value ||
     selectedSeats.value.length === 0 ||
-    selectedState.value === ''
+    (selectedState.value === null && selectedType.value === null)
   ) {
     return
   }
@@ -87,22 +109,43 @@ async function saveStatus() {
         rowNumber: seat.rowNumber,
         columnNumber: seat.columnNumber,
       })),
-      state: selectedState.value,
+      ...(selectedState.value !== null
+        ? { state: selectedState.value }
+        : {}),
+      ...(selectedType.value !== null
+        ? { type: selectedType.value }
+        : {}),
     })
 
     if (theaterId !== props.theaterId) return
 
     selectedSeats.value = []
-    selectedState.value = ''
+    selectedState.value = null
+    selectedType.value = null
     selectorVersion.value++
 
     await loadSeats()
 
-    message.value = 'Estado de los asientos actualizado.'
-  } catch {
-    if (theaterId === props.theaterId) {
-      error.value = 'No se pudo actualizar el estado de los asientos.'
-    }
+    if (theaterId !== props.theaterId || error.value) return
+
+    message.value = 'Asientos actualizados.'
+  } catch (err) {
+    if (theaterId !== props.theaterId) return
+
+    console.error(
+      'Seat update failed:',
+      isAxiosError(err) ? err.response?.data : err,
+    )
+
+    const backendMessage = isAxiosError(err)
+      ? err.response?.data?.message
+      : undefined
+
+    error.value = Array.isArray(backendMessage)
+      ? backendMessage.join(', ')
+      : typeof backendMessage === 'string'
+        ? backendMessage
+        : 'No se pudieron actualizar los asientos.'
   } finally {
     saving.value = false
   }
@@ -113,7 +156,8 @@ watch(
   () => {
     seats.value = []
     selectedSeats.value = []
-    selectedState.value = ''
+    selectedState.value = null
+    selectedType.value = null
     error.value = ''
     message.value = ''
     selectorVersion.value++
@@ -140,21 +184,7 @@ watch(
       {{ message }}
     </p>
 
-    <button
-      type="button"
-      :disabled="disabled || loading || saving"
-      @click="message = ''; loadSeats()"
-    >
-      Actualizar asientos
-    </button>
-    <pre>
-      readonly: {{ readonly }}
-      disabled: {{ disabled }}
-      loading: {{ loading }}
-      saving: {{ saving }}
-      first seat state: {{ seats[0]?.state }}
-      selected seats: {{ selectedSeats.length }}
-      </pre>
+
     <SeatSelector
       :key="selectorVersion"
       :theater-id="theaterId"
@@ -167,36 +197,49 @@ watch(
       @selection-change="selectedSeats = $event"
     />
 
-    <div  v-if="!readonly" class="seat-controls">
-      <label>
-        Nuevo estado
+   <div v-if="!readonly" class="seat-controls">
+    <div class="seat-dropdowns">
+      <SimpleDropdown
+        v-model="selectedState"
+        :options="stateOptions"
+        label="Nuevo estado"
+        placeholder="Seleccione un estado"
+        :disabled="disabled || loading || saving"
+      />
 
-        <select
-          v-model="selectedState"
-          :disabled="disabled || loading || saving"
-        >
-          <option disabled value="">Seleccione un estado</option>
-          <option value="free">Libre</option>
-          <option value="unavailable">No disponible</option>
-          <option value="in-use">En uso</option>
-          <option value="reserved">Reservado</option>
-        </select>
-      </label>
+      <SimpleDropdown
+        v-model="selectedType"
+        :options="typeOptions"
+        label="Nuevo tipo"
+        placeholder="Seleccione un tipo"
+        :disabled="disabled || loading || saving"
+      />
+    </div>
+    <div class="seat-actions">
+      <button
+        type="button"
+        :disabled="disabled || loading || saving"
+        @click="message = ''; loadSeats()"
+      >
+        Actualizar asientos
+      </button>
 
       <button
+        class="save-button"
         type="button"
         :disabled="
           disabled ||
           loading ||
           saving ||
           selectedSeats.length === 0 ||
-          selectedState === ''
+          (selectedState === null && selectedType === null)
         "
         @click="saveStatus"
       >
-        {{ saving ? 'Guardando…' : 'Guardar estado de asientos' }}
+        {{ saving ? 'Guardando…' : 'Guardar cambios de asientos' }}
       </button>
     </div>
+  </div>
   </section>
 </template>
 
@@ -204,37 +247,74 @@ watch(
 .seat-editor {
   margin-top: 24px;
   padding-top: 20px;
+  padding-bottom: 24px;
+  padding-left: 24px;
+  padding-right: 24px;
   border-top: 1px solid #ddd;
 }
 
-.seat-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-select,
-button {
-  padding: 8px 12px;
-  font: inherit;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-}
 
 button {
   cursor: pointer;
+  min-height: 42px;
+  padding: 9px 16px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-small);
+  font: inherit;
+}
+
+.save-button {
+  color: var(--dialog-heading-text);
+  background: var(--dialog-heading-background);
 }
 
 button:disabled {
   cursor: default;
   opacity: 0.6;
 }
+
+
+.seat-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.seat-dropdowns {
+  display: flex;
+  flex: 1 1 320px;
+  gap: 16px;
+  min-width: 0;
+}
+
+.seat-dropdowns > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.seat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-left: auto;
+}
+
+@media (max-width: 600px) {
+  .seat-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .seat-dropdowns {
+    flex: initial;
+  }
+
+  .seat-actions {
+    margin-left: 0;
+  }
+}
+
 </style>

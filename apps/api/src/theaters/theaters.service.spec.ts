@@ -277,22 +277,39 @@ describe('TheatersService', () => {
         seatsUpdated: 1,
       };
 
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
       chairsRepository.updateSelected.mockResolvedValueOnce(result);
 
-      await expect(
-        service.updateSelected(7, dto),
-      ).resolves.toEqual(result);
+      await expect(service.updateSelected(7, dto)).resolves.toEqual(result);
 
+      expect(repository.getTheaterById).toHaveBeenCalledWith(7);
       expect(chairsRepository.updateSelected).toHaveBeenCalledWith(7, dto);
+    });
+
+    it('throws when the theater does not exist', async () => {
+      repository.getTheaterById.mockResolvedValueOnce(null);
+
+      await expect(service.updateSelected(999, dto)).rejects.toThrow(
+        new NotFoundException('Theater not found: 999'),
+      );
+
+      expect(repository.getTheaterById).toHaveBeenCalledWith(999);
+      expect(chairsRepository.updateSelected).not.toHaveBeenCalled();
     });
 
     it('propagates repository errors', async () => {
       const error = new NotFoundException('Seat not found');
+
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
       chairsRepository.updateSelected.mockRejectedValueOnce(error);
 
-      await expect(
-        service.updateSelected(7, dto),
-      ).rejects.toBe(error);
+      await expect(service.updateSelected(7, dto)).rejects.toBe(error);
+
+      expect(chairsRepository.updateSelected).toHaveBeenCalledWith(7, dto);
     });
   });
 });

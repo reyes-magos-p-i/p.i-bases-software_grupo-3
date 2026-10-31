@@ -218,43 +218,24 @@ describe('ChairsRepository', () => {
     });
   });
 
-  describe('ChairsRepository.updateSelected', () => {
-    let repository: ChairsRepository;
-    let executeMany: jest.Mock;
-    let transaction: jest.Mock;
-
+  describe('updateSelected', () => {
     const seats = [
       { rowNumber: 1, columnNumber: 2 },
       { rowNumber: 2, columnNumber: 3 },
     ];
 
-    beforeEach(() => {
-      executeMany = jest.fn().mockResolvedValue({
-        dmlRowCounts: [1, 1],
-      });
-
-      transaction = jest.fn(async work =>
-        work({ executeMany }),
-      );
-
-      repository = new ChairsRepository(
-        { transaction } as unknown as DatabaseService,
-      );
-    });
-
     const changes: Omit<UpdateSeatsDto, 'seats'>[] = [
-      { state: 'unavailable' },
+      { state: 'indisponible' },
       { type: 'vip' },
-      { state: 'free', type: 'accessibility' },
+      { state: 'libre', type: 'accesibilidad' },
     ];
 
     it.each(changes)('updates selected seats with %o', async change => {
-      const result = await repository.updateSelected(7, {
-        seats,
-        ...change,
-      });
+      executeMany.mockResolvedValueOnce({ rowsAffected: 2 });
 
-      expect(result).toEqual({
+      await expect(
+        repository.updateSelected(7, { seats, ...change }),
+      ).resolves.toEqual({
         theaterId: 7,
         seatsUpdated: 2,
       });
@@ -264,8 +245,12 @@ describe('ChairsRepository', () => {
 
       const [sql, binds, options] = executeMany.mock.calls[0];
 
-      expect(sql).toContain('STATUS = COALESCE(:state, STATUS)');
-      expect(sql).toContain('TYPE = COALESCE(:type, TYPE)');
+      expect(sql).toContain(
+        'SEAT_STATE = COALESCE(:state, SEAT_STATE)',
+      );
+      expect(sql).toContain(
+        'SEAT_TYPE = COALESCE(:type, SEAT_TYPE)',
+      );
       expect(sql).toContain('THEATER_ID = :theaterId');
       expect(sql).toContain('ROW_NUMBER = :rowNumber');
       expect(sql).toContain('COLUMN_NUMBER = :columnNumber');
@@ -279,53 +264,84 @@ describe('ChairsRepository', () => {
         })),
       );
 
-      expect(options).toMatchObject({
+      expect(options).toEqual({
         autoCommit: false,
         batchErrors: false,
-        dmlRowCounts: true,
+        bindDefs: {
+          theaterId: { type: oracledb.NUMBER },
+          rowNumber: { type: oracledb.NUMBER },
+          columnNumber: { type: oracledb.NUMBER },
+          state: { type: oracledb.STRING, maxSize: 32 },
+          type: { type: oracledb.STRING, maxSize: 32 },
+        },
       });
     });
 
     it('updates duplicate positions only once', async () => {
-      executeMany.mockResolvedValueOnce({
-        dmlRowCounts: [1],
-      });
-
-      const result = await repository.updateSelected(7, {
-        seats: [seats[0]!, seats[0]!],
-        type: 'vip',
-      });
-
-      expect(result.seatsUpdated).toBe(1);
-      expect(executeMany.mock.calls[0][1]).toHaveLength(1);
-    });
-
-    it.each([0, -1, 1.5, NaN, Number.MAX_SAFE_INTEGER + 1])(
-      'rejects invalid theater ID %s',
-      async theaterId => {
-        await expect(
-          repository.updateSelected(theaterId, {
-            seats,
-            type: 'vip',
-          }),
-        ).rejects.toBeInstanceOf(BadRequestException);
-
-        expect(transaction).not.toHaveBeenCalled();
-      },
-    );
-
-    it('rejects the transaction when a selected seat is missing', async () => {
-      executeMany.mockResolvedValueOnce({
-        dmlRowCounts: [1, 0],
-      });
+      executeMany.mockResolvedValueOnce({ rowsAffected: 1 });
 
       await expect(
         repository.updateSelected(7, {
-          seats,
-          state: 'unavailable',
+          seats: [
+            { rowNumber: 1, columnNumber: 2 },
+            { rowNumber: 1, columnNumber: 2 },
+          ],
+          type: 'vip',
         }),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      ).resolves.toEqual({
+        theaterId: 7,
+        seatsUpdated: 1,
+      });
+
+      expect(executeMany.mock.calls[0][1]).toEqual([
+        {
+          theaterId: 7,
+          rowNumber: 1,
+          columnNumber: 2,
+          state: null,
+          type: 'vip',
+        },
+      ]);
     });
+
+    it.each([
+      0,
+      -1,
+      1.5,
+      NaN,
+      Infinity,
+      Number.MAX_SAFE_INTEGER + 1,
+    ])('rejects invalid theater ID %s', async theaterId => {
+      await expect(
+        repository.updateSelected(theaterId, {
+          seats,
+          type: 'vip',
+        }),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'theaterId must be a positive safe integer',
+        ),
+      );
+
+      expect(transaction).not.toHaveBeenCalled();
+      expect(executeMany).not.toHaveBeenCalled();
+    });
+
+    it.each([0, 1])(
+      'throws when only %i of the two selected seats are updated',
+      async rowsAffected => {
+        executeMany.mockResolvedValueOnce({ rowsAffected });
+
+        await expect(
+          repository.updateSelected(7, {
+            seats,
+            state: 'indisponible',
+          }),
+        ).rejects.toThrow(
+          new NotFoundException('One or more seats do not exist'),
+        );
+      },
+    );
 
     it('propagates database errors', async () => {
       const error = new Error('Oracle update failed');
@@ -337,6 +353,20 @@ describe('ChairsRepository', () => {
           type: 'vip',
         }),
       ).rejects.toBe(error);
+    });
+
+    it('propagates transaction failures', async () => {
+      const error = new Error('Could not acquire connection');
+      transaction.mockRejectedValueOnce(error);
+
+      await expect(
+        repository.updateSelected(7, {
+          seats,
+          type: 'vip',
+        }),
+      ).rejects.toBe(error);
+
+      expect(executeMany).not.toHaveBeenCalled();
     });
   });
 
