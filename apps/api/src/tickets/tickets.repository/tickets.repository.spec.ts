@@ -166,7 +166,7 @@ describe('TicketsRepository', () => {
 
       const sql = databaseService.query.mock.calls[0][0] as string;
       expect(sql).toMatch(
-        /JOIN PRODUCTION\.Theaters cur_th ON cur_th\.theater_id = cur\.theater_id/,
+        /JOIN PRODUCTION\.Theaters cur_th\s+ON cur_th\.theater_id = cur\.theater_id/,
       );
       expect(sql).toMatch(
         /JOIN PRODUCTION\.Theaters mf_th\s+ON mf_th\.theater_id\s+= mf\.theater_id\s+AND mf_th\.branch_id\s+= cur_th\.branch_id/,
