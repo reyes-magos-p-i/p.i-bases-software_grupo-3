@@ -37,11 +37,11 @@ Crear y modificar funciones permite configurar formato, tecnología y estreno. E
 - La transacción bloquea cliente, función, sala y asientos seleccionados, revalida disponibilidad y registra factura, líneas y boletos conjuntamente. La restricción única preexistente de función/asiento es la última defensa contra ventas dobles. Un fallo revierte toda la compra.
 - La ocupación por función se obtiene de `TICKETS`. No se cambia globalmente `SEATS.SEAT_STATE`, por lo que comprar en una función no ocupa el asiento en las demás.
 - Cada confirmación incluye un UUID de solicitud. Repetir la misma selección con esa referencia devuelve la compra registrada; cambiar la selección con la misma referencia produce un conflicto. La referencia nunca permite consultar la factura de otro cliente.
-- Ante una respuesta incierta de red o servidor se conserva la referencia, se bloquea la modificación de la selección y se ofrece reintentar o consultar «Mis compras». No se presenta éxito sin una respuesta válida.
+- Ante una respuesta incierta de red o servidor se conserva la referencia, se bloquea la modificación de la selección y se ofrece reintentar o consultar «Mis compras». No se presenta éxito sin una respuesta válida. Si un reintento devuelve 409 por bloqueo, 429 u otro error sin recuperar el comprobante, la incertidumbre anterior no se descarta: se mantienen la misma referencia, selección y versión del resumen. Un 409 en un intento inicialmente cierto sigue devolviendo al cliente a revisar los asientos.
 
 ## Cuenta e historial
 
-Las rutas requieren JWT de cliente y contraseña vigente. La cuenta se obtiene de la sesión, no del cuerpo de la solicitud; también se comprueba su estado bajo bloqueo al confirmar. Las escrituras exigen un origen permitido y tienen límite de solicitudes. Las respuestas privadas llevan `Cache-Control: no-store`.
+Las rutas requieren JWT de cliente y contraseña vigente. La cuenta se obtiene de la sesión, no del cuerpo de la solicitud; también se comprueba su estado bajo bloqueo al confirmar. Las escrituras exigen un origen permitido y tienen límite de solicitudes: 60 resúmenes y 10 confirmaciones por minuto y cliente de red. `PurchaseThrottlerGuard` reutiliza el mecanismo existente y devuelve un mensaje de compras y `Retry-After` al responder 429; no usa el texto de inicio de sesión. Las respuestas privadas llevan `Cache-Control: no-store`.
 
 «Mi perfil → Mis compras» pagina diez compras por página y muestra el detalle y los boletos propios. Los importes, correo y datos originales de función se conservan en la factura. Si el personal reprograma un boleto, se muestra también su función actual. Las facturas anteriores sin vínculo a boletos no inventan asientos ni vínculos históricos. El panel administrativo de transacciones distingue «Pago simulado» y consulta los datos originales cuando existe la instantánea.
 
@@ -49,7 +49,13 @@ La compra de invitado no está habilitada: el modelo conserva un correo de compr
 
 ## Cambios de Oracle aplicados
 
-El SQL de ejecución fue temporal y se eliminó tras aplicar y verificar el esquema. No se añade un archivo `.sql` al repositorio. Para desplegar en otra base se deben aplicar estos cambios antes de iniciar la nueva API:
+La migración [20261101_ticket_purchase.sql](../database/migrations/20261101_ticket_purchase.sql) versiona los cambios de esta historia, contrastados con los metadatos de Oracle. Para actualizar un esquema existente se requieren las tablas previas de cine, asientos, boletos y ventas, incluida la migración `20261016_sales_invoices_products.sql`. La migración comprueba columnas, restricciones e índices por propietario y omite los objetos ya existentes. No vuelve a inicializar funciones que ya estén configuradas ni inventa vínculos para boletos históricos. Si el nombre de un producto entra en conflicto con otro tipo de producto, informa el error en lugar de sobrescribirlo.
+
+Para crear una base vacía, ejecutar [database/script.sql](../database/script.sql) mediante SQLcl o SQL*Plus. Incluye también asientos, boletos, preferencias y sus referencias, y llama a la migración con una ruta relativa para instalar los seis productos de boletos. No se debe ejecutar el bootstrap sobre un esquema existente. `database/schema.sql` conserva la exportación histórica incorporada de `dev`; el bootstrap y las migraciones son la ruta reproducible de instalación.
+
+Oracle confirma cada sentencia DDL automáticamente: aplicar las migraciones antes de desplegar la API, con las escrituras de la aplicación detenidas. Un fallo detiene el script y revierte el DML pendiente; los DDL anteriores requieren revisar el estado parcial antes de reintentar. No se vuelve a aplicar esta migración sobre la base actual durante esta corrección.
+
+Los cambios de compra son:
 
 1. `MOVIES.SYNOPSIS`: `VARCHAR2(1000 CHAR)`, conservando todas las sinopsis existentes. Los DTO de creación y edición validan 1000 caracteres.
 2. `MOVIE_FUNCTIONS`: `PROJECTION_FORMAT VARCHAR2(2)`, `TECHNOLOGY VARCHAR2(8)`, `IS_PREMIERE NUMBER(1)`, con restricciones para los valores y la compatibilidad 70 mm/2D. Las filas históricas permiten valores desconocidos. Las funciones futuras se inicializaron como 2D, sin estreno y con tecnología según el proyector (IMAX/70 mm/estándar); su precio general se recalculó con la política nueva.

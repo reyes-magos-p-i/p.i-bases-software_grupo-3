@@ -5,6 +5,7 @@ import TicketPurchaseView from '@/views/TicketPurchaseView.vue'
 import FunctionSelectionStep from '@/components/purchases/FunctionSelectionStep.vue'
 import SeatSelectionStep from '@/components/purchases/SeatSelectionStep.vue'
 import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { establishClientSession, clearClientSession } from '@/services/client-session.service'
 import {
   getPurchaseFunctions,
@@ -151,5 +152,40 @@ describe('TicketPurchaseView', () => {
       path: '/',
       query: { login: 'client', reason: 'expired' },
     })
+  })
+  it('keeps the retry screen after a timeout followed by a lock conflict and recovers the receipt', async () => {
+    vi.mocked(confirmPurchase)
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce({ isAxiosError: true, response: { status: 409 } })
+    render()
+    await flushPromises()
+    wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
+    await flushPromises()
+    const seats = wrapper.getComponent(SeatSelectionStep)
+    seats.vm.$emit('selection', [seat])
+    seats.vm.$emit('continue')
+    await flushPromises()
+    await wrapper.get('.purchase-action.primary').trigger('click')
+    await flushPromises()
+    const original = vi.mocked(confirmPurchase).mock.calls[0]![0]
+    await wrapper.get('.purchase-action.primary').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Revisa tu compra')
+    expect(wrapper.get('.purchase-action.primary').text()).toBe('Reintentar pago')
+    expect(wrapper.get('.actions button').attributes('disabled')).toBeDefined()
+    expect(seats.props('disabled')).toBe(true)
+    expect(seats.isVisible()).toBe(false)
+    expect(wrapper.getComponent(NotificationPopup).props()).toMatchObject({
+      duration: 0,
+      placement: 'bottom-right',
+    })
+    expect(wrapper.text()).toContain('Mis compras')
+    expect(getPurchaseSeats).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(original)
+    await wrapper.get('.purchase-action.primary').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('¡Compra exitosa!')
+    expect(wrapper.find('.actions').exists()).toBe(false)
+    expect(vi.mocked(confirmPurchase).mock.calls[2]![0]).toEqual(original)
   })
 })

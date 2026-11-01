@@ -246,6 +246,17 @@ describe('Purchase HTTP with mocked persistence', () => {
         })
       ).status;
     expect(lastStatus).toBe(429);
+    const blocked = await post('', {
+      ...body,
+      requestKey: randomUUID(),
+      quoteVersion: 'a'.repeat(64),
+    });
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.message).toBe(
+      'Has realizado demasiadas solicitudes de compra. Espera un minuto e intenta nuevamente.',
+    );
+    expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0);
+    expect(Number(blocked.headers['retry-after'])).toBeLessThanOrEqual(60);
     expect(storage.confirm).toHaveBeenCalledTimes(10);
   });
 });

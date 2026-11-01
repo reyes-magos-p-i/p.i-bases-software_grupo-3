@@ -86,11 +86,11 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
-        "429": { description: Demasiadas solicitudes }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /purchases:
     post:
       summary: Registra la compra completa mediante pago simulado
-      description: Exige Origin permitido. Máximo 10 solicitudes por minuto y cliente de red. No acepta importes ni un identificador de cliente. Repetir la referencia con la misma selección devuelve la factura existente.
+      description: Exige Origin permitido. Máximo 10 solicitudes por minuto y cliente de red. No acepta importes ni un identificador de cliente. Repetir la referencia con la misma selección devuelve la factura existente. Después de un timeout u otra respuesta incierta, conservar requestKey y la selección al reintentar, incluso si la siguiente respuesta es un 409 por bloqueo o un 429.
       requestBody:
         required: true
         content:
@@ -114,7 +114,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { description: La función no existe }
         "409": { $ref: "#/components/responses/Conflict" }
-        "429": { description: Demasiadas solicitudes }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
         "503": { description: No se pudieron preparar los boletos }
   /purchases/me:
     get:
@@ -175,6 +175,21 @@ components:
       required: true
       schema: { type: integer, minimum: 1, maximum: 9007199254740991 }
   responses:
+    TooManyRequests:
+      description: Límite de solicitudes de compra alcanzado
+      headers:
+        Retry-After:
+          description: Segundos que deben transcurrir antes de reintentar
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode: { type: integer, example: 429 }
+              message:
+                type: string
+                example: Has realizado demasiadas solicitudes de compra. Espera un minuto e intenta nuevamente.
     Unauthorized:
       { description: Sesión ausente, vencida, revocada o cuenta desactivada }
     Forbidden:

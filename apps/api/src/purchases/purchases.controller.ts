@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { ClientGuard } from '../clients/profile/guards/client.guard';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
@@ -23,6 +23,7 @@ import {
   PurchaseSelectionDto,
 } from './purchase.dto';
 import { PurchasesService } from './purchases.service';
+import { PurchaseThrottlerGuard } from './purchase-throttler.guard';
 type ClientRequest = Request & { user: { id: number } };
 @Controller('purchases')
 @UseGuards(AuthGuard('jwt'), ClientGuard, PasswordStatusGuard)
@@ -41,14 +42,14 @@ export class PurchasesController {
   @Post('quote')
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
-  @UseGuards(SessionOriginGuard, ThrottlerGuard)
+  @UseGuards(SessionOriginGuard, PurchaseThrottlerGuard)
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   quote(@Body() data: PurchaseSelectionDto) {
     return this.service.quote(data);
   }
   @Post()
   @Header('Cache-Control', 'no-store')
-  @UseGuards(SessionOriginGuard, ThrottlerGuard)
+  @UseGuards(SessionOriginGuard, PurchaseThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   confirm(@Req() request: ClientRequest, @Body() data: ConfirmPurchaseDto) {
     return this.service.confirm(request.user.id, data);

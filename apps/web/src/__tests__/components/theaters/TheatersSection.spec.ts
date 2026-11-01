@@ -150,10 +150,13 @@ describe('TheatersSection search', () => {
     expect(view.get('tbody').text()).not.toContain('Heredia')
   })
 
-  it('shows a message when nothing matches and restores rows on clear', async () => {
+  it('shows the empty state when nothing matches and restores rows on clear', async () => {
     const view = await renderLoaded()
     await view.get('#theater-search').setValue('zzz')
-    expect(view.text()).toContain('Ninguna sala coincide')
+    expect(view.findComponent(CrudTable).exists()).toBe(false)
+    expect(view.get('.empty-state h2').text()).toBe('No se encontraron salas con estos criterios')
+    expect(view.get('.empty-state p').text()).toBe('Prueba con otros filtros o límpialos.')
+    expect(view.text()).not.toContain('No hay datos')
 
     await view.get('.filters .secondary-button').trigger('click')
     expect((view.get('#theater-search').element as HTMLInputElement).value).toBe('')
