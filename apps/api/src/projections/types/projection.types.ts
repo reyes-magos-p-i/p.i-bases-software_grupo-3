@@ -1,3 +1,4 @@
+import type { PricingSettings } from '../../common/pricing/ticket-pricing';
 import type { ProjectionSlot } from '../projection-schedule';
 
 export const PROJECTION_STATUSES = [
@@ -47,7 +48,8 @@ export interface ProjectionList {
   totalPages: number;
 }
 
-export interface ProjectionDetail extends ListedProjection {
+export interface ProjectionDetail
+  extends ListedProjection, Partial<PricingSettings> {
   runningTime: number;
   posterImage: string;
   createdAt: string;
@@ -62,7 +64,7 @@ export interface AvailableMovie {
   posterImage: string;
 }
 
-export interface NewProjections {
+export interface NewProjections extends Partial<PricingSettings> {
   movieId: number;
   theaterId: number;
   price: number;
@@ -72,10 +74,10 @@ export interface NewProjections {
   slots: ProjectionSlot[];
 }
 
-export interface ProjectionChanges {
+export interface ProjectionChanges extends Partial<PricingSettings> {
   movieId: number;
   theaterId: number;
-  /** Undefined keeps the current price. */
+  /** Legacy input; price is recalculated from the projection settings. */
   price?: number;
   /** Undefined keeps the current status. */
   status?: ProjectionStatus;

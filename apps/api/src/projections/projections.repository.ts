@@ -1,4 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { pricingSettings, ticketPrice } from '../common/pricing/ticket-pricing';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import oracle from 'oracledb';
 import { DatabaseService } from '../database/database.service';
 import { likePattern } from '../users/user-search.util';
@@ -28,7 +34,7 @@ const MAX_REPORTED_CONFLICTS = 5;
 const PROJECTION_COLUMNS = `mf.MOVIE_FUNCTION_ID AS "movieFunctionId", m.MOVIE_ID AS "movieId",
        m.TITLE AS "movieTitle", t.BRANCH_ID AS "branchId", c.NAME AS "branchName",
        mf.THEATER_ID AS "theaterId", TO_CHAR(mf.START_TIME, ${LOCAL_FORMAT}) AS "startTime",
-       TO_CHAR(mf.END_TIME, ${LOCAL_FORMAT}) AS "endTime", mf.STATUS AS "status", mf.PRICE AS "price"`;
+       TO_CHAR(mf.END_TIME, ${LOCAL_FORMAT}) AS "endTime", mf.STATUS AS "status", mf.PRICE AS "price", mf.PROJECTION_FORMAT AS "format", mf.TECHNOLOGY AS "technology", CASE mf.IS_PREMIERE WHEN 1 THEN 1 ELSE 0 END AS "isPremiere"`;
 const PROJECTION_SOURCE = `FROM MOVIE_FUNCTIONS mf
   JOIN MOVIES m ON m.MOVIE_ID = mf.MOVIE_ID
   JOIN THEATERS t ON t.THEATER_ID = mf.THEATER_ID
@@ -37,9 +43,16 @@ const PROJECTION_SOURCE = `FROM MOVIE_FUNCTIONS mf
 type Binds = Exclude<oracle.BindParameters, unknown[]>;
 
 /** WHERE clause for the combinable list filters; every value travels as a bind. */
-function buildProjectionFilters(query: ListProjectionsQueryDto, binds: Binds): string {
+function buildProjectionFilters(
+  query: ListProjectionsQueryDto,
+  binds: Binds,
+): string {
   const conditions = ['1 = 1'];
-  const add = (condition: string, name: string, value: string | number | undefined) => {
+  const add = (
+    condition: string,
+    name: string,
+    value: string | number | undefined,
+  ) => {
     if (value === undefined) return;
     conditions.push(condition);
     binds[name] = value;
@@ -48,9 +61,21 @@ function buildProjectionFilters(query: ListProjectionsQueryDto, binds: Binds): s
   add('t.BRANCH_ID = :branchId', 'branchId', query.branchId);
   add('mf.THEATER_ID = :theaterId', 'theaterId', query.theaterId);
   add('mf.MOVIE_ID = :movieId', 'movieId', query.movieId);
-  add(`mf.SCREENING_DATE >= TO_DATE(:dateFrom, 'YYYY-MM-DD')`, 'dateFrom', query.dateFrom);
-  add(`mf.SCREENING_DATE <= TO_DATE(:dateTo, 'YYYY-MM-DD')`, 'dateTo', query.dateTo);
-  add(`TO_CHAR(mf.START_TIME, 'HH24:MI') >= :timeFrom`, 'timeFrom', query.timeFrom);
+  add(
+    `mf.SCREENING_DATE >= TO_DATE(:dateFrom, 'YYYY-MM-DD')`,
+    'dateFrom',
+    query.dateFrom,
+  );
+  add(
+    `mf.SCREENING_DATE <= TO_DATE(:dateTo, 'YYYY-MM-DD')`,
+    'dateTo',
+    query.dateTo,
+  );
+  add(
+    `TO_CHAR(mf.START_TIME, 'HH24:MI') >= :timeFrom`,
+    'timeFrom',
+    query.timeFrom,
+  );
   add(`TO_CHAR(mf.START_TIME, 'HH24:MI') <= :timeTo`, 'timeTo', query.timeTo);
   const search = query.search?.trim();
   if (search)
@@ -83,7 +108,9 @@ export class ProjectionsRepository {
 
   /** Movies that have at least one projection, for the list filter. */
   async getScheduledMovies(): Promise<ProjectionFilterOptions['movies']> {
-    const result = await this.db.query<ProjectionFilterOptions['movies'][number]>(
+    const result = await this.db.query<
+      ProjectionFilterOptions['movies'][number]
+    >(
       `SELECT m.MOVIE_ID AS "movieId", m.TITLE AS "title"
          FROM MOVIES m
         WHERE EXISTS (SELECT 1 FROM MOVIE_FUNCTIONS mf WHERE mf.MOVIE_ID = m.MOVIE_ID)
@@ -131,7 +158,15 @@ export class ProjectionsRepository {
         WHERE mf.MOVIE_FUNCTION_ID = :id`,
       { id: { val: id, type: oracle.NUMBER } },
     );
-    return result.rows?.[0] ?? null;
+    const row = result.rows?.[0];
+    return row
+      ? {
+          ...row,
+          ...(row.isPremiere === undefined
+            ? {}
+            : { isPremiere: Number(row.isPremiere) === 1 }),
+        }
+      : null;
   }
 
   async findAvailableMovies(
@@ -185,24 +220,48 @@ export class ProjectionsRepository {
         data.movieId,
         PROJECTION_MESSAGES.unavailable,
       );
-      await this.rejectScheduleConflicts(connection, data.theaterId, data.slots);
+      await this.rejectScheduleConflicts(
+        connection,
+        data.theaterId,
+        data.slots,
+      );
       const activityIds = await this.ensureActivities(connection, data);
       const created: CreatedProjection[] = [];
       for (const slot of data.slots) {
-        const movieFunctionId = await this.insertProjection(connection, data, slot, actorId);
-        await this.linkActivities(connection, movieFunctionId, activityIds, actorId);
-        created.push({ movieFunctionId, startTime: slot.startTime, endTime: slot.endTime });
+        const movieFunctionId = await this.insertProjection(
+          connection,
+          data,
+          slot,
+          actorId,
+        );
+        await this.linkActivities(
+          connection,
+          movieFunctionId,
+          activityIds,
+          actorId,
+        );
+        created.push({
+          movieFunctionId,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+        });
       }
       return created;
     });
-    return { status: data.status, price: data.price, projections };
+    return {
+      status: data.status,
+      price: ticketPrice(data).unitPrice,
+      projections,
+    };
   }
 
   /** Cancels a projection that has not finished; the theater becomes free for that slot. */
   async cancelProjection(id: number): Promise<void> {
     await this.db.transaction(async (connection) => {
-      const status = await this.lockProjectionStatus(connection, id);
-      if (status === 'CANCELLED') throw new ConflictException(PROJECTION_MESSAGES.alreadyCancelled);
+      const current = await this.lockProjectionStatus(connection, id);
+      const status = current.STATUS;
+      if (status === 'CANCELLED')
+        throw new ConflictException(PROJECTION_MESSAGES.alreadyCancelled);
       if (status === 'FINISHED')
         throw new ConflictException(PROJECTION_MESSAGES.finishedNotCancellable);
       await connection.execute(
@@ -219,7 +278,8 @@ export class ProjectionsRepository {
     actorId: number,
   ): Promise<void> {
     await this.scheduling(async (connection) => {
-      const status = await this.lockProjectionStatus(connection, id);
+      const current = await this.lockProjectionStatus(connection, id);
+      const status = current.STATUS;
       if (status !== 'ACTIVE' && status !== 'INACTIVE')
         throw new ConflictException(PROJECTION_MESSAGES.notEditable);
       await this.lockAvailableTheater(
@@ -228,7 +288,24 @@ export class ProjectionsRepository {
         data.movieId,
         PROJECTION_MESSAGES.selectionUnavailable,
       );
-      await this.rejectScheduleConflicts(connection, data.theaterId, [data.slot], id);
+      let settings;
+      try {
+        settings = pricingSettings({
+          format: data.format ?? current.PROJECTION_FORMAT,
+          technology: data.technology ?? current.TECHNOLOGY,
+          isPremiere: data.isPremiere ?? current.IS_PREMIERE === 1,
+        });
+      } catch (error) {
+        if (error instanceof RangeError)
+          throw new BadRequestException(error.message);
+        throw error;
+      }
+      await this.rejectScheduleConflicts(
+        connection,
+        data.theaterId,
+        [data.slot],
+        id,
+      );
       const activityIds = await this.ensureActivities(connection, data);
       await connection.execute(
         `UPDATE MOVIE_FUNCTIONS
@@ -236,7 +313,7 @@ export class ProjectionsRepository {
                 START_TIME = TO_TIMESTAMP(:startTime, ${LOCAL_FORMAT}),
                 END_TIME = TO_TIMESTAMP(:endTime, ${LOCAL_FORMAT}),
                 SCREENING_DATE = TO_DATE(:screeningDate, 'YYYY-MM-DD'),
-                PRICE = COALESCE(:price, PRICE), STATUS = COALESCE(:status, STATUS)
+                PRICE = :price, PROJECTION_FORMAT = :format, TECHNOLOGY = :technology, IS_PREMIERE = :isPremiere, STATUS = COALESCE(:status, STATUS)
           WHERE MOVIE_FUNCTION_ID = :id`,
         {
           id,
@@ -245,7 +322,10 @@ export class ProjectionsRepository {
           startTime: data.slot.startTime,
           endTime: data.slot.endTime,
           screeningDate: data.slot.screeningDate,
-          price: { val: data.price ?? null, type: oracle.NUMBER },
+          price: ticketPrice(settings).unitPrice,
+          format: settings.format,
+          technology: settings.technology,
+          isPremiere: settings.isPremiere ? 1 : 0,
           status: { val: data.status ?? null, type: oracle.STRING },
         },
         TRANSACTION,
@@ -260,26 +340,41 @@ export class ProjectionsRepository {
   }
 
   // Locks the projection row so concurrent changes to it wait; missing means deleted.
-  private async lockProjectionStatus(connection: oracle.Connection, id: number) {
-    const current = await connection.execute<{ STATUS: ProjectionStatus }>(
-      'SELECT STATUS FROM MOVIE_FUNCTIONS WHERE MOVIE_FUNCTION_ID = :id FOR UPDATE',
+  private async lockProjectionStatus(
+    connection: oracle.Connection,
+    id: number,
+  ) {
+    const current = await connection.execute<{
+      STATUS: ProjectionStatus;
+      PROJECTION_FORMAT?: '2D' | '3D';
+      TECHNOLOGY?: 'STANDARD' | 'IMAX' | '70MM';
+      IS_PREMIERE?: number;
+    }>(
+      'SELECT STATUS,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS WHERE MOVIE_FUNCTION_ID = :id FOR UPDATE',
       { id: { val: id, type: oracle.NUMBER } },
       TRANSACTION,
     );
     const status = current.rows?.[0]?.STATUS;
-    if (status === undefined) throw new NotFoundException(PROJECTION_MESSAGES.notFound);
-    return status;
+    if (status === undefined)
+      throw new NotFoundException(PROJECTION_MESSAGES.notFound);
+    return current.rows![0];
   }
 
   // Runs a scheduling transaction; a unique constraint violation means another
   // projection took the same slot.
-  private async scheduling<T>(work: (connection: oracle.Connection) => Promise<T>) {
+  private async scheduling<T>(
+    work: (connection: oracle.Connection) => Promise<T>,
+  ) {
     try {
       return await this.db.transaction(async (connection) => {
         // Autonomous Database may run DML in parallel; a parallel DELETE followed by
         // INSERTs on the same table in one transaction deadlocks (ORA-12860).
         // ALTER SESSION does not commit, so the transaction stays intact.
-        await connection.execute('ALTER SESSION DISABLE PARALLEL DML', {}, TRANSACTION);
+        await connection.execute(
+          'ALTER SESSION DISABLE PARALLEL DML',
+          {},
+          TRANSACTION,
+        );
         return work(connection);
       });
     } catch (error) {
@@ -294,7 +389,11 @@ export class ProjectionsRepository {
     data: { advertisementMinutes: number; cleaningMinutes: number },
   ) {
     return [
-      await this.ensureActivity(connection, 'ADVERTISEMENT', data.advertisementMinutes),
+      await this.ensureActivity(
+        connection,
+        'ADVERTISEMENT',
+        data.advertisementMinutes,
+      ),
       await this.ensureActivity(connection, 'CLEANING', data.cleaningMinutes),
     ];
   }
@@ -374,7 +473,10 @@ export class ProjectionsRepository {
     const rows = conflicts.rows ?? [];
     if (!rows.length) return;
     const listed = rows
-      .map((row) => `${formatLocal(row.startTime)} – ${formatLocal(row.endTime).slice(-5)}`)
+      .map(
+        (row) =>
+          `${formatLocal(row.startTime)} – ${formatLocal(row.endTime).slice(-5)}`,
+      )
       .join(', ');
     const remaining = rows[0]!.total - rows.length;
     throw new ConflictException(
@@ -413,10 +515,10 @@ export class ProjectionsRepository {
   ): Promise<number> {
     const result = await connection.execute<unknown>(
       `INSERT INTO MOVIE_FUNCTIONS
-         (MOVIE_ID, THEATER_ID, START_TIME, END_TIME, SCREENING_DATE, CREATED_BY, PRICE, STATUS)
+         (MOVIE_ID, THEATER_ID, START_TIME, END_TIME, SCREENING_DATE, CREATED_BY, PRICE, STATUS, PROJECTION_FORMAT, TECHNOLOGY, IS_PREMIERE)
        VALUES (:movieId, :theaterId, TO_TIMESTAMP(:startTime, ${LOCAL_FORMAT}),
                TO_TIMESTAMP(:endTime, ${LOCAL_FORMAT}), TO_DATE(:screeningDate, 'YYYY-MM-DD'),
-               :actorId, :price, :status)
+               :actorId, :price, :status, :format, :technology, :isPremiere)
        RETURNING MOVIE_FUNCTION_ID INTO :id`,
       {
         movieId: data.movieId,
@@ -425,7 +527,10 @@ export class ProjectionsRepository {
         endTime: slot.endTime,
         screeningDate: slot.screeningDate,
         actorId,
-        price: data.price,
+        price: ticketPrice(data).unitPrice,
+        format: data.format ?? '2D',
+        technology: data.technology ?? 'STANDARD',
+        isPremiere: data.isPremiere ? 1 : 0,
         status: data.status,
         id: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
       },
