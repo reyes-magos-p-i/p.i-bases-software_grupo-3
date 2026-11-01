@@ -1,6 +1,9 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TheatersService } from './theaters.service';
 import { TheaterRepository } from './theater.repository/theater.repository';
+import { ChairsRepository } from './chairs.repository';
+
 
 describe('TheatersService', () => {
   let service: TheatersService;
@@ -11,6 +14,9 @@ describe('TheatersService', () => {
     updateTheater: jest.Mock;
     deleteTheater: jest.Mock;
   };
+  let chairsRepository: {
+    findByTheater: jest.Mock;
+  };
 
   beforeEach(async () => {
     repository = {
@@ -20,11 +26,15 @@ describe('TheatersService', () => {
       updateTheater: jest.fn(),
       deleteTheater: jest.fn(),
     };
+    chairsRepository = {
+      findByTheater: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TheatersService,
         { provide: TheaterRepository, useValue: repository },
+        { provide: ChairsRepository, useValue: chairsRepository },
       ],
     }).compile();
 
@@ -198,4 +208,57 @@ describe('TheatersService', () => {
       service.create({ cinema: 'Cinema Test', dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' }),
     ).rejects.toThrow('Invalid theater seat dimensions');
   });
+
+  describe('getSeats', () => {
+  const seats = [
+    {
+      theaterId: 7,
+      rowNumber: 1,
+      columnNumber: 2,
+      type: 'vip',
+      state: 'free',
+    },
+  ];
+
+  it('returns the seats for an existing theater', async () => {
+    repository.getTheaterById.mockResolvedValueOnce({
+      theaterId: 7,
+    });
+    chairsRepository.findByTheater.mockResolvedValueOnce(seats);
+
+    await expect(service.getSeats(7)).resolves.toEqual(seats);
+
+    expect(repository.getTheaterById).toHaveBeenCalledWith(7);
+    expect(chairsRepository.findByTheater).toHaveBeenCalledWith(7);
+  });
+
+  it('throws when the theater does not exist', async () => {
+    repository.getTheaterById.mockResolvedValueOnce(null);
+
+    await expect(service.getSeats(999))
+      .rejects.toBeInstanceOf(NotFoundException);
+
+    expect(chairsRepository.findByTheater).not.toHaveBeenCalled();
+  });
+
+  it('returns an empty array when the theater has no seats', async () => {
+    repository.getTheaterById.mockResolvedValueOnce({
+      theaterId: 7,
+    });
+    chairsRepository.findByTheater.mockResolvedValueOnce([]);
+
+    await expect(service.getSeats(7)).resolves.toEqual([]);
+  });
+
+  it('propagates seat retrieval errors', async () => {
+    const error = new Error('Seat retrieval failed');
+
+    repository.getTheaterById.mockResolvedValueOnce({
+      theaterId: 7,
+    });
+    chairsRepository.findByTheater.mockRejectedValueOnce(error);
+
+    await expect(service.getSeats(7)).rejects.toBe(error);
+  });
+});
 });

@@ -65,4 +65,67 @@ async createForTheater(
 
     return this.db.transaction(insertChairs);
   }
+
+  async deleteForTheater(
+    theaterId: number,
+    conn?: oracledb.Connection,
+  ): Promise<void> {
+    if (!Number.isSafeInteger(theaterId) || theaterId <= 0) {
+      throw new BadRequestException(
+        'theaterId must be a positive safe integer',
+      );
+    }
+
+    const deleteSeats = async (connection: oracledb.Connection) => {
+      await connection.execute(
+        `DELETE FROM SEATS WHERE THEATER_ID = :theaterId`,
+        { theaterId },
+        { autoCommit: false },
+      );
+    };
+
+    if (conn) {
+      await deleteSeats(conn);
+    } else {
+      await this.db.transaction(deleteSeats);
+    }
+  }
+
+  async findByTheater(theaterId: number) {
+    if (!Number.isSafeInteger(theaterId) || theaterId <= 0) {
+      throw new BadRequestException(
+        'theaterId must be a positive safe integer',
+      );
+    }
+
+    const result = await this.db.query(
+      `SELECT
+        THEATER_ID,
+        ROW_NUMBER,
+        COLUMN_NUMBER,
+        SEAT_TYPE,
+        SEAT_STATE
+      FROM SEATS
+      WHERE THEATER_ID = :theaterId
+      ORDER BY ROW_NUMBER, COLUMN_NUMBER`,
+      { theaterId },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
+    );
+
+    const rows = (result.rows ?? []) as {
+      THEATER_ID: number;
+      ROW_NUMBER: number;
+      COLUMN_NUMBER: number;
+      SEAT_TYPE: string;
+      SEAT_STATE: string;
+    }[];
+
+    return rows.map((row) => ({
+      theaterId: row.THEATER_ID,
+      rowNumber: row.ROW_NUMBER,
+      columnNumber: row.COLUMN_NUMBER,
+      type: row.SEAT_TYPE,
+      state: row.SEAT_STATE,
+    }));
+  }
 }
