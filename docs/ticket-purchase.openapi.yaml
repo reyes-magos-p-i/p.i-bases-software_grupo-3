@@ -1,0 +1,302 @@
+openapi: 3.0.3
+info:
+  title: Cinetadel — Compra de boletos con sesión iniciada
+  version: 1.0.0
+servers:
+  - url: /api
+security:
+  - clientBearer: []
+paths:
+  /purchases/movies/{id}/functions:
+    get:
+      summary: Película y funciones disponibles para comprar
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Película y funciones activas, futuras y disponibles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  movie:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      title: { type: string }
+                      synopsis: { type: string, maxLength: 1000 }
+                      posterImage: { type: string, nullable: true }
+                  functions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Function" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: La película no existe }
+  /purchases/functions/{id}/seats:
+    get:
+      summary: Mapa físico y disponibilidad actual por función
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Función, asientos y categorías con su tarifa base
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  function: { $ref: "#/components/schemas/Function" }
+                  seats:
+                    type: array
+                    items: { $ref: "#/components/schemas/Seat" }
+                  categories:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code: { type: string, enum: [GENERAL, CHILD, SENIOR] }
+                        label: { type: string }
+                        description: { type: string }
+                        base: { type: number }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /purchases/quote:
+    post:
+      summary: Calcula un resumen sin reservar asientos
+      description: Exige Origin permitido. Máximo 60 solicitudes por minuto y cliente de red.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Selection" }
+      responses:
+        "200":
+          description: Resumen con precios del servidor y versión
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+        "400":
+          {
+            description: Selección vacía,
+            repetida,
+            inválida o campos no permitidos,
+          }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { description: Demasiadas solicitudes }
+  /purchases:
+    post:
+      summary: Registra la compra completa mediante pago simulado
+      description: Exige Origin permitido. Máximo 10 solicitudes por minuto y cliente de red. No acepta importes ni un identificador de cliente. Repetir la referencia con la misma selección devuelve la factura existente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/Selection"
+                - type: object
+                  required: [requestKey, quoteVersion]
+                  properties:
+                    requestKey: { type: string, format: uuid }
+                    quoteVersion: { type: string, pattern: "^[a-fA-F0-9]{64}$" }
+      responses:
+        "201":
+          description: Compra registrada o recuperada por idempotencia
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "400": { description: Solicitud inválida }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: La función no existe }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { description: Demasiadas solicitudes }
+        "503": { description: No se pudieron preparar los boletos }
+  /purchases/me:
+    get:
+      summary: Historial exclusivo del cliente autenticado
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        "200":
+          description: Diez compras por página; items, page, total y totalPages. Cada compra incluye id, reference, purchasedAt, status, total, title, startsAt y quantity.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /purchases/me/{id}:
+    get:
+      summary: Factura y boletos propios, con sus funciones actuales
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Datos originales de compra y boletos vinculados
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: La compra no existe o no pertenece a la cuenta }
+  /projections/price-preview:
+    post:
+      summary: Vista previa administrativa de la política de boletos
+      description: Requiere sesión administrativa y Origin permitido; no crea una función.
+      security:
+        - employeeCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PricingSettings" }
+      responses:
+        "200":
+          {
+            description: Configuración,
+            base,
+            recargos,
+            precio unitario general y categorías,
+          }
+        "400": { description: Formato o tecnología incompatible }
+        "401": { description: Sesión ausente o vencida }
+        "403": { description: Permisos, contraseña u origen no autorizados }
+components:
+  securitySchemes:
+    clientBearer: { type: http, scheme: bearer, bearerFormat: JWT }
+    employeeCookie:
+      { type: apiKey, in: cookie, name: cinetadel_employee_session }
+  parameters:
+    Id:
+      in: path
+      name: id
+      required: true
+      schema: { type: integer, minimum: 1, maximum: 9007199254740991 }
+  responses:
+    Unauthorized:
+      { description: Sesión ausente, vencida, revocada o cuenta desactivada }
+    Forbidden:
+      {
+        description: Se requiere cliente,
+        contraseña vigente u origen permitido,
+      }
+    Conflict:
+      description: Función no disponible, asientos vendidos, resumen modificado o referencia reutilizada para otra selección. Puede incluir code FUNCTION_UNAVAILABLE, SEATS_UNAVAILABLE o QUOTE_CHANGED.
+  schemas:
+    PricingSettings:
+      type: object
+      properties:
+        format: { type: string, enum: ["2D", "3D"], default: "2D" }
+        technology:
+          { type: string, enum: [STANDARD, IMAX, "70MM"], default: STANDARD }
+        isPremiere: { type: boolean, default: false }
+    Function:
+      allOf:
+        - $ref: "#/components/schemas/PricingSettings"
+        - type: object
+          properties:
+            id: { type: integer }
+            movieId: { type: integer }
+            title: { type: string }
+            synopsis: { type: string }
+            posterImage: { type: string, nullable: true }
+            branchId: { type: integer }
+            branchName: { type: string }
+            theaterId: { type: integer }
+            rows: { type: integer }
+            columns: { type: integer }
+            startsAt: { type: string, format: date-time }
+            endsAt: { type: string, format: date-time }
+            status: { type: string }
+            available: { type: boolean }
+            price:
+              { type: number, description: General sin recargo de asiento VIP }
+    Seat:
+      type: object
+      properties:
+        positionId: { type: integer, minimum: 1, maximum: 10000 }
+        theaterId: { type: integer }
+        rowNumber: { type: integer }
+        columnNumber: { type: integer }
+        type: { type: string, enum: [normal, vip, accessibility] }
+        state: { type: string, enum: [free, in-use, unavailable, reserved] }
+        category: { type: string, enum: [GENERAL, CHILD, SENIOR] }
+    Positions:
+      type: array
+      maxItems: 10000
+      uniqueItems: true
+      items: { type: integer, minimum: 1, maximum: 10000 }
+    Selection:
+      type: object
+      required: [functionId, seats]
+      properties:
+        functionId: { type: integer, minimum: 1, maximum: 9007199254740991 }
+        seats:
+          type: object
+          required: [GENERAL, CHILD, SENIOR]
+          additionalProperties: false
+          properties:
+            GENERAL: { $ref: "#/components/schemas/Positions" }
+            CHILD: { $ref: "#/components/schemas/Positions" }
+            SENIOR: { $ref: "#/components/schemas/Positions" }
+    Line:
+      type: object
+      properties:
+        code: { type: string }
+        category: { type: string, enum: [GENERAL, CHILD, SENIOR] }
+        label: { type: string }
+        vip: { type: boolean }
+        quantity: { type: integer }
+        base: { type: number }
+        unitPrice: { type: number }
+        subtotal: { type: number }
+        modifiers:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              amount: { type: number }
+    Quote:
+      type: object
+      properties:
+        function: { $ref: "#/components/schemas/Function" }
+        seats:
+          type: array
+          items: { $ref: "#/components/schemas/Seat" }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/Line" }
+        total: { type: number }
+        quantity: { type: integer }
+        version: { type: string }
+    Receipt:
+      type: object
+      properties:
+        id: { type: integer }
+        reference: { type: string, example: ORD-000012 }
+        purchasedAt: { type: string, format: date-time }
+        status: { type: string, enum: [PAID, CANCELLED] }
+        buyerEmail: { type: string, format: email }
+        total: { type: number }
+        function: { $ref: "#/components/schemas/Function" }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/Line" }
+        tickets:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              rowNumber: { type: integer }
+              columnNumber: { type: integer }
+              theaterId: { type: integer }
+              functionId: { type: integer }
+              title: { type: string }
+              startsAt: { type: string, format: date-time }
+              functionStatus: { type: string }
+              unitPrice: { type: number }
+              category: { type: string, enum: [GENERAL, CHILD, SENIOR] }

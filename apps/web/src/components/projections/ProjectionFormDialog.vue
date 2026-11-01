@@ -1,8 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, useTemplateRef, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  reactive,
+  ref,
+  useId,
+  useTemplateRef,
+  watch,
+} from 'vue'
 import ProjectionDialogShell from './ProjectionDialogShell.vue'
 import ProjectionPoster from './ProjectionPoster.vue'
-import { searchAvailableMovies } from '@/services/projection.service'
+import { searchAvailableMovies, previewProjectionPrice } from '@/services/projection.service'
 import {
   PROJECTION_STATUS_LABELS,
   type AvailableMovie,
@@ -15,6 +24,12 @@ import {
 import { addToTime, daysInRange, durationBetween, localNow } from '@/utils/projection-time'
 import { formatPrice, formatProjectionDate, formatProjectionTime } from '@/utils/projection-format'
 
+import type { ProjectionPricePreview } from '@/types/projection'
+import type { PricingSettings } from '@/types/purchase'
+const preview = ref<ProjectionPricePreview | null>(null)
+const previewLoading = ref(false)
+const previewError = ref('')
+let priceAbort: AbortController | undefined
 const MAX_DAYS = 31
 const SEARCH_DELAY_MS = 300
 
@@ -51,6 +66,9 @@ const shell = useTemplateRef<InstanceType<typeof ProjectionDialogShell>>('shell'
 const form = useTemplateRef<HTMLFormElement>('form')
 
 const emptyDraft = () => ({
+  format: '2D' as PricingSettings['format'],
+  technology: 'STANDARD' as PricingSettings['technology'],
+  isPremiere: false,
   movieQuery: '',
   branchId: '',
   theaterId: '',
@@ -64,12 +82,38 @@ const emptyDraft = () => ({
   price: props.defaultPrice === undefined ? '' : String(props.defaultPrice),
 })
 const draft = reactive(emptyDraft())
-// The default price arrives with the scheduling options; keep any value already typed.
+async function refreshPrice() {
+  priceAbort?.abort()
+  const controller = new AbortController()
+  priceAbort = controller
+  previewLoading.value = true
+  previewError.value = ''
+  try {
+    const result = await previewProjectionPrice(
+      { format: draft.format, technology: draft.technology, isPremiere: draft.isPremiere },
+      controller.signal,
+    )
+    if (!controller.signal.aborted) {
+      preview.value = result
+      draft.price = String(result.unitPrice)
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      previewError.value = 'No se pudo calcular el precio. Intenta nuevamente.'
+      if ((error as { response?: { status?: number } }).response?.status === 401)
+        emit('sessionExpired')
+    }
+  } finally {
+    if (priceAbort === controller) previewLoading.value = false
+  }
+}
 watch(
-  () => props.defaultPrice,
-  (price) => {
-    if (price !== undefined && draft.price === '') draft.price = String(price)
+  () => [draft.format, draft.technology, draft.isPremiere],
+  () => {
+    if (draft.technology === '70MM' && draft.format === '3D') draft.format = '2D'
+    void refreshPrice()
   },
+  { immediate: true },
 )
 const movie = ref<AvailableMovie | null>(null)
 const results = ref<AvailableMovie[]>([])
@@ -118,7 +162,11 @@ function scheduleErrors() {
     result.startDate = 'La fecha de la proyección no puede estar en el pasado.'
   if (draft.endDate && draft.startDate && draft.endDate < draft.startDate)
     result.endDate = 'La fecha final no puede ser anterior a la fecha inicial.'
-  else if (draft.endDate && draft.startDate && daysInRange(draft.startDate, draft.endDate) > MAX_DAYS)
+  else if (
+    draft.endDate &&
+    draft.startDate &&
+    daysInRange(draft.startDate, draft.endDate) > MAX_DAYS
+  )
     result.endDate = `El rango no puede superar ${MAX_DAYS} días.`
   if (!draft.startTime) result.startTime = 'Selecciona la hora de inicio.'
   else if (!result.startDate && `${draft.startDate}T${draft.startTime}` <= now)
@@ -139,16 +187,17 @@ const errors = computed(() => {
     result.movie = 'Selecciona una película disponible de la lista.'
   if (!props.cinemas.some((cinema) => String(cinema.branchId) === String(draft.branchId)))
     result.branchId = 'Selecciona una sucursal.'
-  if (!branchTheaters.value.some((theater) => String(theater.theaterId) === String(draft.theaterId)))
+  if (
+    !branchTheaters.value.some((theater) => String(theater.theaterId) === String(draft.theaterId))
+  )
     result.theaterId = 'Selecciona una sala disponible.'
   Object.assign(result, scheduleErrors())
   const cleaning = activityError(draft.cleaningMinutes)
   if (cleaning) result.cleaningMinutes = cleaning
   const advertisement = activityError(draft.advertisementMinutes)
   if (advertisement) result.advertisementMinutes = advertisement
-  const price = Number(draft.price)
-  if (draft.price === '' || !(price > 0) || !/^\d+(\.\d{1,2})?$/u.test(draft.price.trim()))
-    result.price = 'El precio debe ser un número positivo en colones.'
+  if (previewLoading.value || previewError.value || !preview.value)
+    result.price = previewError.value || 'Espera a que se calcule el precio de la función.'
   return result
 })
 
@@ -183,14 +232,19 @@ async function runSearch() {
   searching.value = true
   searchError.value = ''
   try {
-    const found = await searchAvailableMovies(Number(draft.branchId), draft.movieQuery, request.signal)
+    const found = await searchAvailableMovies(
+      Number(draft.branchId),
+      draft.movieQuery,
+      request.signal,
+    )
     if (request.signal.aborted) return
     results.value = found
     activeResult.value = found.length ? 0 : -1
   } catch (error) {
     if (request.signal.aborted) return
     results.value = []
-    if ((error as { response?: { status?: number } }).response?.status === 401) emit('sessionExpired')
+    if ((error as { response?: { status?: number } }).response?.status === 401)
+      emit('sessionExpired')
     else searchError.value = 'No se pudieron buscar películas. Inténtalo nuevamente.'
   } finally {
     if (searchRequest === request) {
@@ -272,6 +326,9 @@ function describe(values: typeof draft, title: string) {
     'Hora fin': time(values.endTime),
     Anuncios: minutes(values.advertisementMinutes),
     Limpieza: minutes(values.cleaningMinutes),
+    Formato: values.format,
+    Tecnología: values.technology,
+    Estreno: values.isPremiere ? 'Sí' : 'No',
     Precio: formatPrice(Number(values.price)),
   }
 }
@@ -288,6 +345,9 @@ const changes = computed(() => {
 
 function snapshotOf(detail: ProjectionDetail): typeof draft {
   return {
+    format: detail.format ?? '2D',
+    technology: detail.technology ?? 'STANDARD',
+    isPremiere: detail.isPremiere ?? false,
     movieQuery: detail.movieTitle,
     branchId: String(detail.branchId),
     theaterId: String(detail.theaterId),
@@ -307,6 +367,7 @@ function applySnapshot(detail: ProjectionDetail) {
   applyingSnapshot = true
   cancelSearch()
   Object.assign(draft, snapshotOf(detail))
+  void refreshPrice()
   movie.value = {
     movieId: detail.movieId,
     title: detail.movieTitle,
@@ -354,6 +415,9 @@ function request(): UpdateProjectionRequest {
     cleaningMinutes: Number(draft.cleaningMinutes),
     advertisementMinutes: Number(draft.advertisementMinutes),
     price: Number(draft.price),
+    format: draft.format,
+    technology: draft.technology,
+    isPremiere: draft.isPremiere,
     status: draft.status,
   }
 }
@@ -378,6 +442,7 @@ watch(
 function reset() {
   cancelSearch()
   Object.assign(draft, emptyDraft())
+  void refreshPrice()
   movie.value = null
   results.value = []
   searchError.value = ''
@@ -414,7 +479,10 @@ function complete() {
   shell.value?.close()
 }
 
-onBeforeUnmount(cancelSearch)
+onBeforeUnmount(() => {
+  cancelSearch()
+  priceAbort?.abort()
+})
 
 defineExpose({ open, edit, complete })
 </script>
@@ -459,14 +527,22 @@ defineExpose({ open, edit, complete })
                   @blur="touched.branchId = true"
                 >
                   <option value="">Selecciona una sucursal</option>
-                  <option v-for="cinema in cinemas" :key="cinema.branchId" :value="String(cinema.branchId)">
+                  <option
+                    v-for="cinema in cinemas"
+                    :key="cinema.branchId"
+                    :value="String(cinema.branchId)"
+                  >
                     {{ cinema.name }}
                   </option>
                 </select>
                 <small :id="id + '-branchId-hint'" class="field-hint">
                   Define las salas y películas disponibles.
                 </small>
-                <small v-if="visibleError('branchId')" :id="id + '-branchId-error'" class="field-error">
+                <small
+                  v-if="visibleError('branchId')"
+                  :id="id + '-branchId-error'"
+                  class="field-error"
+                >
                   {{ visibleError('branchId') }}
                 </small>
               </div>
@@ -482,7 +558,9 @@ defineExpose({ open, edit, complete })
                   :aria-describedby="describedBy('theaterId')"
                   @blur="touched.theaterId = true"
                 >
-                  <option value="">{{ draft.branchId ? 'Selecciona una sala' : 'Elige primero la sucursal' }}</option>
+                  <option value="">
+                    {{ draft.branchId ? 'Selecciona una sala' : 'Elige primero la sucursal' }}
+                  </option>
                   <option
                     v-for="theater in branchTheaters"
                     :key="theater.theaterId"
@@ -492,7 +570,11 @@ defineExpose({ open, edit, complete })
                   </option>
                 </select>
                 <small :id="id + '-theaterId-hint'" class="field-hint">Solo salas activas.</small>
-                <small v-if="visibleError('theaterId')" :id="id + '-theaterId-error'" class="field-error">
+                <small
+                  v-if="visibleError('theaterId')"
+                  :id="id + '-theaterId-error'"
+                  class="field-error"
+                >
                   {{ visibleError('theaterId') }}
                 </small>
               </div>
@@ -524,11 +606,17 @@ defineExpose({ open, edit, complete })
                     type="search"
                     role="combobox"
                     autocomplete="off"
-                    :placeholder="draft.branchId ? 'Escribe el título de la película' : 'Elige primero la sucursal'"
+                    :placeholder="
+                      draft.branchId
+                        ? 'Escribe el título de la película'
+                        : 'Elige primero la sucursal'
+                    "
                     :disabled="!draft.branchId"
                     :aria-expanded="listOpen && results.length > 0"
                     :aria-controls="id + '-movies'"
-                    :aria-activedescendant="activeResult >= 0 ? `${id}-movie-${activeResult}` : undefined"
+                    :aria-activedescendant="
+                      activeResult >= 0 ? `${id}-movie-${activeResult}` : undefined
+                    "
                     :aria-invalid="!!visibleError('movie')"
                     :aria-describedby="describedBy('movie')"
                     @input="movieInput"
@@ -582,7 +670,9 @@ defineExpose({ open, edit, complete })
             <h3 :id="id + '-schedule-title'"><span>2</span> Fecha y horario</h3>
             <div class="section-grid two-columns">
               <div class="field">
-                <label :for="id + '-start-date'">Fecha <span class="required-marker">*</span></label>
+                <label :for="id + '-start-date'"
+                  >Fecha <span class="required-marker">*</span></label
+                >
                 <input
                   :id="id + '-start-date'"
                   v-model="draft.startDate"
@@ -593,8 +683,14 @@ defineExpose({ open, edit, complete })
                   :aria-describedby="describedBy('startDate')"
                   @blur="touched.startDate = true"
                 />
-                <small :id="id + '-startDate-hint'" class="field-hint">Primer día de la proyección.</small>
-                <small v-if="visibleError('startDate')" :id="id + '-startDate-error'" class="field-error">
+                <small :id="id + '-startDate-hint'" class="field-hint"
+                  >Primer día de la proyección.</small
+                >
+                <small
+                  v-if="visibleError('startDate')"
+                  :id="id + '-startDate-error'"
+                  class="field-error"
+                >
                   {{ visibleError('startDate') }}
                 </small>
               </div>
@@ -613,13 +709,19 @@ defineExpose({ open, edit, complete })
                 <small :id="id + '-endDate-hint'" class="field-hint">
                   Crea una proyección por día a la misma hora (máximo {{ MAX_DAYS }} días).
                 </small>
-                <small v-if="visibleError('endDate')" :id="id + '-endDate-error'" class="field-error">
+                <small
+                  v-if="visibleError('endDate')"
+                  :id="id + '-endDate-error'"
+                  class="field-error"
+                >
                   {{ visibleError('endDate') }}
                 </small>
               </div>
 
               <div class="field">
-                <label :for="id + '-start-time'">Hora inicio <span class="required-marker">*</span></label>
+                <label :for="id + '-start-time'"
+                  >Hora inicio <span class="required-marker">*</span></label
+                >
                 <input
                   :id="id + '-start-time'"
                   v-model="draft.startTime"
@@ -629,13 +731,21 @@ defineExpose({ open, edit, complete })
                   :aria-describedby="describedBy('startTime')"
                   @blur="touched.startTime = true"
                 />
-                <small :id="id + '-startTime-hint'" class="field-hint">Inicio de los anuncios.</small>
-                <small v-if="visibleError('startTime')" :id="id + '-startTime-error'" class="field-error">
+                <small :id="id + '-startTime-hint'" class="field-hint"
+                  >Inicio de los anuncios.</small
+                >
+                <small
+                  v-if="visibleError('startTime')"
+                  :id="id + '-startTime-error'"
+                  class="field-error"
+                >
                   {{ visibleError('startTime') }}
                 </small>
               </div>
               <div class="field">
-                <label :for="id + '-end-time'">Hora fin <span class="required-marker">*</span></label>
+                <label :for="id + '-end-time'"
+                  >Hora fin <span class="required-marker">*</span></label
+                >
                 <input
                   :id="id + '-end-time'"
                   v-model="draft.endTime"
@@ -649,7 +759,11 @@ defineExpose({ open, edit, complete })
                 <small :id="id + '-endTime-hint'" class="field-hint">
                   Se calcula sola; puedes ampliarla, no reducirla.
                 </small>
-                <small v-if="visibleError('endTime')" :id="id + '-endTime-error'" class="field-error">
+                <small
+                  v-if="visibleError('endTime')"
+                  :id="id + '-endTime-error'"
+                  class="field-error"
+                >
                   {{ visibleError('endTime') }}
                 </small>
               </div>
@@ -677,7 +791,12 @@ defineExpose({ open, edit, complete })
               <i class="bi bi-plus-lg timeline-operator" aria-hidden="true"></i>
               <div class="field minutes-field">
                 <label :for="id + '-duration'">Película</label>
-                <input :id="id + '-duration'" :value="movie?.runningTime ?? '—'" type="text" readonly />
+                <input
+                  :id="id + '-duration'"
+                  :value="movie?.runningTime ?? '—'"
+                  type="text"
+                  readonly
+                />
                 <span>minutos</span>
               </div>
               <i class="bi bi-plus-lg timeline-operator" aria-hidden="true"></i>
@@ -705,37 +824,61 @@ defineExpose({ open, edit, complete })
             </small>
             <p class="schedule-summary" aria-live="polite">
               <i class="bi bi-clock-history" aria-hidden="true"></i>
-              {{ scheduleSummary || 'Selecciona una película para calcular el tiempo total de la función.' }}
+              {{
+                scheduleSummary ||
+                'Selecciona una película para calcular el tiempo total de la función.'
+              }}
             </p>
           </section>
 
           <section class="form-section" :aria-labelledby="id + '-price-title'">
             <h3 :id="id + '-price-title'"><span>4</span> Precio</h3>
+            <div class="section-grid two-columns">
+              <label
+                >Formato<select v-model="draft.format" name="format">
+                  <option value="2D">2D</option>
+                  <option value="3D" :disabled="draft.technology === '70MM'">3D</option>
+                </select></label
+              >
+              <label
+                >Tecnología<select v-model="draft.technology" name="technology">
+                  <option value="STANDARD">Estándar</option>
+                  <option value="IMAX">IMAX</option>
+                  <option value="70MM">70 mm</option>
+                </select></label
+              >
+              <label
+                ><input v-model="draft.isPremiere" type="checkbox" name="isPremiere" />Función de
+                estreno</label
+              >
+            </div>
             <div class="field price-field">
-              <label :for="id + '-price'">Precio por persona <span class="required-marker">*</span></label>
-              <div class="currency-input">
-                <span aria-hidden="true">₡</span>
-                <input
-                  :id="id + '-price'"
-                  v-model="draft.price"
-                  name="price"
-                  type="text"
-                  inputmode="decimal"
-                  placeholder="4500"
-                  :aria-invalid="!!visibleError('price')"
-                  :aria-describedby="describedBy('price')"
-                  @blur="touched.price = true"
-                />
-              </div>
-              <small :id="id + '-price-hint'" class="field-hint">
-                Por persona, en colones.
-                <template v-if="defaultPrice !== undefined">
-                  Precio por defecto: ₡{{ defaultPrice }}; puedes modificarlo.
-                </template>
-              </small>
-              <small v-if="visibleError('price')" :id="id + '-price-error'" class="field-error">
-                {{ visibleError('price') }}
-              </small>
+              <label :for="id + '-price'">Precio general desde</label
+              ><input
+                :id="id + '-price'"
+                :value="draft.price"
+                name="price"
+                readonly
+                :aria-describedby="id + '-price-policy'"
+              />
+              <p :id="id + '-price-policy'" class="field-hint">
+                Calculado con la política de boletos. La categoría de edad y el asiento VIP se
+                determinan al comprar.
+              </p>
+              <p v-if="previewLoading" role="status">Calculando precio...</p>
+              <template v-if="preview"
+                ><small v-for="modifier in preview.modifiers" :key="modifier.label"
+                  >{{ modifier.label }}: +{{ formatPrice(modifier.amount) }}</small
+                ><small v-for="category in preview.categories" :key="category.code"
+                  >{{ category.label }}: base {{ formatPrice(category.base) }}</small
+                ></template
+              >
+              <p v-if="previewError" role="alert">
+                {{ previewError }} <button type="button" @click="refreshPrice">Reintentar</button>
+              </p>
+              <small v-if="visibleError('price')" class="field-error">{{
+                visibleError('price')
+              }}</small>
             </div>
           </section>
         </fieldset>
@@ -894,7 +1037,7 @@ label {
   font-size: 0.95rem;
   font-weight: 600;
 }
-input,
+input:not([type='checkbox']),
 select {
   width: 100%;
   min-height: 44px;

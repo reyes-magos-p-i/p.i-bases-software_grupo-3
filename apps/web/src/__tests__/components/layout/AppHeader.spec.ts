@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import AccountMenu from '@/components/common/AccountMenu.vue'
 import { establishClientSession } from '@/services/client-session.service'
 import AppHeader from '@/components/layout/AppHeader.vue'
+import { requireClientSession } from '@/router/client-session.guard'
 import LoginModal from '@/components/auth/LoginModal.vue'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
 import {
@@ -82,7 +83,11 @@ describe('AppHeader authentication navigation', () => {
       routes: [
         { path: '/', component: { template: '<p>Portal</p>' } },
         { path: '/dashboard', component: { template: '<p>Dashboard</p>' } },
-        { path: '/account/profile', component: { template: '<p>Perfil</p>' } },
+        {
+          path: '/account/profile',
+          meta: { requiresClient: true },
+          component: { template: '<p>Perfil</p>' },
+        },
         { path: '/account/confirm-email', component: { template: '<p>Confirmar correo</p>' } },
         { path: '/account/password', component: { template: '<p>Cambiar contraseña</p>' } },
       ],
@@ -615,5 +620,89 @@ describe('AppHeader authentication navigation', () => {
     expect(page.find('dialog[open]').exists()).toBe(false)
     expect(wrapper.getComponent(LoginModal).props('open')).toBe(false)
     expect(loginClient).not.toHaveBeenCalled()
+  })
+  it.each(['local', 'social'])(
+    'returns to the portal after %s client login regardless of a purchase query',
+    async (mode) => {
+      await router.push({
+        path: '/',
+        query: { login: 'client', reason: 'required', purchaseId: '12' },
+      })
+      await flushPromises()
+      const login = wrapper.getComponent(LoginModal)
+      if (mode === 'local')
+        login.vm.$emit('submit', { email: 'ana@example.com', password: 'valid-secret' })
+      else
+        login.vm.$emit('authenticated', {
+          id: 7,
+          email: 'ana@example.com',
+          firstName: 'Ana',
+          lastName: 'Rojas',
+        })
+      await flushPromises()
+      expect(router.currentRoute.value.fullPath).toBe('/')
+    },
+  )
+  it('preserves unrelated query parameters when closing the login', async () => {
+    await router.push({ path: '/', query: { login: 'client', campaign: 'premiere' } })
+    await flushPromises()
+    wrapper.getComponent(LoginModal).vm.$emit('close')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({ campaign: 'premiere' })
+    await wrapper.get('.login-button').trigger('click')
+    wrapper
+      .getComponent(LoginModal)
+      .vm.$emit('submit', { email: 'ana@example.com', password: 'valid-secret' })
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/')
+  })
+  it('ignores invalid purchase destinations and keeps employee navigation unchanged', async () => {
+    await router.push({
+      path: '/',
+      query: {
+        login: 'client',
+        purchaseId: 'https://other.example',
+        redirect: 'https://other.example',
+      },
+    })
+    await flushPromises()
+    wrapper.getComponent(LoginModal).vm.$emit('authenticated', {
+      id: 7,
+      email: 'ana@example.com',
+      firstName: 'Ana',
+      lastName: 'Rojas',
+    })
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/')
+    clearClientSession()
+    await router.push({ path: '/', query: { login: 'employee', purchaseId: '12' } })
+    await flushPromises()
+    wrapper
+      .getComponent(LoginModal)
+      .vm.$emit('submit', { email: 'admin@example.com', password: 'valid-secret' })
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+    expect(authenticateEmployee).toHaveBeenCalled()
+  })
+
+  it('returns to the portal through the real client route guard after login', async () => {
+    router.beforeEach(requireClientSession)
+    await router.push('/account/profile?section=purchases&purchaseId=12')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({ login: 'client', reason: 'required' })
+    const identity = { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' }
+    vi.mocked(getClientSession).mockResolvedValue(identity)
+    vi.mocked(loginClient).mockImplementationOnce(() => {
+      establishClientSession(identity, 'client-token')
+      return Promise.resolve(identity)
+    })
+    wrapper
+      .getComponent(LoginModal)
+      .vm.$emit('submit', { email: identity.email, password: 'valid-secret' })
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/')
+    expect(localStorage.getItem('accessToken')).toBe('client-token')
+    expect(wrapper.getComponent(AccountMenu).props('user')).toEqual(identity)
+    expect(getClientPasswordStatus).toHaveBeenCalled()
   })
 })

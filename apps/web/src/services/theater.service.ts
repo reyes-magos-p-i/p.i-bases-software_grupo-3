@@ -7,13 +7,7 @@ import type {
   TheaterStatusOption,
   UpdateTheaterRequest,
 } from '@/types/theater'
-import type {
-  Seat,
-  UpdateSeatStatusRequest,
-  SeatType,
-  SeatState,
-} from '@/types/seats'
-
+import type { Seat, UpdateSeatStatusRequest, SeatType, SeatState } from '@/types/seats'
 
 export async function getTheaters(signal?: AbortSignal): Promise<Theater[]> {
   const response = await getApi().get<Theater[]>('/theaters', { signal, timeout: 10000 })
@@ -47,21 +41,26 @@ type DbSeatState = 'libre' | 'indisponible' | 'ocupado' | 'reservado'
 type DbSeatType = 'normal' | 'vip' | 'accesibilidad'
 
 interface DbSeat extends Omit<Seat, 'state' | 'type'> {
-  state: DbSeatState
-  type: DbSeatType
+  state: DbSeatState | SeatState
+  type: DbSeatType | SeatType
 }
 
-const seatStateFromDb: Record<DbSeatState, SeatState> = {
+const seatStateFromDb: Record<DbSeatState | SeatState, SeatState> = {
   libre: 'free',
   indisponible: 'unavailable',
   ocupado: 'in-use',
   reservado: 'reserved',
+  free: 'free',
+  unavailable: 'unavailable',
+  'in-use': 'in-use',
+  reserved: 'reserved',
 }
 
-const seatTypeFromDb: Record<DbSeatType, SeatType> = {
+const seatTypeFromDb: Record<DbSeatType | SeatType, SeatType> = {
   normal: 'normal',
   vip: 'vip',
   accesibilidad: 'accessibility',
+  accessibility: 'accessibility',
 }
 
 const seatStateToDb: Record<SeatState, DbSeatState> = {
@@ -82,9 +81,7 @@ function normalizeSeat(seat: DbSeat): Seat {
   const type = seatTypeFromDb[seat.type]
 
   if (!state || !type) {
-    throw new Error(
-      `Unknown seat state or type: ${seat.state}, ${seat.type}`,
-    )
+    throw new Error(`Unknown seat state or type: ${seat.state}, ${seat.type}`)
   }
 
   return {
@@ -94,14 +91,11 @@ function normalizeSeat(seat: DbSeat): Seat {
   }
 }
 
-export async function getTheaterSeats(
-  theaterId: number,
-  signal?: AbortSignal,
-): Promise<Seat[]> {
-  const response = await getApi().get<DbSeat[]>(
-    `/theaters/${theaterId}/seats`,
-    { signal, timeout: 10000 },
-  )
+export async function getTheaterSeats(theaterId: number, signal?: AbortSignal): Promise<Seat[]> {
+  const response = await getApi().get<DbSeat[]>(`/theaters/${theaterId}/seats`, {
+    signal,
+    timeout: 10000,
+  })
 
   return response.data.map(normalizeSeat)
 }
@@ -118,17 +112,12 @@ export async function updateSeatStatuses(
     throw new Error('Seleccione un estado o tipo.')
   }
 
-
   await getApi().patch(
     `/theaters/${theaterId}/seats`,
     {
       seats: data.seats,
-      ...(data.state !== undefined
-        ? { state: seatStateToDb[data.state] }
-        : {}),
-      ...(data.type !== undefined
-        ? { type: seatTypeToDb[data.type] }
-        : {}),
+      ...(data.state !== undefined ? { state: seatStateToDb[data.state] } : {}),
+      ...(data.type !== undefined ? { type: seatTypeToDb[data.type] } : {}),
     },
     { timeout: 30000 },
   )

@@ -19,6 +19,7 @@
     "axios": "^1.20.0",
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
+    "qrcode": "^1.5.4",
     "vue": "^3.5.40",
     "vue-router": "^5.2.0",
     "vue3-google-login": "^2.1.4"
@@ -29,6 +30,7 @@
     "@types/facebook-js-sdk": "^3.3.13",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^24.13.3",
+    "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vitest/coverage-v8": "^4.1.11",
     "@vitest/eslint-plugin": "^1.6.23",

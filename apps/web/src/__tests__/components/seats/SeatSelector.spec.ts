@@ -4,11 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 import SeatSelector from '@/components/Seats/SeatSelector.vue'
-import type {
-  Seat,
-  SeatSelectionLimit,
-  SeatState,
-} from '@/types/seats'
+import type { Seat, SeatSelectionLimit, SeatState } from '@/types/seats'
 
 const MovieSeatStub = defineComponent({
   name: 'MovieSeat',
@@ -27,11 +23,7 @@ const MovieSeatStub = defineComponent({
   `,
 })
 
-function makeSeat(
-  rowNumber: number,
-  columnNumber: number,
-  overrides: Partial<Seat> = {},
-): Seat {
+function makeSeat(rowNumber: number, columnNumber: number, overrides: Partial<Seat> = {}): Seat {
   return {
     theaterId: 7,
     rowNumber,
@@ -87,7 +79,7 @@ function lastSelection(wrapper: SelectorWrapper): Seat[] | undefined {
 function actionButton(wrapper: SelectorWrapper, label: string) {
   const button = wrapper
     .findAll<HTMLButtonElement>('.actions button')
-    .find(button => button.text() === label)
+    .find((button) => button.text() === label)
 
   if (!button) {
     throw new Error(`Button not found: ${label}`)
@@ -117,10 +109,9 @@ describe('SeatSelector', () => {
     const rows = wrapper.findAll('.seat-row')
 
     for (const row of rows) {
-      const aisleColumns = row.findAll('.seat-cell')
-        .flatMap((cell, index) =>
-          cell.classes().includes('vertical-aisle') ? [index + 1] : [],
-        )
+      const aisleColumns = row
+        .findAll('.seat-cell')
+        .flatMap((cell, index) => (cell.classes().includes('vertical-aisle') ? [index + 1] : []))
 
       expect(aisleColumns).toEqual([3, 6])
     }
@@ -131,12 +122,7 @@ describe('SeatSelector', () => {
 
   it('ignores seats from other theaters or outside the dimensions', () => {
     const wrapper = mountSelector({
-      seats: [
-        makeSeat(1, 1),
-        makeSeat(1, 2, { theaterId: 9 }),
-        makeSeat(3, 1),
-        makeSeat(1, 4),
-      ],
+      seats: [makeSeat(1, 1), makeSeat(1, 2, { theaterId: 9 }), makeSeat(3, 1), makeSeat(1, 4)],
     })
 
     expect(wrapper.findAll('[data-seat]')).toHaveLength(1)
@@ -168,9 +154,7 @@ describe('SeatSelector', () => {
 
     expect(lastSelection(wrapper)).toEqual([first, second])
     expect(lastSelection(wrapper)?.[0]).not.toBe(first)
-    expect(
-      wrapper.get('[data-seat="1-1"]').attributes('aria-pressed'),
-    ).toBe('true')
+    expect(wrapper.get('[data-seat="1-1"]').attributes('aria-pressed')).toBe('true')
 
     await wrapper.get('[data-seat="1-1"]').trigger('click')
 
@@ -182,12 +166,8 @@ describe('SeatSelector', () => {
 
     await wrapper.get('[data-seat="1-1"]').trigger('click')
 
-    expect(
-      wrapper.get<HTMLButtonElement>('[data-seat="1-2"]').element.disabled,
-    ).toBe(true)
-    expect(
-      wrapper.get<HTMLButtonElement>('[data-seat="1-1"]').element.disabled,
-    ).toBe(false)
+    expect(wrapper.get<HTMLButtonElement>('[data-seat="1-2"]').element.disabled).toBe(true)
+    expect(wrapper.get<HTMLButtonElement>('[data-seat="1-1"]').element.disabled).toBe(false)
 
     await wrapper.get('[data-seat="1-2"]').trigger('click')
 
@@ -196,9 +176,7 @@ describe('SeatSelector', () => {
     await wrapper.get('[data-seat="1-1"]').trigger('click')
 
     expect(lastSelection(wrapper)).toEqual([])
-    expect(
-      wrapper.get<HTMLButtonElement>('[data-seat="1-2"]').element.disabled,
-    ).toBe(false)
+    expect(wrapper.get<HTMLButtonElement>('[data-seat="1-2"]').element.disabled).toBe(false)
     expect(wrapper.findAll('.actions button')).toHaveLength(1)
   })
 
@@ -208,9 +186,7 @@ describe('SeatSelector', () => {
       seats: [makeSeat(1, 1), reserved],
     })
 
-    expect(
-      wrapper.get<HTMLButtonElement>('[data-seat="1-2"]').element.disabled,
-    ).toBe(true)
+    expect(wrapper.get<HTMLButtonElement>('[data-seat="1-2"]').element.disabled).toBe(true)
 
     await wrapper.setProps({
       selectableStates: ['free', 'reserved'],
@@ -292,9 +268,7 @@ describe('SeatSelector', () => {
     })
 
     expect(lastSelection(wrapper)).toEqual([])
-    expect(
-      wrapper.get('[data-seat="1-1"]').attributes('aria-pressed'),
-    ).toBe('false')
+    expect(wrapper.get('[data-seat="1-1"]').attributes('aria-pressed')).toBe('false')
   })
 
   it('shows a message when no seats are registered', () => {
@@ -302,8 +276,6 @@ describe('SeatSelector', () => {
 
     expect(wrapper.text()).toContain('No hay asientos registrados.')
     expect(wrapper.findAll('[data-seat]')).toHaveLength(0)
-    expect(
-      actionButton(wrapper, 'Seleccionar todos').element.disabled,
-    ).toBe(true)
+    expect(actionButton(wrapper, 'Seleccionar todos').element.disabled).toBe(true)
   })
 })
