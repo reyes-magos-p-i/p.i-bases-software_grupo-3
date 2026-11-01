@@ -9,6 +9,7 @@ import {
 } from '@/services/client-session.service'
 import { getClientPasswordStatus, getClientSession } from '@/services/authService'
 import { authErrorStatus } from '@/utils/auth-errors'
+import { purchaseLoginQuery } from '@/utils/purchase-navigation'
 import { onPasswordBlocked } from '@/services/api'
 
 const PASSWORD_PATH = '/account/password'
@@ -22,7 +23,10 @@ export const requireClientSession: NavigationGuard = async (to) => {
     if (to.meta.requiresClient || (hasClientSession() && !clientSession.user.value)) {
       const identity = await restoreClientSession(getClientSession)
       if (to.meta.requiresClient && !identity) {
-        return { path: '/', query: { login: 'client', reason: 'required' } }
+        return {
+          path: '/',
+          query: { login: 'client', reason: 'required', ...purchaseLoginQuery(to) },
+        }
       }
     }
     if (!clientSession.user.value || !hasClientSession() || to.path === PASSWORD_PATH) return true
@@ -35,10 +39,13 @@ export const requireClientSession: NavigationGuard = async (to) => {
     reportClientSessionError(error)
     if (authErrorStatus(error) === 401) {
       clearClientSession()
-      return { path: '/', query: { login: 'client', reason: 'expired' } }
+      return { path: '/', query: { login: 'client', reason: 'expired', ...purchaseLoginQuery(to) } }
     }
     if (to.meta.requiresClient) {
-      return { path: '/', query: { login: 'client', reason: 'unavailable' } }
+      return {
+        path: '/',
+        query: { login: 'client', reason: 'unavailable', ...purchaseLoginQuery(to) },
+      }
     }
   }
   return true
