@@ -192,4 +192,163 @@ describe('theater service', () => {
       timeout: 10000,
     })
   })
+
+  it.each([
+  ['libre', 'normal', 'free', 'normal'],
+  ['indisponible', 'vip', 'unavailable', 'vip'],
+  ['ocupado', 'accesibilidad', 'in-use', 'accessibility'],
+  ['reservado', 'normal', 'reserved', 'normal'],
+])(
+  'normalizes API seat values %s / %s',
+  async (dbState, dbType, state, type) => {
+    get.mockResolvedValueOnce({
+      data: [
+        {
+          theaterId: 17,
+          rowNumber: 1,
+          columnNumber: 2,
+          state: dbState,
+          type: dbType,
+        },
+      ],
+    })
+
+    const { getTheaterSeats } = await import('@/services/theater.service')
+
+    await expect(getTheaterSeats(17)).resolves.toEqual([
+      {
+        theaterId: 17,
+        rowNumber: 1,
+        columnNumber: 2,
+        state,
+        type,
+      },
+    ])
+  },
+)
+
+it.each([
+  ['invalid', 'vip'],
+  ['libre', 'invalid'],
+])('rejects unknown API seat values %s / %s', async (state, type) => {
+  get.mockResolvedValueOnce({
+    data: [
+      {
+        theaterId: 17,
+        rowNumber: 1,
+        columnNumber: 2,
+        state,
+        type,
+      },
+    ],
+  })
+
+  const { getTheaterSeats } = await import('@/services/theater.service')
+
+  await expect(getTheaterSeats(17)).rejects.toThrow(
+    `Unknown seat state or type: ${state}, ${type}`,
+  )
+})
+
+describe('updateSeatStatuses', () => {
+  const seats = [{ rowNumber: 1, columnNumber: 2 }]
+
+  it.each([
+    ['free', 'libre'],
+    ['unavailable', 'indisponible'],
+    ['in-use', 'ocupado'],
+    ['reserved', 'reservado'],
+  ] as const)('sends state %s as %s', async (state, dbState) => {
+    patch.mockResolvedValueOnce({})
+
+    const { updateSeatStatuses } = await import('@/services/theater.service')
+
+    await expect(
+      updateSeatStatuses(17, { seats, state }),
+    ).resolves.toBeUndefined()
+
+    expect(patch).toHaveBeenCalledExactlyOnceWith(
+      '/theaters/17/seats',
+      { seats, state: dbState },
+      { timeout: 30000 },
+    )
+  })
+
+  it.each([
+      ['normal', 'normal'],
+      ['vip', 'vip'],
+      ['accessibility', 'accesibilidad'],
+    ] as const)('sends type %s as %s', async (type, dbType) => {
+      patch.mockResolvedValueOnce({})
+
+      const { updateSeatStatuses } = await import('@/services/theater.service')
+
+      await expect(
+        updateSeatStatuses(17, { seats, type }),
+      ).resolves.toBeUndefined()
+
+      expect(patch).toHaveBeenCalledExactlyOnceWith(
+        '/theaters/17/seats',
+        { seats, type: dbType },
+        { timeout: 30000 },
+      )
+    })
+
+    it('sends state and type together', async () => {
+      patch.mockResolvedValueOnce({})
+
+      const { updateSeatStatuses } = await import('@/services/theater.service')
+
+      await expect(
+        updateSeatStatuses(17, {
+          seats,
+          state: 'unavailable',
+          type: 'accessibility',
+        }),
+      ).resolves.toBeUndefined()
+
+      expect(patch).toHaveBeenCalledExactlyOnceWith(
+        '/theaters/17/seats',
+        {
+          seats,
+          state: 'indisponible',
+          type: 'accesibilidad',
+        },
+        { timeout: 30000 },
+      )
+    })
+
+    it('rejects an empty selection without making a request', async () => {
+      const { updateSeatStatuses } = await import('@/services/theater.service')
+
+      await expect(
+        updateSeatStatuses(17, { seats: [], state: 'free' }),
+      ).rejects.toThrow('Seleccione al menos un asiento.')
+
+      expect(patch).not.toHaveBeenCalled()
+    })
+
+    it('rejects missing changes without making a request', async () => {
+      const { updateSeatStatuses } = await import('@/services/theater.service')
+
+      await expect(
+        updateSeatStatuses(17, { seats }),
+      ).rejects.toThrow('Seleccione un estado o tipo.')
+
+      expect(patch).not.toHaveBeenCalled()
+    })
+
+    it('propagates an update failure without retrying', async () => {
+      const failure = new Error('Seat update failed')
+      patch.mockRejectedValueOnce(failure)
+
+      const { updateSeatStatuses } = await import('@/services/theater.service')
+
+      await expect(
+        updateSeatStatuses(17, { seats, type: 'vip' }),
+      ).rejects.toBe(failure)
+
+      expect(patch).toHaveBeenCalledTimes(1)
+    })
+  })
 })
