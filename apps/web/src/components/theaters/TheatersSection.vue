@@ -297,7 +297,7 @@ onBeforeUnmount(() => {
           {{ visibleTheaters.length }}
           {{ visibleTheaters.length === 1 ? 'sala registrada' : 'salas registradas' }}
         </p>
-        <CrudTable :columns="columns" :rows="rows" caption="Salas">
+        <CrudTable v-if="rows.length" :columns="columns" :rows="rows" caption="Salas">
           <template #actions="{ row }">
             <div class="user-actions">
               <span title="Ver" class="action-hint">
@@ -318,6 +318,11 @@ onBeforeUnmount(() => {
             </div>
           </template>
         </CrudTable>
+        <div v-else class="empty-state">
+          <i class="bi bi-display" aria-hidden="true"></i>
+          <h2>No se encontraron salas con estos criterios</h2>
+          <p>Prueba con otros filtros o límpialos.</p>
+        </div>
       </template>
       <div v-else class="empty-state">
         <i class="bi bi-display" aria-hidden="true"></i>
@@ -404,6 +409,7 @@ onBeforeUnmount(() => {
   padding: 24px;
   border-radius: var(--radius-medium);
   background: var(--content-background);
+  color: var(--text-primary);
   text-align: center;
 }
 .empty-state i {
