@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TheatersService } from './theaters.service';
 import { TheaterRepository } from './theater.repository/theater.repository';
 import { ChairsRepository } from './chairs.repository';
+import { UpdateSeatsDto } from './dto/update-seats.dto';
 
 
 describe('TheatersService', () => {
@@ -16,6 +17,7 @@ describe('TheatersService', () => {
   };
   let chairsRepository: {
     findByTheater: jest.Mock;
+    updateSelected: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -28,6 +30,7 @@ describe('TheatersService', () => {
     };
     chairsRepository = {
       findByTheater: jest.fn(),
+      updateSelected: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -210,55 +213,103 @@ describe('TheatersService', () => {
   });
 
   describe('getSeats', () => {
-  const seats = [
-    {
-      theaterId: 7,
-      rowNumber: 1,
-      columnNumber: 2,
+    const seats = [
+      {
+        theaterId: 7,
+        rowNumber: 1,
+        columnNumber: 2,
+        type: 'vip',
+        state: 'free',
+      },
+    ];
+
+    it('returns the seats for an existing theater', async () => {
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.findByTheater.mockResolvedValueOnce(seats);
+
+      await expect(service.getSeats(7)).resolves.toEqual(seats);
+
+      expect(repository.getTheaterById).toHaveBeenCalledWith(7);
+      expect(chairsRepository.findByTheater).toHaveBeenCalledWith(7);
+    });
+
+    it('throws when the theater does not exist', async () => {
+      repository.getTheaterById.mockResolvedValueOnce(null);
+
+      await expect(service.getSeats(999))
+        .rejects.toBeInstanceOf(NotFoundException);
+
+      expect(chairsRepository.findByTheater).not.toHaveBeenCalled();
+    });
+
+    it('returns an empty array when the theater has no seats', async () => {
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.findByTheater.mockResolvedValueOnce([]);
+
+      await expect(service.getSeats(7)).resolves.toEqual([]);
+    });
+
+    it('propagates seat retrieval errors', async () => {
+      const error = new Error('Seat retrieval failed');
+
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.findByTheater.mockRejectedValueOnce(error);
+
+      await expect(service.getSeats(7)).rejects.toBe(error);
+    });
+  });
+
+  describe('updateSelected', () => {
+    const dto: UpdateSeatsDto = {
+      seats: [{ rowNumber: 1, columnNumber: 2 }],
       type: 'vip',
-      state: 'free',
-    },
-  ];
+    };
 
-  it('returns the seats for an existing theater', async () => {
-    repository.getTheaterById.mockResolvedValueOnce({
-      theaterId: 7,
+    it('passes the request to the repository and returns its result', async () => {
+      const result = {
+        theaterId: 7,
+        seatsUpdated: 1,
+      };
+
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.updateSelected.mockResolvedValueOnce(result);
+
+      await expect(service.updateSelected(7, dto)).resolves.toEqual(result);
+
+      expect(repository.getTheaterById).toHaveBeenCalledWith(7);
+      expect(chairsRepository.updateSelected).toHaveBeenCalledWith(7, dto);
     });
-    chairsRepository.findByTheater.mockResolvedValueOnce(seats);
 
-    await expect(service.getSeats(7)).resolves.toEqual(seats);
+    it('throws when the theater does not exist', async () => {
+      repository.getTheaterById.mockResolvedValueOnce(null);
 
-    expect(repository.getTheaterById).toHaveBeenCalledWith(7);
-    expect(chairsRepository.findByTheater).toHaveBeenCalledWith(7);
-  });
+      await expect(service.updateSelected(999, dto)).rejects.toThrow(
+        new NotFoundException('Theater not found: 999'),
+      );
 
-  it('throws when the theater does not exist', async () => {
-    repository.getTheaterById.mockResolvedValueOnce(null);
-
-    await expect(service.getSeats(999))
-      .rejects.toBeInstanceOf(NotFoundException);
-
-    expect(chairsRepository.findByTheater).not.toHaveBeenCalled();
-  });
-
-  it('returns an empty array when the theater has no seats', async () => {
-    repository.getTheaterById.mockResolvedValueOnce({
-      theaterId: 7,
+      expect(repository.getTheaterById).toHaveBeenCalledWith(999);
+      expect(chairsRepository.updateSelected).not.toHaveBeenCalled();
     });
-    chairsRepository.findByTheater.mockResolvedValueOnce([]);
 
-    await expect(service.getSeats(7)).resolves.toEqual([]);
-  });
+    it('propagates repository errors', async () => {
+      const error = new NotFoundException('Seat not found');
 
-  it('propagates seat retrieval errors', async () => {
-    const error = new Error('Seat retrieval failed');
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.updateSelected.mockRejectedValueOnce(error);
 
-    repository.getTheaterById.mockResolvedValueOnce({
-      theaterId: 7,
+      await expect(service.updateSelected(7, dto)).rejects.toBe(error);
+
+      expect(chairsRepository.updateSelected).toHaveBeenCalledWith(7, dto);
     });
-    chairsRepository.findByTheater.mockRejectedValueOnce(error);
-
-    await expect(service.getSeats(7)).rejects.toBe(error);
   });
-});
 });
