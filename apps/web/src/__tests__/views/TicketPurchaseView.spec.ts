@@ -112,6 +112,9 @@ describe('TicketPurchaseView', () => {
     seats.vm.$emit('continue')
     await flushPromises()
     expect(wrapper.text()).toContain('Revisa tu compra')
+    expect(wrapper.text()).not.toContain('Pago simulado')
+    expect(wrapper.text()).not.toContain('comprobarán nuevamente')
+    expect(wrapper.text()).not.toContain('Ver mis compras')
     expect(seats.isVisible()).toBe(false)
     expect(wrapper.findComponent(PurchaseSummary).exists()).toBe(true)
     await wrapper
@@ -127,6 +130,7 @@ describe('TicketPurchaseView', () => {
       .trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('¡Compra exitosa!')
+    expect(wrapper.text()).not.toContain('pago simulado')
     expect(confirmPurchase).toHaveBeenCalledWith(
       expect.objectContaining({ seats: { GENERAL: [], CHILD: [1], SENIOR: [] } }),
     )

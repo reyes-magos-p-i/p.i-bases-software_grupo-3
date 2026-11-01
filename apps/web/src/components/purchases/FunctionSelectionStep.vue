@@ -33,7 +33,7 @@ const filtered = computed(() =>
     <p class="synopsis">{{ movie.synopsis }}</p>
     <div class="filters">
       <label :for="id + '-branch'"
-        >Sucursal<select :id="id + '-branch'" v-model="branch">
+        >Sucursal<select class="purchase-select" :id="id + '-branch'" v-model="branch">
           <option value="">Todas las sucursales</option>
           <option v-for="[key, name] in branches" :key="key" :value="String(key)">
             {{ name }}
@@ -43,7 +43,9 @@ const filtered = computed(() =>
       <div>
         <label :for="id + '-date'">Fecha</label><DatePicker :id="id + '-date'" v-model="date" />
       </div>
-      <button v-if="date || branch" type="button" @click="clearFilters">Limpiar filtros</button>
+      <button v-if="date || branch" class="purchase-action" type="button" @click="clearFilters">
+        Limpiar filtros
+      </button>
     </div>
     <p v-if="!functions.length" role="status">
       Esta película no tiene funciones disponibles para comprar.
@@ -62,7 +64,12 @@ const filtered = computed(() =>
           >
           <p>General desde {{ formatColones(item.price) }}</p>
         </div>
-        <button type="button" class="primary" :disabled="disabled" @click="emit('select', item.id)">
+        <button
+          type="button"
+          class="purchase-action primary"
+          :disabled="disabled"
+          @click="emit('select', item.id)"
+        >
           Seleccionar función
         </button>
       </li>

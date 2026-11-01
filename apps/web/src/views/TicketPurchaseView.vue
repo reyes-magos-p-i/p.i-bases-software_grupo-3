@@ -84,26 +84,27 @@ watch(
       <section v-if="step === 3 && quote">
         <h1>Revisa tu compra</h1>
         <PurchaseSummary :purchase="quote" />
-        <p>Pago simulado: se registrará la compra sin realizar un cobro real.</p>
-        <p>La disponibilidad y los precios se comprobarán nuevamente al pagar.</p>
         <div class="actions">
-          <button type="button" :disabled="busy || uncertain" @click="flow.back">
+          <button
+            type="button"
+            class="purchase-action"
+            :disabled="busy || uncertain"
+            @click="flow.back"
+          >
             Volver a los asientos</button
-          ><button type="button" class="primary" :disabled="busy" @click="flow.pay">
+          ><button type="button" class="purchase-action primary" :disabled="busy" @click="flow.pay">
             {{ busy ? 'Registrando compra...' : uncertain ? 'Reintentar pago' : 'Pagar' }}
           </button>
         </div>
       </section>
       <section v-if="receipt && step === 4" aria-live="polite">
         <h1>¡Compra exitosa!</h1>
-        <p>Tu compra quedó registrada en tu cuenta mediante pago simulado.</p>
+        <p>Tu compra quedó registrada en tu cuenta.</p>
         <PurchaseSummary :purchase="receipt" />
       </section>
       <p v-if="!movie && !loading && !receipt">
         Elige una película en el portal para comenzar.
       </p></template
-    ><RouterLink class="history-link" to="/account/profile?section=purchases"
-      >Ver mis compras</RouterLink
     >
   </main>
   <AppFooter />
@@ -113,40 +114,40 @@ watch(
   max-width: 1100px;
   min-height: 70vh;
   margin: auto;
-  padding: 120px 24px 48px;
+  padding: 28px 24px 48px;
   color: var(--text-on-dark);
 }
 .purchase-flow a {
   color: var(--text-on-dark);
   text-underline-offset: 4px;
 }
-.purchase-flow :deep(button:not(.seat)),
-.purchase-flow :deep(select) {
+.purchase-flow :deep(.purchase-action),
+.purchase-flow :deep(.purchase-select) {
   min-height: 44px;
   border-radius: var(--radius-small);
   padding: 10px 18px;
   font: inherit;
   border: 1px solid var(--border-on-dark);
 }
-.purchase-flow :deep(button:not(.seat)) {
+.purchase-flow :deep(.purchase-action) {
   background: var(--surface-background);
   color: var(--text-on-dark);
 }
-.purchase-flow :deep(button.primary) {
+.purchase-flow :deep(.purchase-action.primary) {
   background: var(--accent-color);
   color: var(--page-background);
   border-color: var(--accent-color);
   font-weight: 700;
 }
-.purchase-flow :deep(button:not(.seat):disabled) {
+.purchase-flow :deep(.purchase-action:disabled) {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.purchase-flow :deep(select) {
+.purchase-flow :deep(.purchase-select) {
   background: var(--content-background);
   color: var(--text-primary);
 }
-.purchase-flow :deep(button:not(.seat):focus-visible) {
+.purchase-flow :deep(.purchase-action:focus-visible) {
   outline: 3px solid var(--primary-color);
   outline-offset: 3px;
 }
@@ -156,9 +157,5 @@ watch(
   justify-content: space-between;
   gap: 14px;
   margin: 24px 0;
-}
-.history-link {
-  display: inline-block;
-  margin-top: 24px;
 }
 </style>

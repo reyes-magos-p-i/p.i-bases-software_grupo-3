@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue'
 import SeatSelector from '@/components/Seats/SeatSelector.vue'
-import { formatDateTime, formatColones } from '@/utils/transaction-format'
+import { formatDateTime } from '@/utils/transaction-format'
 import type { Seat } from '@/types/seats'
 import type { SeatAvailability, TicketCategory } from '@/types/purchase'
 const props = defineProps<{
@@ -48,15 +48,10 @@ function categoryChange(seat: Seat, event: Event) {
     </p>
     <fieldset :disabled="disabled" class="categories">
       <legend>Tipo de boleto por asiento</legend>
-      <p>
-        Elige la categoría de cada persona. Los recargos de la función y de asientos VIP se suman a
-        la tarifa base.
-      </p>
+      <p>Elige la categoría de cada persona.</p>
       <p>
         {{
-          availability.categories
-            .map((item) => `${item.label} (${item.description}): ${formatColones(item.base)}`)
-            .join(' · ')
+          availability.categories.map((item) => `${item.label}: ${item.description}`).join(' · ')
         }}
       </p>
       <ul>
@@ -65,6 +60,7 @@ function categoryChange(seat: Seat, event: Event) {
             >Fila {{ seat.rowNumber }}, asiento {{ seat.columnNumber
             }}{{ seat.type === 'vip' ? ' · VIP' : '' }}</label
           ><select
+            class="purchase-select"
             :id="id + '-' + position(seat)"
             :value="categories[position(seat)] ?? 'GENERAL'"
             @change="categoryChange(seat, $event)"
@@ -81,10 +77,11 @@ function categoryChange(seat: Seat, event: Event) {
       </ul>
     </fieldset>
     <div class="step-actions">
-      <button type="button" :disabled="disabled" @click="emit('back')">Cambiar función</button
+      <button type="button" class="purchase-action" :disabled="disabled" @click="emit('back')">
+        Cambiar función</button
       ><button
         type="button"
-        class="primary"
+        class="purchase-action primary"
         :disabled="disabled || !available"
         @click="emit('continue')"
       >
