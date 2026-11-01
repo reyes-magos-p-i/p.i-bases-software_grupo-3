@@ -3,6 +3,7 @@ import { TheatersController } from './theaters.controller';
 import { TheatersService } from './theaters.service';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
+import { UpdateSeatsDto } from './dto/update-seats.dto';
 
 describe('TheatersController', () => {
   let controller: TheatersController;
@@ -14,6 +15,7 @@ describe('TheatersController', () => {
     update: jest.Mock;
     remove: jest.Mock;
     getSeats: jest.Mock;
+    updateSelected: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -25,6 +27,7 @@ describe('TheatersController', () => {
       update: jest.fn(),
       remove: jest.fn(),
       getSeats: jest.fn(),
+      updateSelected: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -137,4 +140,33 @@ describe('TheatersController', () => {
       await expect(controller.getSeats(7)).rejects.toBe(error);
     });
   });
+
+  describe('updateSeats', () => {
+    const dto: UpdateSeatsDto = {
+      seats: [{ rowNumber: 1, columnNumber: 2 }],
+      state: 'indisponible',
+      type: 'vip',
+    };
+
+    it('delegates to the service and returns its result', async () => {
+      const result = {
+        theaterId: 7,
+        seatsUpdated: 1,
+      };
+      service.updateSelected.mockResolvedValueOnce(result);
+
+      await expect(controller.updateSeats(7, dto)).resolves.toEqual(result);
+
+      expect(service.updateSelected).toHaveBeenCalledTimes(1);
+      expect(service.updateSelected).toHaveBeenCalledWith(7, dto);
+    });
+
+    it('propagates service errors', async () => {
+      const error = new Error('Seat update failed');
+      service.updateSelected.mockRejectedValueOnce(error);
+
+      await expect(controller.updateSeats(7, dto)).rejects.toBe(error);
+    });
+  });
+
 });
