@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import PurchaseSummary from './PurchaseSummary.vue'
@@ -8,7 +8,8 @@ import { CLIENT_ACCESS_TOKEN_KEY, clientSessionRevision } from '@/services/clien
 import { authErrorStatus } from '@/utils/auth-errors'
 import { formatColones, formatDateTime } from '@/utils/transaction-format'
 import type { PurchaseList, PurchaseReceipt } from '@/types/purchase'
-const emit = defineEmits<{ sessionExpired: [] }>()
+const props = withDefaults(defineProps<{ purchaseId?: number | null }>(), { purchaseId: null })
+const emit = defineEmits<{ sessionExpired: []; history: [] }>()
 const data = ref<PurchaseList | null>(null),
   detail = ref<PurchaseReceipt | null>(null),
   loading = ref(false),
@@ -57,13 +58,36 @@ async function load(page = 1) {
   })
 }
 async function open(id: number) {
+  detail.value = null
   const current = session()
   await run(async (signal) => {
     const result = await getMyPurchase(id, signal)
     if (current() && !signal.aborted) detail.value = result
   })
 }
-onMounted(() => void load())
+function showHistory() {
+  detail.value = null
+  if (!data.value) void load()
+}
+function backToHistory() {
+  showHistory()
+  emit('history')
+}
+function retry() {
+  if (props.purchaseId !== null) void open(props.purchaseId)
+  else void load(data.value?.page ?? 1)
+}
+watch(
+  () => props.purchaseId,
+  (id) => {
+    if (id !== null) void open(id)
+    else if (detail.value) showHistory()
+  },
+)
+onMounted(() => {
+  if (props.purchaseId === null) void load()
+  else void open(props.purchaseId)
+})
 onBeforeUnmount(() => {
   disposed = true
   generation++
@@ -74,7 +98,7 @@ onBeforeUnmount(() => {
   <section>
     <h2>Mis compras</h2>
     <LoadingState v-if="loading" message="Cargando compras..." /><template v-else-if="detail"
-      ><button type="button" @click="detail = null">← Volver a mis compras</button
+      ><button type="button" @click="backToHistory">← Volver a mis compras</button
       ><PurchaseSummary :purchase="detail" /></template
     ><template v-else-if="data"
       ><p>{{ data.total }} compras registradas</p>
@@ -109,7 +133,7 @@ onBeforeUnmount(() => {
         >
           <i class="bi bi-chevron-right" aria-hidden="true" />
         </button></nav></template
-    ><button v-else-if="loadFailed" type="button" @click="load()">Reintentar</button
+    ><button v-else-if="loadFailed" type="button" @click="retry">Reintentar</button
     ><NotificationPopup
       v-if="error"
       type="error"

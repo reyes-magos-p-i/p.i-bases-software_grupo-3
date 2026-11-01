@@ -1,8 +1,18 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import QrCode from '@/components/common/QrCode.vue'
+import { purchaseLocation } from '@/utils/purchase-navigation'
 import { PROJECTION_STATUS_LABELS, type ProjectionStatus } from '@/types/projection'
 import { formatDateTime, formatColones } from '@/utils/transaction-format'
 import { TICKET_CATEGORY_LABELS, type PurchaseQuote, type PurchaseReceipt } from '@/types/purchase'
-defineProps<{ purchase: PurchaseQuote | PurchaseReceipt }>()
+const props = defineProps<{ purchase: PurchaseQuote | PurchaseReceipt }>()
+const router = useRouter()
+const purchaseUrl = computed(() => {
+  if (!('reference' in props.purchase)) return ''
+  return new URL(router.resolve(purchaseLocation(props.purchase.id)).href, window.location.origin)
+    .href
+})
 </script>
 <template>
   <section class="purchase-summary" aria-label="Resumen de compra">
@@ -57,15 +67,7 @@ defineProps<{ purchase: PurchaseQuote | PurchaseReceipt }>()
         <tbody>
           <tr v-for="line in purchase.lines" :key="line.code">
             <td>
-              {{ line.label
-              }}<small v-if="line.modifiers.length"
-                >Base {{ formatColones(line.base) }} +
-                {{
-                  line.modifiers
-                    .map((modifier) => `${modifier.label} ${formatColones(modifier.amount)}`)
-                    .join(' + ')
-                }}</small
-              >
+              {{ line.label }}
             </td>
             <td>{{ line.quantity }}</td>
             <td>{{ formatColones(line.unitPrice) }}</td>
@@ -80,6 +82,13 @@ defineProps<{ purchase: PurchaseQuote | PurchaseReceipt }>()
         <strong>{{ purchase.reference }}</strong> · {{ formatDateTime(purchase.purchasedAt) }} ·
         {{ purchase.status === 'PAID' ? 'Pagada' : 'Cancelada' }}
       </p>
+      <QrCode
+        :value="purchaseUrl"
+        :label="`Código QR de la compra ${purchase.reference}`"
+        class="purchase-qr"
+      >
+        Escanea para consultar esta compra desde tu perfil.
+      </QrCode>
       <h3>Tus boletos</h3>
       <ul v-if="purchase.tickets.length" class="tickets">
         <li v-for="ticket in purchase.tickets" :key="ticket.id">
@@ -134,10 +143,8 @@ td {
   text-align: left;
   vertical-align: top;
 }
-small {
-  display: block;
-  color: var(--text-secondary);
-  margin-top: 5px;
+.purchase-qr {
+  margin: 24px 0;
 }
 .line-scroll {
   overflow-x: auto;

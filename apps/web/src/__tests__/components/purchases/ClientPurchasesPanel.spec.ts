@@ -85,4 +85,52 @@ describe('ClientPurchasesPanel', () => {
     await flushPromises()
     expect(wrapper.findComponent(PurchaseSummary).exists()).toBe(false)
   })
+  it('opens a QR purchase directly and returns to the normal history', async () => {
+    vi.mocked(getMyPurchase).mockResolvedValue({ id: 12 } as never)
+    wrapper = mount(ClientPurchasesPanel, {
+      props: { purchaseId: 12 },
+      global: { stubs: { PurchaseSummary: true } },
+    })
+    await flushPromises()
+    expect(getMyPurchase).toHaveBeenCalledExactlyOnceWith(12, expect.any(AbortSignal))
+    expect(getMyPurchases).not.toHaveBeenCalled()
+    expect(wrapper.getComponent(PurchaseSummary).props('purchase')).toEqual({ id: 12 })
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('history')).toHaveLength(1)
+    expect(wrapper.find('.purchases').exists()).toBe(true)
+    expect(getMyPurchases).toHaveBeenCalledExactlyOnceWith(1, expect.any(AbortSignal))
+  })
+  it('retries a failed direct purchase without replacing it with another client history', async () => {
+    vi.mocked(getMyPurchase)
+      .mockRejectedValueOnce({ isAxiosError: true, response: { status: 404 } })
+      .mockResolvedValue({ id: 12 } as never)
+    wrapper = mount(ClientPurchasesPanel, {
+      props: { purchaseId: 12 },
+      global: { stubs: { PurchaseSummary: true } },
+    })
+    await flushPromises()
+    expect(wrapper.findComponent(PurchaseSummary).exists()).toBe(false)
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(true)
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(getMyPurchase).toHaveBeenCalledTimes(2)
+    expect(getMyPurchase).toHaveBeenLastCalledWith(12, expect.any(AbortSignal))
+    expect(getMyPurchases).not.toHaveBeenCalled()
+  })
+  it('reacts to another QR link and clears its detail when the link is removed', async () => {
+    vi.mocked(getMyPurchase).mockImplementation((id) => Promise.resolve({ id } as never))
+    wrapper = mount(ClientPurchasesPanel, {
+      props: { purchaseId: 12 },
+      global: { stubs: { PurchaseSummary: true } },
+    })
+    await flushPromises()
+    await wrapper.setProps({ purchaseId: 13 })
+    await flushPromises()
+    expect(wrapper.getComponent(PurchaseSummary).props('purchase')).toEqual({ id: 13 })
+    await wrapper.setProps({ purchaseId: null })
+    await flushPromises()
+    expect(wrapper.findComponent(PurchaseSummary).exists()).toBe(false)
+    expect(wrapper.find('.purchases').exists()).toBe(true)
+  })
 })

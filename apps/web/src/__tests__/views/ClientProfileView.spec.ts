@@ -1,3 +1,4 @@
+import { reactive } from 'vue'
 import ClientPurchasesPanel from '@/components/purchases/ClientPurchasesPanel.vue'
 import ClientPreferencesForm from '@/components/clients/ClientPreferencesForm.vue'
 import {
@@ -38,10 +39,11 @@ const navigation = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
   leave: undefined as undefined | (() => boolean | Promise<boolean>),
+  query: {} as Record<string, string>,
 }))
 vi.mock('vue-router', () => ({
   useRouter: () => navigation,
-  useRoute: () => ({ query: {} }),
+  useRoute: () => ({ query: navigation.query }),
   onBeforeRouteLeave: (guard: () => boolean | Promise<boolean>) => {
     navigation.leave = guard
   },
@@ -93,6 +95,7 @@ describe('ClientProfileView', () => {
   const wrappers: VueWrapper[] = []
   beforeEach(() => {
     vi.resetAllMocks()
+    navigation.query = reactive({})
     vi.mocked(getClientPreferenceSettings).mockResolvedValue(structuredClone(preferences))
     vi.mocked(saveClientPreferences).mockResolvedValue({ genreIds: [], languageIds: [] })
     establishClientSession(
@@ -640,5 +643,32 @@ describe('ClientProfileView', () => {
       path: '/',
       query: { login: 'client', reason: 'expired' },
     })
+  })
+  it('opens a linked purchase in its profile section and clears the link on return to history', async () => {
+    Object.assign(navigation.query, { section: 'purchases', purchaseId: '12' })
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.getComponent(ClientPurchasesPanel).props('purchaseId')).toBe(12)
+    navigation.query.purchaseId = '13'
+    await flushPromises()
+    expect(wrapper.getComponent(ClientPurchasesPanel).props('purchaseId')).toBe(13)
+    wrapper.getComponent(ClientPurchasesPanel).vm.$emit('history')
+    await flushPromises()
+    expect(navigation.replace).toHaveBeenCalledWith({
+      path: '/account/profile',
+      query: { section: 'purchases' },
+    })
+  })
+  it('honors unsaved changes before opening a QR purchase in the same profile', async () => {
+    const wrapper = render()
+    await edit(wrapper)
+    wrapper.getComponent(ClientProfileForm).vm.$emit('dirty', true)
+    Object.assign(navigation.query, { section: 'purchases', purchaseId: '12' })
+    await flushPromises()
+    expect(confirmation(wrapper, 'Cambios sin guardar').props('open')).toBe(true)
+    expect(wrapper.findComponent(ClientPurchasesPanel).exists()).toBe(false)
+    confirmation(wrapper, 'Cambios sin guardar').vm.$emit('confirm')
+    await flushPromises()
+    expect(wrapper.getComponent(ClientPurchasesPanel).props('purchaseId')).toBe(12)
   })
 })
