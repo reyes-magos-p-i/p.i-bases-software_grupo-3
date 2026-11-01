@@ -1,3 +1,4 @@
+import ClientPurchasesPanel from '@/components/purchases/ClientPurchasesPanel.vue'
 import ClientPreferencesForm from '@/components/clients/ClientPreferencesForm.vue'
 import {
   getClientPreferenceSettings,
@@ -40,6 +41,7 @@ const navigation = vi.hoisted(() => ({
 }))
 vi.mock('vue-router', () => ({
   useRouter: () => navigation,
+  useRoute: () => ({ query: {} }),
   onBeforeRouteLeave: (guard: () => boolean | Promise<boolean>) => {
     navigation.leave = guard
   },
@@ -119,6 +121,7 @@ describe('ClientProfileView', () => {
           AppHeader: true,
           AppFooter: true,
           ClientProfileForm: true,
+          ClientPurchasesPanel: true,
           ClientPreferencesForm: true,
           ClientEmailChangeDialog: true,
           ConfirmationDialog: true,
@@ -624,5 +627,18 @@ describe('ClientProfileView', () => {
       query: { login: 'client', reason: 'expired' },
     })
     expect(clientSession.user.value).toBeNull()
+  })
+  it('opens purchase history from the profile and handles an expired purchase session', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'purchases')
+    expect(wrapper.findComponent(ClientPurchasesPanel).exists()).toBe(true)
+    wrapper.getComponent(ClientPurchasesPanel).vm.$emit('sessionExpired')
+    await flushPromises()
+    expect(clientSession.user.value).toBeNull()
+    expect(navigation.replace).toHaveBeenCalledWith({
+      path: '/',
+      query: { login: 'client', reason: 'expired' },
+    })
   })
 })
