@@ -5,6 +5,7 @@ import { UpdateTheaterDto } from './dto/update-theater.dto';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { AuthGuard } from '@nestjs/passport';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
+import { UpdateSeatsDto } from './dto/update-seats.dto';
 
 @UseGuards(AuthGuard('jwt'), AdministratorGuard, PasswordStatusGuard)
 @Controller('theaters')
@@ -44,5 +45,13 @@ export class TheatersController {
   @Get(':id/seats')
   getSeats(@Param('id', ParseIntPipe) id: number) {
     return this.theatersService.getSeats(id);
+  }
+
+  @Patch(':theaterId/seats')
+  updateSeats(
+    @Param('theaterId', ParseIntPipe) theaterId: number,
+    @Body() dto: UpdateSeatsDto,
+  ) {
+    return this.theatersService.updateSelected(theaterId, dto);
   }
 }

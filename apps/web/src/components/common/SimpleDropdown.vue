@@ -1,8 +1,8 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends string | number">
 import { useId } from 'vue'
 
 interface DropdownOption {
-  id: number
+  id: T
   name: string
 }
 
@@ -15,16 +15,15 @@ withDefaults(defineProps<{
 }>(), {
   placeholder: 'Seleccione una opción',
   disabled: false,
-  required: false
+  required: false,
 })
 
-const selected = defineModel<number | null>({
-  default: null
+const selected = defineModel<T | null>({
+  default: null,
 })
 
 const id = useId()
 </script>
-
 <template>
   <div class="simple-dropdown">
     <label :for="id">
@@ -38,7 +37,7 @@ const id = useId()
       :disabled="disabled"
       :required="required"
     >
-      <option :value="null" disabled>
+      <option :value="null" >
         {{ placeholder }}
       </option>
 
