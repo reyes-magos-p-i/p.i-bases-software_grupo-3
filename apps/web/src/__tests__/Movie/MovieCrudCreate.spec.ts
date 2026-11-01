@@ -2,11 +2,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
-
 import MovieCrudCreate from '@/components/Movies/MovieCrudCreate.vue'
 import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
-import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 import ReusableSearchDropdown from '@/components/common/ReusableSearchDropdown.vue'
 import { createMovie } from '@/services/movie.service'
 
@@ -45,8 +43,8 @@ describe('MovieCrudCreate', () => {
     numbers[0]!.vm.$emit('update:modelValue', 169)
     numbers[1]!.vm.$emit('update:modelValue', 2014)
 
-    wrapper.findComponent(SimpleDropdown)
-      .vm.$emit('update:modelValue', 1)
+    wrapper.getComponent({ name: 'SimpleDropdown' })
+    .vm.$emit('update:modelValue', 1)
 
     dropdowns[0]!.vm.$emit('update:modelValue', [1])
     dropdowns[1]!.vm.$emit('update:modelValue', [2])
