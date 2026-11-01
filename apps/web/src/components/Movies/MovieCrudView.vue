@@ -25,9 +25,7 @@ const retryable = ref(false)
 let request: AbortController | undefined
 
 const title = computed(() =>
-  movie.value
-    ? `Detalle de ${movie.value.title}`
-    : 'Detalle de película',
+  movie.value ? `Detalle de ${movie.value.title}` : 'Detalle de película',
 )
 
 function text(value: unknown) {
@@ -43,9 +41,7 @@ function text(value: unknown) {
 }
 
 function optionName(value: MovieOption | null | undefined) {
-  return value?.name?.trim()
-    ? value.name
-    : 'Sin registrar'
+  return value?.name?.trim() ? value.name : 'Sin registrar'
 }
 
 function optionList(values: MovieOption[] | null | undefined) {
@@ -53,13 +49,9 @@ function optionList(values: MovieOption[] | null | undefined) {
     return 'Sin registrar'
   }
 
-  const names = values
-    .map((value) => value.name)
-    .filter((name) => name?.trim())
+  const names = values.map((value) => value.name).filter((name) => name?.trim())
 
-  return names.length > 0
-    ? names.join(', ')
-    : 'Sin registrar'
+  return names.length > 0 ? names.join(', ') : 'Sin registrar'
 }
 
 function duration(minutes: number | null | undefined) {
@@ -97,8 +89,8 @@ const groups = computed(() => {
           value: duration(detail.runningTime),
         },
         {
-            label: 'Año de estreno',
-            value: detail.releaseYear ?? 'Sin registrar',
+          label: 'Año de estreno',
+          value: detail.releaseYear ?? 'Sin registrar',
         },
       ],
     },
@@ -159,10 +151,7 @@ async function load() {
   loading.value = true
 
   try {
-    const detail = await getMovie(
-      movieId,
-      current.signal,
-    )
+    const detail = await getMovie(movieId, current.signal)
     //debug stuff
     console.log('MOVIE DETAIL:', detail)
     console.log('MOVIE DETAIL:', detail)
@@ -173,26 +162,20 @@ async function load() {
   } catch (failure) {
     if (current.signal.aborted) return
 
-    const status = isAxiosError(failure)
-      ? failure.response?.status
-      : undefined
+    const status = isAxiosError(failure) ? failure.response?.status : undefined
 
     if (status === 401) {
-      error.value =
-        'La sesión ha expirado. Inicia sesión nuevamente.'
+      error.value = 'La sesión ha expirado. Inicia sesión nuevamente.'
 
       emit('session-expired')
     } else if (status === 403) {
-      error.value =
-        'No tienes permiso para ver esta película.'
+      error.value = 'No tienes permiso para ver esta película.'
 
       emit('forbidden')
     } else if (status === 404) {
-      error.value =
-        'La película seleccionada ya no existe.'
+      error.value = 'La película seleccionada ya no existe.'
     } else {
-      error.value =
-        'No se pudo mostrar la película. Comprueba la conexión y vuelve a intentarlo.'
+      error.value = 'No se pudo mostrar la película. Comprueba la conexión y vuelve a intentarlo.'
 
       retryable.value = true
     }
@@ -223,36 +206,14 @@ onBeforeUnmount(() => request?.abort())
 </script>
 
 <template>
-  <BaseModal
-    :open="movieId !== null"
-    :title="title"
-    @close="close"
-  >
-    <div
-      class="movie-detail-content"
-      :aria-busy="loading"
-    >
-      <p
-        v-if="loading"
-        class="detail-feedback"
-        role="status"
-      >
-        Cargando datos de la película…
-      </p>
+  <BaseModal :open="movieId !== null" :title="title" @close="close">
+    <div class="movie-detail-content" :aria-busy="loading">
+      <p v-if="loading" class="detail-feedback" role="status">Cargando datos de la película…</p>
 
-      <div
-        v-else-if="error"
-        class="detail-feedback detail-error"
-        role="alert"
-      >
+      <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         <p>{{ error }}</p>
 
-        <button
-          v-if="retryable"
-          type="button"
-          class="detail-button"
-          @click="load"
-        >
+        <button v-if="retryable" type="button" class="detail-button" @click="load">
           Reintentar
         </button>
       </div>
@@ -271,6 +232,7 @@ onBeforeUnmount(() => request?.abort())
               v-for="field in group.fields"
               :key="field.label"
               class="detail-field"
+              :class="{ 'detail-field-wide': field.label === 'Sinopsis' }"
             >
               <dt>{{ field.label }}</dt>
               <dd>{{ field.value }}</dd>
@@ -280,13 +242,7 @@ onBeforeUnmount(() => request?.abort())
       </template>
 
       <footer class="detail-footer">
-        <button
-          type="button"
-          class="detail-button"
-          @click="close"
-        >
-          Cerrar
-        </button>
+        <button type="button" class="detail-button" @click="close">Cerrar</button>
       </footer>
     </div>
   </BaseModal>
@@ -407,5 +363,8 @@ dd {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-</style>
 
+.detail-field-wide {
+  grid-column: 1 / -1;
+}
+</style>

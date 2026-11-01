@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TheatersService } from './theaters.service';
 import { TheaterRepository } from './theater.repository/theater.repository';
 import { ChairsRepository } from './chairs.repository';
+import { UpdateSeatsDto } from './dto/update-seats.dto';
 
 describe('TheatersService', () => {
   let service: TheatersService;
@@ -15,6 +16,7 @@ describe('TheatersService', () => {
   };
   let chairsRepository: {
     findByTheater: jest.Mock;
+    updateSelected: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -27,6 +29,7 @@ describe('TheatersService', () => {
     };
     chairsRepository = {
       findByTheater: jest.fn(),
+      updateSelected: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -278,6 +281,54 @@ describe('TheatersService', () => {
       chairsRepository.findByTheater.mockRejectedValueOnce(error);
 
       await expect(service.getSeats(7)).rejects.toBe(error);
+    });
+  });
+
+  describe('updateSelected', () => {
+    const dto: UpdateSeatsDto = {
+      seats: [{ rowNumber: 1, columnNumber: 2 }],
+      type: 'vip',
+    };
+
+    it('passes the request to the repository and returns its result', async () => {
+      const result = {
+        theaterId: 7,
+        seatsUpdated: 1,
+      };
+
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.updateSelected.mockResolvedValueOnce(result);
+
+      await expect(service.updateSelected(7, dto)).resolves.toEqual(result);
+
+      expect(repository.getTheaterById).toHaveBeenCalledWith(7);
+      expect(chairsRepository.updateSelected).toHaveBeenCalledWith(7, dto);
+    });
+
+    it('throws when the theater does not exist', async () => {
+      repository.getTheaterById.mockResolvedValueOnce(null);
+
+      await expect(service.updateSelected(999, dto)).rejects.toThrow(
+        new NotFoundException('Theater not found: 999'),
+      );
+
+      expect(repository.getTheaterById).toHaveBeenCalledWith(999);
+      expect(chairsRepository.updateSelected).not.toHaveBeenCalled();
+    });
+
+    it('propagates repository errors', async () => {
+      const error = new NotFoundException('Seat not found');
+
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.updateSelected.mockRejectedValueOnce(error);
+
+      await expect(service.updateSelected(7, dto)).rejects.toBe(error);
+
+      expect(chairsRepository.updateSelected).toHaveBeenCalledWith(7, dto);
     });
   });
 });

@@ -1,24 +1,21 @@
-
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
-
 import MovieCrudCreate from '@/components/Movies/MovieCrudCreate.vue'
 import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
-import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 import ReusableSearchDropdown from '@/components/common/ReusableSearchDropdown.vue'
 import { createMovie } from '@/services/movie.service'
 
 vi.mock('@/services/movie.service', () => ({
-  createMovie: vi.fn()
+  createMovie: vi.fn(),
 }))
 
 describe('MovieCrudCreate', () => {
   const props = {
     classifications: [{ id: 1, name: 'TP' }],
     languages: [{ id: 1, name: 'Español' }],
-    genres: [{ id: 2, name: 'Ciencia ficción' }]
+    genres: [{ id: 2, name: 'Ciencia ficción' }],
   }
 
   function mountForm() {
@@ -27,10 +24,10 @@ describe('MovieCrudCreate', () => {
       global: {
         stubs: {
           BaseModal: {
-            template: '<div><slot /></div>'
-          }
-        }
-      }
+            template: '<div><slot /></div>',
+          },
+        },
+      },
     })
   }
 
@@ -45,8 +42,7 @@ describe('MovieCrudCreate', () => {
     numbers[0]!.vm.$emit('update:modelValue', 169)
     numbers[1]!.vm.$emit('update:modelValue', 2014)
 
-    wrapper.findComponent(SimpleDropdown)
-      .vm.$emit('update:modelValue', 1)
+    wrapper.getComponent({ name: 'SimpleDropdown' }).vm.$emit('update:modelValue', 1)
 
     dropdowns[0]!.vm.$emit('update:modelValue', [1])
     dropdowns[1]!.vm.$emit('update:modelValue', [2])
@@ -61,8 +57,7 @@ describe('MovieCrudCreate', () => {
   it('disables submit when the form is incomplete', async () => {
     const wrapper = mountForm()
 
-    expect(wrapper.find('button[type="submit"]').attributes('disabled'))
-      .toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
 
     await wrapper.find('form').trigger('submit')
 
@@ -85,7 +80,7 @@ describe('MovieCrudCreate', () => {
       releaseYear: 2014,
       classificationId: 1,
       languageIds: [1],
-      genreIds: [2]
+      genreIds: [2],
     })
 
     expect(wrapper.emitted('saved')).toHaveLength(1)
@@ -110,21 +105,20 @@ describe('MovieCrudCreate', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(wrapper.find('[role="alert"]').text())
-      .toBe('No se pudo crear la película.')
+    expect(wrapper.find('[role="alert"]').text()).toBe('No se pudo crear la película.')
 
     expect(wrapper.emitted('saved')).toBeUndefined()
   })
 
   it.each([
     [401, 'session-expired'],
-    [403, 'forbidden']
+    [403, 'forbidden'],
   ])('emits %s error event', async (status, event) => {
     vi.mocked(createMovie).mockRejectedValue(
       Object.assign(new Error('Request failed'), {
         isAxiosError: true,
-        response: { status }
-      })
+        response: { status },
+      }),
     )
 
     const wrapper = mountForm()
