@@ -123,9 +123,22 @@ paths:
         - in: query
           name: page
           schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: search
+          description: Parte del número de orden; "0122" encuentra ORD-000122.
+          schema: { type: string, maxLength: 20 }
+        - in: query
+          name: dateFrom
+          description: Fecha de compra inicial, incluida, en hora de Costa Rica.
+          schema: { type: string, format: date }
+        - in: query
+          name: dateTo
+          description: Fecha de compra final, incluida, en hora de Costa Rica.
+          schema: { type: string, format: date }
       responses:
         "200":
-          description: Diez compras por página; items, page, total y totalPages. Cada compra incluye id, reference, purchasedAt, status, total, title, startsAt y quantity.
+          description: Diez compras por página, de la más reciente a la más antigua; items, page, total y totalPages. Cada compra incluye id, reference, purchasedAt, status, total, title, startsAt y quantity.
+        "400": { description: Filtros inválidos }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
   /purchases/me/{id}:

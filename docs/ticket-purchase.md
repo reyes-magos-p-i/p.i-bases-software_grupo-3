@@ -37,13 +37,13 @@ Crear y modificar funciones permite configurar formato, tecnología y estreno. E
 - La transacción bloquea cliente, función, sala y asientos seleccionados, revalida disponibilidad y registra factura, líneas y boletos conjuntamente. La restricción única preexistente de función/asiento es la última defensa contra ventas dobles. Un fallo revierte toda la compra.
 - La ocupación por función se obtiene de `TICKETS`. No se cambia globalmente `SEATS.SEAT_STATE`, por lo que comprar en una función no ocupa el asiento en las demás.
 - Cada confirmación incluye un UUID de solicitud. Repetir la misma selección con esa referencia devuelve la compra registrada; cambiar la selección con la misma referencia produce un conflicto. La referencia nunca permite consultar la factura de otro cliente.
-- Ante una respuesta incierta de red o servidor se conserva la referencia, se bloquea la modificación de la selección y se ofrece reintentar o consultar «Mis compras». No se presenta éxito sin una respuesta válida.
+- Ante una respuesta incierta de red o servidor se conserva la referencia, se bloquea la modificación de la selección y se ofrece reintentar o consultar «Historial de compras». No se presenta éxito sin una respuesta válida.
 
 ## Cuenta e historial
 
 Las rutas requieren JWT de cliente y contraseña vigente. La cuenta se obtiene de la sesión, no del cuerpo de la solicitud; también se comprueba su estado bajo bloqueo al confirmar. Las escrituras exigen un origen permitido y tienen límite de solicitudes. Las respuestas privadas llevan `Cache-Control: no-store`.
 
-«Mi perfil → Mis compras» pagina diez compras por página y muestra el detalle y los boletos propios. Los importes, correo y datos originales de función se conservan en la factura. Si el personal reprograma un boleto, se muestra también su función actual. Las facturas anteriores sin vínculo a boletos no inventan asientos ni vínculos históricos. El panel administrativo de transacciones distingue «Pago simulado» y consulta los datos originales cuando existe la instantánea.
+«Mi perfil → Historial de compras» ([especificación](./purchase-history.md)) pagina diez compras por página y muestra el detalle y los boletos propios. Los importes, correo y datos originales de función se conservan en la factura. Si el personal reprograma un boleto, se muestra también su función actual. Las facturas anteriores sin vínculo a boletos no inventan asientos ni vínculos históricos. El panel administrativo de transacciones distingue «Pago simulado» y consulta los datos originales cuando existe la instantánea.
 
 La compra de invitado no está habilitada: el modelo conserva un correo de comprador independiente del cliente para incorporar esa modalidad posteriormente. `/buy-tickets?movieId=…` exige sesión de cliente; un invitado debe iniciar sesión y volver a seleccionar la película.
 

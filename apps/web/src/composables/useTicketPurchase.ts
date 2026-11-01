@@ -235,7 +235,7 @@ export function useTicketPurchase(onExpired: () => void) {
       uncertain.value = !status || status >= 500
       if (uncertain.value) {
         error.value +=
-          ' Puedes reintentar el pago de esta misma selección; la compra no se duplicará. También puedes consultar «Mis compras».'
+          ' Puedes reintentar el pago de esta misma selección; la compra no se duplicará. También puedes consultar «Historial de compras».'
       } else if (status === 409) {
         uncertain.value = false
         invalidate()

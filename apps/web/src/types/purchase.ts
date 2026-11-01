@@ -1,3 +1,4 @@
+import type { TransactionStatus } from './transaction'
 import type { Seat } from './seats'
 import type { PortalMovie } from './movie'
 export type TicketCategory = 'GENERAL' | 'CHILD' | 'SENIOR'
@@ -63,6 +64,9 @@ export interface PurchaseReceipt extends Omit<PurchaseQuote, 'seats' | 'quantity
   purchasedAt: string
   status: string
   buyerEmail: string
+  paymentMethod: 'CARD' | 'CASH' | 'SIMULATED'
+  cardBrand: string | null
+  cardLast4: string | null
   tickets: PurchasedTicket[]
 }
 export interface PurchaseCategory {
@@ -79,12 +83,18 @@ export interface SeatAvailability {
 export interface PurchaseMovie extends PortalMovie {
   synopsis: string
 }
+export interface PurchaseListQuery {
+  page?: number
+  search?: string
+  dateFrom?: string
+  dateTo?: string
+}
 export interface PurchaseList {
   items: {
     id: number
     reference: string
     purchasedAt: string
-    status: string
+    status: TransactionStatus
     total: number
     title: string
     startsAt: string

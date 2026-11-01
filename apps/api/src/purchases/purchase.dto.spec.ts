@@ -3,7 +3,7 @@ import { validate } from 'class-validator';
 import {
   ConfirmPurchaseDto,
   PurchaseSelectionDto,
-  PurchasePageDto,
+  ListPurchasesQueryDto,
 } from './purchase.dto';
 const selection = {
   functionId: 4,
@@ -64,13 +64,31 @@ describe('Purchase DTO validation', () => {
     ).toEqual(expect.arrayContaining(['requestKey', 'quoteVersion']));
   });
   it('defaults page and rejects invalid page values', async () => {
-    expect(new PurchasePageDto().page).toBe(1);
+    expect(new ListPurchasesQueryDto().page).toBe(1);
     for (const page of ['0', 'abc', '1.5'])
       expect(
-        await validate(plainToInstance(PurchasePageDto, { page })),
+        await validate(plainToInstance(ListPurchasesQueryDto, { page })),
       ).not.toHaveLength(0);
     expect(
-      await validate(plainToInstance(PurchasePageDto, { page: '2' })),
+      await validate(plainToInstance(ListPurchasesQueryDto, { page: '2' })),
     ).toEqual([]);
+  });
+  it('accepts history filters and rejects invalid ones', async () => {
+    const filters = plainToInstance(ListPurchasesQueryDto, {
+      search: '  0122 ',
+      dateFrom: '2026-10-05',
+      dateTo: '2026-10-10',
+    });
+    expect(await validate(filters)).toEqual([]);
+    expect(filters.search).toBe('0122');
+    for (const invalid of [
+      { search: 'x'.repeat(21) },
+      { search: ['0122'] },
+      { dateFrom: '05/10/2026' },
+      { dateTo: '2026-02-31' },
+    ])
+      expect(
+        await validate(plainToInstance(ListPurchasesQueryDto, invalid)),
+      ).not.toHaveLength(0);
   });
 });

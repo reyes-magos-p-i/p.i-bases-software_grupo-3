@@ -113,6 +113,14 @@ export async function clearClientAuth(): Promise<void> {
   if (fbAuth.status === 'connected') await logoutFromFacebook()
 }
 
+/** The returned check stays true only while the session active now is the current one. */
+export function trackClientSession(): () => boolean {
+  const revision = clientSessionRevision()
+  const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
+  return () =>
+    revision === clientSessionRevision() && token === localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
+}
+
 export function clientSessionRevision(): number {
   return revision
 }

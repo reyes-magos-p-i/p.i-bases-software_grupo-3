@@ -104,6 +104,6 @@ La guarda y su prueba se renombran a `session-origin.guard.ts` y `session-origin
 - Código nuevo respecto de `HEAD`, según LCOV: API 17/17 líneas y 5/6 ramas (95,65 % combinado); web 2/2 líneas y 3/3 ramas (100 % combinado). Se excluyen pruebas y se incluye el archivo fuente renombrado. SonarQube calculará sus métricas con la base de comparación de la PR.
 - Compilación, tipos, ESLint y Prettier correctos en ambas aplicaciones. Las pruebas utilizan persistencia y correo simulados.
 
-## Mis compras
+## Historial de compras
 
-El perfil incorpora una sección de compras propias con paginación y consulta de boletos. El detalle muestra el mismo QR identificativo de la confirmación de compra, preparado para un futuro sistema de verificación en el cine. El QR no contiene un enlace ni abre el perfil. Véase [Compra de boletos](./ticket-purchase.md).
+El menú lateral del perfil incorpora la sección «Historial de compras», con filtros, paginación y detalle en un modal. Véase [Historial de compras](./purchase-history.md). El detalle muestra el mismo QR identificativo de la confirmación de compra, preparado para un futuro sistema de verificación en el cine. El QR no contiene un enlace ni abre el perfil. Véase [Compra de boletos](./ticket-purchase.md).
