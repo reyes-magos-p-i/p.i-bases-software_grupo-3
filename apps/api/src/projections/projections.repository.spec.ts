@@ -262,6 +262,87 @@ describe('ProjectionsRepository', () => {
     ).toHaveLength(4);
   });
 
+  it.each(['projection', 'activity'])(
+    'waits for the current %s before creating the next projection',
+    async (stage) => {
+      const original = connection.execute.getMockImplementation()!;
+      let release!: () => void;
+      let started!: () => void;
+      const pending = new Promise<void>((resolve) => (release = resolve));
+      const reached = new Promise<void>((resolve) => (started = resolve));
+      let held = false;
+      connection.execute.mockImplementation((sql, binds, options) => {
+        const matches = sql.includes(
+          stage === 'projection'
+            ? 'INSERT INTO MOVIE_FUNCTIONS\n'
+            : 'INSERT INTO MOVIE_FUNCTIONS_ACTIVITIES',
+        );
+        if (matches && !held) {
+          held = true;
+          started();
+          return pending.then(() => original(sql, binds, options));
+        }
+        return original(sql, binds, options);
+      });
+
+      const result = repository.createProjections(data, 21);
+      await reached;
+      expect(
+        connection.execute.mock.calls.filter(([sql]) =>
+          sql.includes('INSERT INTO MOVIE_FUNCTIONS\n'),
+        ),
+      ).toHaveLength(1);
+      release();
+      await expect(result).resolves.toMatchObject({
+        projections: [{ movieFunctionId: 100 }, { movieFunctionId: 101 }],
+      });
+      const writes = connection.execute.mock.calls
+        .filter(([sql]) => sql.includes('INSERT INTO MOVIE_FUNCTIONS'))
+        .map(([sql, binds]) =>
+          sql.includes('MOVIE_FUNCTIONS_ACTIVITIES')
+            ? `activity:${binds!.movieFunctionId}`
+            : `projection:${binds!.screeningDate}`,
+        );
+      expect(writes).toEqual([
+        'projection:2099-07-21',
+        'activity:100',
+        'activity:100',
+        'projection:2099-07-22',
+        'activity:101',
+        'activity:101',
+      ]);
+    },
+  );
+
+  it.each(['projection', 'activity'])(
+    'stops later projections when a %s write fails',
+    async (stage) => {
+      const original = connection.execute.getMockImplementation()!;
+      const failure = new Error('Projection write failed');
+      connection.execute.mockImplementation((sql, binds, options) =>
+        sql.includes(
+          stage === 'projection'
+            ? 'INSERT INTO MOVIE_FUNCTIONS\n'
+            : 'INSERT INTO MOVIE_FUNCTIONS_ACTIVITIES',
+        )
+          ? Promise.reject(failure)
+          : original(sql, binds, options),
+      );
+
+      await expect(repository.createProjections(data, 21)).rejects.toBe(
+        failure,
+      );
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+      const projections = connection.execute.mock.calls.filter(([sql]) =>
+        sql.includes('INSERT INTO MOVIE_FUNCTIONS\n'),
+      );
+      expect(projections).toHaveLength(1);
+      expect(projections[0][1]).toMatchObject({
+        screeningDate: '2099-07-21',
+      });
+    },
+  );
+
   it.each([
     ['an inactive theater', { 'FROM THEATERS': { rows: [] } }],
     [

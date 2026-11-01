@@ -1,5 +1,4 @@
 import type { PricingSettings } from '@/types/purchase'
-import type { ProjectionPricePreview } from '@/types/projection'
 import { getApi } from '@/services/api'
 import type {
   AvailableMovie,
@@ -9,6 +8,7 @@ import type {
   ProjectionFilterOptions,
   ProjectionList,
   ProjectionListQuery,
+  ProjectionPricePreview,
   ProjectionSchedulingOptions,
   UpdateProjectionRequest,
 } from '@/types/projection'

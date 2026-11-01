@@ -227,7 +227,8 @@ export class ProjectionsRepository {
       );
       const activityIds = await this.ensureActivities(connection, data);
       const created: CreatedProjection[] = [];
-      for (const slot of data.slots) {
+      await data.slots.reduce(async (previous, slot) => {
+        await previous;
         const movieFunctionId = await this.insertProjection(
           connection,
           data,
@@ -245,7 +246,7 @@ export class ProjectionsRepository {
           startTime: slot.startTime,
           endTime: slot.endTime,
         });
-      }
+      }, Promise.resolve());
       return created;
     });
     return {

@@ -35,12 +35,12 @@ export class PurchasesRepository {
     private readonly db: DatabaseService,
     private readonly catalog: PurchaseCatalogRepository,
   ) {}
-  private async query<T>(
+  private query<T>(
     sql: string,
     binds: Binds,
     connection?: oracle.Connection,
     json = false,
-  ) {
+  ): Promise<oracle.Result<T>> {
     const options: oracle.ExecuteOptions = {
       ...OPTIONS,
       ...(json ? { fetchInfo: { contextJson: { type: oracle.STRING } } } : {}),
@@ -167,7 +167,12 @@ export class PurchasesRepository {
     positions: number[],
   ) {
     const seats: PurchaseSeat[] = [];
-    for (let offset = 0; offset < positions.length; offset += 1000) {
+    const offsets = Array.from(
+      { length: Math.ceil(positions.length / 1000) },
+      (_, index) => index * 1000,
+    );
+    await offsets.reduce(async (previous, offset) => {
+      await previous;
       const batch = positions.slice(offset, offset + 1000);
       const binds: Binds = {
         columns: context.columns,
@@ -183,7 +188,7 @@ export class PurchasesRepository {
         OPTIONS,
       );
       seats.push(...(result.rows ?? []));
-    }
+    }, Promise.resolve());
     return seats;
   }
   private async writePurchase(

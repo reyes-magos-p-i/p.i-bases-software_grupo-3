@@ -60,6 +60,31 @@ describe('Atomic purchase storage', () => {
     catalog as unknown as PurchaseCatalogRepository,
   );
   let overrides: Record<string, unknown>;
+  function prepareLargeSelection(quantity: number) {
+    const large = Array.from({ length: quantity }, (_, index) => ({
+      ...seats[0]!,
+      positionId: index + 1,
+      rowNumber: Math.floor(index / 100) + 1,
+      columnNumber: (index % 100) + 1,
+    }));
+    const largeContext = {
+      ...context,
+      rows: Math.ceil(quantity / 100),
+      columns: 100,
+    };
+    catalog.getFunction.mockResolvedValue(largeContext);
+    const data = {
+      ...valid,
+      seats: {
+        GENERAL: large.map((seat) => seat.positionId),
+        CHILD: [],
+        SENIOR: [],
+      },
+    };
+    data.quoteVersion = purchaseQuote(largeContext, large, data).version;
+    return { large, data };
+  }
+
   beforeEach(() => {
     jest.resetAllMocks();
     Object.assign(db, {
@@ -276,24 +301,8 @@ describe('Atomic purchase storage', () => {
     expect(commit).not.toHaveBeenCalled();
   });
   it('uses parameterized batches for large selections', async () => {
-    const large = Array.from({ length: 1001 }, (_, index) => ({
-      ...seats[0],
-      positionId: index + 1,
-      rowNumber: Math.floor(index / 100) + 1,
-      columnNumber: (index % 100) + 1,
-    }));
-    const largeContext = { ...context, rows: 11, columns: 100 };
-    catalog.getFunction.mockResolvedValue(largeContext);
+    const { large, data } = prepareLargeSelection(1001);
     overrides['FROM SEATS s'] = { rows: large };
-    const data = {
-      ...valid,
-      seats: {
-        GENERAL: large.map((seat) => seat.positionId),
-        CHILD: [],
-        SENIOR: [],
-      },
-    };
-    data.quoteVersion = purchaseQuote(largeContext, large, data).version;
     await repo.confirm(8, data);
     expect(
       execute.mock.calls.filter(([sql]) =>
@@ -302,6 +311,74 @@ describe('Atomic purchase storage', () => {
     ).toHaveLength(2);
     expect(executeMany.mock.calls[1][1]).toHaveLength(1001);
   });
+  it('locks each seat batch only after the previous batch finishes', async () => {
+    const { large, data } = prepareLargeSelection(1001);
+    const original = execute.getMockImplementation()!;
+    let release!: () => void;
+    let started!: () => void;
+    const pending = new Promise<void>((resolve) => (release = resolve));
+    const reached = new Promise<void>((resolve) => (started = resolve));
+    let batches = 0;
+    execute.mockImplementation((sql: string, ...args: unknown[]) => {
+      if (!sql.includes('FROM SEATS s')) return original(sql, ...args);
+      batches++;
+      if (batches === 1) {
+        started();
+        return pending.then(() => ({ rows: large.slice(0, 1000) }));
+      }
+      return Promise.resolve({ rows: large.slice(1000) });
+    });
+
+    const result = repo.confirm(8, data);
+    await reached;
+    expect(batches).toBe(1);
+    expect(executeMany).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+    release();
+    await expect(result).resolves.toMatchObject({ id: 12 });
+    const locks = execute.mock.calls.filter(([sql]) =>
+      String(sql).includes('FROM SEATS s'),
+    );
+    expect(locks).toHaveLength(2);
+    expect(locks[0][1]).toMatchObject({ p0: 1, p999: 1000 });
+    expect(locks[1][1]).toMatchObject({ p0: 1001 });
+    expect(locks[1][1]).not.toHaveProperty('p1');
+    expect(
+      locks.every(([sql]) => sql.includes('FOR UPDATE OF s.ROW_NUMBER WAIT 5')),
+    ).toBe(true);
+    expect(executeMany.mock.calls[1][1]).toHaveLength(1001);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(rollback).not.toHaveBeenCalled();
+  });
+  it.each([1, 2])(
+    'rolls back and stops later seat batches when batch %i fails',
+    async (failedBatch) => {
+      const { large, data } = prepareLargeSelection(2001);
+      const original = execute.getMockImplementation()!;
+      const failure = new Error('Seat lock failed');
+      let batches = 0;
+      execute.mockImplementation((sql: string, ...args: unknown[]) => {
+        if (!sql.includes('FROM SEATS s')) return original(sql, ...args);
+        batches++;
+        if (batches === failedBatch) return Promise.reject(failure);
+        return Promise.resolve({
+          rows: large.slice((batches - 1) * 1000, batches * 1000),
+        });
+      });
+
+      await expect(repo.confirm(8, data)).rejects.toBe(failure);
+      expect(batches).toBe(failedBatch);
+      expect(executeMany).not.toHaveBeenCalled();
+      expect(
+        execute.mock.calls.some(([sql]) =>
+          sql.includes('INSERT INTO INVOICES'),
+        ),
+      ).toBe(false);
+      expect(rollback).toHaveBeenCalledTimes(1);
+      expect(commit).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledTimes(1);
+    },
+  );
   it('protects ownership and never fabricates tickets for historical invoices', async () => {
     overrides['AS "contextJson"'] = { rows: [] };
     await expect(repo.findOne(12, 99)).rejects.toThrow('no pertenece');
