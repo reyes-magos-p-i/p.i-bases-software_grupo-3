@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { TheatersService } from './theaters.service';
 import { CreateTheaterDto } from './dto/create-theater.dto';
 import { UpdateTheaterDto } from './dto/update-theater.dto';
@@ -39,5 +49,10 @@ export class TheatersController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.theatersService.remove(+id);
+  }
+
+  @Get(':id/seats')
+  getSeats(@Param('id', ParseIntPipe) id: number) {
+    return this.theatersService.getSeats(id);
   }
 }
