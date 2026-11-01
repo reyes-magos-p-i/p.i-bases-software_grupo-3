@@ -29,3 +29,12 @@ export const seatStateLabels: Record<SeatState, string> = {
   'in-use': 'En uso',
   reserved: 'Reservado',
 }
+
+export interface UpdateSeatStatusRequest {
+  seats: {
+    rowNumber: number
+    columnNumber: number
+  }[]
+  state?: SeatState
+  type?: SeatType
+}
