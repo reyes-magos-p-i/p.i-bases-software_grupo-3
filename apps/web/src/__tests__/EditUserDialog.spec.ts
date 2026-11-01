@@ -578,4 +578,39 @@ describe('EditUserDialog', () => {
     expect(page.text()).toContain('Cambiar el correo afectará el acceso')
     expect(page.text()).not.toContain('Cambiar el rol')
   })
+
+  it.each(['clients', 'employees'] as const)(
+    'keeps closing and cancelling %s independent of invalid edits',
+    async (section) => {
+      getUserDetail.mockResolvedValue(section === 'clients' ? client : employee)
+      const view = await render({ section, id: 42 })
+      const input = page.get<HTMLInputElement>('[name="email"]')
+      await input.setValue('invalid')
+      input.element.focus()
+      const cancel = button('Cancelar')
+      cancel.element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+      cancel.element.focus()
+      await flushPromises()
+      expect(input.attributes('aria-invalid')).toBe('false')
+      expect(page.find('.field-error').exists()).toBe(false)
+      await cancel.trigger('pointerup')
+      await cancel.trigger('click')
+      expect(view.emitted('close')).toHaveLength(1)
+      expect(updateUser).not.toHaveBeenCalled()
+    },
+  )
+
+  it('honors keyboard focus on the close icon without triggering field validation', async () => {
+    const view = await render()
+    const input = page.get<HTMLInputElement>('[name="email"]')
+    await input.setValue('invalid')
+    input.element.focus()
+    const close = page.get<HTMLButtonElement>('.app-modal-close')
+    close.element.focus()
+    await flushPromises()
+    expect(input.attributes('aria-invalid')).toBe('false')
+    await close.trigger('click')
+    expect(view.emitted('close')).toHaveLength(1)
+    expect(updateUser).not.toHaveBeenCalled()
+  })
 })
