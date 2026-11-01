@@ -128,23 +128,34 @@ describe('theater service', () => {
   })
 
   it('loads theater seats with the request signal and timeout', async () => {
+        const apiSeats = [
+      {
+        theaterId: 17,
+        rowNumber: 1,
+        columnNumber: 2,
+        state: 'libre',
+        type: 'vip',
+      },
+    ]
+
+    // Expected frontend data.
     const seats: Seat[] = [
       {
         theaterId: 17,
         rowNumber: 1,
         columnNumber: 2,
-        type: 'vip',
         state: 'free',
+        type: 'vip',
       },
     ]
     const controller = new AbortController()
-    get.mockResolvedValueOnce({ data: seats })
+    get.mockResolvedValueOnce({ data: apiSeats })
 
     const { getTheaterSeats } = await import('@/services/theater.service')
 
     await expect(
       getTheaterSeats(17, controller.signal),
-    ).resolves.toBe(seats)
+    ).resolves.toEqual(seats)
 
     expect(get).toHaveBeenCalledExactlyOnceWith('/theaters/17/seats', {
       signal: controller.signal,
