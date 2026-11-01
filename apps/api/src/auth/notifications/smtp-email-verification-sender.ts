@@ -21,26 +21,38 @@ export class SmtpEmailVerificationSender extends EmailVerificationSender {
   }
 
   async send(message: {
+    purpose?: 'registration' | 'email-change';
     email: string;
     confirmationUrl: string;
     expiresInMinutes: number;
   }): Promise<void> {
+    const changingEmail = message.purpose === 'email-change';
     try {
       const result = await this.transport.sendMail({
         from: { name: 'Cinetadel', address: this.from },
         to: { name: '', address: message.email },
-        subject: 'Confirma tu cuenta de Cinetadel',
+        subject: changingEmail
+          ? 'Confirma tu nuevo correo de Cinetadel'
+          : 'Confirma tu cuenta de Cinetadel',
         text: [
-          'Para activar tu cuenta de Cinetadel, confirma tu correo con este enlace:',
+          changingEmail
+            ? 'Confirma tu nuevo correo de Cinetadel con este enlace. Al confirmar se cerrarán tus sesiones:'
+            : 'Para activar tu cuenta de Cinetadel, confirma tu correo con este enlace:',
           '',
           message.confirmationUrl,
           '',
           `Este enlace solo se puede usar una vez y expirará en ${message.expiresInMinutes} minutos.`,
-          'Si no solicitaste esta cuenta, puedes ignorar este mensaje.',
+          changingEmail
+            ? 'Si no solicitaste este cambio, ignora este mensaje. Tu correo actual se mantendrá.'
+            : 'Si no solicitaste esta cuenta, puedes ignorar este mensaje.',
           '',
           'Equipo Cinetadel',
         ].join('\n'),
-        html: this.buildHtml(message.confirmationUrl, message.expiresInMinutes),
+        html: this.buildHtml(
+          message.confirmationUrl,
+          message.expiresInMinutes,
+          message.purpose,
+        ),
         attachments: [
           {
             filename: 'cinetadel-logo.png',
@@ -57,14 +69,28 @@ export class SmtpEmailVerificationSender extends EmailVerificationSender {
     }
   }
 
-  public buildHtml(confirmationUrl: string, expiresInMinutes: number): string {
+  public buildHtml(
+    confirmationUrl: string,
+    expiresInMinutes: number,
+    purpose: 'registration' | 'email-change' = 'registration',
+  ): string {
+    const changingEmail = purpose === 'email-change';
+    const title = changingEmail
+      ? 'Confirma tu nuevo correo'
+      : 'Confirma tu cuenta';
+    const description = changingEmail
+      ? 'Confirma este correo para vincularlo a tu cuenta. Al confirmar se cerrarán tus sesiones y podrás iniciar sesión con el nuevo correo. Si no reconoces la solicitud, ignórala; tu correo actual no cambiará.'
+      : 'Gracias por registrarte en Cinetadel. Confirma tu correo electrónico para activar tu cuenta.';
+    const action = changingEmail
+      ? 'Confirmar nuevo correo'
+      : 'Confirmar mi cuenta';
     return `
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Confirma tu cuenta</title>
+<title>${title}</title>
 </head>
 <body style="margin:0; padding:0; background-color:#020617; font-family: Arial, Helvetica, sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#020617; padding:32px 16px;">
@@ -84,11 +110,11 @@ export class SmtpEmailVerificationSender extends EmailVerificationSender {
             <td style="background-color:#0F172A; border-radius:12px; padding:40px 32px; border:1px solid #8A2BE2;">
 
               <h1 style="margin:0 0 16px; color:#F8F9FA; font-size:22px; font-weight:700; text-align:center;">
-                Confirma tu cuenta
+                ${title}
               </h1>
 
               <p style="margin:0 0 24px; color:#F8F9FA; font-size:15px; line-height:1.6; text-align:center; opacity:0.85;">
-                Gracias por registrarte en Cinetadel. Confirma tu correo electrónico para activar tu cuenta.
+                ${description}
               </p>
 
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -96,7 +122,7 @@ export class SmtpEmailVerificationSender extends EmailVerificationSender {
                   <td align="center" style="padding:8px 0 24px;">
                     <a href="${confirmationUrl}"
                        style="display:inline-block; background-color:#FFD700; color:#020617; text-decoration:none; font-weight:700; font-size:15px; padding:14px 36px; border-radius:8px;">
-                      Confirmar mi cuenta
+                      ${action}
                     </a>
                   </td>
                 </tr>

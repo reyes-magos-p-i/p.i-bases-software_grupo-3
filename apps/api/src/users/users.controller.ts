@@ -10,7 +10,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 import { AdministratorGuard } from './guards/administrator.guard';
-import { EmployeeSessionOriginGuard } from '../auth/guards/employee-session-origin.guard';
+import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
 import { CreateClientDto } from './dto/create-client.dto';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import type { CreatedUserDto } from './dto/created-user.dto';
@@ -29,7 +29,7 @@ export class UsersController {
   }
 
   @Post()
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   @HttpCode(HttpStatus.CREATED)
   create(
     @Body(CreateUserValidationPipe) data: CreateClientDto | CreateEmployeeDto,

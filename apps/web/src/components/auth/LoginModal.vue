@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useBlurValidation } from '@/composables/useBlurValidation'
 import {
   computed,
   nextTick,
@@ -14,6 +15,8 @@ import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 import type { ClientIdentity } from '@/types/client-auth'
 import { validEmail, validText } from '@/utils/user-validation'
 import { ChangePasswordError, requestPasswordRecovery } from '@/services/authService'
+
+const shouldValidateOnBlur = useBlurValidation()
 
 const props = withDefaults(
   defineProps<{
@@ -107,7 +110,7 @@ function switchMode() {
 }
 
 function markTouched(field: 'email' | 'password', event: FocusEvent) {
-  if (event.relatedTarget !== modeSwitch.value) touched[field] = true
+  if (shouldValidateOnBlur(event)) touched[field] = true
 }
 
 function focusModeSwitch(event: PointerEvent) {

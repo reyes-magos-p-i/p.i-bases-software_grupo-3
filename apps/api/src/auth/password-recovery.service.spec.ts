@@ -178,6 +178,17 @@ describe('PasswordRecoveryService', () => {
     );
   });
 
+  it('uses the 30-day default when no period is sent', async () => {
+    await expect(
+      service.reset({ ...input, expirationDays: undefined }),
+    ).resolves.toHaveProperty('message');
+    expect(repository.complete).toHaveBeenCalledWith(
+      recovery,
+      { passwordHash: 'new-hash', salt: 'salt' },
+      30,
+    );
+  });
+
   it('rejects a recovery consumed or invalidated during hashing', async () => {
     repository.complete.mockResolvedValue(false);
     await expect(service.reset(input)).rejects.toMatchObject({

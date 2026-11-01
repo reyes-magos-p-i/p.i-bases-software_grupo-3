@@ -8,7 +8,7 @@ import type { Request } from 'express';
 import { EmployeeSessionService } from '../employee-session.service';
 
 @Injectable()
-export class EmployeeSessionOriginGuard implements CanActivate {
+export class SessionOriginGuard implements CanActivate {
   constructor(private readonly session: EmployeeSessionService) {}
 
   canActivate(context: ExecutionContext): boolean {

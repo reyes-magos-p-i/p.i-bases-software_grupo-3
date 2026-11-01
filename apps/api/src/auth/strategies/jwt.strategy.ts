@@ -7,7 +7,7 @@ import type { Request } from 'express';
 import { EmployeeSessionService } from '../employee-session.service';
 import { ClientsService } from '../../clients/clients.service';
 import { UsersRepository } from '../../users/users.repository';
-import { computePasswordStatus } from '../password/password-status';
+import { describePasswordExpiry } from '../password/password-status';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -61,7 +61,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       const credentials = await this.users.findEmployeeCredentialsStatus(
         employee.id,
       );
-      request.passwordStatus = computePasswordStatus(credentials);
+      this.attachPasswordExpiry(request, credentials);
       request.accountType = 'employee';
       return employee;
     }
@@ -73,8 +73,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     const credentials = await this.clients.findPasswordStatus(client.id);
-    request.passwordStatus = computePasswordStatus(credentials);
+    this.attachPasswordExpiry(request, credentials);
     request.accountType = 'client';
     return client;
+  }
+
+  private attachPasswordExpiry(
+    request: Request,
+    credentials: Parameters<typeof describePasswordExpiry>[0],
+  ) {
+    request.passwordExpiry = describePasswordExpiry(credentials);
+    request.passwordStatus = request.passwordExpiry.status;
   }
 }

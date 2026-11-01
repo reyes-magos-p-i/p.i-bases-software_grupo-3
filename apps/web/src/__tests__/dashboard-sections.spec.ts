@@ -26,12 +26,16 @@ describe('dashboard sections registry', () => {
     const employeeIds = visibleSectionsFor('EMPLOYEE').map((section) => section.id)
 
     expect(employeeIds).not.toContain('tickets')
+    // SCRUM-17 (UT-047): employees do not see Transacciones.
+    expect(employeeIds).not.toContain('transactions')
     expect(employeeIds).toContain('clients')
     expect(visibleSectionsFor('ADMINISTRATOR')).toHaveLength(dashboardSections.length)
   })
 
   it('moves employees away from sections only administrators can open', () => {
     expect(administratorSectionIds).toContain('tickets')
+    expect(administratorSectionIds).toContain('transactions')
+    expect(availableSectionsFor('ADMINISTRATOR')).toContain('transactions')
     expect(administratorSectionIds).not.toContain('clients')
     expect(administratorSectionIds).not.toContain('password')
   })
