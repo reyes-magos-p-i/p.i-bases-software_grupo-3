@@ -23,7 +23,6 @@ import {
   restoreClientSession,
   clearClientSession,
 } from '@/services/client-session.service'
-import { parsePurchaseId, purchaseLocation } from '@/utils/purchase-navigation'
 import { authErrorMessage, authErrorStatus } from '@/utils/auth-errors'
 import {
   announcePasswordExpiry,
@@ -119,11 +118,6 @@ async function recoverSession() {
   if (!disposed) recovering.value = false
 }
 
-function clientLoginDestination() {
-  const id = parsePurchaseId(route.query.purchaseId)
-  return id === null ? '/' : purchaseLocation(id)
-}
-
 async function submitLogin(credentials: EmployeeLoginRequest) {
   updateRetryDelay()
   if (submitting.value || retryAfterSeconds.value > 0) return
@@ -137,7 +131,7 @@ async function submitLogin(credentials: EmployeeLoginRequest) {
       clientUser.value = identity
       activeModal.value = null
       expectPasswordExpiryNotice()
-      await router.push(clientLoginDestination())
+      await router.push('/')
       await enforceClientPasswordStatus()
     } else {
       const identity = await authenticateEmployee(credentials)
@@ -176,7 +170,6 @@ function closeLogin() {
     const query = { ...route.query }
     delete query.login
     delete query.reason
-    delete query.purchaseId
     void router.replace({ path: route.path, query })
   }
 }
@@ -224,7 +217,7 @@ async function handleClientLogin(identity?: ClientIdentity) {
     clientUser.value = identity
     loginError.value = ''
     expectPasswordExpiryNotice()
-    await router.push(clientLoginDestination())
+    await router.push('/')
     await enforceClientPasswordStatus()
   }
 }

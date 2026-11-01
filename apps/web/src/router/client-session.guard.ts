@@ -9,7 +9,6 @@ import {
 } from '@/services/client-session.service'
 import { getClientPasswordStatus, getClientSession } from '@/services/authService'
 import { authErrorStatus } from '@/utils/auth-errors'
-import { purchaseLoginQuery } from '@/utils/purchase-navigation'
 import { onPasswordBlocked } from '@/services/api'
 
 const PASSWORD_PATH = '/account/password'
@@ -25,7 +24,7 @@ export const requireClientSession: NavigationGuard = async (to) => {
       if (to.meta.requiresClient && !identity) {
         return {
           path: '/',
-          query: { login: 'client', reason: 'required', ...purchaseLoginQuery(to) },
+          query: { login: 'client', reason: 'required' },
         }
       }
     }
@@ -39,12 +38,12 @@ export const requireClientSession: NavigationGuard = async (to) => {
     reportClientSessionError(error)
     if (authErrorStatus(error) === 401) {
       clearClientSession()
-      return { path: '/', query: { login: 'client', reason: 'expired', ...purchaseLoginQuery(to) } }
+      return { path: '/', query: { login: 'client', reason: 'expired' } }
     }
     if (to.meta.requiresClient) {
       return {
         path: '/',
-        query: { login: 'client', reason: 'unavailable', ...purchaseLoginQuery(to) },
+        query: { login: 'client', reason: 'unavailable' },
       }
     }
   }

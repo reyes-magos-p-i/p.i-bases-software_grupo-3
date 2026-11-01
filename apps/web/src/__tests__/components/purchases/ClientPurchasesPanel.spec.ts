@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ClientPurchasesPanel from '@/components/purchases/ClientPurchasesPanel.vue'
 import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
+import QrCode from '@/components/common/QrCode.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { getMyPurchases, getMyPurchase } from '@/services/purchase.service'
 import { establishClientSession, clearClientSession } from '@/services/client-session.service'
@@ -85,52 +86,65 @@ describe('ClientPurchasesPanel', () => {
     await flushPromises()
     expect(wrapper.findComponent(PurchaseSummary).exists()).toBe(false)
   })
-  it('opens a QR purchase directly and returns to the normal history', async () => {
-    vi.mocked(getMyPurchase).mockResolvedValue({ id: 12 } as never)
-    wrapper = mount(ClientPurchasesPanel, {
-      props: { purchaseId: 12 },
-      global: { stubs: { PurchaseSummary: true } },
-    })
+  it('shows the selected purchase QR without navigation and preserves it on reopening', async () => {
+    vi.mocked(getMyPurchase).mockResolvedValue({
+      id: 12,
+      reference: 'ORD-000012',
+      purchasedAt: '2099-01-01T12:00:00-06:00',
+      status: 'PAID',
+      buyerEmail: 'ana@example.com',
+      total: 3000,
+      function: {
+        id: 4,
+        title: 'Película',
+        branchName: 'Central',
+        theaterId: 3,
+        startsAt: '2099-01-01T20:00:00-06:00',
+        format: '2D',
+        technology: 'STANDARD',
+        isPremiere: false,
+      },
+      lines: [],
+      tickets: [],
+    } as never)
+    wrapper = mount(ClientPurchasesPanel)
+    await flushPromises()
+    expect(getMyPurchase).not.toHaveBeenCalled()
+    await wrapper.get('.purchases button').trigger('click')
     await flushPromises()
     expect(getMyPurchase).toHaveBeenCalledExactlyOnceWith(12, expect.any(AbortSignal))
-    expect(getMyPurchases).not.toHaveBeenCalled()
-    expect(wrapper.getComponent(PurchaseSummary).props('purchase')).toEqual({ id: 12 })
+    const code = wrapper.getComponent(QrCode).props('value')
+    expect(JSON.parse(code)).toEqual({
+      type: 'CINETADEL_PURCHASE',
+      version: 1,
+      reference: 'ORD-000012',
+    })
+    expect(wrapper.find('a').exists()).toBe(false)
     await wrapper.get('button').trigger('click')
-    await flushPromises()
-    expect(wrapper.emitted('history')).toHaveLength(1)
     expect(wrapper.find('.purchases').exists()).toBe(true)
+    expect(wrapper.findComponent(QrCode).exists()).toBe(false)
+    await wrapper.get('.purchases button').trigger('click')
+    await flushPromises()
+    expect(wrapper.getComponent(QrCode).props('value')).toBe(code)
     expect(getMyPurchases).toHaveBeenCalledExactlyOnceWith(1, expect.any(AbortSignal))
   })
-  it('retries a failed direct purchase without replacing it with another client history', async () => {
+  it('keeps the history available when a selected receipt cannot be found', async () => {
     vi.mocked(getMyPurchase)
       .mockRejectedValueOnce({ isAxiosError: true, response: { status: 404 } })
       .mockResolvedValue({ id: 12 } as never)
     wrapper = mount(ClientPurchasesPanel, {
-      props: { purchaseId: 12 },
       global: { stubs: { PurchaseSummary: true } },
     })
+    await flushPromises()
+    await wrapper.get('.purchases button').trigger('click')
     await flushPromises()
     expect(wrapper.findComponent(PurchaseSummary).exists()).toBe(false)
     expect(wrapper.findComponent(NotificationPopup).exists()).toBe(true)
-    await wrapper.get('button').trigger('click')
+    expect(wrapper.find('.purchases').exists()).toBe(true)
+    await wrapper.get('.purchases button').trigger('click')
     await flushPromises()
     expect(getMyPurchase).toHaveBeenCalledTimes(2)
-    expect(getMyPurchase).toHaveBeenLastCalledWith(12, expect.any(AbortSignal))
-    expect(getMyPurchases).not.toHaveBeenCalled()
-  })
-  it('reacts to another QR link and clears its detail when the link is removed', async () => {
-    vi.mocked(getMyPurchase).mockImplementation((id) => Promise.resolve({ id } as never))
-    wrapper = mount(ClientPurchasesPanel, {
-      props: { purchaseId: 12 },
-      global: { stubs: { PurchaseSummary: true } },
-    })
-    await flushPromises()
-    await wrapper.setProps({ purchaseId: 13 })
-    await flushPromises()
-    expect(wrapper.getComponent(PurchaseSummary).props('purchase')).toEqual({ id: 13 })
-    await wrapper.setProps({ purchaseId: null })
-    await flushPromises()
-    expect(wrapper.findComponent(PurchaseSummary).exists()).toBe(false)
-    expect(wrapper.find('.purchases').exists()).toBe(true)
+    expect(wrapper.getComponent(PurchaseSummary).props('purchase')).toEqual({ id: 12 })
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
   })
 })

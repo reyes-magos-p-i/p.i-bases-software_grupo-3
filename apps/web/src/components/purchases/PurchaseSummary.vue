@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
 import QrCode from '@/components/common/QrCode.vue'
-import { purchaseLocation } from '@/utils/purchase-navigation'
 import { PROJECTION_STATUS_LABELS, type ProjectionStatus } from '@/types/projection'
 import { formatDateTime, formatColones } from '@/utils/transaction-format'
 import { TICKET_CATEGORY_LABELS, type PurchaseQuote, type PurchaseReceipt } from '@/types/purchase'
 const props = defineProps<{ purchase: PurchaseQuote | PurchaseReceipt }>()
-const router = useRouter()
-const purchaseUrl = computed(() => {
+const purchaseCode = computed(() => {
   if (!('reference' in props.purchase)) return ''
-  return new URL(router.resolve(purchaseLocation(props.purchase.id)).href, window.location.origin)
-    .href
+  return JSON.stringify({
+    type: 'CINETADEL_PURCHASE',
+    version: 1,
+    reference: props.purchase.reference,
+  })
 })
 </script>
 <template>
@@ -83,11 +83,11 @@ const purchaseUrl = computed(() => {
         {{ purchase.status === 'PAID' ? 'Pagada' : 'Cancelada' }}
       </p>
       <QrCode
-        :value="purchaseUrl"
+        :value="purchaseCode"
         :label="`Código QR de la compra ${purchase.reference}`"
         class="purchase-qr"
       >
-        Escanea para consultar esta compra desde tu perfil.
+        Código de tu compra.
       </QrCode>
       <h3>Tus boletos</h3>
       <ul v-if="purchase.tickets.length" class="tickets">

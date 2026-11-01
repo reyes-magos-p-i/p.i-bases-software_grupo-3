@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import PurchaseSummary from './PurchaseSummary.vue'
@@ -8,8 +8,7 @@ import { CLIENT_ACCESS_TOKEN_KEY, clientSessionRevision } from '@/services/clien
 import { authErrorStatus } from '@/utils/auth-errors'
 import { formatColones, formatDateTime } from '@/utils/transaction-format'
 import type { PurchaseList, PurchaseReceipt } from '@/types/purchase'
-const props = withDefaults(defineProps<{ purchaseId?: number | null }>(), { purchaseId: null })
-const emit = defineEmits<{ sessionExpired: []; history: [] }>()
+const emit = defineEmits<{ sessionExpired: [] }>()
 const data = ref<PurchaseList | null>(null),
   detail = ref<PurchaseReceipt | null>(null),
   loading = ref(false),
@@ -65,28 +64,14 @@ async function open(id: number) {
     if (current() && !signal.aborted) detail.value = result
   })
 }
-function showHistory() {
-  detail.value = null
-  if (!data.value) void load()
-}
 function backToHistory() {
-  showHistory()
-  emit('history')
+  detail.value = null
 }
 function retry() {
-  if (props.purchaseId !== null) void open(props.purchaseId)
-  else void load(data.value?.page ?? 1)
+  void load(data.value?.page ?? 1)
 }
-watch(
-  () => props.purchaseId,
-  (id) => {
-    if (id !== null) void open(id)
-    else if (detail.value) showHistory()
-  },
-)
 onMounted(() => {
-  if (props.purchaseId === null) void load()
-  else void open(props.purchaseId)
+  void load()
 })
 onBeforeUnmount(() => {
   disposed = true

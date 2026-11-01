@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
@@ -36,7 +36,6 @@ import {
   clientSessionRevision,
   establishClientSession,
 } from '@/services/client-session.service'
-import { parsePurchaseId } from '@/utils/purchase-navigation'
 import { authErrorStatus } from '@/utils/auth-errors'
 import type {
   ClientAddressOptions,
@@ -60,20 +59,6 @@ const preferencesFormKey = ref(0)
 let preferencesGeneration = 0
 let preferencesAbort: AbortController | undefined
 const selected = ref(route.query.section === 'purchases' ? 'purchases' : 'personal')
-const linkedPurchaseId = computed(() =>
-  route.query.section === 'purchases' ? parsePurchaseId(route.query.purchaseId) : null,
-)
-watch(
-  () => [route.query.section, route.query.purchaseId],
-  ([section]) => {
-    if (section === 'purchases' && selected.value !== 'purchases') changeSection('purchases')
-  },
-)
-function showPurchaseHistory() {
-  const query = { ...route.query }
-  delete query.purchaseId
-  void router.replace({ path: '/account/profile', query })
-}
 const profile = ref<ClientProfile | null>(null)
 const options = ref<ClientAddressOptions | null>(null)
 const loading = ref(true)
@@ -495,8 +480,6 @@ onBeforeUnmount(() => {
         </template>
         <ClientPurchasesPanel
           v-else-if="selected === 'purchases'"
-          :purchase-id="linkedPurchaseId"
-          @history="showPurchaseHistory"
           @session-expired="purchasesSessionExpired"
         />
         <template v-else-if="selected === 'security'">

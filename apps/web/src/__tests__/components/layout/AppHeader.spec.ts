@@ -622,7 +622,7 @@ describe('AppHeader authentication navigation', () => {
     expect(loginClient).not.toHaveBeenCalled()
   })
   it.each(['local', 'social'])(
-    'opens the purchase requested by its QR after %s client login',
+    'returns to the portal after %s client login regardless of a purchase query',
     async (mode) => {
       await router.push({
         path: '/',
@@ -640,16 +640,15 @@ describe('AppHeader authentication navigation', () => {
           lastName: 'Rojas',
         })
       await flushPromises()
-      expect(router.currentRoute.value.path).toBe('/account/profile')
-      expect(router.currentRoute.value.query).toEqual({ section: 'purchases', purchaseId: '12' })
+      expect(router.currentRoute.value.fullPath).toBe('/')
     },
   )
-  it('clears a cancelled QR destination before a later ordinary login', async () => {
-    await router.push({ path: '/', query: { login: 'client', purchaseId: '12' } })
+  it('preserves unrelated query parameters when closing the login', async () => {
+    await router.push({ path: '/', query: { login: 'client', campaign: 'premiere' } })
     await flushPromises()
     wrapper.getComponent(LoginModal).vm.$emit('close')
     await flushPromises()
-    expect(router.currentRoute.value.query.purchaseId).toBeUndefined()
+    expect(router.currentRoute.value.query).toEqual({ campaign: 'premiere' })
     await wrapper.get('.login-button').trigger('click')
     wrapper
       .getComponent(LoginModal)
@@ -686,11 +685,11 @@ describe('AppHeader authentication navigation', () => {
     expect(authenticateEmployee).toHaveBeenCalled()
   })
 
-  it('completes QR navigation through the real client route guard after login', async () => {
+  it('returns to the portal through the real client route guard after login', async () => {
     router.beforeEach(requireClientSession)
     await router.push('/account/profile?section=purchases&purchaseId=12')
     await flushPromises()
-    expect(router.currentRoute.value.query).toMatchObject({ login: 'client', purchaseId: '12' })
+    expect(router.currentRoute.value.query).toEqual({ login: 'client', reason: 'required' })
     const identity = { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' }
     vi.mocked(getClientSession).mockResolvedValue(identity)
     vi.mocked(loginClient).mockImplementationOnce(() => {
@@ -701,8 +700,9 @@ describe('AppHeader authentication navigation', () => {
       .getComponent(LoginModal)
       .vm.$emit('submit', { email: identity.email, password: 'valid-secret' })
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/account/profile')
-    expect(router.currentRoute.value.query).toEqual({ section: 'purchases', purchaseId: '12' })
-    expect(getClientSession).toHaveBeenCalledWith('client-token')
+    expect(router.currentRoute.value.fullPath).toBe('/')
+    expect(localStorage.getItem('accessToken')).toBe('client-token')
+    expect(wrapper.getComponent(AccountMenu).props('user')).toEqual(identity)
+    expect(getClientPasswordStatus).toHaveBeenCalled()
   })
 })

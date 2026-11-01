@@ -1,6 +1,16 @@
 # Compra de boletos con sesión iniciada — SCRUM-29
 
-El cliente inicia la compra desde una película del catálogo, elige sucursal y fecha, selecciona una función futura, marca asientos y asigna una categoría a cada boleto. El resumen muestra película, sucursal, sala, horario, asientos, cantidades y desglose. «Pagar» registra una factura pagada mediante **pago simulado**, sus líneas y los boletos. No se procesa un cobro real, no se solicita tarjeta, no se genera un QR ni se envían correos.
+El cliente inicia la compra desde una película del catálogo, elige sucursal y fecha, selecciona una función futura, marca asientos y asigna una categoría a cada boleto. El resumen muestra película, sucursal, sala, horario, asientos, categorías e importes finales. «Pagar» registra una factura pagada mediante **pago simulado**, sus líneas y los boletos. No se procesa un cobro real, no se solicita tarjeta ni se envían correos. La confirmación y el detalle del historial muestran un QR identificativo de la compra para un futuro sistema de verificación en el cine.
+
+## Presentación y código QR de compra
+
+Los cuatro pasos siguen una barra de progreso que se llena al avanzar y respeta la preferencia de movimiento reducido. El flujo se sitúa junto al header y no incluye un enlace adicional al historial. El selector de fecha conserva la apariencia del calendario compartido con los formularios de usuarios.
+
+La selección de asientos avisa que no los reserva hasta pagar. Las pantallas del cliente presentan categorías, formato, asiento VIP, importes finales y total, sin explicar la fórmula interna ni mostrar bases y recargos por separado. El resumen y la confirmación no incluyen mensajes sobre la implementación del pago.
+
+Cada compra registrada tiene un QR generado localmente mediante `qrcode`, con margen de lectura y los colores de las variables existentes. El componente común recibe un texto y no conoce el dominio de compras. En este flujo codifica un objeto JSON con `type: "CINETADEL_PURCHASE"`, `version: 1` y la referencia de la compra en `reference`. No incluye enlaces, datos personales ni credenciales. La confirmación y el historial generan el mismo contenido a partir de la referencia existente, sin almacenar una imagen ni añadir campos a Oracle.
+
+Un lector común puede mostrar ese contenido como texto; el QR no abre páginas ni ejecuta acciones dentro del sistema. La consulta del historial sigue utilizando los endpoints protegidos y la comprobación de pertenencia existente. El código identifica la compra, pero todavía no acredita el ingreso al cine: la futura verificación deberá autenticar al personal, comprobar la compra y sus boletos y definir protección contra falsificación y reutilización. Esta historia no incorpora un lector, un endpoint de validación ni un registro de ingreso.
 
 ## Tarifas aprobadas (CRC)
 
@@ -60,7 +70,7 @@ Errores relevantes: 400 para selección o referencia inválida; 401 para sesión
 
 Las pruebas usan persistencia y solicitudes simuladas, con los guards y la validación de Nest reales en los contratos HTTP. Incluyen categorías mixtas, recargos, sinopsis con tildes, selección vacía/repetida, funciones no disponibles, permisos, cuenta desactivada, errores de cada lote, rollback, reintentos, vínculo exclusivo al cliente, historial, actualización de disponibilidad, respuestas tardías tras cerrar sesión y flujo de interfaz. Las consultas nuevas también se verifican contra Oracle sin insertar compras.
 
-Resultados de la ejecución local:
+Resultados de la ejecución inicial de la compra:
 
 | Aplicación | Suites/archivos | Pruebas aprobadas | Cobertura global de líneas | Cobertura de líneas añadidas/modificadas |
 | ---------- | --------------: | ----------------: | -------------------------: | ---------------------------------------: |

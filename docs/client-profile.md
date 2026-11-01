@@ -106,4 +106,4 @@ La guarda y su prueba se renombran a `session-origin.guard.ts` y `session-origin
 
 ## Mis compras
 
-El perfil incorpora una sección de compras propias con paginación y consulta de boletos. Véase [Compra de boletos](./ticket-purchase.md).
+El perfil incorpora una sección de compras propias con paginación y consulta de boletos. El detalle muestra el mismo QR identificativo de la confirmación de compra, preparado para un futuro sistema de verificación en el cine. El QR no contiene un enlace ni abre el perfil. Véase [Compra de boletos](./ticket-purchase.md).
