@@ -39,6 +39,8 @@ const form = reactive({
 
 const saving = ref(false)
 const error = ref('')
+const runningTimeValid = ref(false)
+const releaseYearValid = ref(false)
 
 const languageOptions = computed(() =>
   props.languages.map(item => ({
@@ -59,12 +61,8 @@ const isFormValid = computed(() =>
   form.title.length <= TITLE_LIMIT &&
   form.synopsis.trim().length > 0 &&
   form.synopsis.length <= SYNOPSIS_LIMIT &&
-  form.runningTime !== null &&
-  Number.isInteger(form.runningTime) &&
-  form.runningTime > 0 &&
-  form.releaseYear !== null &&
-  Number.isInteger(form.releaseYear) &&
-  form.releaseYear > 0 &&
+  runningTimeValid.value &&
+  releaseYearValid.value &&
   form.classificationId !== null &&
   form.languageIds.length > 0 &&
   form.genreIds.length > 0
@@ -138,13 +136,20 @@ async function save() {
           <PositiveNumberInput
             v-model="form.runningTime"
             label="Duración en minutos"
+            :min="1"
+            :max="999"
             required
+            @validity-change="runningTimeValid = $event"
           />
+
 
           <PositiveNumberInput
             v-model="form.releaseYear"
             label="Año de estreno"
+            :min="1888"
+            :max="2077"
             required
+            @validity-change="releaseYearValid = $event"
           />
         </div>
 

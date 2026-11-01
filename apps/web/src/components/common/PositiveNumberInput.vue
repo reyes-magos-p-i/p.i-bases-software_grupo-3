@@ -1,28 +1,50 @@
 <script setup lang="ts">
-import { computed, ref, useId } from 'vue'
+import { computed, ref, useId, watch} from 'vue'
 
 const props = withDefaults(defineProps<{
   label: string
   placeholder?: string
   disabled?: boolean
   required?: boolean
+  min?: number
+  max?: number
 }>(), {
   placeholder: '',
   disabled: false,
-  required: false
+  required: false,
+  min: 1,
 })
 
 const value = defineModel<number | null>({
   default: null
 })
 
+const emit = defineEmits<{
+  'validity-change': [valid: boolean]
+}>()
+
 const id = useId()
 const touched = ref(false)
 
-// Validate positive integers
-const isInvalid = computed(() =>
-  value.value !== null &&
-  (!Number.isInteger(value.value) || value.value <= 0)
+const isInvalid = computed(() => {
+  if (value.value === null) return false
+
+  return (
+    !Number.isInteger(value.value) ||
+    value.value < props.min ||
+    (props.max !== undefined && value.value > props.max)
+  )
+})
+
+const isValid = computed(() =>
+  !isInvalid.value &&
+  (!props.required || value.value !== null)
+)
+
+watch(
+  isValid,
+  (valid) => emit('validity-change', valid),
+  { immediate: true },
 )
 
 // Display errors after the user interacts with the field
@@ -34,11 +56,17 @@ const showError = computed(() =>
   )
 )
 
-const errorMessage = computed(() =>
-  value.value === null
-    ? 'Este campo es obligatorio.'
-    : 'Ingrese un número entero mayor que cero.'
-)
+const errorMessage = computed(() => {
+  if (value.value === null) {
+    return 'Este campo es obligatorio.'
+  }
+
+  if (props.max !== undefined) {
+    return `Ingrese un número entero entre ${props.min} y ${props.max}.`
+  }
+
+  return `Ingrese un número entero mayor o igual que ${props.min}.`
+})
 
 function handleInput(event: Event) {
   const input = event.target as HTMLInputElement
@@ -60,7 +88,8 @@ function handleInput(event: Event) {
       :id="id"
       :value="value ?? ''"
       type="number"
-      min="1"
+      :min="props.min"
+      :max="props.max"
       step="1"
       class="number-input"
       :placeholder="placeholder"
