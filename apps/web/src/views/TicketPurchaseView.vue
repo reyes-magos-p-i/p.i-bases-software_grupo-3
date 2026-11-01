@@ -1,0 +1,164 @@
+<script setup lang="ts">
+import { watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import AppHeader from '@/components/layout/AppHeader.vue'
+import AppFooter from '@/components/layout/AppFooter.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import PurchaseStepper from '@/components/purchases/PurchaseStepper.vue'
+import FunctionSelectionStep from '@/components/purchases/FunctionSelectionStep.vue'
+import SeatSelectionStep from '@/components/purchases/SeatSelectionStep.vue'
+import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
+import { useTicketPurchase } from '@/composables/useTicketPurchase'
+import { clearClientSession } from '@/services/client-session.service'
+const route = useRoute(),
+  router = useRouter()
+let redirecting = false
+const flow = useTicketPurchase(() => {
+  if (redirecting) return
+  redirecting = true
+  clearClientSession()
+  void router.replace({ path: '/', query: { login: 'client', reason: 'expired' } })
+})
+const {
+  movie,
+  functions,
+  availability,
+  selected,
+  categories,
+  quote,
+  receipt,
+  step,
+  loading,
+  busy,
+  uncertain,
+  error,
+  notice,
+} = flow
+function dismissNotice() {
+  error.value = ''
+  notice.value = ''
+}
+watch(
+  () => route.query.movieId,
+  (value) => {
+    const id = Number(value)
+    if (typeof value === 'string' && /^[1-9]\d*$/u.test(value) && Number.isSafeInteger(id))
+      void flow.load(id)
+    else error.value = 'Selecciona una película desde el portal para comprar boletos.'
+  },
+  { immediate: true },
+)
+</script>
+<template>
+  <AppHeader />
+  <main class="purchase-flow">
+    <RouterLink to="/">← Volver al portal</RouterLink
+    ><PurchaseStepper :step="step" /><NotificationPopup
+      v-if="error || notice"
+      :type="error ? 'error' : 'alert'"
+      :message="error || notice"
+      placement="bottom-right"
+      :duration="uncertain ? 0 : 7000"
+      @close="dismissNotice"
+    /><LoadingState v-if="loading" message="Cargando compra..." surface="dark" /><template v-else
+      ><FunctionSelectionStep
+        v-if="step === 1 && movie"
+        :movie="movie"
+        :functions="functions"
+        :disabled="busy"
+        @select="flow.chooseFunction"
+      /><SeatSelectionStep
+        v-if="availability && !receipt"
+        v-show="step === 2"
+        :key="availability.function.id"
+        :availability="availability"
+        :selected="selected"
+        :categories="categories"
+        :disabled="busy || uncertain"
+        @selection="flow.setSelection"
+        @category="flow.setCategory"
+        @continue="flow.summarize"
+        @back="flow.back"
+      />
+      <section v-if="step === 3 && quote">
+        <h1>Revisa tu compra</h1>
+        <PurchaseSummary :purchase="quote" />
+        <p>Pago simulado: se registrará la compra sin realizar un cobro real.</p>
+        <p>La disponibilidad y los precios se comprobarán nuevamente al pagar.</p>
+        <div class="actions">
+          <button type="button" :disabled="busy || uncertain" @click="flow.back">
+            Volver a los asientos</button
+          ><button type="button" class="primary" :disabled="busy" @click="flow.pay">
+            {{ busy ? 'Registrando compra...' : uncertain ? 'Reintentar pago' : 'Pagar' }}
+          </button>
+        </div>
+      </section>
+      <section v-if="receipt && step === 4" aria-live="polite">
+        <h1>¡Compra exitosa!</h1>
+        <p>Tu compra quedó registrada en tu cuenta mediante pago simulado.</p>
+        <PurchaseSummary :purchase="receipt" />
+      </section>
+      <p v-if="!movie && !loading && !receipt">
+        Elige una película en el portal para comenzar.
+      </p></template
+    ><RouterLink class="history-link" to="/account/profile?section=purchases"
+      >Ver mis compras</RouterLink
+    >
+  </main>
+  <AppFooter />
+</template>
+<style scoped>
+.purchase-flow {
+  max-width: 1100px;
+  min-height: 70vh;
+  margin: auto;
+  padding: 120px 24px 48px;
+  color: var(--text-on-dark);
+}
+.purchase-flow a {
+  color: var(--text-on-dark);
+  text-underline-offset: 4px;
+}
+.purchase-flow :deep(button:not(.seat)),
+.purchase-flow :deep(select) {
+  min-height: 44px;
+  border-radius: var(--radius-small);
+  padding: 10px 18px;
+  font: inherit;
+  border: 1px solid var(--border-on-dark);
+}
+.purchase-flow :deep(button:not(.seat)) {
+  background: var(--surface-background);
+  color: var(--text-on-dark);
+}
+.purchase-flow :deep(button.primary) {
+  background: var(--accent-color);
+  color: var(--page-background);
+  border-color: var(--accent-color);
+  font-weight: 700;
+}
+.purchase-flow :deep(button:not(.seat):disabled) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.purchase-flow :deep(select) {
+  background: var(--content-background);
+  color: var(--text-primary);
+}
+.purchase-flow :deep(button:not(.seat):focus-visible) {
+  outline: 3px solid var(--primary-color);
+  outline-offset: 3px;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 24px 0;
+}
+.history-link {
+  display: inline-block;
+  margin-top: 24px;
+}
+</style>
