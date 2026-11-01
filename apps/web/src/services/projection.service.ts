@@ -1,3 +1,5 @@
+import type { PricingSettings } from '@/types/purchase'
+import type { ProjectionPricePreview } from '@/types/projection'
 import { getApi } from '@/services/api'
 import type {
   AvailableMovie,
@@ -19,7 +21,11 @@ export async function getProjectionSchedulingOptions(signal?: AbortSignal) {
   return response.data
 }
 
-export async function searchAvailableMovies(branchId: number, search: string, signal?: AbortSignal) {
+export async function searchAvailableMovies(
+  branchId: number,
+  search: string,
+  signal?: AbortSignal,
+) {
   const response = await getApi().get<AvailableMovie[]>('/projections/available-movies', {
     params: { branchId, search },
     signal,
@@ -72,4 +78,13 @@ export async function createProjections(data: CreateProjectionRequest) {
     timeout: 30000,
   })
   return response.data
+}
+
+export async function previewProjectionPrice(data: PricingSettings, signal?: AbortSignal) {
+  return (
+    await getApi().post<ProjectionPricePreview>('/projections/price-preview', data, {
+      signal,
+      timeout: 10000,
+    })
+  ).data
 }
