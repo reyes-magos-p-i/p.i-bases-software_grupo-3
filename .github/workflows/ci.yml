@@ -12,6 +12,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  source-branch:
+    name: Check PR source branch
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only allow PRs from dev into main
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REF" != "dev" ] || [ "$HEAD_REPO" != "$BASE_REPO" ]; then
+            echo "::error::Pull requests into main must come from the dev branch of $BASE_REPO (got $HEAD_REPO:$HEAD_REF)."
+            exit 1
+          fi
+
   changes:
     name: Detect changed apps
     runs-on: ubuntu-latest
@@ -115,16 +131,18 @@ jobs:
 
   ci-result:
     name: CI result
-    needs: [changes, ci]
+    needs: [source-branch, changes, ci]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check CI outcome
         env:
+          SOURCE_BRANCH_RESULT: ${{ needs.source-branch.result }}
           CHANGES_RESULT: ${{ needs.changes.result }}
           CI_RESULT: ${{ needs.ci.result }}
         run: |
-          echo "changes: $CHANGES_RESULT, ci: $CI_RESULT"
+          echo "source-branch: $SOURCE_BRANCH_RESULT, changes: $CHANGES_RESULT, ci: $CI_RESULT"
+          if [ "$SOURCE_BRANCH_RESULT" != "success" ] && [ "$SOURCE_BRANCH_RESULT" != "skipped" ]; then exit 1; fi
           if [ "$CHANGES_RESULT" != "success" ]; then exit 1; fi
           if [ "$CI_RESULT" != "success" ] && [ "$CI_RESULT" != "skipped" ]; then exit 1; fi
 

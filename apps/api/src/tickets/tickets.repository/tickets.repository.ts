@@ -54,35 +54,50 @@ export class TicketsRepository {
   ): Promise<AlternativeShowtimes[]> {
     try {
       const result = await this.db.query(
-        `SELECT mf.movie_function_id,
-       mf.theater_id,
-       TO_CHAR(mf.start_time, 'HH24:MI') AS "TIME",
-       TO_CHAR(mf.screening_date, 'FMDD "de" month, YYYY',
-               'NLS_DATE_LANGUAGE = SPANISH') AS "DATE",
-       fs.seat_row,
-       fs.seat_column
-FROM PRODUCTION.Tickets t
-JOIN PRODUCTION.Movie_functions cur ON cur.movie_function_id = t.movie_function_id
-JOIN PRODUCTION.Movie_functions mf  ON mf.movie_id = cur.movie_id
-                                   AND mf.movie_function_id <> cur.movie_function_id
-CROSS APPLY (
-    SELECT s.row_number AS seat_row,
-           s.column_number AS seat_column
-    FROM PRODUCTION.Seats s
-    WHERE s.theater_id = mf.theater_id
-      AND s.seat_state <> 'indisponible'
-      AND (s.theater_id, s.row_number, s.column_number) NOT IN (
-          SELECT tk.theater_id, tk.seat_row, tk.seat_column
-          FROM PRODUCTION.Tickets tk
-          WHERE tk.movie_function_id = mf.movie_function_id)
-    ORDER BY s.row_number, s.column_number
-    FETCH FIRST 1 ROW ONLY
-) fs
-WHERE t.tickets_id = :tickets_id
-  AND mf.status = 'ACTIVE'
-  AND mf.start_time >  SYSTIMESTAMP
-  AND mf.start_time <  SYSTIMESTAMP + INTERVAL '7' DAY
-ORDER BY mf.start_time`,
+        `SELECT a.movie_function_id,
+       a.theater_id,
+       a."TIME",
+       a."DATE",
+       a.seat_row,
+       (SELECT MIN(s.column_number)
+          FROM PRODUCTION.Seats s
+         WHERE s.theater_id = a.theater_id
+           AND s.row_number = a.seat_row
+           AND s.seat_state <> 'indisponible'
+           AND NOT EXISTS (
+               SELECT 1 FROM PRODUCTION.Tickets tk
+                WHERE tk.movie_function_id = a.movie_function_id
+                  AND tk.seat_row    = s.row_number
+                  AND tk.seat_column = s.column_number)) AS seat_column
+FROM (
+    SELECT mf.movie_function_id,
+           mf.theater_id,
+           mf.start_time,
+           TO_CHAR(mf.start_time, 'HH24:MI') AS "TIME",
+           TO_CHAR(mf.screening_date, 'FMDD "de" month, YYYY',
+                   'NLS_DATE_LANGUAGE = SPANISH') AS "DATE",
+           (SELECT MIN(s.row_number)
+              FROM PRODUCTION.Seats s
+             WHERE s.theater_id = mf.theater_id
+               AND s.seat_state <> 'indisponible'
+               AND NOT EXISTS (
+                   SELECT 1 FROM PRODUCTION.Tickets tk
+                    WHERE tk.movie_function_id = mf.movie_function_id
+                      AND tk.seat_row    = s.row_number
+                      AND tk.seat_column = s.column_number)) AS seat_row
+      FROM PRODUCTION.Tickets t
+      JOIN PRODUCTION.Movie_functions cur ON cur.movie_function_id = t.movie_function_id
+      JOIN PRODUCTION.Theaters cur_th     ON cur_th.theater_id = cur.theater_id
+      JOIN PRODUCTION.Movie_functions mf  ON mf.movie_id = cur.movie_id
+      JOIN PRODUCTION.Theaters mf_th      ON mf_th.theater_id = mf.theater_id
+                                         AND mf_th.branch_id  = cur_th.branch_id
+     WHERE t.tickets_id = :tickets_id
+       AND mf.status = 'ACTIVE'
+       AND mf.start_time > GREATEST(SYSTIMESTAMP, cur.start_time)
+       AND mf.start_time < SYSTIMESTAMP + INTERVAL '7' DAY
+) a
+WHERE a.seat_row IS NOT NULL
+ORDER BY a.start_time`,
         { tickets_id: id },
         { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
