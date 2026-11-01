@@ -103,3 +103,7 @@ La guarda y su prueba se renombran a `session-origin.guard.ts` y `session-origin
 - Web: 73 archivos y 1140 pruebas correctas; cobertura global de líneas de 95,67 % y ramas de 90,81 %.
 - Código nuevo respecto de `HEAD`, según LCOV: API 17/17 líneas y 5/6 ramas (95,65 % combinado); web 2/2 líneas y 3/3 ramas (100 % combinado). Se excluyen pruebas y se incluye el archivo fuente renombrado. SonarQube calculará sus métricas con la base de comparación de la PR.
 - Compilación, tipos, ESLint y Prettier correctos en ambas aplicaciones. Las pruebas utilizan persistencia y correo simulados.
+
+## Mis compras
+
+El perfil incorpora una sección de compras propias con paginación y consulta de boletos. Véase [Compra de boletos](./ticket-purchase.md).
