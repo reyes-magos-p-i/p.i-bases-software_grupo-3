@@ -1,30 +1,57 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { TicketsRepository } from './tickets.repository/tickets.repository';
-//import { CreateTicketDto } from './dto/create-ticket.dto';
-//import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { UpdateTicketDto } from './dto/update-ticket.dto';
 
 @Injectable()
 export class TicketsService {
   constructor(private readonly ticketsRepository: TicketsRepository) {}
-  /*
-  create(createTicketDto: CreateTicketDto) {
-    return 'This action adds a new ticket';
-  }
 
-  findAll() {
-    return `This action returns all tickets`;
-  }
-  */
   findOne(id: number) {
     return this.ticketsRepository.getTicketById(id);
   }
-  /*
-  update(id: number, updateTicketDto: UpdateTicketDto) {
-    return `This action updates a #${id} ticket`;
+
+  getAlternativeShowtimesByTicketId(id: number) {
+    return this.ticketsRepository.getAlternativeShowtimesByTicketId(id);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} ticket`;
+  async updateMovieFunction(id: number, updateTicketDto: UpdateTicketDto) {
+    const alternatives =
+      await this.ticketsRepository.getAlternativeShowtimesByTicketId(id);
+    const target = alternatives.find(
+      (alternative) =>
+        alternative.movieFunctionId === updateTicketDto.movieFunctionId,
+    );
+
+    if (!target) {
+      throw new BadRequestException(
+        'La función seleccionada no es una alternativa disponible para este boleto.',
+      );
+    }
+
+    const updatedRows = await this.ticketsRepository.updateMovieFunction(
+      id,
+      target.movieFunctionId,
+      target.theaterId,
+      target.seatRow,
+      target.seatColumn,
+    );
+
+    if (updatedRows === 0) {
+      throw new ConflictException(
+        'El asiento ya fue ocupado en la función seleccionada.',
+      );
+    }
+
+    return {
+      ticketId: id,
+      movieFunctionId: target.movieFunctionId,
+      theaterId: target.theaterId,
+      seatRow: target.seatRow,
+      seatColumn: target.seatColumn,
+    };
   }
-  */
 }

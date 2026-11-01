@@ -1,4 +1,7 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateTicketDto } from './create-ticket.dto';
+import { IsFK } from '../../common/validation/fk.decorator';
 
-export class UpdateTicketDto extends PartialType(CreateTicketDto) {}
+// Only the movie function can be changed. The seat is derived from the chosen alternative showtime.
+export class UpdateTicketDto {
+  @IsFK()
+  movieFunctionId: number;
+}
