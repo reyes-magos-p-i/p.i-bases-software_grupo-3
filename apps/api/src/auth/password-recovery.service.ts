@@ -8,7 +8,6 @@ import { PasswordRecoverySender } from './notifications/password-recovery-sender
 import { RequestPasswordRecoveryDto } from './dto/request-password-recovery.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { validatePasswordChange } from './password/password-change-validator';
-import { DEFAULT_PASSWORD_EXPIRATION_DAYS } from './password/password-status';
 
 @Injectable()
 export class PasswordRecoveryService {
@@ -109,7 +108,7 @@ export class PasswordRecoveryService {
       !(await this.repository.complete(
         recovery,
         credentials,
-        input.expirationDays ?? DEFAULT_PASSWORD_EXPIRATION_DAYS,
+        input.expirationDays,
       ))
     )
       this.invalid();

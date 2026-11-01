@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
-  clientRequestOptions,
   changeClientPassword,
   getClientPasswordStatus,
   ChangePasswordError,
@@ -23,26 +22,13 @@ describe('client password service', () => {
   })
 
   it('attaches the stored client token and returns the status', async () => {
-    get.mockResolvedValueOnce({ data: { status: 'valid', expirationDays: 30, expiresInDays: 3 } })
+    get.mockResolvedValueOnce({ data: { status: 'expired' } })
     const status = await getClientPasswordStatus()
-    expect(status).toEqual({ status: 'valid', expirationDays: 30, expiresInDays: 3 })
+    expect(status).toBe('expired')
     expect(get).toHaveBeenCalledWith(
       '/auth/password-status',
       expect.objectContaining({ headers: { Authorization: 'Bearer token-123' } }),
     )
-  })
-
-  it.each([
-    [{ status: 'valid' }],
-    [{ status: 'valid', expirationDays: 0, expiresInDays: -1 }],
-    [{ status: 'valid', expirationDays: '30', expiresInDays: 2.5 }],
-  ])('treats a missing or malformed period as unknown: %j', async (data) => {
-    get.mockResolvedValueOnce({ data })
-    await expect(getClientPasswordStatus()).resolves.toEqual({
-      status: 'valid',
-      expirationDays: null,
-      expiresInDays: null,
-    })
   })
 
   it('rejects password status requests without a client token', async () => {
@@ -167,15 +153,5 @@ describe('client password service', () => {
     await expect(
       changeClientPassword({ newPassword: 'new', confirmNewPassword: 'new', expirationDays: 90 }),
     ).rejects.toThrow('Error 503:')
-  })
-  it('exports the existing credential transport for client-owned profile requests', () => {
-    expect(clientRequestOptions()).toEqual({
-      headers: { Authorization: 'Bearer token-123' },
-      adapter: 'fetch',
-      withCredentials: false,
-      timeout: 10000,
-    })
-    localStorage.removeItem('accessToken')
-    expect(() => clientRequestOptions()).toThrow(ChangePasswordError)
   })
 })

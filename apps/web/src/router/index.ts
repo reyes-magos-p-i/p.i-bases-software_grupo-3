@@ -6,23 +6,12 @@ import TermsConditions from '@/views/TermsConditions.vue'
 import RefundPolicy from '@/views/RefundPolicy.vue'
 import PrivacyPolicy from '@/views/PrivacyPolicy.vue'
 import { requireEmployeeSession } from './employee-session.guard'
-import { redirectClientWhenPasswordBlocked, requireClientSession } from './client-session.guard'
+import { requireClientSession } from './client-session.guard'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
 
   routes: [
-    {
-      path: '/account/profile',
-      name: 'client-profile',
-      component: () => import('@/views/ClientProfileView.vue'),
-      meta: { requiresClient: true },
-    },
-    {
-      path: '/account/confirm-email',
-      name: 'client-email-confirmation',
-      component: () => import('@/views/ClientEmailConfirmationView.vue'),
-    },
     {
       path: '/recover-password',
       name: 'recover-password',
@@ -81,6 +70,5 @@ const router = createRouter({
 })
 router.beforeEach(requireClientSession)
 router.beforeEach(requireEmployeeSession)
-redirectClientWhenPasswordBlocked(router)
 
 export default router

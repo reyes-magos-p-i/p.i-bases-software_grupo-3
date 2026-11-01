@@ -2,8 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
-import AccountMenu from '@/components/common/AccountMenu.vue'
-import { establishClientSession } from '@/services/client-session.service'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import LoginModal from '@/components/auth/LoginModal.vue'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
@@ -21,12 +19,6 @@ import {
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
 import { clearClientSession } from '@/services/client-session.service'
-import type { PasswordExpiry } from '@/services/authService'
-import {
-  dismissPasswordExpiry,
-  passwordExpiryMessage,
-  passwordExpiryNotice,
-} from '@/services/password-expiry-notice'
 
 vi.mock('@/services/authService', async (original) => ({
   ...(await original<typeof import('@/services/authService')>()),
@@ -44,12 +36,6 @@ vi.mock('@/services/employee-session.service', async () => {
     restoreEmployeeSession: vi.fn(),
   }
 })
-
-const expiry = (
-  status: PasswordExpiry['status'],
-  expirationDays: number | null = 120,
-  expiresInDays: number | null = null,
-): PasswordExpiry => ({ status, expirationDays, expiresInDays })
 
 describe('AppHeader authentication navigation', () => {
   let wrapper: VueWrapper
@@ -69,7 +55,7 @@ describe('AppHeader authentication navigation', () => {
       .mockReset()
       .mockResolvedValue({ id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' })
     vi.mocked(getClientSession).mockReset().mockResolvedValue(null)
-    vi.mocked(getClientPasswordStatus).mockReset().mockResolvedValue(expiry('valid'))
+    vi.mocked(getClientPasswordStatus).mockReset().mockResolvedValue('valid')
     vi.mocked(closeEmployeeSession).mockResolvedValue(null)
     Object.assign(employeeSession.user, { value: null })
     Object.assign(employeeSession.status, { value: 'unknown' })
@@ -82,8 +68,6 @@ describe('AppHeader authentication navigation', () => {
       routes: [
         { path: '/', component: { template: '<p>Portal</p>' } },
         { path: '/dashboard', component: { template: '<p>Dashboard</p>' } },
-        { path: '/account/profile', component: { template: '<p>Perfil</p>' } },
-        { path: '/account/confirm-email', component: { template: '<p>Confirmar correo</p>' } },
         { path: '/account/password', component: { template: '<p>Cambiar contraseña</p>' } },
       ],
     })
@@ -107,7 +91,6 @@ describe('AppHeader authentication navigation', () => {
   })
 
   afterEach(() => {
-    dismissPasswordExpiry()
     wrapper.unmount()
     router.options.history.destroy()
     vi.useRealTimers()
@@ -198,10 +181,7 @@ describe('AppHeader authentication navigation', () => {
     expect(wrapper.find('.register-button').exists()).toBe(false)
     await wrapper.get('.account-avatar').trigger('click')
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
-    expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
-      'Mi perfil',
-      'Cambiar Contraseña',
-    ])
+    expect(wrapper.findAll('.account-actions button:disabled')).toHaveLength(2)
 
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
     await flushPromises()
@@ -254,26 +234,8 @@ describe('AppHeader authentication navigation', () => {
     expect(page.findAll('dialog[open]')).toHaveLength(0)
   })
 
-  it('warns a client at login when the password expires within 72 hours (UT-081)', async () => {
-    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('valid', 30, 3))
-    localStorage.setItem('accessToken', 'client-token')
-    await wrapper.get('.login-button').trigger('click')
-    await page.get('[name="email"]').setValue('ana@example.com')
-    await page.get('[name="password"]').setValue('ValidPassword1!')
-    await page.get('form').trigger('submit')
-    await flushPromises()
-
-    expect(router.currentRoute.value.fullPath).toBe('/')
-    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(3))
-
-    // Logging out removes a warning that is still on screen.
-    await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
-    await flushPromises()
-    expect(passwordExpiryNotice.message.value).toBe('')
-  })
-
   it('forces a client with an expired password to the password update page after login', async () => {
-    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('expired'))
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('expired')
     localStorage.setItem('accessToken', 'client-token')
     await wrapper.get('.login-button').trigger('click')
     await page.get('[name="email"]').setValue('ana@example.com')
@@ -287,7 +249,7 @@ describe('AppHeader authentication navigation', () => {
   })
 
   it('does not enforce an expired password after the client logs out during the status check', async () => {
-    let resolveStatus!: (value: PasswordExpiry) => void
+    let resolveStatus!: (status: 'expired') => void
     vi.mocked(getClientPasswordStatus).mockReturnValueOnce(
       new Promise((resolve) => {
         resolveStatus = resolve
@@ -302,30 +264,12 @@ describe('AppHeader authentication navigation', () => {
 
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
     await flushPromises()
-    resolveStatus(expiry('expired'))
+    resolveStatus('expired')
     await flushPromises()
 
     expect(router.currentRoute.value.path).toBe('/')
     expect(wrapper.find('.account-avatar').exists()).toBe(false)
     expect(localStorage.getItem('accessToken')).toBeNull()
-  })
-
-  it('does not warn a client whose session is restored by a page refresh', async () => {
-    wrapper.unmount()
-    localStorage.setItem('accessToken', 'saved-token')
-    vi.mocked(getClientSession).mockResolvedValue({
-      id: 7,
-      email: 'ana@example.com',
-      firstName: 'Ana',
-      lastName: 'Rojas',
-    })
-    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('valid', 30, 3))
-    wrapper = renderHeader()
-    await flushPromises()
-
-    expect(getClientPasswordStatus).toHaveBeenCalled()
-    expect(router.currentRoute.value.path).toBe('/')
-    expect(passwordExpiryNotice.message.value).toBe('')
   })
 
   it('forces a restored client with an expired password to the password update page', async () => {
@@ -337,7 +281,7 @@ describe('AppHeader authentication navigation', () => {
       firstName: 'Ana',
       lastName: 'Rojas',
     })
-    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('expired'))
+    vi.mocked(getClientPasswordStatus).mockResolvedValueOnce('expired')
     wrapper = renderHeader()
     await flushPromises()
 
@@ -503,7 +447,7 @@ describe('AppHeader authentication navigation', () => {
       firstName: 'Ana',
       lastName: 'Rojas',
     })
-    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue(expiry('expired'))
+    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue('expired')
     wrapper = renderHeader()
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/recover-password')
@@ -565,55 +509,5 @@ describe('AppHeader authentication navigation', () => {
     expect(router.currentRoute.value.query).toEqual({ login: 'client', reason: 'expired' })
     expect(page.get('[role="alert"]').text()).toContain('Tu sesión terminó')
     expect(page.get('[role="alert"]').text()).not.toContain('401')
-  })
-  it('navigates to the profile from the existing account menu', async () => {
-    await flushPromises()
-    establishClientSession(
-      { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: '' },
-      'token',
-    )
-    await nextTick()
-    wrapper.getComponent(AccountMenu).vm.$emit('profile')
-    await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/account/profile')
-  })
-  it('does not enforce password status while confirming a new email', async () => {
-    await flushPromises()
-    wrapper.unmount()
-    await router.push('/account/confirm-email')
-    establishClientSession(
-      { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: '' },
-      'token',
-    )
-    vi.mocked(getClientSession).mockResolvedValue({
-      id: 7,
-      email: 'a@example.com',
-      firstName: 'Ana',
-      lastName: '',
-    })
-    vi.mocked(getClientPasswordStatus).mockClear().mockResolvedValue(expiry('expired'))
-    wrapper = renderHeader()
-    await flushPromises()
-    expect(getClientPasswordStatus).not.toHaveBeenCalled()
-    expect(router.currentRoute.value.path).toBe('/account/confirm-email')
-  })
-
-  it('closes the login modal on the first click without validating an unfinished email', async () => {
-    await wrapper.get('.login-button').trigger('click')
-    const email = page.get<HTMLInputElement>('[name="email"]')
-    await email.setValue('invalid')
-    email.element.focus()
-    const close = page.get<HTMLButtonElement>('.app-modal-close')
-    close.element.dispatchEvent(
-      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }),
-    )
-    close.element.focus()
-    await nextTick()
-    expect(email.attributes('aria-invalid')).toBe('false')
-    await close.trigger('pointerup')
-    await close.trigger('click')
-    expect(page.find('dialog[open]').exists()).toBe(false)
-    expect(wrapper.getComponent(LoginModal).props('open')).toBe(false)
-    expect(loginClient).not.toHaveBeenCalled()
   })
 })

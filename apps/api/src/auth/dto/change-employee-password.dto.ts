@@ -1,4 +1,4 @@
-import { IsString, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsString, MinLength } from 'class-validator';
 
 export class ChangeEmployeePasswordDto {
   @IsString()
@@ -12,4 +12,8 @@ export class ChangeEmployeePasswordDto {
   @IsString()
   @MinLength(1)
   confirmNewPassword!: string;
+
+  @IsInt()
+  @IsIn([30, 60, 90, 120])
+  expirationDays!: number;
 }

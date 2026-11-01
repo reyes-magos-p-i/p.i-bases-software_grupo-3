@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useBlurValidation } from '@/composables/useBlurValidation'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
@@ -28,8 +27,6 @@ import type {
   UserEditOptions,
   UserRole,
 } from '@/types/user'
-
-const shouldValidateOnBlur = useBlurValidation()
 
 const props = defineProps<{ selection: UserDetailSelection | null }>()
 const emit = defineEmits<{
@@ -374,7 +371,6 @@ function editedField(event: Event) {
     delete errors[control.name]
 }
 function blurredField(event: FocusEvent) {
-  if (!shouldValidateOnBlur(event)) return
   const control = event.target
   if (
     (control instanceof HTMLInputElement ||

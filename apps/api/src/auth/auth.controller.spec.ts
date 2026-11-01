@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { EmployeeSessionService } from './employee-session.service';
-import { SessionOriginGuard } from './guards/session-origin.guard';
+import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 import { ClientsService } from '../clients/clients.service';
 import {
   ForbiddenException,
@@ -49,7 +49,7 @@ describe('AuthController', () => {
     })
       .overrideGuard(ThrottlerGuard)
       .useValue({ canActivate: () => true })
-      .overrideGuard(SessionOriginGuard)
+      .overrideGuard(EmployeeSessionOriginGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -185,14 +185,9 @@ describe('AuthController', () => {
   });
 
   describe('passwordStatus()', () => {
-    it('returns the expiry attached to the request', () => {
-      const passwordExpiry = {
-        status: 'valid',
-        expirationDays: 30,
-        expiresInDays: 3,
-      };
-      const req = { passwordStatus: 'valid', passwordExpiry } as never;
-      expect(controller.passwordStatus(req)).toEqual(passwordExpiry);
+    it('returns the status attached to the request', () => {
+      const req = { passwordStatus: 'valid' } as never;
+      expect(controller.passwordStatus(req)).toEqual({ status: 'valid' });
     });
 
     it('throws when the status was never computed', () => {
@@ -247,6 +242,7 @@ describe('AuthController', () => {
               currentPassword: 'old',
               newPassword: 'new',
               confirmNewPassword: 'new',
+              expirationDays: 90,
             },
           ),
         ).rejects.toThrow(ForbiddenException);
@@ -254,6 +250,7 @@ describe('AuthController', () => {
           currentPassword: 'old',
           newPassword: 'new',
           confirmNewPassword: 'new',
+          expirationDays: 90,
         };
         auth.changeEmployeePassword.mockResolvedValue(undefined);
         await expect(
@@ -273,6 +270,7 @@ describe('AuthController', () => {
           currentPassword: 'old',
           newPassword: 'new',
           confirmNewPassword: 'new',
+          expirationDays: 90,
         };
         auth.changeEmployeePassword.mockResolvedValue(undefined);
         await expect(

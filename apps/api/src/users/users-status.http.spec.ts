@@ -338,11 +338,7 @@ describe('User status and session lifecycle with mocked persistence', () => {
         type,
         freshToken,
       ).expect(200);
-      expect(current.body).toEqual({
-        status: 'valid',
-        expirationDays: 90,
-        expiresInDays: null,
-      });
+      expect(current.body).toEqual({ status: 'valid' });
     },
   );
 });

@@ -5,7 +5,6 @@ import { MoviesRepository } from './movies.repository';
 
 @Module({
   controllers: [MoviesController],
-  providers: [MoviesService, MoviesRepository],
-  exports: [MoviesRepository],
+  providers: [MoviesService, MoviesRepository]
 })
 export class MoviesModule {}

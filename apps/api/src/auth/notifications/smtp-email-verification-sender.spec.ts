@@ -94,15 +94,4 @@ describe('SmtpEmailVerificationSender', () => {
     );
     expect(createTransport).not.toHaveBeenCalled();
   });
-  it('sends email change instructions without registration activation wording', async () => {
-    const sender = new SmtpEmailVerificationSender(config);
-    await sender.send({ ...message, purpose: 'email-change' });
-    const mail = sendMail.mock.calls[0][0];
-    expect(mail.subject).toBe('Confirma tu nuevo correo de Cinetadel');
-    expect(mail.text).toContain('se cerrarán tus sesiones');
-    expect(mail.text).toContain('Tu correo actual se mantendrá');
-    expect(mail.html).toContain('Confirmar nuevo correo');
-    expect(mail.html).toContain('30 minutos');
-    expect(mail.html).not.toContain('activar tu cuenta');
-  });
 });

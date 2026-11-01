@@ -3,10 +3,19 @@ import { mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
 import type { UserRole } from '@/types/user'
-import { dashboardSections } from '@/components/layout/dashboard-sections'
 
-const sections = dashboardSections.map((section) => [section.id, section.label] as const)
-const adminOnlyIds = new Set(dashboardSections.filter((section) => section.adminOnly).map((s) => s.id))
+const sections = [
+  ['dashboard', 'Tablero'],
+  ['theaters', 'Salas'],
+  ['movies', 'Películas'],
+  ['employees', 'Empleados'],
+  ['clients', 'Clientes'],
+  ['screenings', 'Proyecciones'],
+  ['branches', 'Sucursales'],
+  ['password', 'Cambiar contraseña'],
+  ['account', 'Ajustes de cuenta'],
+  ['help', 'Asistencia'],
+] as const
 const wrappers: VueWrapper[] = []
 let viewport: MediaQueryList
 const dialogPrototype = HTMLDialogElement.prototype
@@ -91,7 +100,7 @@ describe('DashboardLayout', () => {
     const wrapper = renderLayout()
     const navigation = wrapper.get('nav')
 
-    expect(navigation.findAll('button')).toHaveLength(sections.length)
+    expect(navigation.findAll('button')).toHaveLength(10)
     for (const [, label] of sections) {
       expect(navigation.find('[aria-label="' + label + ' (Pendiente)"]').exists()).toBe(true)
     }
@@ -106,9 +115,13 @@ describe('DashboardLayout', () => {
     })
     const navigation = wrapper.get('nav')
 
-    expect(navigation.findAll('button')).toHaveLength(sections.length - adminOnlyIds.size)
+    expect(navigation.findAll('button')).toHaveLength(7)
     for (const [id, label] of sections) {
-      expect(navigation.find('[aria-label="' + label + '"]').exists()).toBe(!adminOnlyIds.has(id))
+      expect(navigation.find('[aria-label="' + label + '"]').exists()).toBe(
+
+
+        id !== 'dashboard' && id !== 'employees' && id !== 'theaters',
+      )
     }
     expect(wrapper.get('header').text()).toContain('Sesión iniciada como Empleado')
   })
@@ -138,7 +151,7 @@ describe('DashboardLayout', () => {
     const wrapper = renderLayout()
     const buttons = wrapper.findAll('nav button, .logout-button')
 
-    expect(buttons).toHaveLength(sections.length + 1)
+    expect(buttons).toHaveLength(11)
     for (const button of buttons) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')

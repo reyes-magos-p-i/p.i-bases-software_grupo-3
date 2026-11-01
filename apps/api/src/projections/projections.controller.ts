@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
-import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
+import { EmployeeSessionOriginGuard } from '../auth/guards/employee-session-origin.guard';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import type { UserIdentity } from '../users/types/user-identity.type';
@@ -56,13 +56,13 @@ export class ProjectionsController {
   }
 
   @Patch(':id/cancel')
-  @UseGuards(SessionOriginGuard)
+  @UseGuards(EmployeeSessionOriginGuard)
   cancel(@Param() params: ProjectionIdParamsDto) {
     return this.projectionsService.cancel(params.id);
   }
 
   @Put(':id')
-  @UseGuards(SessionOriginGuard)
+  @UseGuards(EmployeeSessionOriginGuard)
   update(
     @Param() params: ProjectionIdParamsDto,
     @Body() data: UpdateProjectionDto,
@@ -72,7 +72,7 @@ export class ProjectionsController {
   }
 
   @Post()
-  @UseGuards(SessionOriginGuard)
+  @UseGuards(EmployeeSessionOriginGuard)
   @HttpCode(HttpStatus.CREATED)
   create(
     @Body() data: CreateProjectionDto,

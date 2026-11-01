@@ -26,7 +26,7 @@ import {
   EmployeeSessionService,
   EMPLOYEE_SESSION_TTL_SECONDS,
 } from './employee-session.service';
-import { SessionOriginGuard } from './guards/session-origin.guard';
+import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 import { EmailVerificationSender } from './notifications/email-verification-sender';
 import { SmtpEmailVerificationSender } from './notifications/smtp-email-verification-sender';
 import { PasswordStatusGuard } from './password/password-status.guard';
@@ -63,15 +63,13 @@ import { PasswordStatusGuard } from './password/password-status.guard';
     },
     JwtStrategy,
     EmployeeSessionService,
-    SessionOriginGuard,
+    EmployeeSessionOriginGuard,
     PasswordStatusGuard,
   ],
   exports: [
-    JwtModule,
-    EmailVerificationSender,
     PassportModule,
     EmployeeSessionService,
-    SessionOriginGuard,
+    EmployeeSessionOriginGuard,
     PasswordStatusGuard,
   ],
 })

@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { stripTrailingSlashes } from '@/services/movieFunctions'
-import type { PortalMovie } from '@/types/movie'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { getMovieFunctions, stripTrailingSlashes } from '../../services/movieFunctions'
 import placeholderImage from '../../assets/images/placeholder.svg'
 
 interface CarouselSlide {
@@ -9,44 +8,83 @@ interface CarouselSlide {
   alt: string
   title: string
 }
-const props = defineProps<{ movies: readonly PortalMovie[] }>()
+
 const slides = ref<CarouselSlide[]>([])
-const currentIndex = ref(0)
-const imagesBaseUrl = `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image`
-watch(
-  () => props.movies,
-  (movies) => {
-    slides.value = movies.length
-      ? movies.slice(0, 4).map((movie) => ({
-          image: `${imagesBaseUrl}/${movie.posterImage}`,
-          alt: movie.title,
-          title: movie.title,
-        }))
-      : [{ image: placeholderImage, alt: 'Cinetadel', title: 'Cinetadel' }]
-    currentIndex.value = 0
-  },
-  { immediate: true },
-)
+
+const autoSlideInterval = 5000
+
 let intervalId: ReturnType<typeof setInterval> | undefined
-onMounted(() => {
-  intervalId = setInterval(nextSlide, 5000)
+
+function startAutoSlide(): void {
+  intervalId = setInterval(() => {
+    nextSlide()
+  }, autoSlideInterval)
+}
+
+function stopAutoSlide(): void {
+  if (intervalId) {
+    clearInterval(intervalId)
+  }
+}
+
+function setPlaceholderSlides(): void {
+  slides.value = [
+    {
+      image: placeholderImage,
+      alt: 'Cinetadel',
+      title: 'Cinetadel',
+    },
+  ]
+}
+
+onMounted(async () => {
+  try {
+    const movies = await getMovieFunctions()
+
+    if (!movies?.length) {
+      setPlaceholderSlides()
+    } else {
+      slides.value = movies.map((movie: { title: string; posterImage: string }) => ({
+        image: `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image/${movie.posterImage}`,
+        alt: movie.title,
+        title: movie.title,
+      }))
+    }
+  } catch {
+    setPlaceholderSlides()
+  }
+
+  startAutoSlide()
 })
+
 onUnmounted(() => {
-  clearInterval(intervalId)
+  stopAutoSlide()
 })
+
+const currentIndex = ref(0)
+
 const currentSlide = computed(() => slides.value[currentIndex.value])
-function nextSlide() {
+
+function nextSlide(): void {
+  if (!slides.value.length) return
   currentIndex.value = (currentIndex.value + 1) % slides.value.length
 }
-function previousSlide() {
+
+function previousSlide(): void {
+  if (!slides.value.length) return
   currentIndex.value = (currentIndex.value - 1 + slides.value.length) % slides.value.length
 }
-function selectSlide(index: number) {
+
+function selectSlide(index: number): void {
   currentIndex.value = index
 }
-function handleImageError() {
-  const slide = currentSlide.value
-  if (slide && slide.image !== placeholderImage) slide.image = placeholderImage
+
+function handleImageError(): void {
+  const slide = slides.value[currentIndex.value]
+
+  if (!slide || slide.image === placeholderImage) return
+
+  slide.image = placeholderImage
 }
 </script>
 

@@ -13,7 +13,6 @@ import { UserCreationOptionsDto } from './dto/user-creation-options.dto';
 import { UserRole } from './enums/user-role.enum';
 import type { EmployeeDetailDto } from './dto/user-detail.dto';
 import { DatabaseService } from '../database/database.service';
-import { EMPLOYEE_PASSWORD_EXPIRATION_DAYS } from '../auth/password/password-status';
 import type { CreateEmployeeRecord } from './types/create-employee-record.type';
 import type { CreateAddressDto } from './dto/create-address.dto';
 import type { UpdateEmployeeDto, UpdatedUserDto } from './dto/update-user.dto';
@@ -473,7 +472,7 @@ export class UsersRepository {
     };
   }
 
-  async getAddressOptions(): Promise<Omit<UserCreationOptionsDto, 'branches'>> {
+  async getCreationOptions(): Promise<UserCreationOptionsDto> {
     const options = { outFormat: oracle.OUT_FORMAT_OBJECT };
     const provinces = await this.db.query<{
       ID_PROVINCE: number;
@@ -501,7 +500,16 @@ export class UsersRepository {
       {},
       options,
     );
-    return {
+    const branches = await this.db.query<{
+      BRANCH_ID: number;
+      NAME: string;
+    }>(
+      'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
+      {},
+      options,
+    );
+
+    return new UserCreationOptionsDto({
       provinces: (provinces.rows ?? []).map((row) => ({
         id: row.ID_PROVINCE,
         label: row.NAME,
@@ -516,22 +524,6 @@ export class UsersRepository {
         label: row.NAME,
         cantonId: row.ID_CANTON,
       })),
-    };
-  }
-
-  async getCreationOptions(): Promise<UserCreationOptionsDto> {
-    const address = await this.getAddressOptions();
-    const branches = await this.db.query<{
-      BRANCH_ID: number;
-      NAME: string;
-    }>(
-      'SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID',
-      {},
-      { outFormat: oracle.OUT_FORMAT_OBJECT },
-    );
-
-    return new UserCreationOptionsDto({
-      ...address,
       branches: (branches.rows ?? []).map((row) => ({
         id: row.BRANCH_ID,
         label: row.NAME,
@@ -637,10 +629,7 @@ export class UsersRepository {
             employeeId: { val: employeeId, type: oracle.NUMBER },
             passwordHash: { val: data.passwordHash, type: oracle.STRING },
             salt: { val: data.salt, type: oracle.STRING },
-            expirationDays: {
-              val: EMPLOYEE_PASSWORD_EXPIRATION_DAYS,
-              type: oracle.NUMBER,
-            },
+            expirationDays: { val: 120, type: oracle.NUMBER },
           },
           { autoCommit: false },
         );
@@ -783,6 +772,7 @@ export class UsersRepository {
     employeeId: number,
     passwordHash: string,
     salt: string,
+    expirationDays: number,
     connection?: oracle.Connection,
   ): Promise<void> {
     const execute = connection
@@ -803,10 +793,7 @@ export class UsersRepository {
         employeeId: { val: employeeId, type: oracle.NUMBER },
         passwordHash: { val: passwordHash, type: oracle.STRING },
         salt: { val: salt, type: oracle.STRING },
-        expirationDays: {
-          val: EMPLOYEE_PASSWORD_EXPIRATION_DAYS,
-          type: oracle.NUMBER,
-        },
+        expirationDays: { val: expirationDays, type: oracle.NUMBER },
       },
       { autoCommit: !connection },
     );

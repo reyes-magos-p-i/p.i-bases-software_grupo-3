@@ -4,16 +4,13 @@ import type { Theater } from '@/types/theater'
 export type TheaterSortKey =
   'theaterId' | 'cinema' | 'numberOfSeats' | 'dimensions' | 'projectorName' | 'status'
 
-export const displayStatus = (theater: Theater) =>
-  theater.isActive ? (asText(theater.status) || 'Sin estado') : 'Inactiva'
+export const displayStatus = (theater: Theater) => (theater.isActive ? theater.status : 'Inactiva')
 
-const asText = (value: unknown) => (typeof value === 'string' ? value : '')
+const uniqueSorted = (values: string[]) =>
+  [...new Set(values)].sort((a, b) => a.localeCompare(b, 'es'))
 
-const uniqueSorted = (values: unknown[]) =>
-  [...new Set(values.map(asText).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'))
-
-const normalizeText = (value: unknown) =>
-  asText(value).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim().replace(/\s+/gu, ' ')
+const normalizeText = (value: string) =>
+  value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim().replace(/\s+/gu, ' ')
 
 const searchText = (t: Theater) =>
   normalizeText(
@@ -30,13 +27,13 @@ const searchText = (t: Theater) =>
 function compareBy(key: TheaterSortKey, a: Theater, b: Theater) {
   switch (key) {
     case 'cinema':
-      return asText(a.cinema).localeCompare(asText(b.cinema), 'es')
+      return a.cinema.localeCompare(b.cinema, 'es')
     case 'numberOfSeats':
       return a.numberOfSeats - b.numberOfSeats
     case 'dimensions':
       return a.dimensionX * a.dimensionY - b.dimensionX * b.dimensionY
     case 'projectorName':
-      return asText(a.projectorName).localeCompare(asText(b.projectorName), 'es')
+      return a.projectorName.localeCompare(b.projectorName, 'es')
     case 'status':
       return displayStatus(a).localeCompare(displayStatus(b), 'es')
     default:

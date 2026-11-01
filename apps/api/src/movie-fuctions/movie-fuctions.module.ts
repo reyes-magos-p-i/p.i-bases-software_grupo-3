@@ -8,6 +8,5 @@ import { DatabaseModule } from '../database/database.module';
   imports: [DatabaseModule],
   controllers: [MovieFuctionsController],
   providers: [MovieFuctionsService, MovieFunctionsRepository],
-  exports: [MovieFuctionsService],
 })
 export class MovieFuctionsModule {}

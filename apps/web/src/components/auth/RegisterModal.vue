@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useBlurValidation } from '@/composables/useBlurValidation'
 import { reactive, ref, watch } from 'vue'
 import DatePicker from '@/components/common/DatePicker.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
@@ -16,8 +15,6 @@ import { EmailDeliveryError, registerUser, resendEmailVerification } from '@/ser
 import BaseModal from '@/components/common/BaseModal.vue'
 import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 import type { ClientIdentity } from '@/types/client-auth'
-
-const shouldValidateOnBlur = useBlurValidation()
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
@@ -134,7 +131,6 @@ function inputChanged(event: Event) {
     delete errors[control.id === 'terms' ? 'acceptTerms' : control.id]
 }
 function inputBlurred(event: FocusEvent) {
-  if (!shouldValidateOnBlur(event)) return
   const control = event.target
   if (
     (control instanceof HTMLInputElement || control instanceof HTMLSelectElement) &&

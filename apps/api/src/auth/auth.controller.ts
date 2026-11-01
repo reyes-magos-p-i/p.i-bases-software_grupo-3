@@ -22,12 +22,12 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import type { EmployeeLoginResult } from './types/employee-login-result.type';
 import { EmployeeSessionService } from './employee-session.service';
-import { SessionOriginGuard } from './guards/session-origin.guard';
+import { EmployeeSessionOriginGuard } from './guards/employee-session-origin.guard';
 import { ConfirmEmailVerificationDto } from './dto/confirm-email-verification.dto';
 import { ResendEmailVerificationDto } from './dto/resend-email-verification.dto';
 import { AllowExpiredPassword } from './password/allow-expired-password.decorator';
 import { ChangeClientPasswordDto } from './dto/change-client-password.dto';
-import type { PasswordExpiry } from './password/password-status';
+import { PasswordStatus } from './password/password-status';
 import { Client } from '../clients/client.model';
 import { ClientsService } from '../clients/clients.service';
 import { ChangeEmployeePasswordDto } from './dto/change-employee-password.dto';
@@ -63,7 +63,7 @@ export class AuthController {
   }
 
   @Post('employees/login')
-  @UseGuards(ThrottlerGuard, SessionOriginGuard)
+  @UseGuards(ThrottlerGuard, EmployeeSessionOriginGuard)
   @Header('Cache-Control', 'no-store')
   @HttpCode(HttpStatus.OK)
   async loginEmployee(
@@ -76,7 +76,7 @@ export class AuthController {
   }
 
   @Post('clients/login')
-  @UseGuards(ThrottlerGuard, SessionOriginGuard)
+  @UseGuards(ThrottlerGuard, EmployeeSessionOriginGuard)
   @Header('Cache-Control', 'no-store')
   @HttpCode(HttpStatus.OK)
   async loginClient(@Body() dto: LoginDto) {
@@ -86,8 +86,6 @@ export class AuthController {
   @Get('me')
   @Header('Cache-Control', 'no-store')
   @UseGuards(AuthGuard('jwt'))
-  // The web app restores the session with this route before redirecting to the password change.
-  @AllowExpiredPassword()
   me(@Req() req: Request) {
     const user = req.user as
       | { id?: number; role?: string; firstName?: string; email?: string }
@@ -105,7 +103,7 @@ export class AuthController {
   }
 
   @Post('employees/logout')
-  @UseGuards(SessionOriginGuard)
+  @UseGuards(EmployeeSessionOriginGuard)
   @Header('Cache-Control', 'no-store')
   @HttpCode(HttpStatus.NO_CONTENT)
   logoutEmployee(@Res({ passthrough: true }) response: Response): void {
@@ -128,13 +126,13 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @AllowExpiredPassword()
   @Get('password-status')
-  passwordStatus(@Req() req: Request): PasswordExpiry {
-    if (req.passwordExpiry === undefined) {
+  passwordStatus(@Req() req: Request): { status: PasswordStatus } {
+    if (req.passwordStatus === undefined) {
       throw new InternalServerErrorException(
         'Password status was not computed.',
       );
     }
-    return req.passwordExpiry;
+    return { status: req.passwordStatus };
   }
 
   @UseGuards(AuthGuard('jwt'), ThrottlerGuard)

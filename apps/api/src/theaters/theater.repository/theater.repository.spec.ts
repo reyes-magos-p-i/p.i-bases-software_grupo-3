@@ -1,13 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../../database/database.service';
 import { TheaterRepository } from './theater.repository';
-import { ChairsRepository } from '../chairs.repository';
 
 describe('TheaterRepository', () => {
   let repository: TheaterRepository;
   let databaseService: { query: jest.Mock; transaction: jest.Mock };
   let connection: { execute: jest.Mock };
-  let chairsRepository: { createForTheater: jest.Mock };
 
   beforeEach(async () => {
     connection = {
@@ -19,15 +17,11 @@ describe('TheaterRepository', () => {
         work(connection),
       ),
     };
-    chairsRepository = {
-      createForTheater: jest.fn().mockResolvedValue(undefined),
-    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TheaterRepository,
         { provide: DatabaseService, useValue: databaseService },
-        { provide: ChairsRepository, useValue: chairsRepository },
       ],
     }).compile();
 
@@ -165,13 +159,6 @@ describe('TheaterRepository', () => {
           projectorId: 42,
           isActive: 1,
         }),
-      );
-      expect(chairsRepository.createForTheater).toHaveBeenCalledTimes(1);
-      expect(chairsRepository.createForTheater).toHaveBeenCalledWith(
-        7,
-        theaterDto.dimensionX,
-        theaterDto.dimensionY,
-        connection,
       );
     });
 

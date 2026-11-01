@@ -177,7 +177,7 @@ export class PasswordRecoveryRepository {
   async complete(
     recovery: Recovery,
     credentials: PasswordHashResult,
-    clientExpirationDays: number,
+    expirationDays: number,
   ): Promise<boolean> {
     return this.db.transaction(async (connection) => {
       // Lock credentials first, matching request creation and serializing simultaneous resets.
@@ -197,22 +197,16 @@ export class PasswordRecoveryRepository {
         row?.TEMPORARY_HASH !== recovery.temporaryHash
       )
         return false;
-      // Only clients pick a period; employee passwords always get the fixed one.
+      const args = [
+        account.ID,
+        credentials.passwordHash,
+        credentials.salt,
+        expirationDays,
+        connection,
+      ] as const;
       if (recovery.accountType === 'client')
-        await this.clients.savePassword(
-          account.ID,
-          credentials.passwordHash,
-          credentials.salt,
-          clientExpirationDays,
-          connection,
-        );
-      else
-        await this.users.saveEmployeePassword(
-          account.ID,
-          credentials.passwordHash,
-          credentials.salt,
-          connection,
-        );
+        await this.clients.savePassword(...args);
+      else await this.users.saveEmployeePassword(...args);
       await connection.execute(
         `UPDATE PASSWORD_RECOVERIES SET TOKEN_HASH = NULL, TEMPORARY_HASH = NULL,
          CREDENTIAL_HASH = NULL, EMAIL = NULL, EXPIRES_AT = NULL, RESET_AT = SYSTIMESTAMP

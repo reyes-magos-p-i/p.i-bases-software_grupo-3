@@ -2,9 +2,9 @@ import { type ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { EmployeeSessionService } from '../employee-session.service';
-import { SessionOriginGuard } from './session-origin.guard';
+import { EmployeeSessionOriginGuard } from './employee-session-origin.guard';
 
-describe('SessionOriginGuard', () => {
+describe('EmployeeSessionOriginGuard', () => {
   const session = new EmployeeSessionService(
     new ConfigService({
       FRONTEND_URL: 'https://cinema.example',
@@ -12,7 +12,7 @@ describe('SessionOriginGuard', () => {
     }),
     new JwtService(),
   );
-  const guard = new SessionOriginGuard(session);
+  const guard = new EmployeeSessionOriginGuard(session);
   const context = (origin: unknown) =>
     ({
       switchToHttp: () => ({
