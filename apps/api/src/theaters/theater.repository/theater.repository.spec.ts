@@ -7,7 +7,7 @@ describe('TheaterRepository', () => {
   let repository: TheaterRepository;
   let databaseService: { query: jest.Mock; transaction: jest.Mock };
   let connection: { execute: jest.Mock };
-  let chairsRepository: { createForTheater: jest.Mock };
+  let chairsRepository: { createForTheater: jest.Mock; deleteForTheater: jest.Mock;};
 
   beforeEach(async () => {
     connection = {
@@ -21,6 +21,7 @@ describe('TheaterRepository', () => {
     };
     chairsRepository = {
       createForTheater: jest.fn().mockResolvedValue(undefined),
+      deleteForTheater: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -478,29 +479,55 @@ describe('TheaterRepository', () => {
   });
 
   describe('deleteTheater', () => {
-    it('deactivates an existing theater', async () => {
-      databaseService.query.mockResolvedValue({ rowsAffected: 1 });
+    it('deactivates the theater and deletes its seats in the same transaction', async () => {
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
 
       await expect(repository.deleteTheater(7)).resolves.toBeUndefined();
-      expect(databaseService.query).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE Theaters SET is_active = 0'),
+
+      expect(databaseService.transaction).toHaveBeenCalledTimes(1);
+
+      expect(connection.execute).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'UPDATE Theaters SET is_active = 0 WHERE theater_id = :id',
+        ),
         { id: 7 },
+        { autoCommit: false },
+      );
+
+      expect(chairsRepository.deleteForTheater).toHaveBeenCalledTimes(1);
+      expect(chairsRepository.deleteForTheater).toHaveBeenCalledWith(
+        7,
+        connection,
       );
     });
 
-    it('throws when the theater to deactivate does not exist', async () => {
-      databaseService.query.mockResolvedValue({ rowsAffected: 0 });
+    it('throws when the theater does not exist', async () => {
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 0 });
 
       await expect(repository.deleteTheater(999)).rejects.toThrow(
         'Theater not found: 999',
       );
+
+      expect(chairsRepository.deleteForTheater).not.toHaveBeenCalled();
     });
 
-    it('propagates database errors', async () => {
-      const error = new Error('Database connection failed');
-      databaseService.query.mockRejectedValue(error);
+    it('propagates seat deletion errors', async () => {
+      const error = new Error('Seat deletion failed');
+
+      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
+      chairsRepository.deleteForTheater.mockRejectedValueOnce(error);
 
       await expect(repository.deleteTheater(7)).rejects.toBe(error);
+    });
+
+    it('propagates transaction errors', async () => {
+      const error = new Error('Database transaction failed');
+
+      databaseService.transaction.mockRejectedValueOnce(error);
+
+      await expect(repository.deleteTheater(7)).rejects.toBe(error);
+
+      expect(chairsRepository.deleteForTheater).not.toHaveBeenCalled();
     });
   });
 });

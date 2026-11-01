@@ -7,6 +7,7 @@ import type {
   TheaterStatusOption,
   UpdateTheaterRequest,
 } from '@/types/theater'
+import type { Seat } from '@/types/seats'
 
 export async function getTheaters(signal?: AbortSignal): Promise<Theater[]> {
   const response = await getApi().get<Theater[]>('/theaters', { signal, timeout: 10000 })
@@ -34,4 +35,9 @@ export async function updateTheater(id: number, data: UpdateTheaterRequest): Pro
 
 export async function deleteTheater(id: number): Promise<void> {
   await getApi().delete(`/theaters/${id}`, { timeout: 30000 })
+}
+
+export async function getTheaterSeats(theaterId: number, signal?: AbortSignal,): Promise<Seat[]> {
+  const response = await getApi().get<Seat[]>(`/theaters/${theaterId}/seats`,{ signal, timeout: 10000 },)
+  return response.data
 }

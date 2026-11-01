@@ -1,11 +1,15 @@
-import { BadRequestException, Injectable} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException,} from '@nestjs/common';
 import { CreateTheaterDto } from './dto/create-theater.dto';
 import { UpdateTheaterDto } from './dto/update-theater.dto';
 import { TheaterRepository } from './theater.repository/theater.repository';
+import { ChairsRepository } from './chairs.repository';
 
 @Injectable()
 export class TheatersService {
-  constructor(private readonly theatersRepository: TheaterRepository) {}
+  constructor(
+    private readonly theatersRepository: TheaterRepository,
+    private readonly chairsRepository: ChairsRepository,
+  ) {}
 
   private validateSeatDimensions(numberOfSeats: number, dimensionX: number, dimensionY: number) {
     if (
@@ -65,4 +69,14 @@ export class TheatersService {
   remove(id: number) {
     return this.theatersRepository.deleteTheater(id);
   }
+
+  async getSeats(theaterId: number) {
+  const theater = await this.theatersRepository.getTheaterById(theaterId);
+
+  if (!theater) {
+    throw new NotFoundException(`Theater not found: ${theaterId}`);
+  }
+
+  return this.chairsRepository.findByTheater(theaterId);
+}
 }
