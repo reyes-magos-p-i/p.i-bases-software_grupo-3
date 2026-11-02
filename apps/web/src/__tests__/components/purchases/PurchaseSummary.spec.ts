@@ -31,6 +31,15 @@ const quote = {
   version: 'hash',
 } as PurchaseQuote
 describe('PurchaseSummary', () => {
+  it('shows the confirmed buyer email in a quote without generating a consultation credential or QR', () => {
+    const wrapper = mount(PurchaseSummary, {
+      props: { purchase: quote, buyerEmail: 'guest@example.com' },
+    })
+    expect(wrapper.text()).toContain('Correo del comprador')
+    expect(wrapper.text()).toContain('guest@example.com')
+    expect(wrapper.findComponent(QrCode).exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('shows final prices and a non-navigable purchase QR only after registration', async () => {
     const wrapper = mount(PurchaseSummary, {
       props: { purchase: quote },
@@ -63,6 +72,7 @@ describe('PurchaseSummary', () => {
       ],
     } as unknown as PurchaseReceipt
     await wrapper.setProps({ purchase: receipt })
+    expect(wrapper.text()).toContain('ana@example.com')
     expect(wrapper.text()).toContain('ORD-000012')
     const code = wrapper.getComponent(QrCode).props('value')
     expect(JSON.parse(code)).toEqual({
