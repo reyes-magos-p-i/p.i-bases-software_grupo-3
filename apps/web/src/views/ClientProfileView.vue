@@ -48,7 +48,7 @@ const route = useRoute()
 const sections = [
   { id: 'personal', label: 'Mis datos', icon: 'bi-person' },
   { id: 'security', label: 'Seguridad', icon: 'bi-shield-lock' },
-  { id: 'purchases', label: 'Mis compras', icon: 'bi-ticket-perforated' },
+  { id: 'purchases', label: 'Historial de compras', icon: 'bi-ticket-perforated' },
   { id: 'preferences', label: 'Preferencias', icon: 'bi-sliders' },
   { id: 'deactivation', label: 'Desactivar cuenta', icon: 'bi-person-dash' },
 ]
@@ -59,6 +59,16 @@ const preferencesFormKey = ref(0)
 let preferencesGeneration = 0
 let preferencesAbort: AbortController | undefined
 const selected = ref(route.query.section === 'purchases' ? 'purchases' : 'personal')
+// The open purchase lives in the URL, so a detail link can be reopened; the API checks ownership.
+const selectedPurchaseId = computed(() => {
+  const id = route.query.purchaseId
+  return typeof id === 'string' && /^\d+$/u.test(id) ? Number(id) : null
+})
+function selectPurchase(id: number | null) {
+  void router.replace({
+    query: { section: 'purchases', ...(id === null ? {} : { purchaseId: String(id) }) },
+  })
+}
 const profile = ref<ClientProfile | null>(null)
 const options = ref<ClientAddressOptions | null>(null)
 const loading = ref(true)
@@ -480,6 +490,8 @@ onBeforeUnmount(() => {
         </template>
         <ClientPurchasesPanel
           v-else-if="selected === 'purchases'"
+          :purchase-id="selectedPurchaseId"
+          @select="selectPurchase"
           @session-expired="purchasesSessionExpired"
         />
         <template v-else-if="selected === 'security'">

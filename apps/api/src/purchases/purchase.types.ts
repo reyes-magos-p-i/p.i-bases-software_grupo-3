@@ -73,6 +73,9 @@ export interface PurchaseReceipt {
   purchasedAt: string;
   status: string;
   buyerEmail: string;
+  paymentMethod: 'CARD' | 'CASH' | 'SIMULATED';
+  cardBrand: string | null;
+  cardLast4: string | null;
   total: number;
   function: PurchaseFunction;
   lines: PurchaseLine[];

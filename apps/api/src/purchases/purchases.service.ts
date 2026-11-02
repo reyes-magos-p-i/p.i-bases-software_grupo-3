@@ -2,7 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import { PurchasesRepository } from './purchases.repository';
 import { purchaseQuote, requireAvailableFunction } from './purchase-rules';
-import type { ConfirmPurchaseDto, PurchaseSelectionDto } from './purchase.dto';
+import type {
+  ConfirmPurchaseDto,
+  ListPurchasesQueryDto,
+  PurchaseSelectionDto,
+} from './purchase.dto';
 @Injectable()
 export class PurchasesService {
   constructor(
@@ -26,8 +30,8 @@ export class PurchasesService {
   confirm(clientId: number, data: ConfirmPurchaseDto) {
     return this.purchases.confirm(clientId, data);
   }
-  list(clientId: number, page: number) {
-    return this.purchases.list(clientId, page);
+  list(clientId: number, query: ListPurchasesQueryDto) {
+    return this.purchases.list(clientId, query);
   }
   findOne(clientId: number, id: number) {
     return this.purchases.findOne(id, clientId);

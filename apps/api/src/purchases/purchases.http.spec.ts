@@ -162,10 +162,17 @@ describe('Purchase HTTP with mocked persistence', () => {
       expect.objectContaining(body),
     );
     const list = await request(server)
-      .get('/api/purchases/me?page=2')
+      .get(
+        '/api/purchases/me?page=2&search=0122&dateFrom=2026-10-05&dateTo=2026-10-10',
+      )
       .auth(token(), { type: 'bearer' });
     expect(list.status).toBe(200);
-    expect(storage.list).toHaveBeenCalledWith(8, 2);
+    expect(storage.list).toHaveBeenCalledWith(8, {
+      page: 2,
+      search: '0122',
+      dateFrom: '2026-10-05',
+      dateTo: '2026-10-10',
+    });
     const detail = await request(server)
       .get('/api/purchases/me/12')
       .auth(token(), { type: 'bearer' });

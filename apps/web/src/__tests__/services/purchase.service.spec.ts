@@ -31,7 +31,7 @@ describe('Purchase API', () => {
     await getPurchaseSeats(4)
     await quotePurchase(data)
     await confirmPurchase({ ...data, requestKey: 'key', quoteVersion: 'hash' })
-    await getMyPurchases()
+    await getMyPurchases({ page: 1, search: '0122' })
     await getMyPurchase(12)
     expect(api.get.mock.calls.map(([url]) => url)).toEqual([
       '/purchases/movies/2/functions',
@@ -44,7 +44,7 @@ describe('Purchase API', () => {
       signal: controller.signal,
       withCredentials: false,
     })
-    expect(api.get.mock.calls[2]![1].params).toEqual({ page: 1 })
+    expect(api.get.mock.calls[2]![1].params).toEqual({ page: 1, search: '0122' })
     expect(api.post).toHaveBeenNthCalledWith(
       1,
       '/purchases/quote',
@@ -60,7 +60,7 @@ describe('Purchase API', () => {
   })
   it('preserves network failures and uses the shared clear error messages', async () => {
     api.get.mockRejectedValue(new Error('offline'))
-    await expect(getMyPurchases(2)).rejects.toThrow('offline')
+    await expect(getMyPurchases({ page: 2 })).rejects.toThrow('offline')
     expect(
       purchaseError({
         isAxiosError: true,

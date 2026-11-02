@@ -3,6 +3,7 @@ import { clientRequestOptions } from './authService'
 import { clientProfileError } from './client-profile.service'
 import type {
   PurchaseList,
+  PurchaseListQuery,
   PurchaseMovie,
   PurchaseFunction,
   SeatAvailability,
@@ -46,11 +47,11 @@ export async function confirmPurchase(
     })
   ).data
 }
-export async function getMyPurchases(page = 1, signal?: AbortSignal) {
+export async function getMyPurchases(query: PurchaseListQuery = {}, signal?: AbortSignal) {
   return (
     await getApi().get<PurchaseList>('/purchases/me', {
       ...clientRequestOptions(),
-      params: { page },
+      params: query,
       signal,
     })
   ).data

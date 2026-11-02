@@ -59,10 +59,10 @@ describe('PurchasesService', () => {
     purchases.list.mockResolvedValue({ items: [] });
     purchases.findOne.mockResolvedValue({ id: 5 });
     expect(await service.confirm(8, data)).toEqual({ id: 5 });
-    expect(await service.list(8, 2)).toEqual({ items: [] });
+    expect(await service.list(8, { page: 2 })).toEqual({ items: [] });
     expect(await service.findOne(8, 5)).toEqual({ id: 5 });
     expect(purchases.confirm).toHaveBeenCalledWith(8, data);
-    expect(purchases.list).toHaveBeenCalledWith(8, 2);
+    expect(purchases.list).toHaveBeenCalledWith(8, { page: 2 });
     expect(purchases.findOne).toHaveBeenCalledWith(5, 8);
   });
 });

@@ -96,4 +96,33 @@ describe('PurchaseSummary', () => {
     expect(wrapper.findComponent(QrCode).exists()).toBe(false)
     wrapper.unmount()
   })
+  it('shows the payment method only when it is asked to', () => {
+    const purchase = {
+      reference: 'ORD-000121',
+      purchasedAt: '2026-10-05T10:42:00-06:00',
+      status: 'PAID',
+      paymentMethod: 'CARD',
+      cardBrand: 'visa',
+      cardLast4: '4242',
+      total: 7000,
+      function: {
+        title: 'Ecos del Volcán',
+        branchName: 'Central',
+        theaterId: 1,
+        startsAt: '2026-10-05T20:00:00-06:00',
+        format: '2D',
+        technology: 'STANDARD',
+        isPremiere: false,
+      },
+      lines: [],
+      tickets: [],
+    } as never
+    const payment = 'Método de pago: Tarjeta Visa terminada en 4242'
+    const hidden = mount(PurchaseSummary, { props: { purchase } })
+    expect(hidden.text()).not.toContain('Método de pago')
+    hidden.unmount()
+    const shown = mount(PurchaseSummary, { props: { purchase, showPayment: true } })
+    expect(shown.text()).toContain(payment)
+    shown.unmount()
+  })
 })
