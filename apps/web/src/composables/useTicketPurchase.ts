@@ -214,7 +214,8 @@ export function useTicketPurchase(onExpired: () => void) {
     if (!quote.value || busy.value) return
     request?.abort()
     const current = session(),
-      serial = ++generation
+      serial = ++generation,
+      wasUncertain = uncertain.value
     busy.value = true
     error.value = ''
     try {
@@ -232,7 +233,7 @@ export function useTicketPurchase(onExpired: () => void) {
       if (!current() || serial !== generation) return
       failed(error_)
       const status = authErrorStatus(error_)
-      uncertain.value = !status || status >= 500
+      uncertain.value = wasUncertain || !status || status >= 500
       if (uncertain.value) {
         error.value +=
           ' Puedes reintentar el pago de esta misma selección; la compra no se duplicará. También puedes consultar «Historial de compras».'

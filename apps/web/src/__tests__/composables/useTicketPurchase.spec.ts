@@ -141,6 +141,43 @@ describe('Ticket purchase coordination', () => {
     expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(original)
     expect(flow.uncertain.value).toBe(false)
   })
+  it.each([409, 429, 400, 503])(
+    'preserves an uncertain attempt after retry status %i until its receipt is recovered',
+    async (status) => {
+      await ready()
+      const originalQuote = flow.quote.value
+      vi.mocked(confirmPurchase)
+        .mockRejectedValueOnce(new Error('timeout'))
+        .mockRejectedValueOnce(error(status))
+      await flow.pay()
+      const original = vi.mocked(confirmPurchase).mock.calls[0]![0]
+      await flow.pay()
+      expect(flow.uncertain.value).toBe(true)
+      expect(flow.busy.value).toBe(false)
+      expect(flow.step.value).toBe(3)
+      expect(flow.quote.value).toBe(originalQuote)
+      expect(flow.receipt.value).toBeNull()
+      expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(original)
+      expect(flow.error.value).toContain('Historial de compras')
+      flow.back()
+      flow.setSelection(seats)
+      flow.setCategory(1, 'SENIOR')
+      await flow.chooseFunction(8)
+      await flow.summarize()
+      await flow.refresh()
+      await vi.advanceTimersByTimeAsync(10000)
+      expect(getPurchaseSeats).toHaveBeenCalledTimes(1)
+      expect(flow.selection.value).toEqual({
+        functionId: 4,
+        seats: { GENERAL: [1], CHILD: [], SENIOR: [] },
+      })
+      await flow.pay()
+      expect(vi.mocked(confirmPurchase).mock.calls[2]![0]).toEqual(original)
+      expect(flow.receipt.value?.id).toBe(12)
+      expect(flow.step.value).toBe(4)
+      expect(flow.uncertain.value).toBe(false)
+    },
+  )
   it('invalidates the quote after selection changes and keeps selection while going back', async () => {
     await ready()
     flow.back()

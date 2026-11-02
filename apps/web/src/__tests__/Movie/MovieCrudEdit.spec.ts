@@ -1,5 +1,4 @@
-
-import { defineComponent } from 'vue'
+import { defineComponent, onMounted } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { AxiosError } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -64,7 +63,11 @@ const LimitedTextInputStub = defineComponent({
 // PositiveNumberInput stub
 const PositiveNumberInputStub = defineComponent({
   props: ['modelValue', 'label'],
-  emits: ['update:modelValue'],
+  emits: ['update:modelValue', 'validity-change'],
+  setup(_, { emit }) {
+    // Numeric validation is covered by PositiveNumberInput's own tests.
+    onMounted(() => emit('validity-change', true))
+  },
   template: `
     <div>
       <label>{{ label }}</label>
@@ -337,20 +340,45 @@ describe('MovieCrudEdit', () => {
     wrapper.unmount()
   })
 
-  it('disables Save for an invalid duration', async () => {
-    const wrapper = mountModal()
-    await flushPromises()
+  it.each([0, 1])(
+    'blocks saving when numeric input %i reports invalid',
+    async (index) => {
+      const wrapper = mountModal()
+      await flushPromises()
 
-    await wrapper.get('input[data-test="Duración en minutos"]')
-      .setValue('0')
+      await wrapper.get('input[data-test="Título"]')
+        .setValue('Interstellar Updated')
 
-    expect(
-      wrapper.get<HTMLButtonElement>('button[type="submit"]')
-        .element.disabled,
-    ).toBe(true)
+      const saveButton = wrapper.get<HTMLButtonElement>(
+        'button[type="submit"]',
+      )
+      expect(saveButton.element.disabled).toBe(false)
 
-    wrapper.unmount()
-  })
+      const inputs = wrapper.findAllComponents(PositiveNumberInputStub)
+      expect(inputs).toHaveLength(2)
+      const input = inputs[index]!
+
+      input.vm.$emit('validity-change', false)
+      await flushPromises()
+
+      expect(saveButton.element.disabled).toBe(true)
+
+      // Submitting directly also checks the save handler's guard.
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+
+      expect(updateMovieMock).not.toHaveBeenCalled()
+      expect(wrapper.emitted('saved')).toBeUndefined()
+      expect(wrapper.emitted('close')).toBeUndefined()
+
+      input.vm.$emit('validity-change', true)
+      await flushPromises()
+
+      expect(saveButton.element.disabled).toBe(false)
+
+      wrapper.unmount()
+    },
+  )
 
   it('saves valid changes', async () => {
     const wrapper = mountModal()
