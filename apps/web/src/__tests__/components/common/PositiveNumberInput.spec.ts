@@ -43,8 +43,9 @@ describe('PositiveNumberInput', () => {
     await input.setValue('0')
     await input.trigger('blur')
 
-    expect(wrapper.find('[role="alert"]').text())
-      .toBe('Ingrese un número entero mayor o igual que 1.')
+    expect(wrapper.find('[role="alert"]').text()).toBe(
+      'Ingrese un número entero mayor o igual que 1.',
+    )
     expect(input.attributes('aria-invalid')).toBe('true')
   })
 
@@ -55,8 +56,7 @@ describe('PositiveNumberInput', () => {
 
     await wrapper.find('input').trigger('blur')
 
-    expect(wrapper.find('[role="alert"]').text())
-      .toBe('Este campo es obligatorio.')
+    expect(wrapper.find('[role="alert"]').text()).toBe('Este campo es obligatorio.')
   })
 
   it('accepts an empty optional field after blur', async () => {
@@ -91,51 +91,38 @@ describe('PositiveNumberInput', () => {
     expect(input.attributes('max')).toBe('100')
   })
 
-  it.each([9, 101, 50.5])(
-    'rejects invalid value %s',
-    async (value) => {
-      const wrapper = mount(PositiveNumberInput, {
-        props: { ...props, min: 10, max: 100 },
-      })
-      const input = wrapper.find('input')
+  it.each([9, 101, 50.5])('rejects invalid value %s', async (value) => {
+    const wrapper = mount(PositiveNumberInput, {
+      props: { ...props, min: 10, max: 100 },
+    })
+    const input = wrapper.find('input')
 
-      await input.setValue(String(value))
-      await input.trigger('blur')
+    await input.setValue(String(value))
+    await input.trigger('blur')
 
-      expect(wrapper.find('[role="alert"]').text())
-        .toBe('Ingrese un número entero entre 10 y 100.')
-      expect(input.attributes('aria-invalid')).toBe('true')
-      expect(wrapper.emitted('validity-change')).toEqual([
-        [true],
-        [false],
-      ])
-    },
-  )
+    expect(wrapper.find('[role="alert"]').text()).toBe('Ingrese un número entero entre 10 y 100.')
+    expect(input.attributes('aria-invalid')).toBe('true')
+    expect(wrapper.emitted('validity-change')).toEqual([[true], [false]])
+  })
 
-  it.each([10, 50, 100])(
-    'accepts %i within the inclusive range',
-    async (value) => {
-      const wrapper = mount(PositiveNumberInput, {
-        props: {
-          ...props,
-          required: true,
-          min: 10,
-          max: 100,
-        },
-      })
-      const input = wrapper.find('input')
+  it.each([10, 50, 100])('accepts %i within the inclusive range', async (value) => {
+    const wrapper = mount(PositiveNumberInput, {
+      props: {
+        ...props,
+        required: true,
+        min: 10,
+        max: 100,
+      },
+    })
+    const input = wrapper.find('input')
 
-      await input.setValue(String(value))
-      await input.trigger('blur')
+    await input.setValue(String(value))
+    await input.trigger('blur')
 
-      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
-      expect(input.attributes('aria-invalid')).toBe('false')
-      expect(wrapper.emitted('validity-change')).toEqual([
-        [false],
-        [true],
-      ])
-    },
-  )
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(input.attributes('aria-invalid')).toBe('false')
+    expect(wrapper.emitted('validity-change')).toEqual([[false], [true]])
+  })
 
   it('disables the input when disabled is true', () => {
     const wrapper = mount(PositiveNumberInput, {
@@ -163,22 +150,19 @@ describe('PositiveNumberInput', () => {
     { value: 50, valid: true },
     { value: 5, valid: false },
     { value: 101, valid: false },
-  ])(
-    'emits $valid immediately for initial value $value',
-    ({ value, valid }) => {
-      const wrapper = mount(PositiveNumberInput, {
-        props: {
-          ...props,
-          required: true,
-          min: 10,
-          max: 100,
-          modelValue: value,
-        },
-      })
+  ])('emits $valid immediately for initial value $value', ({ value, valid }) => {
+    const wrapper = mount(PositiveNumberInput, {
+      props: {
+        ...props,
+        required: true,
+        min: 10,
+        max: 100,
+        modelValue: value,
+      },
+    })
 
-      expect(wrapper.emitted('validity-change')).toEqual([[valid]])
-    },
-  )
+    expect(wrapper.emitted('validity-change')).toEqual([[valid]])
+  })
 
   it('reports validity changes without requiring blur', async () => {
     const wrapper = mount(PositiveNumberInput, {
@@ -191,13 +175,7 @@ describe('PositiveNumberInput', () => {
     await input.setValue('100')
     await input.setValue('')
 
-    expect(wrapper.emitted('validity-change')).toEqual([
-      [false],
-      [true],
-      [false],
-      [true],
-      [false],
-    ])
+    expect(wrapper.emitted('validity-change')).toEqual([[false], [true], [false], [true], [false]])
 
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
@@ -210,11 +188,7 @@ describe('PositiveNumberInput', () => {
     await wrapper.setProps({ modelValue: 5 })
     await wrapper.setProps({ modelValue: 50 })
 
-    expect(wrapper.emitted('validity-change')).toEqual([
-      [true],
-      [false],
-      [true],
-    ])
+    expect(wrapper.emitted('validity-change')).toEqual([[true], [false], [true]])
   })
 
   it('updates validity when the maximum changes', async () => {
@@ -225,11 +199,7 @@ describe('PositiveNumberInput', () => {
     await wrapper.setProps({ max: 40 })
     await wrapper.setProps({ max: 100 })
 
-    expect(wrapper.emitted('validity-change')).toEqual([
-      [true],
-      [false],
-      [true],
-    ])
+    expect(wrapper.emitted('validity-change')).toEqual([[true], [false], [true]])
   })
 
   it('updates validity when the minimum changes', async () => {
@@ -240,11 +210,7 @@ describe('PositiveNumberInput', () => {
     await wrapper.setProps({ min: 60 })
     await wrapper.setProps({ min: 10 })
 
-    expect(wrapper.emitted('validity-change')).toEqual([
-      [true],
-      [false],
-      [true],
-    ])
+    expect(wrapper.emitted('validity-change')).toEqual([[true], [false], [true]])
   })
 
   it('updates validity when an empty field becomes required', async () => {
@@ -253,10 +219,6 @@ describe('PositiveNumberInput', () => {
     await wrapper.setProps({ required: true })
     await wrapper.setProps({ required: false })
 
-    expect(wrapper.emitted('validity-change')).toEqual([
-      [true],
-      [false],
-      [true],
-    ])
+    expect(wrapper.emitted('validity-change')).toEqual([[true], [false], [true]])
   })
 })

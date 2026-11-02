@@ -15,6 +15,7 @@ import {
 import {
   purchaseQuote,
   requireAvailableFunction,
+  requireGuestEmailAvailable,
   selectionHash,
   selectionPositions,
 } from './purchase-rules';
@@ -26,8 +27,28 @@ import type {
   PurchaseReceipt,
   PurchaseSeat,
   PurchasedTicket,
+  GuestPurchaseReceipt,
 } from './purchase.types';
 import { ticketProductCode } from '../common/pricing/ticket-pricing';
+import {
+  guestPurchaseCode,
+  guestPurchaseId,
+  matchesGuestPurchaseCode,
+} from './guest-purchase-access';
+import type { UserStatus } from '../users/types/user-status.type';
+
+type Buyer = { clientId: number } | { email: string };
+function buyerScope(buyer: Buyer): { condition: string; binds: Binds } {
+  return 'clientId' in buyer
+    ? {
+        condition: 'i.CLIENT_ID=:clientId',
+        binds: { clientId: buyer.clientId },
+      }
+    : {
+        condition: 'i.CLIENT_ID IS NULL AND i.BUYER_EMAIL=:email',
+        binds: { email: buyer.email },
+      };
+}
 type Binds = Exclude<oracle.BindParameters, unknown[]>;
 const OPTIONS = { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false };
 const ZONE = 'America/Costa_Rica';
@@ -53,12 +74,13 @@ export class PurchasesRepository {
   }
   private async previous(
     key: string,
-    clientId: number,
+    buyer: Buyer,
     connection?: oracle.Connection,
   ) {
+    const scope = buyerScope(buyer);
     const result = await this.query<{ id: number; hash: string }>(
-      `SELECT INVOICE_ID AS "id", REQUEST_HASH AS "hash" FROM INVOICES WHERE REQUEST_KEY=:key AND CLIENT_ID=:clientId`,
-      { key, clientId },
+      `SELECT i.INVOICE_ID AS "id", i.REQUEST_HASH AS "hash" FROM INVOICES i WHERE i.REQUEST_KEY=:key AND ${scope.condition}`,
+      { key, ...scope.binds },
       connection,
     );
     return result.rows?.[0];
@@ -66,102 +88,160 @@ export class PurchasesRepository {
   private async replay(
     previous: { id: number; hash: string },
     hash: string,
-    clientId: number,
+    buyer: Buyer,
     connection?: oracle.Connection,
   ) {
     if (previous.hash !== hash)
       throw new ConflictException(
         'Esta referencia ya se utilizó para otra selección. Reinicia la compra.',
       );
-    return this.findOne(previous.id, clientId, connection);
+    return this.readReceipt(previous.id, buyer, connection);
   }
-  async confirm(
+  confirm(
     clientId: number,
     data: ConfirmPurchaseDto,
   ): Promise<PurchaseReceipt> {
-    // A retry is recognized before checking seats already sold by the original request.
+    return this.confirmFor({ clientId }, data);
+  }
+  async confirmGuest(
+    email: string,
+    data: ConfirmPurchaseDto,
+  ): Promise<GuestPurchaseReceipt> {
+    const receipt = await this.confirmFor({ email }, data);
+    return {
+      ...receipt,
+      accessCode: guestPurchaseCode(receipt.id, data.requestKey),
+    };
+  }
+  private async confirmFor(
+    buyer: Buyer,
+    data: ConfirmPurchaseDto,
+  ): Promise<PurchaseReceipt> {
     const hash = selectionHash(data);
     const positions = selectionPositions(data);
     try {
-      return await this.db.transaction(async (connection) => {
-        await connection.execute(
-          'ALTER SESSION DISABLE PARALLEL DML',
-          {},
-          OPTIONS,
-        );
-        const account = await connection.execute<{
-          STATUS: string;
-          EMAIL: string;
-        }>(
-          'SELECT STATUS,EMAIL FROM CLIENTS WHERE CLIENT_ID=:clientId FOR UPDATE WAIT 5',
-          { clientId },
-          OPTIONS,
-        );
-        if (account.rows?.[0]?.STATUS !== 'ACTIVE')
-          throw new UnauthorizedException(
-            'Tu sesión terminó. Inicia sesión nuevamente.',
-          );
-        const previous = await this.previous(
-          data.requestKey,
-          clientId,
-          connection,
-        );
-        if (previous) return this.replay(previous, hash, clientId, connection);
-        const locked = await connection.execute(
-          'SELECT MOVIE_FUNCTION_ID FROM MOVIE_FUNCTIONS WHERE MOVIE_FUNCTION_ID=:id FOR UPDATE WAIT 5',
-          { id: data.functionId },
-          OPTIONS,
-        );
-        if (!locked.rows?.length)
-          throw new NotFoundException('La función no existe.');
-        const context = await this.catalog.getFunction(
-          data.functionId,
-          connection,
-        );
-        requireAvailableFunction(context);
-        await connection.execute(
-          'SELECT THEATER_ID FROM THEATERS WHERE THEATER_ID=:id FOR UPDATE WAIT 5',
-          { id: context.theaterId },
-          OPTIONS,
-        );
-        const seats = await this.lockSeats(connection, context, positions);
-        const quote = purchaseQuote(context, seats, data);
-        if (quote.version !== data.quoteVersion)
-          throw new ConflictException({
-            code: 'QUOTE_CHANGED',
-            message:
-              'Los datos o el precio de la función cambiaron. Revisa el resumen actualizado antes de pagar.',
-          });
-        const id = await this.writePurchase(
-          connection,
-          clientId,
-          account.rows[0].EMAIL,
-          data,
-          hash,
-          quote,
-        );
-        requireAvailableFunction(
-          await this.catalog.getFunction(context.id, connection),
-        );
-        return this.findOne(id, clientId, connection);
-      });
+      return await this.db.transaction((connection) =>
+        this.register(connection, buyer, data, hash, positions),
+      );
     } catch (error) {
-      const failure = error as { errorNum?: number } | null;
-      if (failure?.errorNum === 1) {
-        const previous = await this.previous(data.requestKey, clientId);
-        if (previous) return this.replay(previous, hash, clientId);
-        throw new ConflictException({
-          code: 'SEATS_UNAVAILABLE',
-          message:
-            'Uno de los asientos ya fue comprado. Actualiza tu selección.',
-        });
-      }
-      if ([54, 30006, 60].includes(failure?.errorNum ?? 0))
-        throw new ConflictException(
-          'Otra operación está actualizando la disponibilidad. Intenta nuevamente con la misma selección.',
-        );
-      throw error;
+      return this.recoverFailure(error, buyer, data, hash);
     }
+  }
+  private async buyerEmail(
+    connection: oracle.Connection,
+    buyer: Buyer,
+  ): Promise<string> {
+    if (!('clientId' in buyer)) return buyer.email;
+    const account = await connection.execute<{ STATUS: string; EMAIL: string }>(
+      'SELECT STATUS,EMAIL FROM CLIENTS WHERE CLIENT_ID=:clientId FOR UPDATE WAIT 5',
+      { clientId: buyer.clientId },
+      OPTIONS,
+    );
+    if (account.rows?.[0]?.STATUS !== 'ACTIVE')
+      throw new UnauthorizedException(
+        'Tu sesión terminó. Inicia sesión nuevamente.',
+      );
+    return account.rows[0].EMAIL;
+  }
+  private async register(
+    connection: oracle.Connection,
+    buyer: Buyer,
+    data: ConfirmPurchaseDto,
+    hash: string,
+    positions: number[],
+  ) {
+    await connection.execute('ALTER SESSION DISABLE PARALLEL DML', {}, OPTIONS);
+    const email = await this.buyerEmail(connection, buyer);
+    const previous = await this.previous(data.requestKey, buyer, connection);
+    if (previous) return this.replay(previous, hash, buyer, connection);
+    const locked = await connection.execute(
+      'SELECT MOVIE_FUNCTION_ID FROM MOVIE_FUNCTIONS WHERE MOVIE_FUNCTION_ID=:id FOR UPDATE WAIT 5',
+      { id: data.functionId },
+      OPTIONS,
+    );
+    if (!locked.rows?.length)
+      throw new NotFoundException('La función no existe.');
+    if (!('clientId' in buyer)) {
+      // A guest retry can wait for the first request to commit without sharing a client row lock.
+      const committed = await this.previous(data.requestKey, buyer, connection);
+      if (committed) return this.replay(committed, hash, buyer, connection);
+      await this.requireGuestEmail(connection, email);
+    }
+    const context = await this.catalog.getFunction(data.functionId, connection);
+    requireAvailableFunction(context);
+    await connection.execute(
+      'SELECT THEATER_ID FROM THEATERS WHERE THEATER_ID=:id FOR UPDATE WAIT 5',
+      { id: context.theaterId },
+      OPTIONS,
+    );
+    const quote = purchaseQuote(
+      context,
+      await this.lockSeats(connection, context, positions),
+      data,
+    );
+    if (quote.version !== data.quoteVersion)
+      throw new ConflictException({
+        code: 'QUOTE_CHANGED',
+        message:
+          'Los datos o el precio de la función cambiaron. Revisa el resumen actualizado antes de pagar.',
+      });
+    const id = await this.writePurchase(
+      connection,
+      'clientId' in buyer ? buyer.clientId : null,
+      email,
+      data,
+      hash,
+      quote,
+    );
+    requireAvailableFunction(
+      await this.catalog.getFunction(context.id, connection),
+    );
+    return this.readReceipt(id, buyer, connection);
+  }
+  private async requireGuestEmail(
+    connection: oracle.Connection,
+    email: string,
+  ) {
+    const registered = await connection.execute<{
+      status: UserStatus;
+      verificationPending: number;
+    }>(
+      `SELECT c.STATUS AS "status", CASE WHEN EXISTS (SELECT 1 FROM CLIENT_EMAIL_VERIFICATIONS v WHERE v.CLIENT_ID=c.CLIENT_ID) THEN 1 ELSE 0 END AS "verificationPending" FROM CLIENTS c WHERE c.EMAIL=:email AND ROWNUM=1`,
+      { email },
+      OPTIONS,
+    );
+    const account = registered.rows?.[0];
+    requireGuestEmailAvailable(
+      account
+        ? {
+            status: account.status,
+            verificationPending: account.verificationPending === 1,
+          }
+        : null,
+    );
+  }
+  private async recoverFailure(
+    error: unknown,
+    buyer: Buyer,
+    data: ConfirmPurchaseDto,
+    hash: string,
+  ): Promise<PurchaseReceipt> {
+    const failure = error as { errorNum?: number } | null;
+    if (failure?.errorNum === 1) {
+      const previous = await this.previous(data.requestKey, buyer);
+      if (previous) return this.replay(previous, hash, buyer);
+      throw new ConflictException({
+        code: 'SEATS_UNAVAILABLE',
+        message: 'Uno de los asientos ya fue comprado. Actualiza tu selección.',
+      });
+    }
+    if ([54, 30006, 60].includes(failure?.errorNum ?? 0))
+      throw new ConflictException({
+        code: 'PURCHASE_BUSY',
+        message:
+          'Otra operación está actualizando la disponibilidad. Intenta nuevamente con la misma selección.',
+      });
+    throw error;
   }
   private async lockSeats(
     connection: oracle.Connection,
@@ -195,7 +275,7 @@ export class PurchasesRepository {
   }
   private async writePurchase(
     connection: oracle.Connection,
-    clientId: number,
+    clientId: number | null,
     buyerEmail: string,
     data: ConfirmPurchaseDto,
     hash: string,
@@ -290,6 +370,32 @@ export class PurchasesRepository {
     clientId: number,
     connection?: oracle.Connection,
   ): Promise<PurchaseReceipt> {
+    return this.readReceipt(id, { clientId }, connection);
+  }
+  async findGuest(code: string): Promise<GuestPurchaseReceipt> {
+    const id = guestPurchaseId(code);
+    if (id === null)
+      throw new NotFoundException(
+        'No se encontró una compra con ese código de consulta.',
+      );
+    const result = await this.query<{ requestKey: string; email: string }>(
+      `SELECT REQUEST_KEY AS "requestKey", BUYER_EMAIL AS "email" FROM INVOICES WHERE INVOICE_ID=:id AND CLIENT_ID IS NULL AND REQUEST_KEY IS NOT NULL AND STATUS IN ('PAID','CANCELLED')`,
+      { id },
+    );
+    const row = result.rows?.[0];
+    if (!row || !matchesGuestPurchaseCode(code, id, row.requestKey))
+      throw new NotFoundException(
+        'No se encontró una compra con ese código de consulta.',
+      );
+    const receipt = await this.readReceipt(id, { email: row.email });
+    return { ...receipt, accessCode: guestPurchaseCode(id, row.requestKey) };
+  }
+  private async readReceipt(
+    id: number,
+    buyer: Buyer,
+    connection?: oracle.Connection,
+  ): Promise<PurchaseReceipt> {
+    const scope = buyerScope(buyer);
     const header = await this.query<{
       id: number;
       functionId: number;
@@ -302,8 +408,8 @@ export class PurchasesRepository {
       total: number;
       contextJson: string | null;
     }>(
-      `SELECT i.INVOICE_ID AS "id", i.MOVIE_FUNCTION_ID AS "functionId", TO_CHAR(i.CREATED_AT AT TIME ZONE 'America/Costa_Rica','YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "purchasedAt", i.STATUS AS "status", NVL(i.BUYER_EMAIL,c.EMAIL) AS "buyerEmail", i.PAYMENT_METHOD AS "paymentMethod", i.CARD_BRAND AS "cardBrand", i.CARD_LAST4 AS "cardLast4", i.TOTAL AS "total", i.PURCHASE_CONTEXT AS "contextJson" FROM INVOICES i LEFT JOIN CLIENTS c ON c.CLIENT_ID=i.CLIENT_ID WHERE i.INVOICE_ID=:id AND i.CLIENT_ID=:clientId AND i.STATUS IN ('PAID','CANCELLED')`,
-      { id, clientId },
+      `SELECT i.INVOICE_ID AS "id", i.MOVIE_FUNCTION_ID AS "functionId", TO_CHAR(i.CREATED_AT AT TIME ZONE 'America/Costa_Rica','YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "purchasedAt", i.STATUS AS "status", NVL(i.BUYER_EMAIL,c.EMAIL) AS "buyerEmail", i.PAYMENT_METHOD AS "paymentMethod", i.CARD_BRAND AS "cardBrand", i.CARD_LAST4 AS "cardLast4", i.TOTAL AS "total", i.PURCHASE_CONTEXT AS "contextJson" FROM INVOICES i LEFT JOIN CLIENTS c ON c.CLIENT_ID=i.CLIENT_ID WHERE i.INVOICE_ID=:id AND ${scope.condition} AND i.STATUS IN ('PAID','CANCELLED')`,
+      { id, ...scope.binds },
       connection,
       true,
     );

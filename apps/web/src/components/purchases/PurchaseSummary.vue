@@ -4,7 +4,14 @@ import QrCode from '@/components/common/QrCode.vue'
 import { PROJECTION_STATUS_LABELS, type ProjectionStatus } from '@/types/projection'
 import { formatDateTime, formatColones, formatPaymentMethod } from '@/utils/transaction-format'
 import { TICKET_CATEGORY_LABELS, type PurchaseQuote, type PurchaseReceipt } from '@/types/purchase'
-const props = defineProps<{ purchase: PurchaseQuote | PurchaseReceipt; showPayment?: boolean }>()
+const props = defineProps<{
+  purchase: PurchaseQuote | PurchaseReceipt
+  buyerEmail?: string
+  showPayment?: boolean
+}>()
+const email = computed(
+  () => props.buyerEmail || ('buyerEmail' in props.purchase ? props.purchase.buyerEmail : ''),
+)
 const purchaseCode = computed(() => {
   if (!('reference' in props.purchase)) return ''
   return JSON.stringify({
@@ -18,6 +25,10 @@ const purchaseCode = computed(() => {
   <section class="purchase-summary" aria-label="Resumen de compra">
     <h2>{{ purchase.function.title }}</h2>
     <dl>
+      <div v-if="email">
+        <dt>Correo del comprador</dt>
+        <dd>{{ email }}</dd>
+      </div>
       <div>
         <dt>Sucursal</dt>
         <dd>{{ purchase.function.branchName }}</dd>

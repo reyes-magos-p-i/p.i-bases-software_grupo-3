@@ -13,6 +13,31 @@ import type {
   PurchaseQuote,
   PurchaseLine,
 } from './purchase.types';
+import type { UserStatus } from '../users/types/user-status.type';
+
+export function requireGuestEmailAvailable(
+  account: { status: UserStatus; verificationPending: boolean } | null,
+): void {
+  if (!account) return;
+  if (account.status === 'INACTIVE')
+    throw new ConflictException({
+      code: 'CLIENT_ACCOUNT_INACTIVE',
+      message:
+        'La cuenta asociada a este correo está desactivada. Solicita su reactivación a asistencia o utiliza otro correo.',
+    });
+  if (account.verificationPending)
+    throw new ConflictException({
+      code: 'CLIENT_VERIFICATION_REQUIRED',
+      message:
+        'Este correo tiene un registro pendiente. Confirma tu correo para utilizar tu cuenta o solicita otro enlace desde el registro.',
+    });
+  throw new ConflictException({
+    code: 'CLIENT_LOGIN_REQUIRED',
+    message:
+      'Ya existe una cuenta con este correo. Inicia sesión para continuar con la compra.',
+  });
+}
+
 export function selectionPositions(selection: PurchaseSelection) {
   const positions = TICKET_CATEGORIES.flatMap(
     (category) => selection.seats[category],

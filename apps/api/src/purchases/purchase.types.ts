@@ -81,3 +81,6 @@ export interface PurchaseReceipt {
   lines: PurchaseLine[];
   tickets: PurchasedTicket[];
 }
+export interface GuestPurchaseReceipt extends PurchaseReceipt {
+  accessCode: string;
+}

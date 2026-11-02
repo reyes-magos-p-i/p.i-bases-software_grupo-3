@@ -33,7 +33,6 @@ const retryable = ref(false)
 const runningTimeValid = ref(false)
 const releaseYearValid = ref(false)
 
-
 const form = reactive({
   title: '',
   synopsis: '',
@@ -69,8 +68,7 @@ const hasChanges = computed(() => {
 
   const sameIds = (a: number[], b: number[]) =>
     a.length === b.length &&
-    [...a].sort((x, y) => x - y)
-      .every((id, index) => id === [...b].sort((x, y) => x - y)[index])
+    [...a].sort((x, y) => x - y).every((id, index) => id === [...b].sort((x, y) => x - y)[index])
 
   return (
     form.title !== original.title ||
@@ -78,35 +76,34 @@ const hasChanges = computed(() => {
     form.runningTime !== original.runningTime ||
     form.releaseYear !== original.releaseYear ||
     form.classificationId !== original.classification.id ||
-    !sameIds(form.languageIds, original.languages.map(l => l.id)) ||
-    !sameIds(form.genreIds, original.genres.map(g => g.id))
+    !sameIds(
+      form.languageIds,
+      original.languages.map((l) => l.id),
+    ) ||
+    !sameIds(
+      form.genreIds,
+      original.genres.map((g) => g.id),
+    )
   )
 })
 
-const canSave = computed(() =>
-  hasChanges.value &&
-  isFormValid.value &&
-  !saving.value &&
-  !loading.value
+const canSave = computed(
+  () => hasChanges.value && isFormValid.value && !saving.value && !loading.value,
 )
 
 const title = computed(() =>
-  movie.value
-    ? `Modificar ${movie.value.title}`
-    : 'Modificar película',
+  movie.value ? `Modificar ${movie.value.title}` : 'Modificar película',
 )
 
 const languageOptions = computed(() =>
-  props.languages.map(language => ({
+  props.languages.map((language) => ({
     value: language.id,
-    label: language.name
-  }))
+    label: language.name,
+  })),
 )
 
 function reportError(failure: unknown, operation: 'load' | 'save') {
-  const status = isAxiosError(failure)
-    ? failure.response?.status
-    : undefined
+  const status = isAxiosError(failure) ? failure.response?.status : undefined
 
   let message: string
 
@@ -119,9 +116,7 @@ function reportError(failure: unknown, operation: 'load' | 'save') {
   } else if (status === 404) {
     message = 'La película seleccionada ya no existe.'
   } else if (status === 400 && operation === 'save') {
-    const backendMessage = isAxiosError(failure)
-      ? failure.response?.data?.message
-      : undefined
+    const backendMessage = isAxiosError(failure) ? failure.response?.data?.message : undefined
 
     message = Array.isArray(backendMessage)
       ? backendMessage.join(' ')
@@ -129,9 +124,10 @@ function reportError(failure: unknown, operation: 'load' | 'save') {
         ? backendMessage
         : 'Revisa los datos ingresados.'
   } else {
-    message = operation === 'load'
-      ? 'No se pudo cargar la película. Vuelve a intentarlo.'
-      : 'No se pudieron guardar los cambios. Vuelve a intentarlo.'
+    message =
+      operation === 'load'
+        ? 'No se pudo cargar la película. Vuelve a intentarlo.'
+        : 'No se pudieron guardar los cambios. Vuelve a intentarlo.'
 
     if (operation === 'load') {
       retryable.value = true
@@ -205,8 +201,7 @@ async function save() {
   if (!hasChanges.value) return
 
   if (!isFormValid.value) {
-    saveError.value =
-      'Completa los campos requeridos con valores válidos.'
+    saveError.value = 'Completa los campos requeridos con valores válidos.'
     return
   }
 
@@ -267,32 +262,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <BaseModal
-    :open="movieId !== null"
-    :title="title"
-    @close="close"
-  >
-    <div
-      class="movie-detail-content"
-      :aria-busy="loading || saving"
-    >
-      <p v-if="loading" class="detail-feedback" role="status">
-        Cargando datos de la película…
-      </p>
+  <BaseModal :open="movieId !== null" :title="title" @close="close">
+    <div class="movie-detail-content" :aria-busy="loading || saving">
+      <p v-if="loading" class="detail-feedback" role="status">Cargando datos de la película…</p>
 
-      <div
-        v-else-if="error"
-        class="detail-feedback detail-error"
-        role="alert"
-      >
+      <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         <p>{{ error }}</p>
 
-        <button
-          v-if="retryable"
-          type="button"
-          class="detail-button"
-          @click="load"
-        >
+        <button v-if="retryable" type="button" class="detail-button" @click="load">
           Reintentar
         </button>
       </div>
@@ -354,7 +331,6 @@ onBeforeUnmount(() => {
             />
           </section>
 
-
           <ReusableSearchDropdown
             class="detail-group"
             v-model="form.languageIds"
@@ -367,23 +343,15 @@ onBeforeUnmount(() => {
             <legend>Géneros</legend>
 
             <div class="edit-options">
-              <label
-                v-for="genre in genres"
-                :key="genre.id"
-                class="edit-option"
-              >
-                <input
-                  v-model="form.genreIds"
-                  type="checkbox"
-                  :value="genre.id"
-                />
+              <label v-for="genre in genres" :key="genre.id" class="edit-option">
+                <input v-model="form.genreIds" type="checkbox" :value="genre.id" />
                 {{ genre.name }}
               </label>
             </div>
           </fieldset>
 
           <section class="detail-group">
-              <LimitedTextInput
+            <LimitedTextInput
               v-model="form.synopsis"
               label="Sinopsis"
               placeholder="Ingrese la sinopsis"
@@ -395,38 +363,23 @@ onBeforeUnmount(() => {
           </section>
         </fieldset>
 
-        <p
-          v-if="saveError"
-          class="detail-feedback detail-error"
-          role="alert"
-        >
+        <p v-if="saveError" class="detail-feedback detail-error" role="alert">
           {{ saveError }}
         </p>
 
         <footer class="detail-footer">
-          <button
-            type="button"
-            class="detail-button"
-            :disabled="saving"
-            @click="close"
-          >
+          <button type="button" class="detail-button" :disabled="saving" @click="close">
             Cancelar
           </button>
 
-          <button
-            type="submit"
-            class="detail-button save-button"
-            :disabled="!canSave"
-          >
+          <button type="submit" class="detail-button save-button" :disabled="!canSave">
             {{ saving ? 'Guardando…' : 'Guardar cambios' }}
           </button>
         </footer>
       </form>
 
       <footer v-if="!movie" class="detail-footer">
-        <button type="button" class="detail-button" @click="close">
-          Cerrar
-        </button>
+        <button type="button" class="detail-button" @click="close">Cerrar</button>
       </footer>
     </div>
   </BaseModal>

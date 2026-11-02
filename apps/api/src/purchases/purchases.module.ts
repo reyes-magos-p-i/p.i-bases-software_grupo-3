@@ -6,15 +6,19 @@ import { PurchasesService } from './purchases.service';
 import { PurchasesRepository } from './purchases.repository';
 import { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import { PurchaseThrottlerGuard } from './purchase-throttler.guard';
+import { ClientsModule } from '../clients/clients.module';
+import { GuestPurchasesController } from './guest-purchases.controller';
+import { GuestPurchasesService } from './guest-purchases.service';
 @Module({
-  imports: [AuthModule],
-  controllers: [PurchasesController],
+  imports: [AuthModule, ClientsModule],
+  controllers: [PurchasesController, GuestPurchasesController],
   providers: [
     ClientGuard,
     PurchasesService,
     PurchasesRepository,
     PurchaseCatalogRepository,
     PurchaseThrottlerGuard,
+    GuestPurchasesService,
   ],
 })
 export class PurchasesModule {}

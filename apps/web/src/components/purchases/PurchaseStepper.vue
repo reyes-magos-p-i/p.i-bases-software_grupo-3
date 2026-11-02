@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-const props = defineProps<{ step: number }>()
-const labels = ['Función', 'Asientos', 'Resumen', 'Compra lista']
-const currentStep = computed(() => Math.max(1, Math.min(labels.length, props.step)))
-const progress = computed(() => `${((currentStep.value - 1) / (labels.length - 1)) * 100}%`)
+const props = withDefaults(defineProps<{ step: number; labels?: string[] }>(), {
+  labels: () => ['Función', 'Asientos', 'Resumen', 'Compra lista'],
+})
+const labels = computed(() => (props.labels.length ? props.labels : ['Compra']))
+const currentStep = computed(() => Math.max(1, Math.min(labels.value.length, props.step)))
+const progress = computed(() =>
+  labels.value.length < 2
+    ? '0%'
+    : `${((currentStep.value - 1) / (labels.value.length - 1)) * 100}%`,
+)
 </script>
 <template>
-  <nav aria-label="Pasos de compra">
+  <nav
+    aria-label="Pasos de compra"
+    :style="{ '--step-count': labels.length, '--step-inset': `${50 / labels.length}%` }"
+  >
     <div class="step-track" aria-hidden="true">
       <div class="step-progress" :style="{ width: progress }" />
     </div>
@@ -30,7 +39,7 @@ nav {
 }
 .step-track {
   position: absolute;
-  inset: 16px 12.5% auto;
+  inset: 16px var(--step-inset) auto;
   height: 4px;
   background: var(--border-on-dark);
 }
@@ -41,7 +50,7 @@ nav {
 }
 ol {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--step-count), minmax(0, 1fr));
   list-style: none;
   padding: 0;
   margin: 0;

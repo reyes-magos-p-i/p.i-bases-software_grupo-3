@@ -10,6 +10,47 @@ import {
 } from '@/services/purchase.service'
 const { api } = vi.hoisted(() => ({ api: { get: vi.fn(), post: vi.fn() } }))
 vi.mock('@/services/api', () => ({ getApi: () => api }))
+const receipt = {
+  id: 12,
+  reference: 'ORD-000012',
+  purchasedAt: '2026-11-01T12:00:00-06:00',
+  status: 'PAID',
+  buyerEmail: 'guest@example.com',
+  total: 3000,
+  function: {
+    id: 4,
+    title: 'Película',
+    branchName: 'Central',
+    theaterId: 3,
+    startsAt: '2099-01-01T20:00:00-06:00',
+    format: '2D',
+    technology: 'STANDARD',
+    isPremiere: false,
+  },
+  lines: [
+    {
+      code: 'TICKET_GENERAL_STANDARD',
+      label: 'General',
+      quantity: 1,
+      unitPrice: 3000,
+      subtotal: 3000,
+    },
+  ],
+  tickets: [
+    {
+      id: 1,
+      rowNumber: 1,
+      columnNumber: 1,
+      functionId: 4,
+      theaterId: 3,
+      title: 'Película',
+      startsAt: '2099-01-01T20:00:00-06:00',
+      functionStatus: 'ACTIVE',
+      category: 'GENERAL',
+      unitPrice: 3000,
+    },
+  ],
+}
 vi.mock('@/services/authService', () => ({
   clientRequestOptions: () => ({
     headers: { Authorization: 'Bearer client-token' },
@@ -30,9 +71,13 @@ describe('Purchase API', () => {
     expect(await getPurchaseFunctions(2, controller.signal)).toEqual({ id: 12 })
     await getPurchaseSeats(4)
     await quotePurchase(data)
-    await confirmPurchase({ ...data, requestKey: 'key', quoteVersion: 'hash' })
+    api.post.mockResolvedValueOnce({ data: receipt })
+    expect(await confirmPurchase({ ...data, requestKey: 'key', quoteVersion: 'hash' })).toEqual(
+      receipt,
+    )
     await getMyPurchases({ page: 1, search: '0122' })
-    await getMyPurchase(12)
+    api.get.mockResolvedValueOnce({ data: receipt })
+    expect(await getMyPurchase(12)).toEqual(receipt)
     expect(api.get.mock.calls.map(([url]) => url)).toEqual([
       '/purchases/movies/2/functions',
       '/purchases/functions/4/seats',
@@ -68,5 +113,19 @@ describe('Purchase API', () => {
       }),
     ).toBe('Asiento ocupado')
     expect(purchaseError(new Error('offline'))).toContain('No se pudo completar')
+  })
+  it('rejects malformed confirmations and history responses with a clear error', async () => {
+    const data = {
+      functionId: 4,
+      seats: { GENERAL: [1], CHILD: [], SENIOR: [] },
+      requestKey: 'key',
+      quoteVersion: 'hash',
+    }
+    await expect(confirmPurchase(data)).rejects.toThrow('No se pudo comprobar la respuesta')
+    await expect(getMyPurchase(12)).rejects.toThrow('No se pudo comprobar la respuesta')
+    const { PurchaseResponseError } = await import('@/utils/purchase-response')
+    expect(purchaseError(new PurchaseResponseError())).toContain(
+      'No se pudo comprobar la respuesta',
+    )
   })
 })
