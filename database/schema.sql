@@ -717,4 +717,3 @@ dbms_scheduler.enable('"MOVIE_FUNCTION_STATUS_JOB"');
 COMMIT;
 END;
 /
-

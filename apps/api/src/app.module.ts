@@ -1,4 +1,5 @@
 import { ClientProfileModule } from './clients/profile/client-profile.module';
+import { PurchasesModule } from './purchases/purchases.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { HealthModule } from './health/health.module';
@@ -38,6 +39,7 @@ import { ImageHandlerModule } from './image-handler/image-handler.module';
     TransactionsModule,
     //ImagesModule,
     ImageHandlerModule,
+    PurchasesModule,
   ],
   controllers: [ImageController],
 })

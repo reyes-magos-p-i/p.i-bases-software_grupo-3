@@ -4,6 +4,12 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": false,
-    "assets": ["assets/**/*"]
+    "assets": [
+      "assets/**/*",
+      {
+        "include": "../../web/src/styles/variables.css",
+        "outDir": "dist/assets/email-theme"
+      }
+    ]
   }
 }

@@ -108,10 +108,15 @@ describe('TheatersController', () => {
   });
 
   it('protects the controller with the admin and password status guards', () => {
-    const guards: unknown[] = Reflect.getMetadata('__guards__', TheatersController);
+    const guards: unknown[] = Reflect.getMetadata(
+      '__guards__',
+      TheatersController,
+    );
 
     expect(guards).toHaveLength(3);
-    expect(guards).toEqual(expect.arrayContaining([AdministratorGuard, PasswordStatusGuard]));
+    expect(guards).toEqual(
+      expect.arrayContaining([AdministratorGuard, PasswordStatusGuard]),
+    );
   });
 
   describe('getSeats', () => {
@@ -168,5 +173,4 @@ describe('TheatersController', () => {
       await expect(controller.updateSeats(7, dto)).rejects.toBe(error);
     });
   });
-
 });

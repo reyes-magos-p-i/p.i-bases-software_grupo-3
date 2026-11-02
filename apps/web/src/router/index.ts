@@ -19,6 +19,17 @@ const router = createRouter({
       meta: { requiresClient: true },
     },
     {
+      path: '/historial-compras',
+      redirect: { path: '/account/profile', query: { section: 'purchases' } },
+    },
+    {
+      path: '/historial-compras/:id',
+      redirect: (to) => ({
+        path: '/account/profile',
+        query: { section: 'purchases', purchaseId: to.params.id },
+      }),
+    },
+    {
       path: '/account/confirm-email',
       name: 'client-email-confirmation',
       component: () => import('@/views/ClientEmailConfirmationView.vue'),
@@ -55,7 +66,12 @@ const router = createRouter({
     {
       path: '/buy-tickets',
       name: 'buy-tickets',
-      component: PlaceHolder,
+      component: () => import('@/views/TicketPurchaseView.vue'),
+    },
+    {
+      path: '/guest-purchases',
+      name: 'guest-purchase-lookup',
+      component: () => import('@/views/GuestPurchaseLookupView.vue'),
     },
     {
       path: '/:pathMatch(.*)*',

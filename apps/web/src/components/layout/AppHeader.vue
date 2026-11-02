@@ -131,7 +131,7 @@ async function submitLogin(credentials: EmployeeLoginRequest) {
       clientUser.value = identity
       activeModal.value = null
       expectPasswordExpiryNotice()
-      await router.push('/')
+      await returnAfterClientLogin()
       await enforceClientPasswordStatus()
     } else {
       const identity = await authenticateEmployee(credentials)
@@ -160,6 +160,17 @@ function changeLoginMode(mode: 'client' | 'employee') {
   if (submitting.value) return
   loginMode.value = mode
   loginError.value = ''
+}
+
+async function returnAfterClientLogin() {
+  if (route.path !== '/buy-tickets') {
+    await router.push('/')
+    return
+  }
+  const query = { ...route.query }
+  delete query.login
+  delete query.reason
+  await router.replace({ path: route.path, query })
 }
 
 function closeLogin() {
@@ -217,7 +228,7 @@ async function handleClientLogin(identity?: ClientIdentity) {
     clientUser.value = identity
     loginError.value = ''
     expectPasswordExpiryNotice()
-    await router.push('/')
+    await returnAfterClientLogin()
     await enforceClientPasswordStatus()
   }
 }

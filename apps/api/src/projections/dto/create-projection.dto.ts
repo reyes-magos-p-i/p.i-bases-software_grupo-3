@@ -1,5 +1,6 @@
 import {
   IsIn,
+  IsBoolean,
   IsInt,
   IsISO8601,
   IsNumber,
@@ -8,6 +9,11 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import {
+  PROJECTION_FORMATS,
+  PROJECTION_TECHNOLOGIES,
+  type PricingSettings,
+} from '../../common/pricing/ticket-pricing';
 import { PROJECTION_MESSAGES } from '../projection-messages';
 import {
   SELECTABLE_PROJECTION_STATUSES,
@@ -54,7 +60,7 @@ export class CreateProjectionDto {
   @Max(240, { message: ACTIVITY_MESSAGE })
   advertisementMinutes: number;
 
-  /** Defaults to DEFAULT_TICKET_PRICE when omitted. */
+  /** Legacy input accepted for compatibility; the pricing policy determines the amount. */
   @IsOptional()
   @IsNumber(
     { maxDecimalPlaces: 2, allowNaN: false, allowInfinity: false },
@@ -69,4 +75,15 @@ export class CreateProjectionDto {
     message: 'El estado debe ser activa o inactiva.',
   })
   status?: ProjectionStatus;
+  @IsOptional()
+  @IsIn(PROJECTION_FORMATS, { message: 'Selecciona 2D o 3D.' })
+  format?: PricingSettings['format'];
+  @IsOptional()
+  @IsIn(PROJECTION_TECHNOLOGIES, {
+    message: 'Selecciona una tecnología válida.',
+  })
+  technology?: PricingSettings['technology'];
+  @IsOptional()
+  @IsBoolean({ message: 'Indica si la función es un estreno.' })
+  isPremiere?: boolean;
 }

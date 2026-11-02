@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException,} from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateTheaterDto } from './dto/create-theater.dto';
 import { UpdateTheaterDto } from './dto/update-theater.dto';
 import { TheaterRepository } from './theater.repository/theater.repository';
@@ -12,7 +16,11 @@ export class TheatersService {
     private readonly chairsRepository: ChairsRepository,
   ) {}
 
-  private validateSeatDimensions(numberOfSeats: number, dimensionX: number, dimensionY: number) {
+  private validateSeatDimensions(
+    numberOfSeats: number,
+    dimensionX: number,
+    dimensionY: number,
+  ) {
     if (
       !Number.isInteger(numberOfSeats) ||
       numberOfSeats < 1 ||
@@ -73,19 +81,19 @@ export class TheatersService {
 
   async getSeats(theaterId: number) {
     const theater = await this.theatersRepository.getTheaterById(theaterId);
+
     if (!theater) {
       throw new NotFoundException(`Theater not found: ${theaterId}`);
     }
+
     return this.chairsRepository.findByTheater(theaterId);
   }
 
   async updateSelected(theaterId: number, dto: UpdateSeatsDto) {
-    const theater =
-      await this.theatersRepository.getTheaterById(theaterId);
+    const theater = await this.theatersRepository.getTheaterById(theaterId);
     if (!theater) {
       throw new NotFoundException(`Theater not found: ${theaterId}`);
     }
     return this.chairsRepository.updateSelected(theaterId, dto);
   }
-
 }

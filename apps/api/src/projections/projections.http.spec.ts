@@ -90,15 +90,25 @@ describe('Projections HTTP contracts', () => {
     app = module.createNestApplication({ logger: false });
     app.setGlobalPrefix('api');
     app.useGlobalPipes(
-      new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
     );
     await app.init();
   });
 
   beforeEach(() => {
     jest.resetAllMocks();
-    users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role: 'ADMINISTRATOR' });
-    users.findEmployeeCredentialsStatus.mockResolvedValue({ setAt: new Date(), expirationDays: 90 });
+    users.findEmployeeIdentityById.mockResolvedValue({
+      id: 21,
+      role: 'ADMINISTRATOR',
+    });
+    users.findEmployeeCredentialsStatus.mockResolvedValue({
+      setAt: new Date(),
+      expirationDays: 90,
+    });
     repository.findAvailableMovieRunningTime.mockResolvedValue(190);
     repository.createProjections.mockResolvedValue({
       status: 'INACTIVE',
@@ -130,7 +140,7 @@ describe('Projections HTTP contracts', () => {
     await request(app.getHttpServer())
       .get('/api/projections/options')
       .set('Cookie', session())
-      .expect(200, { cinemas: [], theaters: [], defaultTicketPrice: 3500 });
+      .expect(200, { cinemas: [], theaters: [], defaultTicketPrice: 3000 });
     await request(app.getHttpServer())
       .get('/api/projections/available-movies?branchId=2&search=spi')
       .set('Cookie', session())
@@ -143,12 +153,23 @@ describe('Projections HTTP contracts', () => {
   });
 
   const get = (path: string) =>
-    request(app.getHttpServer()).get(`/api/projections${path}`).set('Cookie', session());
+    request(app.getHttpServer())
+      .get(`/api/projections${path}`)
+      .set('Cookie', session());
 
   it('lists projections with defaults and combined filters', async () => {
     repository.listProjections.mockResolvedValue({ items: [], total: 0 });
-    await get('').expect(200, { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 });
-    expect(repository.listProjections).toHaveBeenLastCalledWith({ page: 1, pageSize: 10 });
+    await get('').expect(200, {
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+      totalPages: 0,
+    });
+    expect(repository.listProjections).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 10,
+    });
 
     await get(
       '?page=2&pageSize=25&status=CANCELLED&branchId=2&theaterId=7&movieId=3&dateFrom=2099-07-01&dateTo=2099-07-31&timeFrom=18:00&timeTo=22:00&search=spi',
@@ -185,7 +206,11 @@ describe('Projections HTTP contracts', () => {
   it('returns filter options and the detail of a projection', async () => {
     repository.getCatalogs.mockResolvedValue({ cinemas: [], theaters: [] });
     repository.getScheduledMovies.mockResolvedValue([]);
-    await get('/filter-options').expect(200, { cinemas: [], theaters: [], movies: [] });
+    await get('/filter-options').expect(200, {
+      cinemas: [],
+      theaters: [],
+      movies: [],
+    });
 
     repository.findProjection.mockResolvedValueOnce({ movieFunctionId: 100 });
     await get('/100').expect(200, { movieFunctionId: 100 });
@@ -202,7 +227,10 @@ describe('Projections HTTP contracts', () => {
     [{ price: 10.123 }, 'El precio debe ser un número positivo en colones.'],
     [{ startDate: '2099-02-30' }, 'Introduce una fecha válida (AAAA-MM-DD).'],
     [{ startTime: '24:00' }, 'Introduce una hora válida (HH:mm).'],
-    [{ cleaningMinutes: 241 }, 'Los minutos deben ser un entero entre 0 y 240.'],
+    [
+      { cleaningMinutes: 241 },
+      'Los minutos deben ser un entero entre 0 y 240.',
+    ],
     [{ status: 'CANCELLED' }, 'El estado debe ser activa o inactiva.'],
     [{ movieId: 'x' }, 'Selecciona una película.'],
   ])('rejects invalid fields %#', async (override, message) => {
@@ -223,9 +251,14 @@ describe('Projections HTTP contracts', () => {
   });
 
   it('denies non administrators and anonymous requests', async () => {
-    users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role: 'EMPLOYEE' });
+    users.findEmployeeIdentityById.mockResolvedValue({
+      id: 21,
+      role: 'EMPLOYEE',
+    });
     await post(valid).expect(403);
-    await request(app.getHttpServer()).get('/api/projections/options').expect(401);
+    await request(app.getHttpServer())
+      .get('/api/projections/options')
+      .expect(401);
     expect(repository.createProjections).not.toHaveBeenCalled();
   });
 
@@ -265,13 +298,15 @@ describe('Projections HTTP contracts', () => {
       await put(changes).expect(200, { movieFunctionId: 100 });
       expect(repository.updateProjection).toHaveBeenCalledWith(
         100,
-        expect.objectContaining({ price: 4200, status: 'ACTIVE' }),
+        expect.objectContaining({ format: undefined, status: 'ACTIVE' }),
         21,
       );
     });
 
     it('rejects ranges, invalid ids and foreign origins', async () => {
-      const range = await put({ ...changes, endDate: '2099-07-25' }).expect(400);
+      const range = await put({ ...changes, endDate: '2099-07-25' }).expect(
+        400,
+      );
       expect(range.body.message).toContain('property endDate should not exist');
       await put(changes, '/abc').expect(400);
       await put({ ...changes, status: 'CANCELLED' }).expect(400);
@@ -288,7 +323,10 @@ describe('Projections HTTP contracts', () => {
         .set('Cookie', session());
 
     it('cancels a projection and returns its detail', async () => {
-      repository.findProjection.mockResolvedValue({ movieFunctionId: 100, status: 'CANCELLED' });
+      repository.findProjection.mockResolvedValue({
+        movieFunctionId: 100,
+        status: 'CANCELLED',
+      });
       await cancel().expect(200, { movieFunctionId: 100, status: 'CANCELLED' });
       expect(repository.cancelProjection).toHaveBeenCalledWith(100);
     });
@@ -296,9 +334,27 @@ describe('Projections HTTP contracts', () => {
     it('rejects invalid ids, foreign origins and non administrators', async () => {
       await cancel('/abc').expect(400);
       await cancel('/100', 'https://evil.example').expect(403);
-      users.findEmployeeIdentityById.mockResolvedValue({ id: 21, role: 'EMPLOYEE' });
+      users.findEmployeeIdentityById.mockResolvedValue({
+        id: 21,
+        role: 'EMPLOYEE',
+      });
       await cancel().expect(403);
       expect(repository.cancelProjection).not.toHaveBeenCalled();
     });
+  });
+  it('previews the central pricing policy without accepting client totals', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/projections/price-preview')
+      .set('Origin', origin)
+      .set('Cookie', session())
+      .send({ format: '3D', technology: 'IMAX', isPremiere: true });
+    expect(response.status).toBe(200);
+    expect(response.body.unitPrice).toBe(5000);
+    const rejected = await request(app.getHttpServer())
+      .post('/api/projections/price-preview')
+      .set('Origin', origin)
+      .set('Cookie', session())
+      .send({ format: '3D', technology: '70MM' });
+    expect(rejected.status).toBe(400);
   });
 });

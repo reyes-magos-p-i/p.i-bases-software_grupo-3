@@ -136,6 +136,37 @@ describe('requireClientSession', () => {
     const result = await requireClientSession(route('/account/profile', true), route('/'), vi.fn())
     expect(result).toEqual({ path: '/', query: { login: 'client', reason: 'required' } })
   })
+  it('does not carry purchase destinations into the required login', async () => {
+    const destination = {
+      ...route('/account/profile', true),
+      query: { section: 'purchases', purchaseId: '12', redirect: 'https://other.example' },
+    }
+    const result = await requireClientSession(destination, route('/'), vi.fn())
+    expect(result).toEqual({
+      path: '/',
+      query: { login: 'client', reason: 'required' },
+    })
+    expect(getClientPasswordStatus).not.toHaveBeenCalled()
+  })
+  it('does not carry purchase destinations after a revoked or unavailable session', async () => {
+    const destination = {
+      ...route('/account/profile', true),
+      query: { section: 'purchases', purchaseId: '12' },
+    }
+    vi.mocked(getClientSession).mockRejectedValueOnce(
+      Object.assign(new Error('expired'), { status: 401 }),
+    )
+    expect(await requireClientSession(destination, route('/'), vi.fn())).toEqual({
+      path: '/',
+      query: { login: 'client', reason: 'expired' },
+    })
+    localStorage.setItem('accessToken', 'saved-token')
+    vi.mocked(getClientSession).mockRejectedValueOnce(new Error('offline'))
+    expect(await requireClientSession(destination, route('/'), vi.fn())).toEqual({
+      path: '/',
+      query: { login: 'client', reason: 'unavailable' },
+    })
+  })
 })
 
 describe('redirectClientWhenPasswordBlocked', () => {

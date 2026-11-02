@@ -117,7 +117,7 @@ describe('ProjectionListPanel', () => {
       'Sala',
       'Fecha',
       'Duración',
-      'Precio',
+      'Precio general desde',
       'Estado',
       'Acciones',
     ])

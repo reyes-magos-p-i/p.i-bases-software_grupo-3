@@ -1,10 +1,6 @@
 // Formats of the transactions section, as the test plan writes them:
 // FAC-000123, 12/10/2026, 12/10/2026 17:00 and ₡3500.
-import type {
-  TransactionDetail,
-  TransactionListItem,
-  TransactionStatus,
-} from '@/types/transaction'
+import type { TransactionDetail, TransactionListItem, TransactionStatus } from '@/types/transaction'
 
 export const TRANSACTION_STATUS_LABELS: Record<TransactionStatus, string> = {
   PAID: 'Pagada',
@@ -42,6 +38,7 @@ const CARD_BRANDS: Record<string, string> = {
 export function formatPaymentMethod(
   transaction: Pick<TransactionDetail, 'paymentMethod' | 'cardBrand' | 'cardLast4'>,
 ): string {
+  if (transaction.paymentMethod === 'SIMULATED') return 'Pago simulado'
   if (transaction.paymentMethod === 'CASH') return 'Efectivo'
   const brand = transaction.cardBrand
     ? (CARD_BRANDS[transaction.cardBrand.toLowerCase()] ??

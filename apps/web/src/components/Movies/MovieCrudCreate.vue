@@ -48,35 +48,34 @@ const selectedPoster = ref<File | null>(null)
 const existingPosterUrl = computed(() =>
   getPosterUrl(form.posterImage),
 )
+const runningTimeValid = ref(false)
+const releaseYearValid = ref(false)
 
 const languageOptions = computed(() =>
-  props.languages.map(item => ({
+  props.languages.map((item) => ({
     value: item.id,
-    label: item.name
-  }))
+    label: item.name,
+  })),
 )
 
 const genreOptions = computed(() =>
-  props.genres.map(item => ({
+  props.genres.map((item) => ({
     value: item.id,
-    label: item.name
-  }))
+    label: item.name,
+  })),
 )
 
-const isFormValid = computed(() =>
-  form.title.trim().length > 0 &&
-  form.title.length <= TITLE_LIMIT &&
-  form.synopsis.trim().length > 0 &&
-  form.synopsis.length <= SYNOPSIS_LIMIT &&
-  form.runningTime !== null &&
-  Number.isInteger(form.runningTime) &&
-  form.runningTime > 0 &&
-  form.releaseYear !== null &&
-  Number.isInteger(form.releaseYear) &&
-  form.releaseYear > 0 &&
-  form.classificationId !== null &&
-  form.languageIds.length > 0 &&
-  form.genreIds.length > 0
+const isFormValid = computed(
+  () =>
+    form.title.trim().length > 0 &&
+    form.title.length <= TITLE_LIMIT &&
+    form.synopsis.trim().length > 0 &&
+    form.synopsis.length <= SYNOPSIS_LIMIT &&
+    runningTimeValid.value &&
+    releaseYearValid.value &&
+    form.classificationId !== null &&
+    form.languageIds.length > 0 &&
+    form.genreIds.length > 0,
 )
 
 async function save() {
@@ -86,11 +85,7 @@ async function save() {
   const releaseYear = form.releaseYear
   const classificationId = form.classificationId
 
-  if (
-    runningTime === null ||
-    releaseYear === null ||
-    classificationId === null
-  ) return
+  if (runningTime === null || releaseYear === null || classificationId === null) return
 
   saving.value = true
   error.value = ''
@@ -133,13 +128,7 @@ async function save() {
 </script>
 
 <template>
-  <BaseModal
-    :open="true"
-    title="Crear película"
-    :close-disabled="saving"
-    @close="emit('close')"
-  >
-
+  <BaseModal :open="true" title="Crear película" :close-disabled="saving" @close="emit('close')">
     <div class="movie-create-content">
       <form @submit.prevent="save">
         <fieldset class="create-fieldset" :disabled="saving">
@@ -148,26 +137,27 @@ async function save() {
               <!-- All your movie fields -->
                <h3>Información general</h3>
 
-                <div class="form-grid">
-                  <LimitedTextInput
-                    v-model="form.title"
-                    label="Título"
-                    :limit="TITLE_LIMIT"
-                    required
-                  />
+        <div class="form-grid">
+          <LimitedTextInput v-model="form.title" label="Título" :limit="TITLE_LIMIT" required />
 
-                  <PositiveNumberInput
-                    v-model="form.runningTime"
-                    label="Duración en minutos"
-                    required
-                  />
+          <PositiveNumberInput
+            v-model="form.runningTime"
+            label="Duración en minutos"
+            :min="1"
+            :max="999"
+            required
+            @validity-change="runningTimeValid = $event"
+          />
 
-                  <PositiveNumberInput
-                    v-model="form.releaseYear"
-                    label="Año de estreno"
-                    required
-                  />
-                </div>
+          <PositiveNumberInput
+            v-model="form.releaseYear"
+            label="Año de estreno"
+            :min="1888"
+            :max="2077"
+            required
+            @validity-change="releaseYearValid = $event"
+          />
+        </div>
 
                 <div class="form-group">
                   <SimpleDropdown
@@ -224,20 +214,11 @@ async function save() {
         </p>
 
         <footer class="form-footer">
-          <button
-            type="button"
-            class="secondary"
-            :disabled="saving"
-            @click="emit('close')"
-          >
+          <button type="button" class="secondary" :disabled="saving" @click="emit('close')">
             Cancelar
           </button>
 
-          <button
-            type="submit"
-            class="primary"
-            :disabled="!isFormValid || saving"
-          >
+          <button type="submit" class="primary" :disabled="!isFormValid || saving">
             {{ saving ? 'Creando...' : 'Crear película' }}
           </button>
         </footer>

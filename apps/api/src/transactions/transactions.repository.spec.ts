@@ -267,7 +267,12 @@ describe('TransactionsRepository', () => {
       db.query
         .mockResolvedValueOnce({
           rows: [
-            { ...row, PAYMENT_METHOD: 'CASH', CARD_BRAND: null, CARD_LAST4: null },
+            {
+              ...row,
+              PAYMENT_METHOD: 'CASH',
+              CARD_BRAND: null,
+              CARD_LAST4: null,
+            },
           ],
         })
         .mockResolvedValueOnce({});
@@ -309,5 +314,28 @@ describe('TransactionsRepository', () => {
         movies: [],
       });
     });
+  });
+  it('preserves simulated payment details and reads the original purchase snapshot', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            ...row,
+            PAYMENT_METHOD: 'SIMULATED',
+            CARD_BRAND: null,
+            CARD_LAST4: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+    expect(await repository.findTransactionById(123)).toMatchObject({
+      paymentMethod: 'SIMULATED',
+      cardBrand: null,
+      cardLast4: null,
+    });
+    expect(call(0)[0]).toContain(
+      "JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.title')",
+    );
+    expect(call(0)[0]).toContain('COALESCE(i.BUYER_EMAIL,c.EMAIL)');
   });
 });
