@@ -290,20 +290,30 @@ export class PurchasesRepository {
     context: PurchaseFunction,
     positions: number[],
   ) {
-    const binds: Binds = {
-      columns: context.columns,
-      theaterId: context.theaterId,
-      functionId: context.id,
-    };
-    positions.forEach((position, index) => {
-      binds['p' + index] = position;
-    });
-    const result = await connection.execute<PurchaseSeat>(
-      seatQuery(positions),
-      binds,
-      OPTIONS,
+    const seats: PurchaseSeat[] = [];
+    const offsets = Array.from(
+      { length: Math.ceil(positions.length / 1000) },
+      (_, index) => index * 1000,
     );
-    return result.rows ?? [];
+    await offsets.reduce(async (previous, offset) => {
+      await previous;
+      const batch = positions.slice(offset, offset + 1000);
+      const binds: Binds = {
+        columns: context.columns,
+        theaterId: context.theaterId,
+        functionId: context.id,
+      };
+      batch.forEach((position, index) => {
+        binds['p' + index] = position;
+      });
+      const result = await connection.execute<PurchaseSeat>(
+        seatQuery(batch),
+        binds,
+        OPTIONS,
+      );
+      seats.push(...(result.rows ?? []));
+    }, Promise.resolve());
+    return seats;
   }
   private async writePurchase(
     connection: oracle.Connection,

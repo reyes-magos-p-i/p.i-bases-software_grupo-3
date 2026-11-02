@@ -20,6 +20,10 @@ const id = useId()
 const available = computed(
   () => props.availability.seats.filter((seat) => seat.state === 'free').length,
 )
+// Only a setting below the free seats limits the selection, so buyers keep 'select all'.
+const limit = computed(() =>
+  props.availability.maxTickets < available.value ? props.availability.maxTickets : 'all',
+)
 const position = (seat: Seat) =>
   (seat.rowNumber - 1) * props.availability.function.columns + seat.columnNumber
 function categoryChange(seat: Seat, event: Event) {
@@ -34,7 +38,7 @@ function categoryChange(seat: Seat, event: Event) {
       {{ availability.function.theaterId }} · {{ formatDateTime(availability.function.startsAt) }}
     </p>
     <p>La selección no reserva los asientos. Confirmaremos su disponibilidad al pagar.</p>
-    <p>Puedes comprar hasta {{ availability.maxTickets }} boletos por función.</p>
+    <p v-if="limit !== 'all'">Puedes comprar hasta {{ limit }} boletos por función.</p>
     <p v-if="!available" role="status">Esta función no tiene asientos disponibles.</p>
     <SeatSelector
       :theater-id="availability.function.theaterId"
@@ -42,7 +46,7 @@ function categoryChange(seat: Seat, event: Event) {
       :columns="availability.function.columns"
       :seats="availability.seats"
       :disabled="disabled"
-      :max-selections="availability.maxTickets"
+      :max-selections="limit"
       @selection-change="emit('selection', $event)"
     />
     <p aria-live="polite">

@@ -65,17 +65,17 @@ Las rutas requieren JWT de cliente y contraseña vigente. La cuenta se obtiene d
 
 ## Límites de compra — SCRUM-378
 
-Mientras el pago sea simulado, estos límites reducen la compra masiva de asientos. No sustituyen un cobro real.
+Clientes e invitados pueden comprar los boletos que deseen según la disponibilidad de la sala, por decisión del PO. El límite efectivo es el menor entre el valor configurado y los asientos libres. Para reducirlo basta con cambiar `GLOBAL_SETTINGS`. Estos límites no sustituyen un cobro real.
 
 | Límite | Valor inicial | Dónde vive | Dónde se valida |
 | --- | ---: | --- | --- |
-| Boletos por comprador y función | 10 | `GLOBAL_SETTINGS` | Cotización y transacción de confirmación |
+| Boletos por comprador y función | 10000 | `GLOBAL_SETTINGS` | Cotización y transacción de confirmación |
 | Compras de invitado por correo y hora | 3 | `GLOBAL_SETTINGS` | Transacción de confirmación |
 | Confirmaciones de invitado por IP y hora | 10 | API | `POST /guest-purchases` |
 
-Los boletos ya comprados para la función cuentan dentro del límite, con el mismo bloqueo de la función, por lo que no se evade con varias compras pequeñas. Superarlo responde 409 con `TICKET_LIMIT_REACHED` o `GUEST_EMAIL_LIMIT`. Las comprobaciones se ejecutan después de reconocer un reintento, de modo que repetir una compra registrada sigue devolviendo su comprobante. Los valores de `GLOBAL_SETTINGS` se cambian con un `UPDATE`, sin recompilar ni desplegar, y aplican desde la siguiente compra. La disponibilidad de asientos devuelve `maxTickets` para que la web use el mismo valor. Una restricción admite enteros de 1 a 1000, porque el bloqueo de asientos usa una sola lista `IN`. Si no se pueden leer los límites, la compra responde 503 y no se vende nada.
+Los boletos ya comprados para la función cuentan dentro del límite, con el mismo bloqueo de la función, por lo que no se evade con varias compras pequeñas. Superarlo responde 409 con `TICKET_LIMIT_REACHED` o `GUEST_EMAIL_LIMIT`. Las comprobaciones se ejecutan después de reconocer un reintento, de modo que repetir una compra registrada sigue devolviendo su comprobante. Los valores de `GLOBAL_SETTINGS` se cambian con un `UPDATE`, sin recompilar ni desplegar, y aplican desde la siguiente compra. La disponibilidad de asientos devuelve `maxTickets`; si es menor que los asientos libres, la web limita la selección, y si no, mantiene «Seleccionar todos». Una restricción admite enteros de 1 a 10000, el tamaño máximo de una sala. Si no se pueden leer los límites, la compra responde 503 y no se vende nada.
 
-La tabla se crea con [20261102_global_settings.sql](../database/migrations/20261102_global_settings.sql), que debe aplicarse **antes** de desplegar la API. Queda preparada para los demás valores de SCRUM-366 y para un futuro trigger que valide estos límites en Oracle.
+La tabla se crea con [20261102_global_settings.sql](../database/migrations/20261102_global_settings.sql), y [20261102_ticket_limit_by_availability.sql](../database/migrations/20261102_ticket_limit_by_availability.sql) amplía el límite. Ambas deben aplicarse **antes** de desplegar la API. Queda preparada para los demás valores de SCRUM-366 y para un futuro trigger que valide estos límites en Oracle.
 
 ## Compra como invitado
 
