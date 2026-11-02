@@ -75,7 +75,7 @@ describe('Purchase API', () => {
     expect(await confirmPurchase({ ...data, requestKey: 'key', quoteVersion: 'hash' })).toEqual(
       receipt,
     )
-    await getMyPurchases()
+    await getMyPurchases({ page: 1, search: '0122' })
     api.get.mockResolvedValueOnce({ data: receipt })
     expect(await getMyPurchase(12)).toEqual(receipt)
     expect(api.get.mock.calls.map(([url]) => url)).toEqual([
@@ -89,7 +89,7 @@ describe('Purchase API', () => {
       signal: controller.signal,
       withCredentials: false,
     })
-    expect(api.get.mock.calls[2]![1].params).toEqual({ page: 1 })
+    expect(api.get.mock.calls[2]![1].params).toEqual({ page: 1, search: '0122' })
     expect(api.post).toHaveBeenNthCalledWith(
       1,
       '/purchases/quote',
@@ -105,7 +105,7 @@ describe('Purchase API', () => {
   })
   it('preserves network failures and uses the shared clear error messages', async () => {
     api.get.mockRejectedValue(new Error('offline'))
-    await expect(getMyPurchases(2)).rejects.toThrow('offline')
+    await expect(getMyPurchases({ page: 2 })).rejects.toThrow('offline')
     expect(
       purchaseError({
         isAxiosError: true,

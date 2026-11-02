@@ -19,7 +19,7 @@ import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
 import { ParseDecimalIdPipe } from '../common/pipes/parse-decimal-id.pipe';
 import {
   ConfirmPurchaseDto,
-  PurchasePageDto,
+  ListPurchasesQueryDto,
   PurchaseSelectionDto,
 } from './purchase.dto';
 import { PurchasesService } from './purchases.service';
@@ -56,8 +56,8 @@ export class PurchasesController {
   }
   @Get('me')
   @Header('Cache-Control', 'no-store')
-  list(@Req() request: ClientRequest, @Query() query: PurchasePageDto) {
-    return this.service.list(request.user.id, query.page);
+  list(@Req() request: ClientRequest, @Query() query: ListPurchasesQueryDto) {
+    return this.service.list(request.user.id, query);
   }
   @Get('me/:id')
   @Header('Cache-Control', 'no-store')

@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayUnique,
@@ -6,9 +6,13 @@ import {
   IsDefined,
   IsHash,
   IsInt,
+  IsISO8601,
   IsObject,
+  IsString,
   IsUUID,
+  Matches,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
   IsOptional,
@@ -51,11 +55,29 @@ export class ConfirmPurchaseDto extends PurchaseSelectionDto {
   @IsHash('sha256', { message: 'Actualiza el resumen antes de pagar.' })
   quoteVersion: string;
 }
-export class PurchasePageDto {
+const DATE_MESSAGE = 'Introduce una fecha válida (AAAA-MM-DD).';
+export class ListPurchasesQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(Number.MAX_SAFE_INTEGER)
   page: number = 1;
+  // Part of the order number: "0122" finds ORD-000122.
+  @IsOptional()
+  @IsString({ message: 'La búsqueda debe ser texto.' })
+  @MaxLength(20, { message: 'La búsqueda no puede superar 20 caracteres.' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  search?: string;
+  // Purchase dates, inclusive, in Costa Rica time.
+  @IsOptional()
+  @IsISO8601({ strict: true }, { message: DATE_MESSAGE })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u, { message: DATE_MESSAGE })
+  dateFrom?: string;
+  @IsOptional()
+  @IsISO8601({ strict: true }, { message: DATE_MESSAGE })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/u, { message: DATE_MESSAGE })
+  dateTo?: string;
 }

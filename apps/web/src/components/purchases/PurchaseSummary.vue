@@ -2,9 +2,13 @@
 import { computed } from 'vue'
 import QrCode from '@/components/common/QrCode.vue'
 import { PROJECTION_STATUS_LABELS, type ProjectionStatus } from '@/types/projection'
-import { formatDateTime, formatColones } from '@/utils/transaction-format'
+import { formatDateTime, formatColones, formatPaymentMethod } from '@/utils/transaction-format'
 import { TICKET_CATEGORY_LABELS, type PurchaseQuote, type PurchaseReceipt } from '@/types/purchase'
-const props = defineProps<{ purchase: PurchaseQuote | PurchaseReceipt; buyerEmail?: string }>()
+const props = defineProps<{
+  purchase: PurchaseQuote | PurchaseReceipt
+  buyerEmail?: string
+  showPayment?: boolean
+}>()
 const email = computed(
   () => props.buyerEmail || ('buyerEmail' in props.purchase ? props.purchase.buyerEmail : ''),
 )
@@ -61,11 +65,11 @@ const purchaseCode = computed(() => {
     <div class="line-scroll">
       <table>
         <caption>
-          Detalle de los boletos
+          Productos de la compra
         </caption>
         <thead>
           <tr>
-            <th scope="col">Tipo</th>
+            <th scope="col">Producto</th>
             <th scope="col">Cantidad</th>
             <th scope="col">Precio unitario</th>
             <th scope="col">Subtotal</th>
@@ -89,6 +93,7 @@ const purchaseCode = computed(() => {
         <strong>{{ purchase.reference }}</strong> · {{ formatDateTime(purchase.purchasedAt) }} ·
         {{ purchase.status === 'PAID' ? 'Pagada' : 'Cancelada' }}
       </p>
+      <p v-if="showPayment">Método de pago: {{ formatPaymentMethod(purchase) }}</p>
       <QrCode
         :value="purchaseCode"
         :label="`Código QR de la compra ${purchase.reference}`"

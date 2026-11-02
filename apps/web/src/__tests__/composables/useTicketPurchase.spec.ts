@@ -357,7 +357,7 @@ describe('Ticket purchase coordination', () => {
       expect(flow.quote.value).toBe(originalQuote)
       expect(flow.receipt.value).toBeNull()
       expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(original)
-      expect(flow.error.value).toContain('Mis compras')
+      expect(flow.error.value).toContain('Historial de compras')
       flow.back()
       flow.setSelection(seats)
       flow.setCategory(1, 'SENIOR')

@@ -257,7 +257,7 @@ describe('TicketPurchaseView', () => {
       duration: 0,
       placement: 'bottom-right',
     })
-    expect(wrapper.text()).toContain('Mis compras')
+    expect(wrapper.text()).toContain('Historial de compras')
     expect(getPurchaseSeats).toHaveBeenCalledTimes(1)
     expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(original)
     await wrapper.get('.purchase-action.primary').trigger('click')

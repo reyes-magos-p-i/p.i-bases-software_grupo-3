@@ -418,7 +418,7 @@ describe('Atomic purchase storage', () => {
     delete overrides['FROM INVOICE_PRODUCTS ip JOIN'];
     overrides['COUNT(*)'] = { rows: [{ TOTAL: 11 }] };
     overrides['JSON_VALUE'] = { rows: [{ id: 12, title: 'Película' }] };
-    expect(await repo.list(8, 999)).toMatchObject({
+    expect(await repo.list(8, { page: 999 })).toMatchObject({
       page: 2,
       total: 11,
       totalPages: 2,
@@ -426,12 +426,70 @@ describe('Atomic purchase storage', () => {
     });
     overrides['COUNT(*)'] = {};
     overrides['JSON_VALUE'] = {};
-    expect(await repo.list(8, 1)).toEqual({
+    expect(await repo.list(8, { page: 1 })).toEqual({
       page: 1,
       total: 0,
       totalPages: 0,
       items: [],
     });
+  });
+  it('filters the history by order number and inclusive purchase dates', async () => {
+    const query = jest.spyOn(db, 'query');
+    await repo.list(8, {
+      page: 1,
+      search: 'ORD-0%',
+      dateFrom: '2026-10-05',
+      dateTo: '2026-10-10',
+    });
+    const [countSql, countBinds] = query.mock.calls[0];
+    const [listSql, listBinds] = query.mock.calls[1];
+    for (const sql of [countSql, listSql]) {
+      expect(sql).toContain('i.CLIENT_ID=:clientId');
+      expect(sql).toContain(
+        String.raw`LOWER('ORD-' || LPAD(i.INVOICE_ID,6,'0')) LIKE :search ESCAPE '\'`,
+      );
+      expect(sql).toContain('i.CREATED_AT >= FROM_TZ(');
+      expect(sql).toContain("+ INTERVAL '1' DAY");
+    }
+    expect(countBinds).toEqual({
+      clientId: 8,
+      search: String.raw`%ord-0\%%`,
+      dateFrom: '2026-10-05',
+      dateTo: '2026-10-10',
+    });
+    expect(listBinds).toEqual({ ...(countBinds as object), offset: 0 });
+    query.mockRestore();
+  });
+  it('returns the payment and the food lines of an invoice without snapshot', async () => {
+    overrides['AS "contextJson"'] = {
+      rows: [
+        {
+          id: 122,
+          functionId: 4,
+          contextJson: null,
+          paymentMethod: 'CARD',
+          cardBrand: 'visa',
+          cardLast4: '4242',
+        },
+      ],
+    };
+    overrides['FROM INVOICE_PRODUCTS ip JOIN'] = {
+      rows: [
+        { code: 'PRODUCT_1', label: 'Combo', quantity: 1, unitPrice: 4500 },
+      ],
+    };
+    const query = jest.spyOn(db, 'query');
+    expect(await repo.findOne(122, 8)).toMatchObject({
+      paymentMethod: 'CARD',
+      cardBrand: 'visa',
+      cardLast4: '4242',
+      lines: [{ code: 'PRODUCT_1', label: 'Combo', subtotal: 4500 }],
+    });
+    const linesSql = query.mock.calls
+      .map(([sql]) => sql)
+      .find((sql) => sql.includes('FROM INVOICE_PRODUCTS ip JOIN'));
+    expect(linesSql).not.toContain("PRODUCT_TYPE='TICKET'");
+    query.mockRestore();
   });
   it('stores guest invoices without an account and restricts retries to the original email', async () => {
     const receipt = await repo.confirmGuest('guest@example.com', valid);

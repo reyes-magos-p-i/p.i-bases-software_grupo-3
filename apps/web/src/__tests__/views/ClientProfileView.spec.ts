@@ -643,13 +643,25 @@ describe('ClientProfileView', () => {
       query: { login: 'client', reason: 'expired' },
     })
   })
-  it('opens the history section without selecting a purchase from the URL', async () => {
+  it('opens the purchase of the URL and keeps the selected purchase in it', async () => {
     Object.assign(navigation.query, { section: 'purchases', purchaseId: '12' })
     const wrapper = render()
     await flushPromises()
-    expect(wrapper.findComponent(ClientPurchasesPanel).exists()).toBe(true)
-    expect(wrapper.getComponent(ClientPurchasesPanel).attributes('purchase-id')).toBeUndefined()
+    const panel = wrapper.getComponent(ClientPurchasesPanel)
+    expect(panel.props('purchaseId')).toBe(12)
     expect(navigation.replace).not.toHaveBeenCalled()
+    panel.vm.$emit('select', 15)
+    expect(navigation.replace).toHaveBeenLastCalledWith({
+      query: { section: 'purchases', purchaseId: '15' },
+    })
+    panel.vm.$emit('select', null)
+    expect(navigation.replace).toHaveBeenLastCalledWith({ query: { section: 'purchases' } })
+  })
+  it('ignores a purchase id that is not a number', async () => {
+    Object.assign(navigation.query, { section: 'purchases', purchaseId: 'ORD-1' })
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.getComponent(ClientPurchasesPanel).props('purchaseId')).toBeNull()
   })
   it('honors unsaved changes before opening purchase history', async () => {
     const wrapper = render()

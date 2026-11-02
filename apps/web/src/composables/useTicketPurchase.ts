@@ -443,7 +443,7 @@ export function useTicketPurchase(onExpired: () => void) {
     if (uncertain.value) {
       error.value += guest.value
         ? ' Reintenta el pago de esta misma selección para recuperar tu compra sin duplicarla. Conservaremos la selección mientras comprobamos el resultado.'
-        : ' Puedes reintentar el pago de esta misma selección; la compra no se duplicará. También puedes consultar «Mis compras».'
+        : ' Puedes reintentar el pago de esta misma selección; la compra no se duplicará. También puedes consultar «Historial de compras».'
       return
     }
     releaseAttempt()
