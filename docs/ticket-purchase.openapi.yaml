@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Cinetadel — Compra de boletos para clientes e invitados
-  version: 1.1.0
+  version: 1.2.0
 servers:
   - url: /api
 security:
@@ -316,6 +316,83 @@ paths:
         "400": { description: Formato o tecnología incompatible }
         "401": { description: Sesión ausente o vencida }
         "403": { description: Permisos, contraseña u origen no autorizados }
+  /purchases/me/{id}/email-status:
+    get:
+      summary: Estado del envío de los boletos de una compra propia
+      description: Requiere sesión de cliente y contraseña vigente. Máximo 60 solicitudes por minuto. Cache-Control no-store. SENT significa aceptación por SMTP, no entrega confirmada al buzón.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Estado persistido del último intento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TicketEmailStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: La compra no existe o no pertenece al cliente }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /purchases/me/{id}/resend-tickets:
+    post:
+      summary: Solicita el reenvío al correo verificado actual del cliente
+      description: Requiere Origin permitido. No acepta un destinatario en el cuerpo. Máximo 5 solicitudes por minuto y un intervalo de 60 segundos por compra. No reintenta automáticamente envíos fallidos o inciertos.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "202":
+          description: Solicitud persistida para procesamiento posterior
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TicketEmailStatus" }
+        "400": { description: Compra cancelada o sin boletos }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: La compra no existe o no pertenece al cliente }
+        "409":
+          {
+            description: Envío en curso o intervalo entre solicitudes no cumplido,
+          }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /guest-purchases/email-status:
+    post:
+      security: []
+      summary: Consulta el estado de envío mediante el código privado del invitado
+      description: Exige Origin permitido. El código se envía en el cuerpo, nunca en la URL. Máximo 60 solicitudes por minuto. Cache-Control no-store.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [accessCode]
+              properties:
+                accessCode: { type: string, maxLength: 85 }
+      responses:
+        "200":
+          $ref: "#/paths/~1purchases~1me~1{id}~1email-status/get/responses/200"
+        "400": { description: Código inválido }
+        "403": { description: Origen no autorizado }
+        "404": { description: Código no encontrado }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /guest-purchases/resend-tickets:
+    post:
+      security: []
+      summary: Reenvía los boletos al correo original de la compra de invitado
+      description: Exige código privado y Origin permitido. No acepta otro destinatario. Máximo 5 solicitudes por minuto y un intervalo de 60 segundos por compra. Cache-Control no-store.
+      requestBody:
+        $ref: "#/paths/~1guest-purchases~1email-status/post/requestBody"
+      responses:
+        "202":
+          $ref: "#/paths/~1purchases~1me~1{id}~1resend-tickets/post/responses/202"
+        "400": { description: Código inválido o compra sin boletos disponibles }
+        "403": { description: Origen no autorizado }
+        "404": { description: Código no encontrado }
+        "409":
+          {
+            description: Envío en curso o intervalo entre solicitudes no cumplido,
+          }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
 components:
   securitySchemes:
     clientBearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -353,6 +430,24 @@ components:
     Conflict:
       description: Función no disponible, asientos vendidos, resumen modificado, referencia reutilizada o bloqueo temporal. FUNCTION_UNAVAILABLE, SEATS_UNAVAILABLE y QUOTE_CHANGED son rechazos definitivos. PURCHASE_BUSY requiere reintentar con la misma referencia y selección.
   schemas:
+    TicketEmailStatus:
+      type: object
+      required: [status, recipient, sentAt, retryAfter]
+      properties:
+        status:
+          {
+            type: string,
+            enum: [NOT_REQUESTED, PENDING, SENDING, SENT, FAILED, UNKNOWN],
+          }
+        recipient: { type: string, format: email, nullable: true }
+        sentAt: { type: string, format: date-time, nullable: true }
+        retryAfter:
+          {
+            type: integer,
+            minimum: 0,
+            maximum: 60,
+            description: Segundos restantes antes de solicitar otro envío,
+          }
     GuestBuyer:
       type: object
       required: [email, confirmEmail]
@@ -470,6 +565,13 @@ components:
       properties:
         id: { type: integer }
         reference: { type: string, example: ORD-000012 }
+        qrPayload:
+          {
+            type: string,
+            description: JSON canónico con type CINETADEL_PURCHASE,
+            version 1 y reference. Sin URL,
+            datos personales ni código privado,
+          }
         purchasedAt: { type: string, format: date-time }
         status: { type: string, enum: [PAID, CANCELLED] }
         buyerEmail: { type: string, format: email }
@@ -489,6 +591,12 @@ components:
               theaterId: { type: integer }
               functionId: { type: integer }
               title: { type: string }
+              branchName:
+                {
+                  type: string,
+                  description: Sucursal vigente del boleto,
+                  incluso después de una reprogramación,
+                }
               startsAt: { type: string, format: date-time }
               functionStatus: { type: string }
               unitPrice: { type: number }
