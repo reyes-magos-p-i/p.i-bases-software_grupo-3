@@ -65,6 +65,13 @@ export interface PurchaseReceipt extends Omit<PurchaseQuote, 'seats' | 'quantity
   buyerEmail: string
   tickets: PurchasedTicket[]
 }
+export interface GuestBuyer {
+  email: string
+  confirmEmail: string
+}
+export interface GuestPurchaseReceipt extends PurchaseReceipt {
+  accessCode: string
+}
 export interface PurchaseCategory {
   code: TicketCategory
   label: string
