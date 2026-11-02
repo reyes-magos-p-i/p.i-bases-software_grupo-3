@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import {
-  seatStateLabels,
-  seatTypeLabels,
-  type Seat,
-} from '@/types/seats'
+import { seatStateLabels, seatTypeLabels, type Seat } from '@/types/seats'
 
 const props = withDefaults(
   defineProps<{
@@ -19,16 +15,16 @@ const emit = defineEmits<{
   toggle: [seat: Seat]
 }>()
 
-const seatNumber = computed(
-  () => `${props.seat.rowNumber}-${props.seat.columnNumber}`,
-)
+const seatNumber = computed(() => `${props.seat.rowNumber}-${props.seat.columnNumber}`)
 
-const accessibleLabel = computed(() => [
-  `Sala ${props.seat.theaterId}`,
-  `Fila ${props.seat.rowNumber}, columna ${props.seat.columnNumber}`,
-  seatTypeLabels[props.seat.type],
-  seatStateLabels[props.seat.state],
-].join(', '))
+const accessibleLabel = computed(() =>
+  [
+    `Sala ${props.seat.theaterId}`,
+    `Fila ${props.seat.rowNumber}, columna ${props.seat.columnNumber}`,
+    seatTypeLabels[props.seat.type],
+    seatStateLabels[props.seat.state],
+  ].join(', '),
+)
 
 function handleClick() {
   if (!props.disabled) emit('toggle', { ...props.seat })
@@ -39,11 +35,7 @@ function handleClick() {
   <button
     type="button"
     class="seat"
-    :class="[
-      `seat--${seat.type}`,
-      `seat--${seat.state}`,
-      { 'seat--selected': selected },
-    ]"
+    :class="[`seat--${seat.type}`, `seat--${seat.state}`, { 'seat--selected': selected }]"
     :disabled="disabled"
     :aria-label="accessibleLabel"
     :aria-pressed="selected"
@@ -109,30 +101,69 @@ function handleClick() {
   border: 2px solid currentColor;
   cursor: pointer;
 }
-.seat--normal { border-radius: 8px; }
-.seat--vip { border-width: 3px; border-radius: 14px 14px 6px 6px; }
-.seat--accessibility { border-style: dashed; border-radius: 8px; }
-.seat--free { color: #166534; background: #dcfce7; }
-.seat--unavailable { color: #475569; background: #e2e8f0; }
-.seat--in-use { color: #991b1b; background: #fee2e2; }
-.seat--reserved { color: #854d0e; background: #fef3c7; }
-.seat-icon { width: 30px; height: 30px; flex-shrink: 0; }
-.seat-number { font-size: 11px; font-weight: 600; line-height: 14px; }
-.seat--selected { box-shadow: 0 0 0 2px #fff, 0 0 0 5px #2563eb; }
+.seat--normal {
+  border-radius: 8px;
+}
+.seat--vip {
+  border-width: 3px;
+  border-radius: 14px 14px 6px 6px;
+}
+.seat--accessibility {
+  border-style: dashed;
+  border-radius: 8px;
+}
+.seat--free {
+  color: var(--success-text);
+  background: var(--success-background);
+}
+.seat--unavailable {
+  color: var(--text-secondary);
+  background: var(--input-disabled-background);
+}
+.seat--in-use {
+  color: var(--error-text);
+  background: var(--error-background);
+}
+.seat--reserved {
+  color: var(--warning-text);
+  background: var(--warning-background);
+}
+.seat-icon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+.seat-number {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+}
+.seat--selected {
+  box-shadow:
+    0 0 0 2px var(--content-background),
+    0 0 0 5px var(--accent-color);
+}
 .selection-mark {
   position: absolute;
   top: -7px;
   right: -7px;
   width: 19px;
   height: 19px;
-  color: #fff;
-  background: #2563eb;
+  color: var(--page-background);
+  background: var(--accent-color);
   border-radius: 50%;
   font-size: 12px;
   line-height: 19px;
   text-align: center;
 }
-.seat:not(:disabled):hover { filter: brightness(0.94); }
-.seat:focus-visible { outline: 3px solid #0f172a; outline-offset: 6px; }
-.seat:disabled { cursor: not-allowed; }
+.seat:not(:disabled):hover {
+  filter: brightness(0.94);
+}
+.seat:focus-visible {
+  outline: 3px solid var(--focus-color);
+  outline-offset: 6px;
+}
+.seat:disabled {
+  cursor: not-allowed;
+}
 </style>

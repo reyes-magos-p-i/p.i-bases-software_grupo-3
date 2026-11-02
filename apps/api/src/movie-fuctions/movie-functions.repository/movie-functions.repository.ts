@@ -32,7 +32,8 @@ export class MovieFunctionsRepository {
           JOIN Theaters t ON t.theater_id = mf.theater_id
           JOIN Cinemas ci ON ci.branch_id = t.branch_id
           JOIN Companies co ON co.company_id = ci.company_id
-          WHERE mf.start_time > SYSTIMESTAMP AND mf.status = 'ACTIVE'
+          WHERE mf.start_time > CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP) AND mf.status = 'ACTIVE' AND t.is_active = 1 AND ci.status = 'ACTIVE'
+            AND EXISTS (SELECT 1 FROM CINEMA_MOVIES cm WHERE cm.MOVIE_ID=mf.MOVIE_ID AND cm.BRANCH_ID=t.BRANCH_ID AND cm.IS_AVAILABLE=1)
           GROUP BY mf.movie_id
         ), associations AS (
           SELECT movie_id, 'GENRE' AS kind, genre_id AS option_id FROM Movie_genres

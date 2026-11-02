@@ -365,11 +365,7 @@ onBeforeUnmount(() => {
       @close="editingTheater = null"
       @submit="submitModify"
     />
-    <TheaterDetailDialog
-      :theater="selectedTheater"
-      :error="detailError"
-      @close="closeDetail"
-    />
+    <TheaterDetailDialog :theater="selectedTheater" :error="detailError" @close="closeDetail" />
     <DeactivateTheaterDialog
       :theater="deactivatingTheater"
       @close="deactivatingTheater = null"

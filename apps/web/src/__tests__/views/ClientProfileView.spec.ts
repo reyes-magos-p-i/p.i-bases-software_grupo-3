@@ -1,3 +1,4 @@
+import ClientPurchasesPanel from '@/components/purchases/ClientPurchasesPanel.vue'
 import ClientPreferencesForm from '@/components/clients/ClientPreferencesForm.vue'
 import {
   getClientPreferenceSettings,
@@ -37,9 +38,11 @@ const navigation = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
   leave: undefined as undefined | (() => boolean | Promise<boolean>),
+  query: {} as Record<string, string>,
 }))
 vi.mock('vue-router', () => ({
   useRouter: () => navigation,
+  useRoute: () => ({ query: navigation.query }),
   onBeforeRouteLeave: (guard: () => boolean | Promise<boolean>) => {
     navigation.leave = guard
   },
@@ -91,6 +94,7 @@ describe('ClientProfileView', () => {
   const wrappers: VueWrapper[] = []
   beforeEach(() => {
     vi.resetAllMocks()
+    navigation.query = {}
     vi.mocked(getClientPreferenceSettings).mockResolvedValue(structuredClone(preferences))
     vi.mocked(saveClientPreferences).mockResolvedValue({ genreIds: [], languageIds: [] })
     establishClientSession(
@@ -119,6 +123,7 @@ describe('ClientProfileView', () => {
           AppHeader: true,
           AppFooter: true,
           ClientProfileForm: true,
+          ClientPurchasesPanel: true,
           ClientPreferencesForm: true,
           ClientEmailChangeDialog: true,
           ConfirmationDialog: true,
@@ -624,5 +629,37 @@ describe('ClientProfileView', () => {
       query: { login: 'client', reason: 'expired' },
     })
     expect(clientSession.user.value).toBeNull()
+  })
+  it('opens purchase history from the profile and handles an expired purchase session', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'purchases')
+    expect(wrapper.findComponent(ClientPurchasesPanel).exists()).toBe(true)
+    wrapper.getComponent(ClientPurchasesPanel).vm.$emit('sessionExpired')
+    await flushPromises()
+    expect(clientSession.user.value).toBeNull()
+    expect(navigation.replace).toHaveBeenCalledWith({
+      path: '/',
+      query: { login: 'client', reason: 'expired' },
+    })
+  })
+  it('opens the history section without selecting a purchase from the URL', async () => {
+    Object.assign(navigation.query, { section: 'purchases', purchaseId: '12' })
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.findComponent(ClientPurchasesPanel).exists()).toBe(true)
+    expect(wrapper.getComponent(ClientPurchasesPanel).attributes('purchase-id')).toBeUndefined()
+    expect(navigation.replace).not.toHaveBeenCalled()
+  })
+  it('honors unsaved changes before opening purchase history', async () => {
+    const wrapper = render()
+    await edit(wrapper)
+    wrapper.getComponent(ClientProfileForm).vm.$emit('dirty', true)
+    await choose(wrapper, 'purchases')
+    expect(confirmation(wrapper, 'Cambios sin guardar').props('open')).toBe(true)
+    expect(wrapper.findComponent(ClientPurchasesPanel).exists()).toBe(false)
+    confirmation(wrapper, 'Cambios sin guardar').vm.$emit('confirm')
+    await flushPromises()
+    expect(wrapper.findComponent(ClientPurchasesPanel).exists()).toBe(true)
   })
 })

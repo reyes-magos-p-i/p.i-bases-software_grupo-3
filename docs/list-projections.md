@@ -5,23 +5,23 @@ Solo `ADMINISTRATOR`. No requiere cambios de base de datos adicionales a los de
 
 ## Endpoints
 
-| Método | Ruta | Uso |
-| --- | --- | --- |
-| `GET` | `/api/projections` | Listado paginado con filtros |
-| `GET` | `/api/projections/filter-options` | Sucursales, todas las salas y películas con proyecciones |
-| `GET` | `/api/projections/:id` | Detalle de una proyección |
+| Método | Ruta                              | Uso                                                      |
+| ------ | --------------------------------- | -------------------------------------------------------- |
+| `GET`  | `/api/projections`                | Listado paginado con filtros                             |
+| `GET`  | `/api/projections/filter-options` | Sucursales, todas las salas y películas con proyecciones |
+| `GET`  | `/api/projections/:id`            | Detalle de una proyección                                |
 
 Parámetros de `GET /api/projections` (todos opcionales y combinables):
 
-| Parámetro | Valores |
-| --- | --- |
-| `page` | Entero ≥ 1 (por defecto 1) |
-| `pageSize` | 10, 25, 50 o 100 (por defecto 10) |
-| `search` | Texto (máx. 100) sobre el título o el ID de la proyección |
-| `status` | `ACTIVE`, `INACTIVE`, `CANCELLED`, `IN_PROGRESS`, `FINISHED` |
-| `branchId`, `theaterId`, `movieId` | Identificadores de las listas de `filter-options` |
-| `dateFrom`, `dateTo` | `AAAA-MM-DD`, sobre la fecha de proyección |
-| `timeFrom`, `timeTo` | `HH:mm`, sobre la hora de inicio |
+| Parámetro                          | Valores                                                      |
+| ---------------------------------- | ------------------------------------------------------------ |
+| `page`                             | Entero ≥ 1 (por defecto 1)                                   |
+| `pageSize`                         | 10, 25, 50 o 100 (por defecto 10)                            |
+| `search`                           | Texto (máx. 100) sobre el título o el ID de la proyección    |
+| `status`                           | `ACTIVE`, `INACTIVE`, `CANCELLED`, `IN_PROGRESS`, `FINISHED` |
+| `branchId`, `theaterId`, `movieId` | Identificadores de las listas de `filter-options`            |
+| `dateFrom`, `dateTo`               | `AAAA-MM-DD`, sobre la fecha de proyección                   |
+| `timeFrom`, `timeTo`               | `HH:mm`, sobre la hora de inicio                             |
 
 Respuesta: `{ items, total, page, pageSize, totalPages }`, ordenada por hora de inicio.
 Cada elemento incluye película, sucursal, sala, inicio, fin, estado y precio.
@@ -39,3 +39,7 @@ Columnas en el orden del diseño de Figma: Película, ID Proyección, Sala, Fech
 Duración, Precio, Estado y Acciones (ver, modificar y cancelar). La celda Fecha
 muestra la fecha en negrita con la hora de inicio debajo. La sucursal no es una
 columna; se consulta en el detalle o con el filtro «Sucursal».
+
+## Precio de referencia
+
+El precio listado corresponde a General sin asiento VIP. Los recargos de función forman parte de ese valor; las categorías Niño y Adulto mayor y el asiento se calculan al comprar. Véase [Tarifas](./ticket-purchase.md).

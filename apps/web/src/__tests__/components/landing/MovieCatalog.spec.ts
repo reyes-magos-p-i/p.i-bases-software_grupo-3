@@ -1,6 +1,6 @@
 import placeholderImage from '@/assets/images/placeholder.svg'
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, RouterLinkStub } from '@vue/test-utils'
 import MovieCatalog from '@/components/landing/MovieCatalog.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import type { PortalMovie } from '@/types/movie'
@@ -14,11 +14,15 @@ describe('MovieCatalog', () => {
   const render = (props: { movies: readonly PortalMovie[]; loading?: boolean; error?: string }) =>
     mount(MovieCatalog, {
       props,
-      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+      global: { stubs: { RouterLink: RouterLinkStub } },
     })
   it('renders the complete supplied catalog in order, including movies sharing a title', async () => {
     const wrapper = render({ movies })
     expect(wrapper.findAll('.movie-card')).toHaveLength(6)
+    expect(wrapper.findAllComponents(RouterLinkStub)[0]!.props('to')).toEqual({
+      name: 'buy-tickets',
+      query: { movieId: 1 },
+    })
     expect(
       wrapper.findAll('img').map((image) => image.attributes('src')?.split('/').slice(-1)[0]),
     ).toEqual(['1.jpg', '2.jpg', '3.jpg', '4.jpg', '5.jpg', '6.jpg'])

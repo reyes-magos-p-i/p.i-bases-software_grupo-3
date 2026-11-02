@@ -130,4 +130,14 @@ describe('App', () => {
       wrapper.unmount()
     }
   })
+  it('requires a client session before opening the purchase route', async () => {
+    clearClientSession()
+    await router.push('/buy-tickets?movieId=2')
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(router.currentRoute.value.query).toMatchObject({ login: 'client', reason: 'required' })
+    const matched = router.resolve('/buy-tickets?movieId=2').matched[0]!
+    expect(matched.meta.requiresClient).toBe(true)
+    const component = matched.components!.default as () => Promise<unknown>
+    expect(await component()).toBeDefined()
+  })
 })

@@ -22,16 +22,16 @@ más antigua. Solo incluye las facturas **pagadas** (`PAID`) y **canceladas**
 (`CANCELLED`); las pendientes (`PENDING`) y fallidas (`FAILED`) todavía no son
 transacciones.
 
-| Columna | Valor | Ejemplo |
-|---|---|---|
-| IdTransacción | `FAC-` y el ID de la factura con 6 dígitos | FAC-000123 |
-| Fecha | Fecha de compra, hora de Costa Rica | 12/10/2026 |
-| Cliente | Nombre completo y, debajo, el correo | Carlos Mora |
+| Columna            | Valor                                                            | Ejemplo                                    |
+| ------------------ | ---------------------------------------------------------------- | ------------------------------------------ |
+| IdTransacción      | `FAC-` y el ID de la factura con 6 dígitos                       | FAC-000123                                 |
+| Fecha              | Fecha de compra, hora de Costa Rica                              | 12/10/2026                                 |
+| Cliente            | Nombre completo y, debajo, el correo                             | Carlos Mora                                |
 | Película y función | Película, sala y fecha y hora de la función; debajo, la sucursal | Ecos del Volcán – Sala 1, 12/10/2026 17:00 |
-| Boletos | Suma de las cantidades de las líneas de tipo `TICKET` | 1 |
-| Total | Total cobrado, en colones | ₡3500 |
-| Estado | «Pagada» o «Cancelada» | Pagada |
-| Acciones | «Ver detalle» | |
+| Boletos            | Suma de las cantidades de las líneas de tipo `TICKET`            | 1                                          |
+| Total              | Total cobrado, en colones                                        | ₡3500                                      |
+| Estado             | «Pagada» o «Cancelada»                                           | Pagada                                     |
+| Acciones           | «Ver detalle»                                                    |                                            |
 
 - El cliente ve la misma factura en su historial como `ORD-000123`.
 - Los montos se muestran como en el plan de pruebas, sin separador de miles (`₡11500`).
@@ -57,14 +57,14 @@ implementa.
 
 ## Mensajes
 
-| Situación | Texto |
-|---|---|
+| Situación                            | Texto                                                                        |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
 | Error de red o del servidor (UT-045) | No se pudieron cargar las transacciones, intenta de nuevo (con «Reintentar») |
-| Sin transacciones (UT-046) | No hay transacciones disponibles |
-| Búsqueda o filtros sin coincidencias | No se encontraron transacciones |
-| `403` | No tiene permisos para acceder a esta sección |
-| `401` | Vuelve al inicio de sesión |
-| Fallan las opciones de filtros | No se pudieron cargar los filtros. (con «Reintentar») |
+| Sin transacciones (UT-046)           | No hay transacciones disponibles                                             |
+| Búsqueda o filtros sin coincidencias | No se encontraron transacciones                                              |
+| `403`                                | No tiene permisos para acceder a esta sección                                |
+| `401`                                | Vuelve al inicio de sesión                                                   |
+| Fallan las opciones de filtros       | No se pudieron cargar los filtros. (con «Reintentar»)                        |
 
 ## Detalle (SCRUM-18)
 
@@ -72,23 +72,23 @@ implementa.
 `GET /api/transactions/:id`. Muestra solo la transacción seleccionada: al abrir otra, se
 borran los datos anteriores antes de cargar la nueva (UT-057).
 
-| Grupo | Campos |
-|---|---|
-| 1 Resumen de la transacción | IdTransacción, Fecha, Hora de compra, Estado |
-| 2 Cliente | Cliente, Correo electrónico |
-| 3 Función | Película y función, Sucursal, Boletos |
-| 4 Productos y pago | Tabla de productos (Producto, Cantidad, Precio unitario, Subtotal y Total), Total y Método de pago |
+| Grupo                       | Campos                                                                                             |
+| --------------------------- | -------------------------------------------------------------------------------------------------- |
+| 1 Resumen de la transacción | IdTransacción, Fecha, Hora de compra, Estado                                                       |
+| 2 Cliente                   | Cliente, Correo electrónico                                                                        |
+| 3 Función                   | Película y función, Sucursal, Boletos                                                              |
+| 4 Productos y pago          | Tabla de productos (Producto, Cantidad, Precio unitario, Subtotal y Total), Total y Método de pago |
 
 - **Método de pago:** con tarjeta, «Tarjeta Visa terminada en 4242» (solo se guardan la
   marca y los últimos 4 dígitos); en efectivo, «Efectivo».
 - **Precio unitario:** es el precio cobrado en la compra, así que un cambio posterior de
   precio no altera facturas viejas. Primero van los boletos y después los comestibles.
 
-| Situación | Texto |
-|---|---|
-| Error de red o del servidor (UT-053) | No se pudo cargar el detalle, intenta de nuevo (con «Reintentar») |
-| No existe, o está pendiente o fallida (UT-054) | No fue posible cargar el detalle de la transacción |
-| `403` | No tiene permisos para acceder a esta sección |
+| Situación                                      | Texto                                                             |
+| ---------------------------------------------- | ----------------------------------------------------------------- |
+| Error de red o del servidor (UT-053)           | No se pudo cargar el detalle, intenta de nuevo (con «Reintentar») |
+| No existe, o está pendiente o fallida (UT-054) | No fue posible cargar el detalle de la transacción                |
+| `403`                                          | No tiene permisos para acceder a esta sección                     |
 
 Si la transacción ya no existe, además de mostrar el mensaje se recarga la lista.
 
@@ -116,3 +116,7 @@ Si la transacción ya no existe, además de mostrar el mensaje se recarga la lis
 
 En `apps/api`: `npm test -- src/transactions`. En `apps/web`:
 `npx vitest run src/__tests__/components/transactions src/__tests__/utils/transaction-format.spec.ts src/__tests__/services/transaction.service.spec.ts`.
+
+## Compras simuladas e instantáneas
+
+El método `SIMULATED` se muestra como «Pago simulado», sin tarjeta ni Stripe. Las nuevas compras guardan una instantánea de la función y del correo al comprar; las transacciones consultan esos datos cuando están presentes y conservan el comportamiento histórico en las demás. Véase [Compra de boletos](./ticket-purchase.md).

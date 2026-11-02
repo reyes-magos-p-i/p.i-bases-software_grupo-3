@@ -74,7 +74,9 @@ describe('MovieFunctionsRepository', () => {
     expect(database.query).toHaveBeenCalledTimes(1);
     const sql = database.query.mock.calls[0][0] as string;
     expect(sql).toContain("mf.status = 'ACTIVE'");
-    expect(sql).toContain('mf.start_time > SYSTIMESTAMP');
+    expect(sql).toContain(
+      "mf.start_time > CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP)",
+    );
     expect(sql).toContain('GROUP BY mf.movie_id');
     expect(sql).toContain('UNION ALL');
     expect(sql).toContain('ORDER BY u.next_start, m.movie_id');

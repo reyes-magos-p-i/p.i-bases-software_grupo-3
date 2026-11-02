@@ -48,7 +48,7 @@ export interface TransactionLine {
 
 // Card payments keep only the brand Stripe returns (e.g. "visa") and the last 4 digits.
 export interface TransactionDetail extends TransactionListItem {
-  paymentMethod: 'CARD' | 'CASH'
+  paymentMethod: 'CARD' | 'CASH' | 'SIMULATED'
   cardBrand: string | null
   cardLast4: string | null
   lines: TransactionLine[]
