@@ -7,12 +7,15 @@ import {
   getMyPurchases,
   getMyPurchase,
   purchaseError,
+  getTicketEmailStatus,
+  resendPurchaseTickets,
 } from '@/services/purchase.service'
 const { api } = vi.hoisted(() => ({ api: { get: vi.fn(), post: vi.fn() } }))
 vi.mock('@/services/api', () => ({ getApi: () => api }))
 const receipt = {
   id: 12,
   reference: 'ORD-000012',
+  qrPayload: JSON.stringify({ type: 'CINETADEL_PURCHASE', version: 1, reference: 'ORD-000012' }),
   purchasedAt: '2026-11-01T12:00:00-06:00',
   status: 'PAID',
   buyerEmail: 'guest@example.com',
@@ -46,6 +49,7 @@ const receipt = {
       title: 'Película',
       startsAt: '2099-01-01T20:00:00-06:00',
       functionStatus: 'ACTIVE',
+      branchName: 'Central',
       category: 'GENERAL',
       unitPrice: 3000,
     },
@@ -60,6 +64,32 @@ vi.mock('@/services/authService', () => ({
   }),
 }))
 describe('Purchase API', () => {
+  it('queries delivery status and requests a resend using the authenticated identity', async () => {
+    const status = {
+      status: 'PENDING',
+      recipient: 'client@example.com',
+      sentAt: null,
+      retryAfter: 60,
+    }
+    api.get.mockResolvedValueOnce({ data: status })
+    api.post.mockResolvedValueOnce({ data: status })
+    const controller = new AbortController()
+    expect(await getTicketEmailStatus(12, controller.signal)).toEqual(status)
+    expect(await resendPurchaseTickets(12, controller.signal)).toEqual(status)
+    expect(api.get).toHaveBeenCalledWith(
+      '/purchases/me/12/email-status',
+      expect.objectContaining({
+        signal: controller.signal,
+        headers: { Authorization: 'Bearer client-token' },
+        timeout: 10000,
+      }),
+    )
+    expect(api.post).toHaveBeenCalledWith(
+      '/purchases/me/12/resend-tickets',
+      {},
+      expect.objectContaining({ signal: controller.signal, withCredentials: false }),
+    )
+  })
   beforeEach(() => {
     vi.resetAllMocks()
     api.get.mockResolvedValue({ data: { id: 12 } })

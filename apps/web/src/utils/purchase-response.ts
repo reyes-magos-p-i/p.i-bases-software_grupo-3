@@ -1,4 +1,4 @@
-import type { GuestPurchaseReceipt, PurchaseReceipt } from '@/types/purchase'
+import type { GuestPurchaseReceipt, PurchaseReceipt, TicketEmailStatus } from '@/types/purchase'
 import { validEmail } from './user-validation'
 import { validGuestPurchaseCode } from './guest-purchase-code'
 
@@ -55,6 +55,7 @@ function validTicket(value: unknown) {
     typeof value.title === 'string' &&
     date(value.startsAt) &&
     typeof value.functionStatus === 'string' &&
+    typeof value.branchName === 'string' &&
     category(value.category) &&
     money(value.unitPrice)
   )
@@ -63,6 +64,7 @@ function validHeader(value: Record<string, unknown>) {
   return (
     positiveId(value.id) &&
     value.reference === `ORD-${String(value.id).padStart(6, '0')}` &&
+    typeof value.qrPayload === 'string' &&
     date(value.purchasedAt) &&
     ['PAID', 'CANCELLED'].includes(String(value.status)) &&
     typeof value.buyerEmail === 'string' &&
@@ -92,4 +94,25 @@ export function readGuestPurchaseReceipt(value: unknown): GuestPurchaseReceipt {
   )
     throw new PurchaseResponseError()
   return { ...receipt, accessCode: value.accessCode }
+}
+
+export function readTicketEmailStatus(value: unknown): TicketEmailStatus {
+  if (
+    !isRecord(value) ||
+    !['NOT_REQUESTED', 'PENDING', 'SENDING', 'SENT', 'FAILED', 'UNKNOWN'].includes(
+      String(value.status),
+    ) ||
+    !(
+      value.recipient === null ||
+      (typeof value.recipient === 'string' && validEmail(value.recipient))
+    ) ||
+    !(value.sentAt === null || date(value.sentAt)) ||
+    typeof value.retryAfter !== 'number' ||
+    !Number.isInteger(value.retryAfter) ||
+    value.retryAfter < 0 ||
+    value.retryAfter > 60
+  ) {
+    throw new PurchaseResponseError()
+  }
+  return value as unknown as TicketEmailStatus
 }
