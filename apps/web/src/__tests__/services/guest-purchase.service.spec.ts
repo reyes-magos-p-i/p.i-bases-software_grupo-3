@@ -6,12 +6,15 @@ import {
   identifyGuestBuyer,
   confirmGuestPurchase,
   lookupGuestPurchase,
+  getGuestTicketEmailStatus,
+  resendGuestPurchaseTickets,
 } from '@/services/guest-purchase.service'
 const { api } = vi.hoisted(() => ({ api: { get: vi.fn(), post: vi.fn() } }))
 vi.mock('@/services/api', () => ({ getApi: () => api }))
 const receipt = {
   id: 12,
   reference: 'ORD-000012',
+  qrPayload: JSON.stringify({ type: 'CINETADEL_PURCHASE', version: 1, reference: 'ORD-000012' }),
   purchasedAt: '2026-11-01T12:00:00-06:00',
   status: 'PAID',
   buyerEmail: 'guest@example.com',
@@ -45,6 +48,7 @@ const receipt = {
       title: 'Película',
       startsAt: '2099-01-01T20:00:00-06:00',
       functionStatus: 'ACTIVE',
+      branchName: 'Central',
       category: 'GENERAL',
       unitPrice: 3000,
     },
@@ -55,6 +59,25 @@ describe('Guest purchase API', () => {
     vi.resetAllMocks()
     api.get.mockResolvedValue({ data: { id: 12 } })
     api.post.mockResolvedValue({ data: { id: 12 } })
+  })
+  it('keeps the private credential in the body of email status and resend requests', async () => {
+    const status = { status: 'FAILED', recipient: 'guest@example.com', sentAt: null, retryAfter: 0 }
+    api.post.mockResolvedValue({ data: status })
+    const controller = new AbortController()
+    expect(await getGuestTicketEmailStatus('private', controller.signal)).toEqual(status)
+    expect(await resendGuestPurchaseTickets('private', controller.signal)).toEqual(status)
+    expect(api.post.mock.calls).toEqual([
+      [
+        '/guest-purchases/email-status',
+        { accessCode: 'private' },
+        { signal: controller.signal, timeout: 10000 },
+      ],
+      [
+        '/guest-purchases/resend-tickets',
+        { accessCode: 'private' },
+        { signal: controller.signal, timeout: 10000 },
+      ],
+    ])
   })
   it('uses public purchase endpoints without a client identity or credentials', async () => {
     const controller = new AbortController()

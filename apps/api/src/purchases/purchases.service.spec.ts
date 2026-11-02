@@ -1,6 +1,7 @@
 import { PurchasesService } from './purchases.service';
 import type { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import type { PurchasesRepository } from './purchases.repository';
+import type { TicketEmailService } from './ticket-email.service';
 describe('PurchasesService', () => {
   const catalog = {
       getMovie: jest.fn(),
@@ -9,11 +10,30 @@ describe('PurchasesService', () => {
       getSeats: jest.fn(),
     },
     purchases = { confirm: jest.fn(), list: jest.fn(), findOne: jest.fn() };
+  const emails = { status: jest.fn(), request: jest.fn() };
   const service = new PurchasesService(
     catalog as unknown as PurchaseCatalogRepository,
     purchases as unknown as PurchasesRepository,
+    emails as unknown as TicketEmailService,
   );
   beforeEach(() => jest.resetAllMocks());
+  it('checks ownership before querying or requesting a ticket email', async () => {
+    const receipt = { id: 5 };
+    purchases.findOne.mockResolvedValue(receipt);
+    emails.status.mockResolvedValue({ status: 'SENT' });
+    emails.request.mockResolvedValue({ status: 'PENDING' });
+    await expect(service.emailStatus(8, 5)).resolves.toEqual({
+      status: 'SENT',
+    });
+    await expect(service.resendTickets(8, 5)).resolves.toEqual({
+      status: 'PENDING',
+    });
+    expect(emails.status).toHaveBeenCalledWith(receipt);
+    expect(emails.request).toHaveBeenCalledWith(receipt, 8);
+    purchases.findOne.mockRejectedValue(new Error('not owned'));
+    await expect(service.resendTickets(9, 5)).rejects.toThrow('not owned');
+    expect(emails.request).toHaveBeenCalledTimes(1);
+  });
   it('returns the movie and its current functions or a missing movie error', async () => {
     catalog.getMovie
       .mockResolvedValueOnce({ id: 2 })

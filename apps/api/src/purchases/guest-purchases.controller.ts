@@ -71,4 +71,19 @@ export class GuestPurchasesController {
   lookup(@Body() data: GuestPurchaseLookupDto) {
     return this.service.lookup(data.accessCode);
   }
+  @Post('email-status')
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(200)
+  @UseGuards(SessionOriginGuard)
+  emailStatus(@Body() data: GuestPurchaseLookupDto) {
+    return this.service.emailStatus(data.accessCode);
+  }
+  @Post('resend-tickets')
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(202)
+  @UseGuards(SessionOriginGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  resendTickets(@Body() data: GuestPurchaseLookupDto) {
+    return this.service.resendTickets(data.accessCode);
+  }
 }

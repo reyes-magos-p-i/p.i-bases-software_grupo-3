@@ -1,6 +1,6 @@
 # Compra de boletos con sesión iniciada — SCRUM-29
 
-El cliente inicia la compra desde una película del catálogo, elige sucursal y fecha, selecciona una función futura, marca asientos y asigna una categoría a cada boleto. El resumen muestra película, sucursal, sala, horario, asientos, categorías e importes finales. «Pagar» registra una factura pagada mediante **pago simulado**, sus líneas y los boletos. No se procesa un cobro real, no se solicita tarjeta ni se envían correos. La confirmación y el detalle del historial muestran un QR identificativo de la compra para un futuro sistema de verificación en el cine.
+El cliente inicia la compra desde una película del catálogo, elige sucursal y fecha, selecciona una función futura, marca asientos y asigna una categoría a cada boleto. El resumen muestra película, sucursal, sala, horario, asientos, categorías e importes finales. «Pagar» registra una factura pagada mediante **pago simulado**, sus líneas y los boletos. No se procesa un cobro real ni se solicita tarjeta. Tras registrar la compra se solicita automáticamente el envío de sus boletos por correo. La confirmación y el detalle del historial muestran un QR identificativo de la compra para un futuro sistema de verificación en el cine.
 
 ## Presentación y código QR de compra
 
@@ -8,9 +8,27 @@ Los cuatro pasos siguen una barra de progreso que se llena al avanzar y respeta 
 
 La selección de asientos avisa que no los reserva hasta pagar. Las pantallas del cliente presentan categorías, formato, asiento VIP, importes finales y total, sin explicar la fórmula interna ni mostrar bases y recargos por separado. El resumen y la confirmación no incluyen mensajes sobre la implementación del pago.
 
-Cada compra registrada tiene un QR generado localmente mediante `qrcode`, con margen de lectura y los colores de las variables existentes. El componente común recibe un texto y no conoce el dominio de compras. En este flujo codifica un objeto JSON con `type: "CINETADEL_PURCHASE"`, `version: 1` y la referencia de la compra en `reference`. No incluye enlaces, datos personales ni credenciales. La confirmación y el historial generan el mismo contenido a partir de la referencia existente, sin almacenar una imagen ni añadir campos a Oracle.
+Cada compra registrada tiene un QR generado localmente mediante `qrcode`, con margen de lectura y los colores de las variables existentes. El componente común recibe un texto y no conoce el dominio de compras. En este flujo codifica un objeto JSON con `type: "CINETADEL_PURCHASE"`, `version: 1` y la referencia de la compra en `reference`. No incluye enlaces, datos personales ni credenciales. El backend devuelve ese contenido canónico en `qrPayload`; la confirmación, el historial y el correo lo reutilizan. La imagen no se almacena en Oracle.
 
 Un lector común puede mostrar ese contenido como texto; el QR no abre páginas ni ejecuta acciones dentro del sistema. La consulta del historial sigue utilizando los endpoints protegidos y la comprobación de pertenencia existente. El código identifica la compra, pero todavía no acredita el ingreso al cine: la futura verificación deberá autenticar al personal, comprobar la compra y sus boletos y definir protección contra falsificación y reutilización. Esta historia no incorpora un lector, un endpoint de validación ni un registro de ingreso.
+
+## Envío de boletos por correo — SCRUM-323
+
+Cada nueva compra solicita un envío inicial para el cliente o invitado. La tabla `PURCHASE_TICKET_EMAILS` registra una única solicitud inicial dentro de la transacción de compra. Un procesador consulta los pendientes cada dos segundos, toma hasta tres por lote y los reclama mediante una actualización condicional para evitar envíos simultáneos entre instancias. El SMTP se ejecuta después del commit; sus fallos no revierten facturas, líneas ni boletos ni bloquean la confirmación HTTP de compra.
+
+El correo incluye referencia, una sección por boleto con película, fecha y hora de Costa Rica, sucursal, sala, fila, asiento y categoría, y un QR PNG de 512 píxeles con margen de lectura y corrección M. El QR es el único adjunto, generado en memoria y referenciado por CID, sin consultas a servicios externos. La plantilla usa los cinco colores semánticos de `apps/web/src/styles/variables.css`, incluidos como recurso durante el build de Nest. Los valores se aplican en estilos inline compatibles con correo y todos los datos variables se escapan para HTML. Hay una versión de texto alternativo.
+
+El QR conserva el protocolo de compra existente y no incluye enlaces, correos ni credenciales. El código privado del invitado se presenta por separado en el correo. Los reenvíos consultan los boletos vigentes, incluida su sucursal actual si hubo reprogramación, y la identifican sin cambiar el QR de la compra. Los importes históricos se conservan.
+
+La confirmación muestra el estado persistido y permite solicitar otro envío. Los clientes usan `GET /purchases/me/{id}/email-status` y `POST /purchases/me/{id}/resend-tickets`, con sesión, contraseña vigente y pertenencia a la compra. Los invitados usan `POST /guest-purchases/email-status` y `POST /guest-purchases/resend-tickets`, presentando el código privado únicamente en el cuerpo. Las operaciones de invitado y los reenvíos autenticados exigen Origin permitido. Las respuestas privadas llevan `Cache-Control: no-store`. El destinatario no se recibe del navegador: el reenvío de cliente usa su correo verificado actual; el invitado conserva el de la factura.
+
+Los reenvíos responden 202 cuando la solicitud queda registrada. Se limita a cinco solicitudes por minuto y a un nuevo intento por compra cada 60 segundos; un envío pendiente o en curso produce 409. Las compras canceladas o sin boletos no se reenvían. Las compras anteriores no generan envíos automáticos retroactivos; el servicio puede registrar su primer envío ante una solicitud manual autorizada.
+
+Estados: `NOT_REQUESTED` para compras sin solicitud, `PENDING`, `SENDING`, `SENT`, `FAILED` y `UNKNOWN`. `SENT` confirma que SMTP aceptó al destinatario, no que el mensaje llegó a su bandeja de entrada. Un fallo antes de contactar SMTP o un rechazo explícito deja `FAILED`. Una excepción después de iniciar la comunicación deja `UNKNOWN`; también se aplica a un envío que permanece `SENDING` por diez minutos tras una interrupción. Un fallo al persistir el resultado no vuelve a enviar el mensaje automáticamente. El identificador de intento impide que una finalización tardía sobrescriba un reenvío posterior.
+
+Solo se procesan automáticamente solicitudes pendientes. Los fallos y resultados desconocidos requieren reenvío manual; se pide revisar el buzón antes de repetir un resultado incierto. SMTP no garantiza envío exactamente una vez: un reenvío manual tras un resultado desconocido podría duplicar un mensaje que el proveedor ya hubiera aceptado. La interfaz consulta cada dos segundos durante un máximo de 30 repeticiones; después permite comprobar el estado explícitamente. Un timeout del reenvío provoca una consulta de estado, no otra solicitud de envío ni una confirmación falsa de éxito.
+
+Aplicar `database/migrations/20261102_purchase_ticket_email.sql` antes de desplegar la API. El bootstrap la incluye después de la migración de compras. No requiere nuevas variables de entorno: utiliza el transporte SMTP existente. Reiniciar la API inicia el procesador; las pruebas lo sustituyen por mocks cuando no forma parte del escenario.
 
 ## Tarifas aprobadas (CRC)
 
@@ -57,7 +75,7 @@ La confirmación devuelve un código privado compacto `<id>.<secreto>`, por ejem
 
 El footer incluye «Consultar compra», una página pública que envía el código en el cuerpo de `POST /guest-purchases/lookup`, nunca en la URL. Devuelve exclusivamente el comprobante identificado, con los boletos y el mismo QR de verificación futura del cine. El código de consulta es una credencial privada: quien lo tenga puede leer esa compra. No inicia sesión ni permite acceder al perfil, al historial personal o a otras compras.
 
-Por decisión de alcance, esta historia no envía correos, boletos ni reenvíos. El comprador debe guardar el código mostrado; su envío al correo queda para la historia de notificaciones. Introducir dos veces una dirección comprueba su coincidencia y formato, no el acceso al buzón.
+La notificación por correo (SCRUM-323) envía los boletos, el QR y el código privado de consulta a la dirección original de la compra. El código sigue mostrándose al terminar y debe guardarse por si el correo no llega. Introducir dos veces una dirección comprueba su coincidencia y formato, no el acceso al buzón.
 
 Antes de confirmar se guarda una instantánea del intento en `sessionStorage`: referencia privada de solicitud, selección, resumen y comprador, sin tokens de autenticación. Si no puede guardarse, no se envía el pago. Una recarga o regreso al flujo en la misma pestaña recupera ese intento en el resumen y pide reintentar explícitamente; nunca paga automáticamente ni cambia de película mientras exista un resultado pendiente. Los intentos de cuenta solo se restauran para el cliente original. El cierre de sesión o cambio de cuenta elimina el estado privado mostrado; el historial sigue siendo la vía de consulta para compras autenticadas. Este respaldo no se conserva al cerrar la pestaña y no sustituye guardar el código final.
 
@@ -139,3 +157,16 @@ Las regresiones comprueban el 404 después de un timeout para clientes e invitad
 | Web        |             112 |              1633 |         95,47 % |                  100,00 % |                           98,82 % |
 
 Se ejecutaron las suites completas con dos workers y mocks, los builds, las comprobaciones de tipos y ESLint. La medición nueva cruza LCOV con las líneas modificadas frente a HEAD, sin incluir pruebas; no sustituye el análisis de SonarQube del PR. El proyecto de tipos de Vitest incorpora `ES2021.String` para comprobar `replaceAll`; la aplicación ya utiliza las bibliotecas ES2022. No se modificó el pipeline ni se realizaron operaciones contra Oracle durante las pruebas.
+
+### Verificación del envío de boletos
+
+Las pruebas con mocks verifican registro inicial sin commit independiente, exclusión entre procesadores, reintentos de pago sin duplicar solicitudes, intervalo entre reenvíos, fallos y resultados inciertos del SMTP, interrupciones del procesador y protección contra finalizaciones tardías. Comprueban el correo verificado actual del cliente, el correo original y código privado del invitado, propiedad y origen de las solicitudes, boletos reprogramados, HTML escapado, adjuntos PNG y correspondencia del contenido QR entre pantalla y correo. La interfaz prueba espera limitada, cancelación de consultas, cambio de sesión y mensajes de reenvío en la esquina inferior derecha sin perder la compra.
+
+| Aplicación | Suites/archivos | Pruebas aprobadas | Líneas globales | Líneas nuevas/modificadas | Cobertura nueva de líneas y ramas |
+| ---------- | --------------: | ----------------: | --------------: | ------------------------: | --------------------------------: |
+| API        |             120 |              2579 |         98,11 % |                  100,00 % |                           94,65 % |
+| Web        |             114 |              1661 |         95,57 % |                  100,00 % |                           98,67 % |
+
+La medición local cruza LCOV con los cambios frente a HEAD y los archivos nuevos de producción: 153/153 líneas ejecutables nuevas o modificadas en API y 102/102 en web. SonarQube utilizará la referencia de código nuevo configurada en el PR. Pasan ESLint, Prettier, tipos y builds. Se interpretaron el OpenAPI y sus 73 referencias internas. El build de Nest incluye la paleta y se comprobó su lectura desde el módulo compilado.
+
+La migración se aplicó en Oracle y se verificaron sus columnas. Las pruebas funcionales usan persistencia y SMTP simulados: no crean compras ni envían correos reales. No se modificaron workflows ni configuración de SonarQube.

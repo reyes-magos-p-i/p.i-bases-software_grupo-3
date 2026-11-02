@@ -1,11 +1,22 @@
 import {
   purchaseQuote,
+  purchaseQrPayload,
   requireAvailableFunction,
   requireGuestEmailAvailable,
   selectionHash,
   selectionPositions,
 } from './purchase-rules';
 import type { PurchaseFunction, PurchaseSeat } from './purchase.types';
+it('keeps the transaction QR stable and free of guest access credentials', () => {
+  const payload = purchaseQrPayload('ORD-000012');
+  expect(JSON.parse(payload)).toEqual({
+    type: 'CINETADEL_PURCHASE',
+    version: 1,
+    reference: 'ORD-000012',
+  });
+  expect(purchaseQrPayload('ORD-000012')).toBe(payload);
+  expect(purchaseQrPayload('ORD-000013')).not.toBe(payload);
+});
 const context: PurchaseFunction = {
   id: 4,
   movieId: 2,

@@ -1,5 +1,5 @@
 import { getApi } from './api'
-import { readGuestPurchaseReceipt } from '@/utils/purchase-response'
+import { readGuestPurchaseReceipt, readTicketEmailStatus } from '@/utils/purchase-response'
 import type {
   GuestBuyer,
   PurchaseFunction,
@@ -57,6 +57,28 @@ export async function lookupGuestPurchase(accessCode: string, signal?: AbortSign
     (
       await getApi().post<unknown>(
         '/guest-purchases/lookup',
+        { accessCode },
+        { signal, timeout: 10000 },
+      )
+    ).data,
+  )
+}
+export async function getGuestTicketEmailStatus(accessCode: string, signal?: AbortSignal) {
+  return readTicketEmailStatus(
+    (
+      await getApi().post<unknown>(
+        '/guest-purchases/email-status',
+        { accessCode },
+        { signal, timeout: 10000 },
+      )
+    ).data,
+  )
+}
+export async function resendGuestPurchaseTickets(accessCode: string, signal?: AbortSignal) {
+  return readTicketEmailStatus(
+    (
+      await getApi().post<unknown>(
+        '/guest-purchases/resend-tickets',
         { accessCode },
         { signal, timeout: 10000 },
       )

@@ -14,10 +14,13 @@ import { UsersRepository } from '../users/users.repository';
 import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 import { PasswordRecoverySender } from '../auth/notifications/password-recovery-sender';
 import { EmailVerificationSender } from '../auth/notifications/email-verification-sender';
+import { TicketEmailService } from './ticket-email.service';
+import { TicketEmailSender } from './notifications/ticket-email-sender';
 describe('Purchase HTTP with mocked persistence', () => {
   let app: INestApplication, server: Server, jwt: JwtService;
   const origin = 'https://cinema.example',
     secret = randomUUID();
+  const emails = { status: jest.fn(), request: jest.fn() };
   const clients = {
       findById: jest.fn(),
       findPasswordStatus: jest.fn(),
@@ -85,6 +88,8 @@ describe('Purchase HTTP with mocked persistence', () => {
     storage.confirm.mockResolvedValue({ id: 12 });
     storage.list.mockResolvedValue({ items: [] });
     storage.findOne.mockResolvedValue({ id: 12 });
+    emails.status.mockResolvedValue({ status: 'SENT' });
+    emails.request.mockResolvedValue({ status: 'PENDING' });
     const module = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
@@ -112,6 +117,10 @@ describe('Purchase HTTP with mocked persistence', () => {
       .useValue(catalog)
       .overrideProvider(PurchasesRepository)
       .useValue(storage)
+      .overrideProvider(TicketEmailService)
+      .useValue(emails)
+      .overrideProvider(TicketEmailSender)
+      .useValue({})
       .compile();
     jwt = module.get(JwtService);
     app = module.createNestApplication({ logger: false });
@@ -128,6 +137,29 @@ describe('Purchase HTTP with mocked persistence', () => {
   });
   afterEach(async () => {
     await app?.close();
+  });
+  it('protects ticket email routes and returns an asynchronous resend acknowledgement', async () => {
+    const response = await request(server)
+      .get('/api/purchases/me/12/email-status')
+      .auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('SENT');
+    expect(response.headers['cache-control']).toBe('no-store');
+    const resend = await post('/me/12/resend-tickets', {});
+    expect(resend.status).toBe(202);
+    expect(resend.body.status).toBe('PENDING');
+    expect(emails.request).toHaveBeenCalledWith({ id: 12 }, 8);
+    const anonymous = await request(server).get(
+      '/api/purchases/me/12/email-status',
+    );
+    expect(anonymous.status).toBe(401);
+    const foreignOrigin = await request(server)
+      .post('/api/purchases/me/12/resend-tickets')
+      .set('Origin', 'https://foreign.example')
+      .auth(token(), { type: 'bearer' })
+      .send({});
+    expect(foreignOrigin.status).toBe(403);
+    expect(emails.request).toHaveBeenCalledTimes(1);
   });
   it('loads functions, physical seats and an authoritative quote', async () => {
     const functions = await request(server)

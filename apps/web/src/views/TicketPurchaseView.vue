@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
@@ -11,6 +11,8 @@ import SeatSelectionStep from '@/components/purchases/SeatSelectionStep.vue'
 import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
 import GuestBuyerStep from '@/components/purchases/GuestBuyerStep.vue'
 import GuestPurchaseAccess from '@/components/purchases/GuestPurchaseAccess.vue'
+import PurchaseEmailStatus from '@/components/purchases/PurchaseEmailStatus.vue'
+import { usePurchaseEmail } from '@/composables/usePurchaseEmail'
 import { useTicketPurchase } from '@/composables/useTicketPurchase'
 import { clearClientSession } from '@/services/client-session.service'
 const route = useRoute(),
@@ -47,9 +49,16 @@ const {
   error,
   notice,
 } = flow
+const emailNotice = ref(false)
+const ticketEmail = usePurchaseEmail(receipt, guestReceipt, (message, failed) => {
+  emailNotice.value = !failed
+  error.value = failed ? message : ''
+  notice.value = failed ? '' : message
+})
 function dismissNotice() {
   error.value = ''
   notice.value = ''
+  emailNotice.value = false
 }
 watch(
   () => route.query.movieId,
@@ -68,7 +77,7 @@ watch(
     <RouterLink to="/">← Volver al portal</RouterLink
     ><PurchaseStepper :step="step" :labels="labels" /><NotificationPopup
       v-if="error || notice"
-      :type="error ? 'error' : 'alert'"
+      :type="error ? 'error' : emailNotice ? 'success' : 'alert'"
       :message="error || notice"
       placement="bottom-right"
       :duration="uncertain ? 0 : 7000"
@@ -139,6 +148,15 @@ watch(
         </p>
         <GuestPurchaseAccess v-if="guestReceipt" :access-code="guestReceipt.accessCode" />
         <PurchaseSummary :purchase="receipt" />
+        <PurchaseEmailStatus
+          :status="ticketEmail.status.value"
+          :busy="ticketEmail.busy.value"
+          :checking="ticketEmail.checking.value"
+          :seconds="ticketEmail.seconds.value"
+          :error="ticketEmail.error.value"
+          @resend="ticketEmail.resend"
+          @check="ticketEmail.check"
+        />
       </section>
       <p v-if="!movie && !loading && !receipt">
         Elige una película en el portal para comenzar.

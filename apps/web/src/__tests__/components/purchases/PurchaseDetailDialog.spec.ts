@@ -20,6 +20,7 @@ const stubs = {
 const ord121 = {
   id: 121,
   reference: 'ORD-000121',
+  qrPayload: JSON.stringify({ type: 'CINETADEL_PURCHASE', version: 1, reference: 'ORD-000121' }),
   paymentMethod: 'CARD',
   cardBrand: 'visa',
   cardLast4: '4242',

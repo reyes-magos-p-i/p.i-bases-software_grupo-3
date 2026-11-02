@@ -154,3 +154,6 @@ export function purchaseQuote(
     version,
   };
 }
+export function purchaseQrPayload(reference: string): string {
+  return JSON.stringify({ type: 'CINETADEL_PURCHASE', version: 1, reference });
+}

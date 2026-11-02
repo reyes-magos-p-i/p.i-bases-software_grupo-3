@@ -18,10 +18,12 @@ import { PurchasesRepository } from './purchases.repository';
 import { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import { PurchaseThrottlerGuard } from './purchase-throttler.guard';
 import { guestPurchaseCode } from './guest-purchase-access';
+import { TicketEmailService } from './ticket-email.service';
 
 describe('Guest purchase HTTP with mocked persistence', () => {
   let app: INestApplication, server: Server;
   const origin = 'https://cinema.example';
+  const emails = { status: jest.fn(), request: jest.fn() };
   const clients = {
       findByEmail: jest.fn(),
       deleteExpiredPendingClientByEmail: jest.fn(),
@@ -74,6 +76,8 @@ describe('Guest purchase HTTP with mocked persistence', () => {
       accessCode: 'private',
     });
     repository.findGuest.mockResolvedValue({ id: 12, tickets: [{ id: 8 }] });
+    emails.status.mockResolvedValue({ status: 'FAILED' });
+    emails.request.mockResolvedValue({ status: 'PENDING' });
     const module = await Test.createTestingModule({
       imports: [ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }])],
       controllers: [GuestPurchasesController],
@@ -89,6 +93,7 @@ describe('Guest purchase HTTP with mocked persistence', () => {
         { provide: ClientsService, useValue: clients },
         { provide: PurchasesRepository, useValue: repository },
         { provide: PurchaseCatalogRepository, useValue: catalog },
+        { provide: TicketEmailService, useValue: emails },
       ],
     }).compile();
     app = module.createNestApplication({ logger: false });
@@ -106,6 +111,28 @@ describe('Guest purchase HTTP with mocked persistence', () => {
   });
   afterEach(async () => {
     await app?.close();
+  });
+  it('requires a valid code and origin for guest email routes without accepting a destination', async () => {
+    const accessCode = guestPurchaseCode(12, randomUUID());
+    const status = await post('/email-status', { accessCode });
+    expect(status.status).toBe(200);
+    expect(status.body.status).toBe('FAILED');
+    const resend = await post('/resend-tickets', { accessCode });
+    expect(resend.status).toBe(202);
+    expect(emails.request).toHaveBeenCalledWith({
+      id: 12,
+      tickets: [{ id: 8 }],
+    });
+    const invalid = await post('/resend-tickets', {
+      accessCode,
+      email: 'other@example.com',
+    });
+    expect(invalid.status).toBe(400);
+    const noOrigin = await request(server)
+      .post('/api/guest-purchases/email-status')
+      .send({ accessCode });
+    expect(noOrigin.status).toBe(403);
+    expect(emails.request).toHaveBeenCalledTimes(1);
   });
   it('offers functions, seats and quotes without cookies or a client token', async () => {
     const functions = await request(server).get(

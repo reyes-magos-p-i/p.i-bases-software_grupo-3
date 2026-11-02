@@ -3,6 +3,7 @@ import { PurchasesService } from './purchases.service';
 import { PurchasesRepository } from './purchases.repository';
 import { GuestPurchasesService } from './guest-purchases.service';
 import type { ConfirmGuestPurchaseDto } from './guest-purchase.dto';
+import type { TicketEmailService } from './ticket-email.service';
 
 describe('Guest purchase orchestration', () => {
   const clients = {
@@ -11,16 +12,37 @@ describe('Guest purchase orchestration', () => {
       isEmailVerificationPending: jest.fn(),
     },
     repository = { confirmGuest: jest.fn(), findGuest: jest.fn() };
+  const emails = { status: jest.fn(), request: jest.fn() };
   const service = new GuestPurchasesService(
     {} as PurchasesService,
     repository as unknown as PurchasesRepository,
     clients as unknown as ClientsService,
+    emails as unknown as TicketEmailService,
   );
   const buyer = {
     email: 'guest@example.com',
     confirmEmail: 'guest@example.com',
   };
   beforeEach(() => jest.resetAllMocks());
+  it('requires the private lookup code for email status and resends', async () => {
+    const receipt = { id: 12 };
+    repository.findGuest.mockResolvedValue(receipt);
+    emails.status.mockResolvedValue({ status: 'FAILED' });
+    emails.request.mockResolvedValue({ status: 'PENDING' });
+    await expect(service.emailStatus('private')).resolves.toEqual({
+      status: 'FAILED',
+    });
+    await expect(service.resendTickets('private')).resolves.toEqual({
+      status: 'PENDING',
+    });
+    expect(repository.findGuest).toHaveBeenCalledWith('private');
+    expect(emails.request).toHaveBeenCalledWith(receipt);
+    repository.findGuest.mockRejectedValue(new Error('invalid code'));
+    await expect(service.resendTickets('invalid')).rejects.toThrow(
+      'invalid code',
+    );
+    expect(emails.request).toHaveBeenCalledTimes(1);
+  });
   it('allows an unregistered email and does not create an account', async () => {
     await expect(service.identify(buyer)).resolves.toEqual({
       email: buyer.email,

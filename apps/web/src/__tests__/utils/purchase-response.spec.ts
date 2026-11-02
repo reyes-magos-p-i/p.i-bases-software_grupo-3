@@ -3,10 +3,12 @@ import {
   PurchaseResponseError,
   readPurchaseReceipt,
   readGuestPurchaseReceipt,
+  readTicketEmailStatus,
 } from '@/utils/purchase-response'
 const receipt = {
   id: 12,
   reference: 'ORD-000012',
+  qrPayload: JSON.stringify({ type: 'CINETADEL_PURCHASE', version: 1, reference: 'ORD-000012' }),
   purchasedAt: '2026-11-01T12:00:00-06:00',
   status: 'PAID',
   buyerEmail: 'guest@example.com',
@@ -40,12 +42,45 @@ const receipt = {
       title: 'Película',
       startsAt: '2099-01-01T20:00:00-06:00',
       functionStatus: 'ACTIVE',
+      branchName: 'Central',
       category: 'GENERAL',
       unitPrice: 3000,
     },
   ],
 }
 describe('Purchase receipt validation', () => {
+  it('validates delivery states without accepting malformed metadata as a successful send', () => {
+    expect(
+      readTicketEmailStatus({
+        status: 'NOT_REQUESTED',
+        recipient: null,
+        sentAt: null,
+        retryAfter: 0,
+      }).status,
+    ).toBe('NOT_REQUESTED')
+    expect(
+      readTicketEmailStatus({
+        status: 'SENT',
+        recipient: 'client@example.com',
+        sentAt: '2026-11-02T12:00:00Z',
+        retryAfter: 60,
+      }).status,
+    ).toBe('SENT')
+  })
+  it.each([
+    null,
+    {},
+    { status: 'BAD', recipient: null, sentAt: null, retryAfter: 0 },
+    { status: 'SENT', recipient: 'bad', sentAt: null, retryAfter: 0 },
+    { status: 'SENT', recipient: 2, sentAt: null, retryAfter: 0 },
+    { status: 'SENT', recipient: null, sentAt: 'bad', retryAfter: 0 },
+    { status: 'SENT', recipient: null, sentAt: null, retryAfter: '0' },
+    { status: 'SENT', recipient: null, sentAt: null, retryAfter: 1.2 },
+    { status: 'SENT', recipient: null, sentAt: null, retryAfter: -1 },
+    { status: 'SENT', recipient: null, sentAt: null, retryAfter: 61 },
+  ])('rejects malformed email status %j', (value) => {
+    expect(() => readTicketEmailStatus(value)).toThrow(PurchaseResponseError)
+  })
   it('accepts current receipts, rescheduled tickets and historical invoices without tickets', () => {
     expect(readPurchaseReceipt(receipt, true)).toBe(receipt)
     expect(readPurchaseReceipt({ ...receipt, status: 'CANCELLED', tickets: [] }).tickets).toEqual(

@@ -1,7 +1,11 @@
 import { getApi } from './api'
 import { clientRequestOptions } from './authService'
 import { clientProfileError } from './client-profile.service'
-import { PurchaseResponseError, readPurchaseReceipt } from '@/utils/purchase-response'
+import {
+  PurchaseResponseError,
+  readPurchaseReceipt,
+  readTicketEmailStatus,
+} from '@/utils/purchase-response'
 import type {
   PurchaseList,
   PurchaseListQuery,
@@ -72,4 +76,25 @@ export async function getMyPurchase(id: number, signal?: AbortSignal) {
 export function purchaseError(error: unknown) {
   if (error instanceof PurchaseResponseError) return error.message
   return clientProfileError(error, 'No se pudo completar la operación. Intenta nuevamente.')
+}
+export async function getTicketEmailStatus(id: number, signal?: AbortSignal) {
+  return readTicketEmailStatus(
+    (
+      await getApi().get<unknown>(`/purchases/me/${id}/email-status`, {
+        ...clientRequestOptions(),
+        signal,
+      })
+    ).data,
+  )
+}
+export async function resendPurchaseTickets(id: number, signal?: AbortSignal) {
+  return readTicketEmailStatus(
+    (
+      await getApi().post<unknown>(
+        `/purchases/me/${id}/resend-tickets`,
+        {},
+        { ...clientRequestOptions(), signal },
+      )
+    ).data,
+  )
 }

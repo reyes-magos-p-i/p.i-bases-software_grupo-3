@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { ClientsService } from '../clients/clients.service';
 import { PurchasesService } from './purchases.service';
 import { PurchasesRepository } from './purchases.repository';
+import { TicketEmailService } from './ticket-email.service';
 import { requireGuestEmailAvailable } from './purchase-rules';
 import type {
   ConfirmGuestPurchaseDto,
@@ -14,6 +15,7 @@ export class GuestPurchasesService {
     readonly purchases: PurchasesService,
     private readonly repository: PurchasesRepository,
     private readonly clients: ClientsService,
+    private readonly emails: TicketEmailService,
   ) {}
 
   private matchingEmail(data: GuestBuyerDto) {
@@ -44,5 +46,11 @@ export class GuestPurchasesService {
 
   lookup(code: string) {
     return this.repository.findGuest(code);
+  }
+  async emailStatus(code: string) {
+    return this.emails.status(await this.lookup(code));
+  }
+  async resendTickets(code: string) {
+    return this.emails.request(await this.lookup(code));
   }
 }

@@ -55,6 +55,7 @@ export interface PurchasedTicket
   id: number
   functionId: number
   functionStatus: string
+  branchName: string
   unitPrice: number
   category: TicketCategory
 }
@@ -62,6 +63,7 @@ export interface PurchaseReceipt extends Omit<PurchaseQuote, 'seats' | 'quantity
   id: number
   reference: string
   purchasedAt: string
+  qrPayload: string
   status: string
   buyerEmail: string
   paymentMethod: 'CARD' | 'CASH' | 'SIMULATED'
@@ -75,6 +77,12 @@ export interface GuestBuyer {
 }
 export interface GuestPurchaseReceipt extends PurchaseReceipt {
   accessCode: string
+}
+export interface TicketEmailStatus {
+  status: 'NOT_REQUESTED' | 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'UNKNOWN'
+  recipient: string | null
+  sentAt: string | null
+  retryAfter: number
 }
 export interface PendingPurchaseAttempt {
   version: 1

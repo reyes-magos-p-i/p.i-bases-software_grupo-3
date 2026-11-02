@@ -67,4 +67,25 @@ export class PurchasesController {
   ) {
     return this.service.findOne(request.user.id, Number(id));
   }
+  @Get('me/:id/email-status')
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(PurchaseThrottlerGuard)
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  emailStatus(
+    @Req() request: ClientRequest,
+    @Param('id', ParseDecimalIdPipe) id: string,
+  ) {
+    return this.service.emailStatus(request.user.id, Number(id));
+  }
+  @Post('me/:id/resend-tickets')
+  @HttpCode(202)
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(SessionOriginGuard, PurchaseThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  resendTickets(
+    @Req() request: ClientRequest,
+    @Param('id', ParseDecimalIdPipe) id: string,
+  ) {
+    return this.service.resendTickets(request.user.id, Number(id));
+  }
 }
