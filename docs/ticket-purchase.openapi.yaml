@@ -106,11 +106,7 @@ paths:
         "403": { description: Origen no autorizado }
         "404": { description: La función no existe }
         "409":
-          {
-            description: Cuenta registrada (CLIENT_LOGIN_REQUIRED),
-            selección no disponible,
-            resumen modificado o referencia reutilizada,
-          }
+          description: Cuenta registrada (CLIENT_LOGIN_REQUIRED), selección no disponible, resumen modificado o referencia reutilizada. PURCHASE_BUSY indica un bloqueo temporal; conservar la misma solicitud al reintentar.
         "429": { $ref: "#/components/responses/TooManyRequests" }
         "503": { description: No se pudieron preparar los boletos }
   /guest-purchases/lookup:
@@ -131,7 +127,8 @@ paths:
                   {
                     type: string,
                     maxLength: 85,
-                    pattern: "^INV-[1-9][0-9]{0,15}-[a-fA-F0-9]{64}$",
+                    pattern: '^(?:INV-[1-9][0-9]{0,15}-[A-F0-9]{64}|[1-9][0-9]{0,15}\.[0-7][0-9A-HJKMNP-TV-Z]{25})$',
+                    description: Formato normalizado; acepta códigos largos anteriores y compactos. Convierte a mayúsculas y admite espacios o guiones y O/0 e I/L/1 en el secreto compacto,
                   }
       responses:
         "200":
@@ -337,7 +334,7 @@ components:
         contraseña vigente u origen permitido,
       }
     Conflict:
-      description: Función no disponible, asientos vendidos, resumen modificado o referencia reutilizada para otra selección. Puede incluir code FUNCTION_UNAVAILABLE, SEATS_UNAVAILABLE o QUOTE_CHANGED.
+      description: Función no disponible, asientos vendidos, resumen modificado, referencia reutilizada o bloqueo temporal. FUNCTION_UNAVAILABLE, SEATS_UNAVAILABLE y QUOTE_CHANGED son rechazos definitivos. PURCHASE_BUSY requiere reintentar con la misma referencia y selección.
   schemas:
     GuestBuyer:
       type: object
@@ -360,7 +357,9 @@ components:
             accessCode:
               {
                 type: string,
-                description: Código privado de consulta; debe guardarse y no se incorpora al QR,
+                description: Código privado compacto de consulta; debe guardarse y no se incorpora al QR. Los códigos largos anteriores siguen siendo válidos para consultar,
+                pattern: '^[1-9][0-9]{0,15}\.[0-7][0-9A-HJKMNP-TV-Z]{25}$',
+                example: "12.4AVG75NWK52Z476W4QDMW7DYQE",
               }
     PricingSettings:
       type: object
