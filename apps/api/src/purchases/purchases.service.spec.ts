@@ -52,6 +52,21 @@ describe('PurchasesService', () => {
     await expect(service.seats(4)).rejects.toThrow('La función');
     expect(catalog.getSeats).not.toHaveBeenCalled();
   });
+  it('refuses a quote above the configured tickets per function', async () => {
+    const context = { id: 4, available: true };
+    catalog.getFunction.mockResolvedValue(context);
+    catalog.getSeats.mockResolvedValue({
+      function: context,
+      seats: [],
+      maxTickets: 1,
+    });
+    await expect(
+      service.quote({
+        functionId: 4,
+        seats: { GENERAL: [1, 2], CHILD: [], SENIOR: [] },
+      }),
+    ).rejects.toMatchObject({ response: { code: 'TICKET_LIMIT_REACHED' } });
+  });
   it('quotes available seats with authoritative prices', async () => {
     const context = {
       id: 4,

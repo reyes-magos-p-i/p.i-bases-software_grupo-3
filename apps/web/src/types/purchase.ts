@@ -101,6 +101,7 @@ export interface SeatAvailability {
   function: PurchaseFunction
   seats: PurchaseSeat[]
   categories: PurchaseCategory[]
+  maxTickets: number
 }
 export interface PurchaseMovie extends PortalMovie {
   synopsis: string
@@ -126,8 +127,6 @@ export interface PurchaseList {
   total: number
   totalPages: number
 }
-// Mirrors the API limit, which is the one that decides.
-export const MAX_TICKETS_PER_PURCHASE = 10
 export const TICKET_CATEGORY_LABELS: Record<TicketCategory, string> = {
   GENERAL: 'General',
   CHILD: 'Niño',

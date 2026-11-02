@@ -192,6 +192,7 @@ export function useTicketPurchase(onExpired: () => void) {
         function: saved.quote.function,
         seats: saved.quote.seats,
         categories: [],
+        maxTickets: saved.quote.seats.length,
       }
       selected.value = saved.quote.seats
       categories.value = Object.fromEntries(

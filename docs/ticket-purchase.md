@@ -67,13 +67,15 @@ Las rutas requieren JWT de cliente y contraseña vigente. La cuenta se obtiene d
 
 Mientras el pago sea simulado, estos límites reducen la compra masiva de asientos. No sustituyen un cobro real.
 
-| Límite | Valor | Dónde se valida |
-| --- | ---: | --- |
-| Boletos por comprador y función | 10 | Selección y transacción de confirmación |
-| Compras de invitado por correo y hora | 3 | Transacción de confirmación |
-| Confirmaciones de invitado por IP y hora | 10 | `POST /guest-purchases` |
+| Límite | Valor inicial | Dónde vive | Dónde se valida |
+| --- | ---: | --- | --- |
+| Boletos por comprador y función | 10 | `GLOBAL_SETTINGS` | Cotización y transacción de confirmación |
+| Compras de invitado por correo y hora | 3 | `GLOBAL_SETTINGS` | Transacción de confirmación |
+| Confirmaciones de invitado por IP y hora | 10 | API | `POST /guest-purchases` |
 
-Los boletos ya comprados para la función cuentan dentro del límite, con el mismo bloqueo de la función, por lo que no se evade con varias compras pequeñas. Superarlo responde 409 con `TICKET_LIMIT_REACHED` o `GUEST_EMAIL_LIMIT`. Las comprobaciones se ejecutan después de reconocer un reintento, de modo que repetir una compra registrada sigue devolviendo su comprobante. Los valores están en `apps/api/src/purchases/purchase-rules.ts`, y la web refleja el primero en `apps/web/src/types/purchase.ts`.
+Los boletos ya comprados para la función cuentan dentro del límite, con el mismo bloqueo de la función, por lo que no se evade con varias compras pequeñas. Superarlo responde 409 con `TICKET_LIMIT_REACHED` o `GUEST_EMAIL_LIMIT`. Las comprobaciones se ejecutan después de reconocer un reintento, de modo que repetir una compra registrada sigue devolviendo su comprobante. Los valores de `GLOBAL_SETTINGS` se cambian con un `UPDATE`, sin recompilar ni desplegar, y aplican desde la siguiente compra. La disponibilidad de asientos devuelve `maxTickets` para que la web use el mismo valor. Una restricción admite enteros de 1 a 1000, porque el bloqueo de asientos usa una sola lista `IN`. Si no se pueden leer los límites, la compra responde 503 y no se vende nada.
+
+La tabla se crea con [20261102_global_settings.sql](../database/migrations/20261102_global_settings.sql), que debe aplicarse **antes** de desplegar la API. Queda preparada para los demás valores de SCRUM-366 y para un futuro trigger que valide estos límites en Oracle.
 
 ## Compra como invitado
 
@@ -118,7 +120,7 @@ La desactivación de sala conserva los asientos para respetar las referencias de
 
 ## Contratos y errores
 
-Véase [OpenAPI de compra](./ticket-purchase.openapi.yaml). La selección compacta contiene posiciones físicas 1..filas×columnas, agrupadas en GENERAL/CHILD/SENIOR; cada posición debe aparecer una sola vez. El servidor resuelve fila y columna; no acepta importes ni cliente en el cuerpo. Cada compra admite hasta 10 boletos, sumando todas las categorías; las posiciones siguen admitiendo salas de hasta 10000 asientos.
+Véase [OpenAPI de compra](./ticket-purchase.openapi.yaml). La selección compacta contiene posiciones físicas 1..filas×columnas, agrupadas en GENERAL/CHILD/SENIOR; cada posición debe aparecer una sola vez. El servidor resuelve fila y columna; no acepta importes ni cliente en el cuerpo. El límite de 10000 posiciones cabe en el límite JSON existente, sin modificar la configuración global. El máximo de boletos es un valor configurable; véase [Límites de compra](#límites-de-compra--scrum-378).
 
 Errores relevantes: 400 para selección o referencia inválida; 401 para sesión ausente, vencida o cuenta desactivada; 403 para personal, contraseña bloqueada u origen inválido; 404 para película/compra inexistente; 409 para función no disponible, asientos vendidos, resumen desactualizado o bloqueo temporal (`PURCHASE_BUSY`); 429 para exceso de solicitudes; 503 cuando no se pueden preparar las tarifas. Los errores generales usan `NotificationPopup` abajo a la derecha.
 

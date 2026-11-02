@@ -21,6 +21,7 @@ const data = {
     { code: 'GENERAL', label: 'General', base: 3000, description: 'Tarifa general' },
     { code: 'CHILD', label: 'Niño', base: 2500, description: '2 a 12 años' },
   ],
+  maxTickets: 6,
 } as SeatAvailability
 describe('SeatSelectionStep', () => {
   it('reuses the seat map and emits per-seat ticket categories without pricing locally', async () => {
@@ -28,8 +29,8 @@ describe('SeatSelectionStep', () => {
       props: { availability: data, selected: [data.seats[0]!], categories: {} },
     })
     expect(wrapper.getComponent(SeatSelector).props('theaterId')).toBe(3)
-    expect(wrapper.getComponent(SeatSelector).props('maxSelections')).toBe(10)
-    expect(wrapper.text()).toContain('hasta 10 boletos por función')
+    expect(wrapper.getComponent(SeatSelector).props('maxSelections')).toBe(6)
+    expect(wrapper.text()).toContain('hasta 6 boletos por función')
     expect(wrapper.text()).toContain('1 asientos disponibles')
     expect(wrapper.text()).toContain('VIP')
     expect(wrapper.text()).toContain('2 a 12 años')

@@ -56,7 +56,7 @@ describe('Atomic purchase storage', () => {
   Object.assign(db, {
     pool: { getConnection: jest.fn().mockResolvedValue(connection) },
   });
-  const catalog = { getFunction: jest.fn() };
+  const catalog = { getFunction: jest.fn(), getLimits: jest.fn() };
   const emails = { enqueueInitial: jest.fn() };
   const repo = new PurchasesRepository(
     db,
@@ -96,6 +96,10 @@ describe('Atomic purchase storage', () => {
     });
     overrides = {};
     catalog.getFunction.mockResolvedValue(context);
+    catalog.getLimits.mockResolvedValue({
+      maxTickets: 10,
+      maxGuestPurchases: 3,
+    });
     execute.mockImplementation((sql: string) => {
       const key = Object.keys(overrides).find((part) => sql.includes(part));
       if (key) {
@@ -402,6 +406,30 @@ describe('Atomic purchase storage', () => {
       expect(binds.functionId).toBe(valid.functionId);
     },
   );
+  it('reads the configured limits inside the purchase transaction', async () => {
+    catalog.getLimits.mockResolvedValue({
+      maxTickets: 2,
+      maxGuestPurchases: 1,
+    });
+    overrides['COUNT(*) AS TOTAL FROM TICKETS'] = { rows: [{ TOTAL: 2 }] };
+    await expect(repo.confirm(8, valid)).rejects.toMatchObject({
+      response: { code: 'TICKET_LIMIT_REACHED' },
+    });
+    expect(catalog.getLimits).toHaveBeenCalledWith(connection);
+    overrides['COUNT(*) AS TOTAL FROM TICKETS'] = { rows: [{ TOTAL: 0 }] };
+    overrides['COUNT(*) AS TOTAL FROM INVOICES'] = { rows: [{ TOTAL: 1 }] };
+    await expect(
+      repo.confirmGuest('guest@example.com', valid),
+    ).rejects.toMatchObject({ response: { code: 'GUEST_EMAIL_LIMIT' } });
+  });
+  it('sells nothing when the limits cannot be read', async () => {
+    catalog.getLimits.mockRejectedValue(new Error('settings unavailable'));
+    await expect(repo.confirm(8, valid)).rejects.toThrow(
+      'settings unavailable',
+    );
+    expect(executeMany).not.toHaveBeenCalled();
+    expect(rollback).toHaveBeenCalledTimes(1);
+  });
   it('counts only paid tickets of the buyer and the function', async () => {
     await repo.confirm(8, valid);
     const [sql, binds] = execute.mock.calls.find(([text]) =>

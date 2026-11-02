@@ -240,19 +240,27 @@ export class PurchasesRepository {
     requested: number,
   ) {
     const scope = buyerScope(buyer);
+    const limits = await this.catalog.getLimits(connection);
     const owned = await connection.execute<{ TOTAL: number }>(
       `SELECT COUNT(*) AS TOTAL FROM TICKETS tk JOIN INVOICES i ON i.INVOICE_ID=tk.INVOICE_ID WHERE tk.MOVIE_FUNCTION_ID=:functionId AND i.STATUS='PAID' AND ${scope.condition}`,
       { functionId, ...scope.binds },
       OPTIONS,
     );
-    requireTicketAllowance(owned.rows?.[0]?.TOTAL ?? 0, requested);
+    requireTicketAllowance(
+      owned.rows?.[0]?.TOTAL ?? 0,
+      requested,
+      limits.maxTickets,
+    );
     if ('clientId' in buyer) return;
     const recent = await connection.execute<{ TOTAL: number }>(
       `SELECT COUNT(*) AS TOTAL FROM INVOICES i WHERE ${scope.condition} AND i.CREATED_AT > SYSTIMESTAMP - INTERVAL '1' HOUR`,
       scope.binds,
       OPTIONS,
     );
-    requireGuestPurchaseAllowance(recent.rows?.[0]?.TOTAL ?? 0);
+    requireGuestPurchaseAllowance(
+      recent.rows?.[0]?.TOTAL ?? 0,
+      limits.maxGuestPurchases,
+    );
   }
   private async recoverFailure(
     error: unknown,

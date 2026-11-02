@@ -120,14 +120,24 @@ beforeEach(() => {
     movie: { id: 2, title: 'Película', synopsis: 'Historia', posterImage: '' },
     functions: [context],
   })
-  vi.mocked(getPurchaseSeats).mockResolvedValue({ function: context, seats, categories: [] })
+  vi.mocked(getPurchaseSeats).mockResolvedValue({
+    function: context,
+    seats,
+    categories: [],
+    maxTickets: 10,
+  })
   vi.mocked(quotePurchase).mockImplementation((data) => Promise.resolve(quoted(data)))
   vi.mocked(confirmPurchase).mockResolvedValue({ id: 12, reference: 'ORD-000012' } as never)
   vi.mocked(getGuestPurchaseFunctions).mockResolvedValue({
     movie: { id: 2, title: 'Película', synopsis: 'Historia', posterImage: '' },
     functions: [context],
   })
-  vi.mocked(getGuestPurchaseSeats).mockResolvedValue({ function: context, seats, categories: [] })
+  vi.mocked(getGuestPurchaseSeats).mockResolvedValue({
+    function: context,
+    seats,
+    categories: [],
+    maxTickets: 10,
+  })
   vi.mocked(quoteGuestPurchase).mockImplementation((data) => Promise.resolve(quoted(data)))
   vi.mocked(identifyGuestBuyer).mockResolvedValue({ email: 'guest@example.com' })
   vi.mocked(confirmGuestPurchase).mockResolvedValue({
@@ -396,6 +406,7 @@ describe('Ticket purchase coordination', () => {
       function: context,
       seats: [{ ...seats[0]!, state: 'in-use' }, seats[1]!],
       categories: [],
+      maxTickets: 10,
     })
     await flow.refresh()
     expect(flow.selected.value).toHaveLength(0)

@@ -641,3 +641,4 @@ CREATE INDEX ix_ticket_invoice_product ON Tickets (invoice_id, product_id);
 
 @@migrations/20261101_ticket_purchase.sql
 @@migrations/20261102_purchase_ticket_email.sql
+@@migrations/20261102_global_settings.sql
