@@ -43,10 +43,11 @@ export function requireTicketAllowance(
   requested: number,
   maxTickets: number,
 ) {
+  const ownedNote = owned ? ` Ya tienes ${owned} para esta función.` : '';
   if (owned + requested > maxTickets)
     throw new ConflictException({
       code: 'TICKET_LIMIT_REACHED',
-      message: `Puedes comprar hasta ${maxTickets} boletos por función.${owned ? ` Ya tienes ${owned} para esta función.` : ''}`,
+      message: `Puedes comprar hasta ${maxTickets} boletos por función.${ownedNote}`,
     });
 }
 
