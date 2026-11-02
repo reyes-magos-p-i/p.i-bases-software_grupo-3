@@ -36,7 +36,7 @@ describe('Guest purchase lookup', () => {
     await wrapper.get('input').setValue(' ' + code + ' ')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(lookupGuestPurchase).toHaveBeenCalledWith(code, expect.any(AbortSignal))
+    expect(lookupGuestPurchase).toHaveBeenCalledWith(code.toUpperCase(), expect.any(AbortSignal))
     expect(wrapper.getComponent(PurchaseSummary).props('purchase')).toEqual({
       id: 12,
       accessCode: code,
@@ -90,5 +90,24 @@ describe('Guest purchase lookup', () => {
     reject(new Error('late'))
     await flushPromises()
     expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
+  })
+  it('accepts a compact grouped code and allows retry after a timeout', async () => {
+    vi.mocked(lookupGuestPurchase)
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce({ id: 12 } as never)
+    render()
+    await wrapper.get('input').setValue(' 12.4avg-75nw k52z476w4qdmw7dyqe ')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(lookupGuestPurchase).toHaveBeenCalledWith(
+      '12.4AVG75NWK52Z476W4QDMW7DYQE',
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(true)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(lookupGuestPurchase).toHaveBeenCalledTimes(2)
+    expect(wrapper.findComponent(PurchaseSummary).exists()).toBe(true)
   })
 })

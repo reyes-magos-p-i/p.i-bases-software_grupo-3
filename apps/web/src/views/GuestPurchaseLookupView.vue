@@ -9,6 +9,7 @@ import { useBlurValidation } from '@/composables/useBlurValidation'
 import { lookupGuestPurchase } from '@/services/guest-purchase.service'
 import { purchaseError } from '@/services/purchase.service'
 import type { GuestPurchaseReceipt } from '@/types/purchase'
+import { normalizeGuestPurchaseCode, validGuestPurchaseCode } from '@/utils/guest-purchase-code'
 const code = ref(''),
   touched = ref(false),
   loading = ref(false),
@@ -19,7 +20,7 @@ let controller: AbortController | undefined
 function validationError() {
   if (!code.value.trim())
     return 'Introduce el código de consulta que recibiste al terminar la compra.'
-  return /^INV-[1-9]\d{0,15}-[a-f0-9]{64}$/iu.test(code.value.trim())
+  return validGuestPurchaseCode(code.value)
     ? ''
     : 'Introduce el código de consulta completo de tu compra.'
 }
@@ -33,7 +34,7 @@ async function lookup() {
   const request = controller
   loading.value = true
   try {
-    const data = await lookupGuestPurchase(code.value.trim(), request.signal)
+    const data = await lookupGuestPurchase(normalizeGuestPurchaseCode(code.value), request.signal)
     if (!request.signal.aborted) receipt.value = data
   } catch (error_) {
     if (!request.signal.aborted) error.value = purchaseError(error_)
