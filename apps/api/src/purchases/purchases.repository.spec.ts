@@ -518,7 +518,9 @@ describe('Atomic purchase storage', () => {
     expect(commit).toHaveBeenCalledTimes(1);
   });
   it('rejects a guest email that became registered before confirmation', async () => {
-    overrides['SELECT CLIENT_ID FROM CLIENTS'] = { rows: [{ CLIENT_ID: 8 }] };
+    overrides['AS "verificationPending"'] = {
+      rows: [{ status: 'ACTIVE', verificationPending: 0 }],
+    };
     await expect(
       repo.confirmGuest('client@example.com', valid),
     ).rejects.toMatchObject({ response: { code: 'CLIENT_LOGIN_REQUIRED' } });
@@ -526,11 +528,55 @@ describe('Atomic purchase storage', () => {
     expect(commit).not.toHaveBeenCalled();
     expect(rollback).toHaveBeenCalledTimes(1);
   });
+  it.each([
+    ['INACTIVE', 0, 'CLIENT_ACCOUNT_INACTIVE'],
+    ['ACTIVE', 1, 'CLIENT_VERIFICATION_REQUIRED'],
+  ])(
+    'checks the %s account state with verification %i inside the confirmation transaction',
+    async (status, verificationPending, code) => {
+      overrides['AS "verificationPending"'] = {
+        rows: [{ status, verificationPending }],
+      };
+      await expect(
+        repo.confirmGuest('guest@example.com', valid),
+      ).rejects.toMatchObject({ response: { code } });
+      expect(executeMany).not.toHaveBeenCalled();
+      expect(commit).not.toHaveBeenCalled();
+      expect(rollback).toHaveBeenCalledTimes(1);
+      const check = execute.mock.calls.find(([sql]) =>
+        sql.includes('AS "verificationPending"'),
+      );
+      expect(check?.[0]).toContain('CLIENT_EMAIL_VERIFICATIONS');
+      expect(check?.[1]).toEqual({ email: 'guest@example.com' });
+    },
+  );
+  it.each(['client', 'guest'])(
+    'returns a definitive 404 for a %s only after checking the request key',
+    async (buyer) => {
+      overrides['SELECT MOVIE_FUNCTION_ID'] = { rows: [] };
+      const pending =
+        buyer === 'client'
+          ? repo.confirm(8, valid)
+          : repo.confirmGuest('guest@example.com', valid);
+      await expect(pending).rejects.toMatchObject({ status: 404 });
+      const queries = execute.mock.calls.map(([sql]) => sql as string);
+      expect(
+        queries.findIndex((sql) => sql.includes('REQUEST_HASH AS')),
+      ).toBeLessThan(
+        queries.findIndex((sql) => sql.startsWith('SELECT MOVIE_FUNCTION_ID')),
+      );
+      expect(executeMany).not.toHaveBeenCalled();
+      expect(commit).not.toHaveBeenCalled();
+      expect(rollback).toHaveBeenCalledTimes(1);
+    },
+  );
   it('returns a committed guest retry even if the email was subsequently registered', async () => {
     overrides['REQUEST_HASH AS'] = {
       rows: [{ id: 12, hash: selectionHash(valid) }],
     };
-    overrides['SELECT CLIENT_ID FROM CLIENTS'] = { rows: [{ CLIENT_ID: 8 }] };
+    overrides['AS "verificationPending"'] = {
+      rows: [{ status: 'ACTIVE', verificationPending: 0 }],
+    };
     await expect(
       repo.confirmGuest('guest@example.com', valid),
     ).resolves.toMatchObject({
@@ -540,7 +586,7 @@ describe('Atomic purchase storage', () => {
     expect(executeMany).not.toHaveBeenCalled();
     expect(
       execute.mock.calls.some(([sql]) =>
-        sql.includes('SELECT CLIENT_ID FROM CLIENTS'),
+        sql.includes('AS "verificationPending"'),
       ),
     ).toBe(false);
   });

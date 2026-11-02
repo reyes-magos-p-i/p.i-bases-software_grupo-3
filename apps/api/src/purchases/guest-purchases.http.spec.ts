@@ -22,7 +22,11 @@ import { guestPurchaseCode } from './guest-purchase-access';
 describe('Guest purchase HTTP with mocked persistence', () => {
   let app: INestApplication, server: Server;
   const origin = 'https://cinema.example';
-  const clients = { findByEmail: jest.fn() },
+  const clients = {
+      findByEmail: jest.fn(),
+      deleteExpiredPendingClientByEmail: jest.fn(),
+      isEmailVerificationPending: jest.fn(),
+    },
     repository = { confirmGuest: jest.fn(), findGuest: jest.fn() };
   const catalog = {
     getMovie: jest.fn(),
@@ -149,12 +153,31 @@ describe('Guest purchase HTTP with mocked persistence', () => {
       buyer: { ...buyer, confirmEmail: 'other@example.com' },
     });
     expect(mismatch.status).toBe(400);
-    clients.findByEmail.mockResolvedValue({ id: 8 });
+    clients.findByEmail.mockResolvedValue({ id: 8, status: 'ACTIVE' });
+    clients.isEmailVerificationPending.mockResolvedValue(false);
     const registered = await post('/buyer', buyer);
     expect(registered.status).toBe(409);
     expect(registered.body.code).toBe('CLIENT_LOGIN_REQUIRED');
     expect(repository.confirmGuest).not.toHaveBeenCalled();
   });
+  it.each([
+    ['INACTIVE', false, 'CLIENT_ACCOUNT_INACTIVE'],
+    ['ACTIVE', true, 'CLIENT_VERIFICATION_REQUIRED'],
+  ])(
+    'explains why a %s account cannot continue as a guest',
+    async (status, pending, code) => {
+      clients.findByEmail.mockResolvedValue({ id: 8, status });
+      clients.isEmailVerificationPending.mockResolvedValue(pending);
+      const result = await post('/buyer', buyer);
+      expect(result.status).toBe(409);
+      expect(result.body.code).toBe(code);
+      expect(result.body.message).not.toContain('Inicia sesión');
+      expect(clients.deleteExpiredPendingClientByEmail).toHaveBeenCalledWith(
+        buyer.email,
+      );
+      expect(repository.confirmGuest).not.toHaveBeenCalled();
+    },
+  );
   it.each([
     { buyer: { email: 'bad', confirmEmail: 'bad' } },
     { clientId: 8 },

@@ -1,6 +1,7 @@
 import {
   purchaseQuote,
   requireAvailableFunction,
+  requireGuestEmailAvailable,
   selectionHash,
   selectionPositions,
 } from './purchase-rules';
@@ -38,6 +39,27 @@ const selection = {
   seats: { GENERAL: [1, 2], CHILD: [3], SENIOR: [4] },
 };
 describe('Purchase rules', () => {
+  it('allows an email only when no client account exists', () => {
+    expect(() => requireGuestEmailAvailable(null)).not.toThrow();
+  });
+  it.each([
+    ['ACTIVE', false, 'CLIENT_LOGIN_REQUIRED', 'Inicia sesión'],
+    ['ACTIVE', true, 'CLIENT_VERIFICATION_REQUIRED', 'Confirma tu correo'],
+    ['INACTIVE', false, 'CLIENT_ACCOUNT_INACTIVE', 'reactivación'],
+    ['INACTIVE', true, 'CLIENT_ACCOUNT_INACTIVE', 'reactivación'],
+  ] as const)(
+    'rejects %s accounts with pending verification %s consistently',
+    (status, verificationPending, code, message) => {
+      expect(() =>
+        requireGuestEmailAvailable({ status, verificationPending }),
+      ).toThrow(
+        expect.objectContaining({
+          response: { code, message: expect.stringContaining(message) },
+          status: 409,
+        }),
+      );
+    },
+  );
   it('quotes mixed age and VIP tickets without trusting a client price', () => {
     const quote = purchaseQuote(context, seats, selection);
     expect(quote.quantity).toBe(4);

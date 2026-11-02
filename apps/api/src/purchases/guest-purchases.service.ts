@@ -1,11 +1,8 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ClientsService } from '../clients/clients.service';
 import { PurchasesService } from './purchases.service';
 import { PurchasesRepository } from './purchases.repository';
+import { requireGuestEmailAvailable } from './purchase-rules';
 import type {
   ConfirmGuestPurchaseDto,
   GuestBuyerDto,
@@ -28,12 +25,15 @@ export class GuestPurchasesService {
 
   async identify(data: GuestBuyerDto) {
     this.matchingEmail(data);
-    if (await this.clients.findByEmail(data.email))
-      throw new ConflictException({
-        code: 'CLIENT_LOGIN_REQUIRED',
-        message:
-          'Ya existe una cuenta con este correo. Inicia sesión para continuar con la compra.',
-      });
+    await this.clients.deleteExpiredPendingClientByEmail(data.email);
+    const account = await this.clients.findByEmail(data.email);
+    const verificationPending =
+      !!account &&
+      account.status === 'ACTIVE' &&
+      (await this.clients.isEmailVerificationPending(account.id));
+    requireGuestEmailAvailable(
+      account ? { status: account.status, verificationPending } : null,
+    );
     return { email: data.email };
   }
 

@@ -15,6 +15,7 @@ import {
 import {
   purchaseQuote,
   requireAvailableFunction,
+  requireGuestEmailAvailable,
   selectionHash,
   selectionPositions,
 } from './purchase-rules';
@@ -34,6 +35,7 @@ import {
   guestPurchaseId,
   matchesGuestPurchaseCode,
 } from './guest-purchase-access';
+import type { UserStatus } from '../users/types/user-status.type';
 
 type Buyer = { clientId: number } | { email: string };
 function buyerScope(buyer: Buyer): { condition: string; binds: Binds } {
@@ -200,17 +202,23 @@ export class PurchasesRepository {
     connection: oracle.Connection,
     email: string,
   ) {
-    const registered = await connection.execute(
-      'SELECT CLIENT_ID FROM CLIENTS WHERE EMAIL=:email AND ROWNUM=1',
+    const registered = await connection.execute<{
+      status: UserStatus;
+      verificationPending: number;
+    }>(
+      `SELECT c.STATUS AS "status", CASE WHEN EXISTS (SELECT 1 FROM CLIENT_EMAIL_VERIFICATIONS v WHERE v.CLIENT_ID=c.CLIENT_ID) THEN 1 ELSE 0 END AS "verificationPending" FROM CLIENTS c WHERE c.EMAIL=:email AND ROWNUM=1`,
       { email },
       OPTIONS,
     );
-    if (registered.rows?.length)
-      throw new ConflictException({
-        code: 'CLIENT_LOGIN_REQUIRED',
-        message:
-          'Ya existe una cuenta con este correo. Inicia sesión para continuar con la compra.',
-      });
+    const account = registered.rows?.[0];
+    requireGuestEmailAvailable(
+      account
+        ? {
+            status: account.status,
+            verificationPending: account.verificationPending === 1,
+          }
+        : null,
+    );
   }
   private async recoverFailure(
     error: unknown,
