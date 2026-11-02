@@ -72,6 +72,13 @@ export interface GuestBuyer {
 export interface GuestPurchaseReceipt extends PurchaseReceipt {
   accessCode: string
 }
+export interface PendingPurchaseAttempt {
+  version: 1
+  requestKey: string
+  quote: PurchaseQuote
+  selection: PurchaseSelection
+  buyer: { kind: 'client'; clientId: number } | ({ kind: 'guest' } & GuestBuyer)
+}
 export interface PurchaseCategory {
   code: TicketCategory
   label: string
