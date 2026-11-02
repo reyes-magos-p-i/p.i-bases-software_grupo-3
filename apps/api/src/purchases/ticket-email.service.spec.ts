@@ -79,6 +79,28 @@ describe('Ticket email processing', () => {
     expect(emails.finish).toHaveBeenCalledWith(job, state);
     expect(emails.request).not.toHaveBeenCalled();
   });
+  it.each([
+    [new TicketEmailDeliveryError(false, 'ESOCKET'), 'FAILED (ESOCKET)'],
+    [
+      new TicketEmailDeliveryError(true, 'ECONNECTION'),
+      'UNKNOWN (ECONNECTION)',
+    ],
+    [new TicketEmailDeliveryError(true), 'UNKNOWN (SMTP)'],
+    [new Error('private details'), 'FAILED (PREPARATION)'],
+  ])('logs the outcome of a failed send %s', async (error, outcome) => {
+    const log = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    sender.send.mockRejectedValue(error);
+    await service.processPending();
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(
+      `Ticket email for invoice 12 ended as ${outcome}.`,
+    );
+  });
+  it('does not log a successful send', async () => {
+    const log = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    await service.processPending();
+    expect(log).not.toHaveBeenCalled();
+  });
   it('does not contact SMTP when the current tickets cannot be read', async () => {
     purchases.findForEmail.mockRejectedValue(new Error('cancelled'));
     await service.processPending();
