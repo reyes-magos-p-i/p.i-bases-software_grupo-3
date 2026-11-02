@@ -9,7 +9,14 @@ import {
   quotePurchase,
   confirmPurchase,
 } from '@/services/purchase.service'
-import type { PurchaseFunction, PurchaseSeat } from '@/types/purchase'
+import type {
+  PurchaseFunction,
+  PurchaseSeat,
+  PurchaseSelection,
+  TicketCategory,
+} from '@/types/purchase'
+import { loadPurchaseAttempt } from '@/services/purchase-attempt.service'
+import { PurchaseResponseError } from '@/utils/purchase-response'
 import {
   getGuestPurchaseFunctions,
   getGuestPurchaseSeats,
@@ -64,6 +71,26 @@ let flow: ReturnType<typeof useTicketPurchase>,
   wrapper: ReturnType<typeof mount>,
   expired: () => void
 const error = (status: number) => ({ isAxiosError: true, response: { status } })
+const conflict = (code: string) => ({
+  isAxiosError: true,
+  response: { status: 409, data: { code } },
+})
+function quoted(data: PurchaseSelection) {
+  const selected = Object.entries(data.seats).flatMap(([category, positions]) =>
+    positions.map((position) => ({
+      ...seats[position - 1]!,
+      category: category as TicketCategory,
+    })),
+  )
+  return {
+    function: context,
+    seats: selected,
+    lines: [],
+    total: selected.length * 3000,
+    quantity: selected.length,
+    version: 'a'.repeat(64),
+  }
+}
 function render() {
   wrapper = mount(
     defineComponent({
@@ -83,6 +110,7 @@ async function ready() {
 beforeEach(() => {
   vi.useFakeTimers()
   vi.resetAllMocks()
+  sessionStorage.clear()
   establishClientSession(
     { id: 8, email: 'a@example.com', firstName: 'Ana', lastName: 'Rojas' },
     'client-token',
@@ -93,28 +121,14 @@ beforeEach(() => {
     functions: [context],
   })
   vi.mocked(getPurchaseSeats).mockResolvedValue({ function: context, seats, categories: [] })
-  vi.mocked(quotePurchase).mockResolvedValue({
-    function: context,
-    seats: [{ ...seats[0]!, category: 'GENERAL' }],
-    lines: [],
-    total: 3000,
-    quantity: 1,
-    version: 'hash',
-  })
+  vi.mocked(quotePurchase).mockImplementation((data) => Promise.resolve(quoted(data)))
   vi.mocked(confirmPurchase).mockResolvedValue({ id: 12, reference: 'ORD-000012' } as never)
   vi.mocked(getGuestPurchaseFunctions).mockResolvedValue({
     movie: { id: 2, title: 'Película', synopsis: 'Historia', posterImage: '' },
     functions: [context],
   })
   vi.mocked(getGuestPurchaseSeats).mockResolvedValue({ function: context, seats, categories: [] })
-  vi.mocked(quoteGuestPurchase).mockResolvedValue({
-    function: context,
-    seats: [{ ...seats[0]!, category: 'GENERAL' }],
-    lines: [],
-    total: 3000,
-    quantity: 1,
-    version: 'hash',
-  })
+  vi.mocked(quoteGuestPurchase).mockImplementation((data) => Promise.resolve(quoted(data)))
   vi.mocked(identifyGuestBuyer).mockResolvedValue({ email: 'guest@example.com' })
   vi.mocked(confirmGuestPurchase).mockResolvedValue({
     id: 12,
@@ -126,6 +140,8 @@ beforeEach(() => {
 afterEach(() => {
   wrapper.unmount()
   clearClientSession()
+  sessionStorage.clear()
+  vi.restoreAllMocks()
   vi.useRealTimers()
 })
 describe('Ticket purchase coordination', () => {
@@ -149,7 +165,7 @@ describe('Ticket purchase coordination', () => {
     expect(identifyGuestBuyer).not.toHaveBeenCalled()
     expect(flow.buyerError.value).toContain('correo válido')
     await flow.identify({ email: ' Guest@Example.com ', confirmEmail: 'GUEST@example.com' })
-    expect(identifyGuestBuyer).toHaveBeenCalledWith(buyer)
+    expect(identifyGuestBuyer).toHaveBeenCalledWith(buyer, expect.any(AbortSignal))
     expect(flow.guestBuyer.value).toEqual(buyer)
     expect(flow.step.value).toBe(4)
     await flow.pay()
@@ -216,10 +232,13 @@ describe('Ticket purchase coordination', () => {
     await flushPromises()
     expect(flow.guest.value).toBe(false)
     expect(flow.selected.value).toHaveLength(1)
-    expect(quotePurchase).toHaveBeenCalledWith({
-      functionId: 4,
-      seats: { GENERAL: [1], CHILD: [], SENIOR: [] },
-    })
+    expect(quotePurchase).toHaveBeenCalledWith(
+      {
+        functionId: 4,
+        seats: { GENERAL: [1], CHILD: [], SENIOR: [] },
+      },
+      expect.any(AbortSignal),
+    )
     expect(flow.step.value).toBe(3)
     await flow.identify(buyer)
     expect(identifyGuestBuyer).not.toHaveBeenCalled()
@@ -298,7 +317,7 @@ describe('Ticket purchase coordination', () => {
       expect.objectContaining({
         functionId: 4,
         requestKey: expect.any(String),
-        quoteVersion: 'hash',
+        quoteVersion: 'a'.repeat(64),
       }),
     )
   })
@@ -420,7 +439,9 @@ describe('Ticket purchase coordination', () => {
     )
     resolve({ movie: { id: 2 }, functions: [] } as never)
     await pending
-    expect(flow.movie.value).toBeNull()
+    await flushPromises()
+    expect(flow.movie.value?.title).toBe('Película')
+    expect(getPurchaseFunctions).toHaveBeenCalledTimes(2)
     expect(flow.loading.value).toBe(false)
   })
   it('blocks duplicate submits and ignores availability responses overtaken by paying', async () => {
@@ -465,5 +486,244 @@ describe('Ticket purchase coordination', () => {
     expect(flow.receipt.value).toBeNull()
     expect(flow.quote.value).toBeNull()
     expect(expired).toHaveBeenCalledTimes(1)
+  })
+  it('restores an uncertain guest payment after reload without sending payment automatically', async () => {
+    await guestReady()
+    await flow.identify(buyer)
+    vi.mocked(confirmGuestPurchase).mockRejectedValueOnce(new Error('timeout'))
+    await flow.pay()
+    const original = vi.mocked(confirmGuestPurchase).mock.calls[0]![0]
+    expect(loadPurchaseAttempt()?.requestKey).toBe(original.requestKey)
+    wrapper.unmount()
+    render()
+    await flow.load(99)
+    expect(flow.restored.value).toBe(true)
+    expect(flow.movie.value?.id).toBe(2)
+    expect(flow.step.value).toBe(4)
+    expect(flow.guestBuyer.value).toEqual(buyer)
+    expect(flow.selection.value.seats.GENERAL).toEqual([1])
+    expect(confirmGuestPurchase).toHaveBeenCalledTimes(1)
+    expect(getGuestPurchaseFunctions).toHaveBeenCalledTimes(1)
+    await flow.pay()
+    expect(vi.mocked(confirmGuestPurchase).mock.calls[1]![0]).toEqual(original)
+    expect(flow.guestReceipt.value?.id).toBe(12)
+    expect(loadPurchaseAttempt()).toBeNull()
+    expect(flow.restored.value).toBe(false)
+  })
+  it('restores an account payment only for the original client', async () => {
+    await ready()
+    vi.mocked(confirmPurchase).mockRejectedValueOnce(new PurchaseResponseError())
+    await flow.pay()
+    const original = vi.mocked(confirmPurchase).mock.calls[0]![0]
+    wrapper.unmount()
+    render()
+    await flow.load(2)
+    expect(flow.guest.value).toBe(false)
+    expect(flow.restored.value).toBe(true)
+    expect(flow.step.value).toBe(3)
+    await flow.pay()
+    expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(original)
+    expect(loadPurchaseAttempt()).toBeNull()
+  })
+  it('does not show another client’s pending selection after the account changes', async () => {
+    await ready()
+    vi.mocked(confirmPurchase).mockRejectedValueOnce(new Error('timeout'))
+    await flow.pay()
+    wrapper.unmount()
+    establishClientSession(
+      { id: 9, email: 'b@example.com', firstName: 'Luis', lastName: '' },
+      'new-token',
+    )
+    render()
+    await flow.load(2)
+    expect(flow.restored.value).toBe(false)
+    expect(flow.quote.value).toBeNull()
+    expect(flow.selected.value).toEqual([])
+    expect(loadPurchaseAttempt()).toBeNull()
+    expect(confirmPurchase).toHaveBeenCalledTimes(1)
+  })
+  it('keeps movie changes from discarding a payment in progress or with an uncertain result', async () => {
+    await ready()
+    let reject!: (error: Error) => void
+    vi.mocked(confirmPurchase).mockReturnValueOnce(
+      new Promise((_, fail) => {
+        reject = fail
+      }),
+    )
+    const pending = flow.pay()
+    await flow.load(99)
+    expect(flow.movie.value?.id).toBe(2)
+    expect(flow.busy.value).toBe(true)
+    reject(new Error('timeout'))
+    await pending
+    await flow.load(99)
+    expect(flow.notice.value).toContain('compra pendiente')
+    expect(flow.uncertain.value).toBe(true)
+    expect(getPurchaseFunctions).toHaveBeenCalledTimes(1)
+    expect(loadPurchaseAttempt()).not.toBeNull()
+  })
+  it('does not submit if the pending attempt cannot be saved', async () => {
+    await ready()
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      throw new Error('quota')
+    })
+    await flow.pay()
+    expect(confirmPurchase).not.toHaveBeenCalled()
+    expect(flow.uncertain.value).toBe(false)
+    expect(flow.busy.value).toBe(false)
+    expect(flow.error.value).toContain('No se pudo guardar o recuperar')
+  })
+  it('blocks a new purchase if stored pending data is corrupted', async () => {
+    sessionStorage.setItem('cinetadel.pending-purchase', '{')
+    await flow.load(2)
+    expect(getPurchaseFunctions).not.toHaveBeenCalled()
+    expect(flow.movie.value).toBeNull()
+    expect(flow.error.value).toContain('Vuelve a cargar la página')
+  })
+  it.each(['QUOTE_CHANGED', 'SEATS_UNAVAILABLE', 'FUNCTION_UNAVAILABLE'])(
+    'releases a previously uncertain attempt after a definitive %s rejection',
+    async (code) => {
+      await ready()
+      vi.mocked(confirmPurchase)
+        .mockRejectedValueOnce(new Error('timeout'))
+        .mockRejectedValueOnce(conflict(code))
+      await flow.pay()
+      await flow.pay()
+      expect(flow.uncertain.value).toBe(false)
+      expect(flow.quote.value).toBeNull()
+      expect(flow.step.value).toBe(2)
+      expect(loadPurchaseAttempt()).toBeNull()
+      expect(getPurchaseSeats).toHaveBeenCalledTimes(2)
+    },
+  )
+  it('preserves the request on a temporary lock conflict even on the first attempt', async () => {
+    await ready()
+    vi.mocked(confirmPurchase).mockRejectedValueOnce(conflict('PURCHASE_BUSY'))
+    await flow.pay()
+    expect(flow.uncertain.value).toBe(true)
+    expect(flow.step.value).toBe(3)
+    const original = vi.mocked(confirmPurchase).mock.calls[0]![0]
+    await flow.pay()
+    expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(original)
+    expect(flow.receipt.value?.id).toBe(12)
+  })
+  it('adopts a login after a definite guest rejection, without losing the selection', async () => {
+    await guestReady()
+    await flow.identify(buyer)
+    let reject!: (error: unknown) => void
+    vi.mocked(confirmGuestPurchase).mockReturnValueOnce(
+      new Promise((_, fail) => {
+        reject = fail
+      }),
+    )
+    const pending = flow.pay()
+    establishClientSession({ id: 9, email: buyer.email, firstName: 'Ana', lastName: '' }, 'token')
+    await nextTick()
+    expect(flow.guest.value).toBe(true)
+    reject(conflict('CLIENT_LOGIN_REQUIRED'))
+    await pending
+    await flushPromises()
+    expect(flow.guest.value).toBe(false)
+    expect(flow.selected.value).toHaveLength(1)
+    expect(flow.step.value).toBe(3)
+    expect(flow.quote.value).not.toBeNull()
+    expect(loadPurchaseAttempt()).toBeNull()
+  })
+  it('retains the original guest receipt when a login occurs while payment succeeds', async () => {
+    await guestReady()
+    await flow.identify(buyer)
+    let resolve!: (value: never) => void
+    vi.mocked(confirmGuestPurchase).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done
+      }),
+    )
+    const pending = flow.pay()
+    establishClientSession({ id: 9, email: buyer.email, firstName: 'Ana', lastName: '' }, 'token')
+    await nextTick()
+    resolve({ id: 12, accessCode: 'private' } as never)
+    await pending
+    expect(flow.guest.value).toBe(true)
+    expect(flow.step.value).toBe(5)
+    expect(flow.guestReceipt.value?.accessCode).toBe('private')
+    expect(quotePurchase).not.toHaveBeenCalled()
+  })
+  it('does not let an old confirmation unlock a newer client’s payment', async () => {
+    await ready()
+    let oldDone!: (value: never) => void, newDone!: (value: never) => void
+    vi.mocked(confirmPurchase).mockReturnValueOnce(
+      new Promise((done) => {
+        oldDone = done
+      }),
+    )
+    const oldPayment = flow.pay()
+    establishClientSession(
+      { id: 9, email: 'b@example.com', firstName: 'Luis', lastName: '' },
+      'new-token',
+    )
+    await flushPromises()
+    await flow.chooseFunction(4)
+    flow.setSelection([seats[1]!])
+    await flow.summarize()
+    vi.mocked(confirmPurchase).mockReturnValueOnce(
+      new Promise((done) => {
+        newDone = done
+      }),
+    )
+    const newPayment = flow.pay()
+    oldDone({ id: 12 } as never)
+    await oldPayment
+    expect(flow.busy.value).toBe(true)
+    expect(flow.receipt.value).toBeNull()
+    expect(loadPurchaseAttempt()?.selection.seats.GENERAL).toEqual([2])
+    newDone({ id: 13 } as never)
+    await newPayment
+    expect(flow.receipt.value?.id).toBe(13)
+    expect(flow.busy.value).toBe(false)
+  })
+  it('does not let an old quote stop the loading indicator of a newer request', async () => {
+    await flow.load(2)
+    await flow.chooseFunction(4)
+    flow.setSelection([seats[0]!])
+    let quoteDone!: (value: never) => void, loadDone!: (value: never) => void
+    vi.mocked(quotePurchase).mockReturnValueOnce(
+      new Promise((done) => {
+        quoteDone = done
+      }),
+    )
+    const old = flow.summarize()
+    const signal = vi.mocked(quotePurchase).mock.calls[0]![1]!
+    vi.mocked(getPurchaseFunctions).mockReturnValueOnce(
+      new Promise((done) => {
+        loadDone = done
+      }),
+    )
+    const newer = flow.load(3)
+    expect(signal.aborted).toBe(true)
+    quoteDone(quoted({ functionId: 4, seats: { GENERAL: [1], CHILD: [], SENIOR: [] } }) as never)
+    await old
+    expect(flow.loading.value).toBe(true)
+    expect(flow.quote.value).toBeNull()
+    loadDone({ movie: { id: 3 }, functions: [] } as never)
+    await newer
+    expect(flow.loading.value).toBe(false)
+    expect(flow.movie.value?.id).toBe(3)
+  })
+  it('aborts guest identification on unmount and ignores the late error', async () => {
+    await guestReady()
+    let reject!: (error: Error) => void
+    vi.mocked(identifyGuestBuyer).mockReturnValueOnce(
+      new Promise((_, fail) => {
+        reject = fail
+      }),
+    )
+    const pending = flow.identify(buyer)
+    const signal = vi.mocked(identifyGuestBuyer).mock.calls[0]![1]!
+    wrapper.unmount()
+    expect(signal.aborted).toBe(true)
+    reject(new Error('late timeout'))
+    await pending
+    expect(flow.buyerError.value).toBe('')
+    expect(quoteGuestPurchase).not.toHaveBeenCalled()
   })
 })

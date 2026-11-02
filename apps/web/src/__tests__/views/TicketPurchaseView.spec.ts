@@ -86,6 +86,7 @@ function render() {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  sessionStorage.clear()
   navigation.route = reactive({ path: '/buy-tickets', query: { movieId: '2' } })
   establishClientSession(
     { id: 8, email: 'a@example.com', firstName: 'Ana', lastName: 'Rojas' },
@@ -100,14 +101,16 @@ beforeEach(() => {
     seats: [seat],
     categories: [],
   } as never)
-  vi.mocked(quotePurchase).mockResolvedValue({
-    function: context,
-    seats: [{ ...seat, category: 'GENERAL' }],
-    lines: [],
-    quantity: 1,
-    total: 3000,
-    version: 'hash',
-  } as never)
+  vi.mocked(quotePurchase).mockImplementation((data) =>
+    Promise.resolve({
+      function: context,
+      seats: [{ ...seat, category: data.seats.CHILD.length ? 'CHILD' : 'GENERAL' }],
+      lines: [],
+      quantity: 1,
+      total: 3000,
+      version: 'a'.repeat(64),
+    } as never),
+  )
   vi.mocked(confirmPurchase).mockResolvedValue({
     id: 12,
     function: context,
@@ -120,6 +123,7 @@ beforeEach(() => {
 afterEach(() => {
   wrapper?.unmount()
   clearClientSession()
+  sessionStorage.clear()
   document.body.innerHTML = ''
 })
 describe('TicketPurchaseView', () => {
@@ -138,9 +142,10 @@ describe('TicketPurchaseView', () => {
     vi.mocked(quoteGuestPurchase).mockResolvedValue({
       function: context,
       lines: [],
-      seats: [seat],
+      seats: [{ ...seat, category: 'GENERAL' }],
       total: 3000,
-      version: 'hash',
+      quantity: 1,
+      version: 'a'.repeat(64),
     } as never)
     vi.mocked(confirmGuestPurchase).mockResolvedValue({
       id: 12,
@@ -260,5 +265,30 @@ describe('TicketPurchaseView', () => {
     expect(wrapper.text()).toContain('¡Compra exitosa!')
     expect(wrapper.find('.actions').exists()).toBe(false)
     expect(vi.mocked(confirmPurchase).mock.calls[2]![0]).toEqual(original)
+  })
+  it('restores the summary after reload and waits for an explicit retry', async () => {
+    vi.mocked(confirmPurchase).mockRejectedValueOnce(new Error('timeout'))
+    render()
+    await flushPromises()
+    wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
+    await flushPromises()
+    wrapper.getComponent(SeatSelectionStep).vm.$emit('selection', [seat])
+    wrapper.getComponent(SeatSelectionStep).vm.$emit('continue')
+    await flushPromises()
+    await wrapper.get('.purchase-action.primary').trigger('click')
+    await flushPromises()
+    const original = vi.mocked(confirmPurchase).mock.calls[0]![0]
+    wrapper.unmount()
+    render()
+    await flushPromises()
+    expect(wrapper.get('[role="status"]').text()).toContain(
+      'Recuperamos un intento de compra pendiente',
+    )
+    expect(wrapper.get('.purchase-action.primary').text()).toBe('Reintentar pago')
+    expect(confirmPurchase).toHaveBeenCalledTimes(1)
+    await wrapper.get('.purchase-action.primary').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(original)
+    expect(wrapper.text()).toContain('¡Compra exitosa!')
   })
 })

@@ -11,7 +11,6 @@ import {
   clientSession,
   clientSessionRevision,
 } from '@/services/client-session.service'
-import { authErrorStatus } from '@/utils/auth-errors'
 import {
   getGuestPurchaseFunctions,
   getGuestPurchaseSeats,
@@ -19,11 +18,19 @@ import {
   confirmGuestPurchase,
   identifyGuestBuyer,
 } from '@/services/guest-purchase.service'
+import {
+  clearPurchaseAttempt,
+  loadPurchaseAttempt,
+  savePurchaseAttempt,
+  PurchaseAttemptStorageError,
+} from '@/services/purchase-attempt.service'
+import { authErrorStatus } from '@/utils/auth-errors'
 import { validEmail } from '@/utils/user-validation'
 import type { Seat } from '@/types/seats'
 import type {
   GuestBuyer,
   GuestPurchaseReceipt,
+  PendingPurchaseAttempt,
   PurchaseMovie,
   PurchaseFunction,
   SeatAvailability,
@@ -32,6 +39,16 @@ import type {
   PurchaseSelection,
   TicketCategory,
 } from '@/types/purchase'
+
+const DEFINITIVE_CONFLICTS = new Set([
+  'QUOTE_CHANGED',
+  'SEATS_UNAVAILABLE',
+  'FUNCTION_UNAVAILABLE',
+  'CLIENT_LOGIN_REQUIRED',
+])
+function errorCode(error: unknown) {
+  return (error as { response?: { data?: { code?: string } } } | null)?.response?.data?.code
+}
 export function useTicketPurchase(onExpired: () => void) {
   const movie = ref<PurchaseMovie | null>(null),
     functions = ref<PurchaseFunction[]>([]),
@@ -45,19 +62,29 @@ export function useTicketPurchase(onExpired: () => void) {
     busy = ref(false),
     uncertain = ref(false),
     error = ref(''),
-    notice = ref('')
-  const guest = ref(!localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY))
-  const guestBuyer = ref<GuestBuyer | null>(null),
+    notice = ref(''),
+    restored = ref(false)
+  const guest = ref(!localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)),
+    guestBuyer = ref<GuestBuyer | null>(null),
     buyerError = ref(''),
     loginRequired = ref(false)
-  const summaryStep = computed(() => (guest.value ? 4 : 3))
-  const finalStep = computed(() => summaryStep.value + 1)
+  const summaryStep = computed(() => (guest.value ? 4 : 3)),
+    finalStep = computed(() => summaryStep.value + 1)
   const labels = computed(() =>
     guest.value
       ? ['Función', 'Asientos', 'Correo', 'Resumen', 'Compra lista']
       : ['Función', 'Asientos', 'Resumen', 'Compra lista'],
   )
-  let paying = false
+  let generation = 0,
+    disposed = false,
+    currentMovieId = 0,
+    requestKey = '',
+    clientId = clientSession.user.value?.id
+  let request: AbortController | undefined,
+    refreshRequest: AbortController | undefined,
+    poll: ReturnType<typeof setInterval> | undefined
+  let paymentSerial: number | null = null,
+    attempt: PendingPurchaseAttempt | null = null
   const api = () =>
     guest.value
       ? {
@@ -66,12 +93,6 @@ export function useTicketPurchase(onExpired: () => void) {
           quote: quoteGuestPurchase,
         }
       : { functions: getPurchaseFunctions, seats: getPurchaseSeats, quote: quotePurchase }
-  let generation = 0,
-    disposed = false,
-    request: AbortController | undefined,
-    poll: ReturnType<typeof setInterval> | undefined,
-    refreshing = false,
-    requestKey = ''
   const selection = computed<PurchaseSelection>(() => {
     const seats: PurchaseSelection['seats'] = { GENERAL: [], CHILD: [], SENIOR: [] }
     const context = availability.value?.function
@@ -82,6 +103,7 @@ export function useTicketPurchase(onExpired: () => void) {
       }
     return { functionId: context?.id ?? 0, seats }
   })
+  const locked = () => paymentSerial !== null || uncertain.value || attempt !== null
   function session() {
     const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY),
       revision = clientSessionRevision()
@@ -92,65 +114,124 @@ export function useTicketPurchase(onExpired: () => void) {
           token === localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY) &&
           revision === clientSessionRevision()))
   }
-  function failed(error_: unknown) {
-    error.value = purchaseError(error_)
-    if (!guest.value && authErrorStatus(error_) === 401) onExpired()
+  function beginRead() {
+    request?.abort()
+    refreshRequest?.abort()
+    const serial = ++generation,
+      controller = new AbortController(),
+      current = session()
+    request = controller
+    return {
+      serial,
+      controller,
+      active: () => serial === generation && current() && !controller.signal.aborted,
+    }
+  }
+  function failed(failure: unknown) {
+    error.value =
+      failure instanceof PurchaseAttemptStorageError ? failure.message : purchaseError(failure)
+    if (!guest.value && authErrorStatus(failure) === 401) onExpired()
   }
   function invalidate() {
     quote.value = null
     requestKey = ''
   }
+  function releaseAttempt() {
+    clearPurchaseAttempt(attempt?.requestKey ?? requestKey)
+    attempt = null
+    uncertain.value = false
+    restored.value = false
+  }
   function setSelection(seats: Seat[]) {
-    if (busy.value || uncertain.value) return
+    if (busy.value || locked()) return
     const before = JSON.stringify(selection.value.seats)
     selected.value = seats
     if (before !== JSON.stringify(selection.value.seats)) invalidate()
   }
   function setCategory(position: number, category: TicketCategory) {
-    if (busy.value || uncertain.value) return
+    if (busy.value || locked()) return
     categories.value = { ...categories.value, [position]: category }
     invalidate()
   }
-  let currentMovieId = 0
+  function recoverAttempt(): boolean {
+    try {
+      const saved = loadPurchaseAttempt()
+      if (!saved) return false
+      if (saved.buyer.kind === 'client' && saved.buyer.clientId !== clientSession.user.value?.id) {
+        if (!localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY) || clientSession.user.value)
+          clearPurchaseAttempt(saved.requestKey)
+        return false
+      }
+      attempt = saved
+      guest.value = saved.buyer.kind === 'guest'
+      guestBuyer.value =
+        saved.buyer.kind === 'guest'
+          ? { email: saved.buyer.email, confirmEmail: saved.buyer.confirmEmail }
+          : null
+      quote.value = saved.quote
+      requestKey = saved.requestKey
+      currentMovieId = saved.quote.function.movieId
+      movie.value = {
+        id: currentMovieId,
+        title: saved.quote.function.title,
+        synopsis: saved.quote.function.synopsis,
+        posterImage: saved.quote.function.posterImage,
+      }
+      availability.value = {
+        function: saved.quote.function,
+        seats: saved.quote.seats,
+        categories: [],
+      }
+      selected.value = saved.quote.seats
+      categories.value = Object.fromEntries(
+        saved.quote.seats.map((seat) => [seat.positionId, seat.category]),
+      )
+      uncertain.value = true
+      restored.value = true
+      step.value = summaryStep.value
+      return true
+    } catch (error_) {
+      failed(error_)
+      return true
+    }
+  }
   async function load(movieId: number) {
+    if (locked()) {
+      notice.value = 'Comprueba el resultado de la compra pendiente antes de iniciar otra.'
+      return
+    }
+    if (recoverAttempt()) return
     currentMovieId = movieId
-    const current = session(),
-      serial = ++generation
-    request?.abort()
-    const controller = new AbortController()
-    request = controller
+    const operation = beginRead()
     loading.value = true
+    busy.value = false
     error.value = ''
+    notice.value = ''
     movie.value = null
     functions.value = []
     availability.value = null
     selected.value = []
     receipt.value = null
-    uncertain.value = false
     step.value = 1
     guestBuyer.value = null
     buyerError.value = ''
     loginRequired.value = false
     invalidate()
     try {
-      const result = await api().functions(movieId, controller.signal)
-      if (current() && serial === generation) {
+      const result = await api().functions(movieId, operation.controller.signal)
+      if (operation.active()) {
         movie.value = result.movie
         functions.value = result.functions
       }
     } catch (error_) {
-      if (current() && !controller.signal.aborted && serial === generation) failed(error_)
+      if (operation.active()) failed(error_)
     } finally {
-      if (serial === generation) loading.value = false
+      if (operation.serial === generation) loading.value = false
     }
   }
   async function chooseFunction(id: number) {
-    if (busy.value || uncertain.value) return
-    const current = session(),
-      serial = ++generation
-    request?.abort()
-    const controller = new AbortController()
-    request = controller
+    if (busy.value || locked()) return
+    const operation = beginRead()
     loading.value = true
     error.value = ''
     availability.value = null
@@ -158,15 +239,15 @@ export function useTicketPurchase(onExpired: () => void) {
     categories.value = {}
     invalidate()
     try {
-      const data = await api().seats(id, controller.signal)
-      if (current() && serial === generation) {
+      const data = await api().seats(id, operation.controller.signal)
+      if (operation.active()) {
         availability.value = data
         step.value = 2
       }
     } catch (error_) {
-      if (current() && !controller.signal.aborted && serial === generation) failed(error_)
+      if (operation.active()) failed(error_)
     } finally {
-      if (serial === generation) loading.value = false
+      if (operation.serial === generation) loading.value = false
     }
   }
   function applyAvailability(data: SeatAvailability) {
@@ -189,22 +270,27 @@ export function useTicketPurchase(onExpired: () => void) {
     const id = availability.value?.function.id
     if (
       !id ||
-      refreshing ||
+      refreshRequest ||
       busy.value ||
-      uncertain.value ||
+      locked() ||
       receipt.value ||
       document.visibilityState === 'hidden'
     )
       return
-    refreshing = true
     const current = session(),
-      serial = generation
-    const controller = new AbortController()
-    request = controller
+      serial = generation,
+      controller = new AbortController()
+    refreshRequest = controller
     try {
       const data = await api().seats(id, controller.signal)
-      if (!current() || serial !== generation || busy.value) return
-      applyAvailability(data)
+      if (
+        current() &&
+        serial === generation &&
+        !controller.signal.aborted &&
+        !busy.value &&
+        !locked()
+      )
+        applyAvailability(data)
     } catch (error_) {
       if (current() && serial === generation && !controller.signal.aborted) {
         if (authErrorStatus(error_) === 409) {
@@ -216,11 +302,11 @@ export function useTicketPurchase(onExpired: () => void) {
         failed(error_)
       }
     } finally {
-      refreshing = false
+      if (refreshRequest === controller) refreshRequest = undefined
     }
   }
   async function summarize() {
-    if (busy.value || uncertain.value) return
+    if (busy.value || locked()) return
     if (!selected.value.length) {
       error.value = 'Selecciona al menos un asiento para continuar.'
       return
@@ -234,7 +320,7 @@ export function useTicketPurchase(onExpired: () => void) {
     await review()
   }
   async function identify(buyer: GuestBuyer) {
-    if (busy.value || uncertain.value || !guest.value) return
+    if (busy.value || locked() || !guest.value) return
     const normalized = {
       email: buyer.email.trim().toLowerCase(),
       confirmEmail: buyer.confirmEmail.trim().toLowerCase(),
@@ -243,147 +329,197 @@ export function useTicketPurchase(onExpired: () => void) {
       buyerError.value = 'Introduce un correo válido y confírmalo con la misma dirección.'
       return
     }
-    const current = session(),
-      serial = ++generation
-    request?.abort()
+    const operation = beginRead()
     busy.value = true
     buyerError.value = ''
     loginRequired.value = false
     let accepted = false
     try {
-      await identifyGuestBuyer(normalized)
-      if (current() && serial === generation) {
+      await identifyGuestBuyer(normalized, operation.controller.signal)
+      if (operation.active()) {
         guestBuyer.value = normalized
         accepted = true
       }
     } catch (error_) {
-      if (current() && serial === generation) {
+      if (operation.active()) {
         buyerError.value = purchaseError(error_)
-        loginRequired.value = requiresLogin(error_)
+        loginRequired.value = errorCode(error_) === 'CLIENT_LOGIN_REQUIRED'
       }
     } finally {
-      if (serial === generation) busy.value = false
+      if (operation.serial === generation) busy.value = false
     }
     if (accepted) await review()
   }
-  function requiresLogin(error_: unknown): boolean {
-    return (
-      (error_ as { response?: { data?: { code?: string } } } | null)?.response?.data?.code ===
-      'CLIENT_LOGIN_REQUIRED'
-    )
-  }
   async function review() {
-    request?.abort()
-    const current = session(),
-      serial = ++generation
+    const operation = beginRead()
     busy.value = true
     error.value = ''
     try {
-      const result = await api().quote(selection.value)
-      if (current() && serial === generation) {
+      const result = await api().quote(selection.value, operation.controller.signal)
+      if (operation.active()) {
         quote.value = result
         requestKey = crypto.randomUUID()
         step.value = summaryStep.value
       }
     } catch (error_) {
-      if (current() && serial === generation) {
+      if (operation.active()) {
         failed(error_)
         step.value = 2
       }
     } finally {
-      if (serial === generation) busy.value = false
+      if (operation.serial === generation) busy.value = false
+    }
+  }
+  function prepareAttempt(): PendingPurchaseAttempt | null {
+    if (attempt) return attempt
+    const buyer =
+      guest.value && guestBuyer.value
+        ? { kind: 'guest' as const, ...guestBuyer.value }
+        : { kind: 'client' as const, clientId: clientSession.user.value?.id ?? 0 }
+    try {
+      attempt = savePurchaseAttempt({
+        version: 1,
+        buyer,
+        requestKey,
+        quote: quote.value!,
+        selection: selection.value,
+      })
+      return attempt
+    } catch (error_) {
+      failed(error_)
+      return null
     }
   }
   async function pay() {
-    if (!quote.value || busy.value || (guest.value && !guestBuyer.value)) return
+    if (!quote.value || busy.value || receipt.value || (guest.value && !guestBuyer.value)) return
+    const pending = prepareAttempt()
+    if (!pending) return
     request?.abort()
-    const current = session(),
-      serial = ++generation,
+    refreshRequest?.abort()
+    const serial = ++generation,
+      current = session(),
       wasUncertain = uncertain.value
     busy.value = true
-    paying = true
+    uncertain.value = true
+    paymentSerial = serial
     error.value = ''
     try {
       const data = {
-        ...selection.value,
-        requestKey,
-        quoteVersion: quote.value.version,
+        ...pending.selection,
+        requestKey: pending.requestKey,
+        quoteVersion: pending.quote.version,
       }
       const result =
-        guest.value && guestBuyer.value
-          ? await confirmGuestPurchase({ ...data, ...guestBuyer.value })
+        pending.buyer.kind === 'guest'
+          ? await confirmGuestPurchase({
+              ...data,
+              email: pending.buyer.email,
+              confirmEmail: pending.buyer.confirmEmail,
+            })
           : await confirmPurchase(data)
       if (current() && serial === generation) {
         receipt.value = result
-        uncertain.value = false
+        releaseAttempt()
+        notice.value = ''
         step.value = finalStep.value
       }
     } catch (error_) {
-      if (!current() || serial !== generation) return
-      await paymentFailed(error_, wasUncertain)
+      if (current() && serial === generation) await paymentFailed(error_, wasUncertain)
     } finally {
-      busy.value = false
-      paying = false
+      if (serial === generation) {
+        busy.value = false
+        paymentSerial = null
+        adoptClient()
+      }
     }
   }
-  async function paymentFailed(error_: unknown, wasUncertain: boolean) {
-    failed(error_)
-    const status = authErrorStatus(error_)
-    uncertain.value = wasUncertain || !status || status >= 500
+  async function paymentFailed(failure: unknown, wasUncertain: boolean) {
+    failed(failure)
+    const status = authErrorStatus(failure),
+      code = errorCode(failure)
+    const definite = status === 409 && DEFINITIVE_CONFLICTS.has(code ?? '')
+    uncertain.value =
+      !definite && (wasUncertain || !status || status >= 500 || code === 'PURCHASE_BUSY')
     if (uncertain.value) {
       error.value += guest.value
         ? ' Reintenta el pago de esta misma selección para recuperar tu compra sin duplicarla. Conservaremos la selección mientras comprobamos el resultado.'
         : ' Puedes reintentar el pago de esta misma selección; la compra no se duplicará. También puedes consultar «Mis compras».'
-    } else if (requiresLogin(error_)) {
+      return
+    }
+    releaseAttempt()
+    if (code === 'CLIENT_LOGIN_REQUIRED') {
       loginRequired.value = true
-      buyerError.value = purchaseError(error_)
+      buyerError.value = purchaseError(failure)
       error.value = ''
       step.value = 3
       invalidate()
     } else if (status === 409) {
-      uncertain.value = false
       invalidate()
       step.value = 2
       busy.value = false
+      // The failed transaction has finished; refresh is now safe.
+      paymentSerial = null
       await refresh()
     }
   }
   function back() {
-    if (busy.value || uncertain.value) return
-    step.value = Math.max(1, step.value - 1)
+    if (!busy.value && !locked()) step.value = Math.max(1, step.value - 1)
   }
-  const stop = watch(clientSession.status, (status) => {
+  function resetOperations() {
+    generation++
+    request?.abort()
+    refreshRequest?.abort()
+    loading.value = false
+    busy.value = false
+    paymentSerial = null
+  }
+  function adoptClient() {
     if (
-      status === 'authenticated' &&
-      guest.value &&
-      !paying &&
-      !uncertain.value &&
-      !receipt.value
-    ) {
-      generation++
-      request?.abort()
-      guest.value = false
-      loading.value = false
-      busy.value = false
-      guestBuyer.value = null
-      buyerError.value = ''
-      loginRequired.value = false
-      invalidate()
-      step.value = availability.value ? 2 : 1
-      if (selected.value.length) void review()
-      else if (!movie.value && currentMovieId) void load(currentMovieId)
-    }
-    if (status === 'anonymous' && !guest.value) {
-      generation++
-      request?.abort()
-      movie.value = null
-      availability.value = null
-      selected.value = []
-      quote.value = null
-      receipt.value = null
-      onExpired()
-    }
-  })
+      !guest.value ||
+      clientSession.status.value !== 'authenticated' ||
+      !clientSession.user.value ||
+      locked() ||
+      receipt.value
+    )
+      return
+    resetOperations()
+    guest.value = false
+    clientId = clientSession.user.value.id
+    guestBuyer.value = null
+    buyerError.value = ''
+    loginRequired.value = false
+    invalidate()
+    step.value = availability.value ? 2 : 1
+    if (selected.value.length) void review()
+    else if (!movie.value && currentMovieId) void load(currentMovieId)
+  }
+  function clearPrivateState() {
+    resetOperations()
+    releaseAttempt()
+    movie.value = null
+    functions.value = []
+    availability.value = null
+    selected.value = []
+    invalidate()
+    receipt.value = null
+  }
+  const stop = watch(
+    () => [clientSession.status.value, clientSession.user.value?.id] as const,
+    ([status, id]) => {
+      if (guest.value) {
+        adoptClient()
+        return
+      }
+      if (status === 'anonymous') {
+        clearPrivateState()
+        onExpired()
+      } else if (status === 'authenticated' && id !== clientId) {
+        clearPrivateState()
+        clientId = id
+        if (currentMovieId) void load(currentMovieId)
+      }
+    },
+  )
   const focus = () => void refresh()
   onMounted(() => {
     poll = setInterval(focus, 10000)
@@ -394,6 +530,7 @@ export function useTicketPurchase(onExpired: () => void) {
     disposed = true
     generation++
     request?.abort()
+    refreshRequest?.abort()
     clearInterval(poll)
     window.removeEventListener('focus', focus)
     document.removeEventListener('visibilitychange', focus)
@@ -408,6 +545,7 @@ export function useTicketPurchase(onExpired: () => void) {
     finalStep,
     labels,
     identify,
+    restored,
     guestReceipt: computed(() =>
       receipt.value && 'accessCode' in receipt.value
         ? (receipt.value as GuestPurchaseReceipt)

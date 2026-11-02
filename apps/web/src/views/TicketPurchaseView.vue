@@ -42,6 +42,7 @@ const {
   loading,
   busy,
   uncertain,
+  restored,
   error,
   notice,
 } = flow
@@ -103,6 +104,10 @@ watch(
       />
       <section v-if="step === summaryStep && quote">
         <h1>Revisa tu compra</h1>
+        <p v-if="restored" role="status">
+          Recuperamos un intento de compra pendiente. Reintenta el pago para comprobar su resultado
+          sin duplicarlo.
+        </p>
         <PurchaseSummary :purchase="quote" :buyer-email="guestBuyer?.email" />
         <div class="actions">
           <button
