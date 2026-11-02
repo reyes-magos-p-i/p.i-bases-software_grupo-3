@@ -14,6 +14,7 @@ import {
 } from './purchase-catalog.repository';
 import {
   purchaseQuote,
+  purchaseQrPayload,
   requireAvailableFunction,
   requireGuestEmailAvailable,
   selectionHash,
@@ -36,6 +37,7 @@ import {
   matchesGuestPurchaseCode,
 } from './guest-purchase-access';
 import type { UserStatus } from '../users/types/user-status.type';
+import { TicketEmailRepository } from './ticket-email.repository';
 
 type Buyer = { clientId: number } | { email: string };
 function buyerScope(buyer: Buyer): { condition: string; binds: Binds } {
@@ -57,6 +59,7 @@ export class PurchasesRepository {
   constructor(
     private readonly db: DatabaseService,
     private readonly catalog: PurchaseCatalogRepository,
+    private readonly ticketEmails: TicketEmailRepository,
   ) {}
   private query<T>(
     sql: string,
@@ -196,6 +199,7 @@ export class PurchasesRepository {
     requireAvailableFunction(
       await this.catalog.getFunction(context.id, connection),
     );
+    await this.ticketEmails.enqueueInitial(connection, id, email);
     return this.readReceipt(id, buyer, connection);
   }
   private async requireGuestEmail(
@@ -390,6 +394,38 @@ export class PurchasesRepository {
     const receipt = await this.readReceipt(id, { email: row.email });
     return { ...receipt, accessCode: guestPurchaseCode(id, row.requestKey) };
   }
+  async findForEmail(
+    id: number,
+  ): Promise<{ receipt: PurchaseReceipt; accessCode?: string }> {
+    const result = await this.db.query<{
+      clientId: number | null;
+      email: string;
+      requestKey: string;
+    }>(
+      `SELECT CLIENT_ID AS "clientId",BUYER_EMAIL AS "email",REQUEST_KEY AS "requestKey" FROM INVOICES WHERE INVOICE_ID=:id AND STATUS='PAID'`,
+      { id },
+    );
+    const buyer = result.rows?.[0];
+    if (!buyer)
+      throw new NotFoundException(
+        'No se pueden enviar los boletos de esta compra.',
+      );
+    const receipt = await this.readReceipt(
+      id,
+      buyer.clientId === null
+        ? { email: buyer.email }
+        : { clientId: buyer.clientId },
+    );
+    if (!receipt.tickets.length)
+      throw new NotFoundException('Esta compra no tiene boletos disponibles.');
+    return {
+      receipt,
+      ...(buyer.clientId === null
+        ? { accessCode: guestPurchaseCode(id, buyer.requestKey) }
+        : {}),
+    };
+  }
+
   private async readReceipt(
     id: number,
     buyer: Buyer,
@@ -454,13 +490,14 @@ export class PurchasesRepository {
       }));
     }
     const tickets = await this.query<PurchasedTicket>(
-      `SELECT tk.TICKETS_ID AS "id",tk.SEAT_ROW AS "rowNumber",tk.SEAT_COLUMN AS "columnNumber",tk.THEATER_ID AS "theaterId",tk.MOVIE_FUNCTION_ID AS "functionId",m.TITLE AS "title",TO_CHAR(mf.START_TIME,'YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "startsAt",mf.STATUS AS "functionStatus",ip.UNIT_PRICE AS "unitPrice",CASE WHEN p.CODE LIKE 'TICKET_CHILD_%' THEN 'CHILD' WHEN p.CODE LIKE 'TICKET_SENIOR_%' THEN 'SENIOR' ELSE 'GENERAL' END AS "category" FROM TICKETS tk JOIN MOVIE_FUNCTIONS mf ON mf.MOVIE_FUNCTION_ID=tk.MOVIE_FUNCTION_ID JOIN MOVIES m ON m.MOVIE_ID=mf.MOVIE_ID JOIN INVOICE_PRODUCTS ip ON ip.INVOICE_ID=tk.INVOICE_ID AND ip.PRODUCT_ID=tk.PRODUCT_ID JOIN PRODUCTS p ON p.PRODUCT_ID=tk.PRODUCT_ID WHERE tk.INVOICE_ID=:id ORDER BY tk.SEAT_ROW,tk.SEAT_COLUMN,tk.TICKETS_ID`,
+      `SELECT tk.TICKETS_ID AS "id",tk.SEAT_ROW AS "rowNumber",tk.SEAT_COLUMN AS "columnNumber",tk.THEATER_ID AS "theaterId",tk.MOVIE_FUNCTION_ID AS "functionId",m.TITLE AS "title",c.NAME AS "branchName",TO_CHAR(mf.START_TIME,'YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "startsAt",mf.STATUS AS "functionStatus",ip.UNIT_PRICE AS "unitPrice",CASE WHEN p.CODE LIKE 'TICKET_CHILD_%' THEN 'CHILD' WHEN p.CODE LIKE 'TICKET_SENIOR_%' THEN 'SENIOR' ELSE 'GENERAL' END AS "category" FROM TICKETS tk JOIN MOVIE_FUNCTIONS mf ON mf.MOVIE_FUNCTION_ID=tk.MOVIE_FUNCTION_ID JOIN MOVIES m ON m.MOVIE_ID=mf.MOVIE_ID JOIN THEATERS th ON th.THEATER_ID=tk.THEATER_ID JOIN CINEMAS c ON c.BRANCH_ID=th.BRANCH_ID JOIN INVOICE_PRODUCTS ip ON ip.INVOICE_ID=tk.INVOICE_ID AND ip.PRODUCT_ID=tk.PRODUCT_ID JOIN PRODUCTS p ON p.PRODUCT_ID=tk.PRODUCT_ID WHERE tk.INVOICE_ID=:id ORDER BY tk.SEAT_ROW,tk.SEAT_COLUMN,tk.TICKETS_ID`,
       { id },
       connection,
     );
     return {
       id: row.id,
       reference: `ORD-${String(row.id).padStart(6, '0')}`,
+      qrPayload: purchaseQrPayload(`ORD-${String(row.id).padStart(6, '0')}`),
       purchasedAt: row.purchasedAt,
       status: row.status,
       buyerEmail: row.buyerEmail,

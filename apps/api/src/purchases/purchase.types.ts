@@ -62,6 +62,7 @@ export interface PurchasedTicket {
   theaterId: number;
   functionId: number;
   title: string;
+  branchName: string;
   startsAt: string;
   functionStatus: string;
   unitPrice: number;
@@ -70,6 +71,7 @@ export interface PurchasedTicket {
 export interface PurchaseReceipt {
   id: number;
   reference: string;
+  qrPayload: string;
   purchasedAt: string;
   status: string;
   buyerEmail: string;
@@ -83,4 +85,14 @@ export interface PurchaseReceipt {
 }
 export interface GuestPurchaseReceipt extends PurchaseReceipt {
   accessCode: string;
+}
+
+export type TicketEmailState =
+  'NOT_REQUESTED' | 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'UNKNOWN';
+
+export interface TicketEmailStatus {
+  status: TicketEmailState;
+  recipient: string | null;
+  sentAt: string | null;
+  retryAfter: number;
 }

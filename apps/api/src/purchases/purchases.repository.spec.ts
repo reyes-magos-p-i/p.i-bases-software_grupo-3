@@ -5,6 +5,7 @@ import { PurchasesRepository } from './purchases.repository';
 import { purchaseQuote, selectionHash } from './purchase-rules';
 import type { PurchaseFunction, PurchaseSeat } from './purchase.types';
 import { guestPurchaseCode } from './guest-purchase-access';
+import { TicketEmailRepository } from './ticket-email.repository';
 const context: PurchaseFunction = {
   id: 4,
   movieId: 2,
@@ -56,9 +57,11 @@ describe('Atomic purchase storage', () => {
     pool: { getConnection: jest.fn().mockResolvedValue(connection) },
   });
   const catalog = { getFunction: jest.fn() };
+  const emails = { enqueueInitial: jest.fn() };
   const repo = new PurchasesRepository(
     db,
     catalog as unknown as PurchaseCatalogRepository,
+    emails as unknown as TicketEmailRepository,
   );
   let overrides: Record<string, unknown>;
   function prepareLargeSelection(quantity: number) {
@@ -158,6 +161,14 @@ describe('Atomic purchase storage', () => {
       tickets: [{ rowNumber: 1, columnNumber: 1 }],
     });
     expect(commit).toHaveBeenCalledTimes(1);
+    expect(emails.enqueueInitial).toHaveBeenCalledWith(
+      connection,
+      12,
+      'client@example.com',
+    );
+    expect(emails.enqueueInitial.mock.invocationCallOrder[0]).toBeLessThan(
+      commit.mock.invocationCallOrder[0]!,
+    );
     expect(rollback).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
     expect(executeMany).toHaveBeenCalledTimes(2);
@@ -186,6 +197,60 @@ describe('Atomic purchase storage', () => {
         productId: 3,
       },
     ]);
+  });
+  it('prepares current client and guest tickets for delivery while preserving the canonical purchase QR', async () => {
+    overrides['SELECT CLIENT_ID AS'] = {
+      rows: [
+        {
+          clientId: 8,
+          email: 'client@example.com',
+          requestKey: valid.requestKey,
+        },
+      ],
+    };
+    const client = await repo.findForEmail(12);
+    expect(client.accessCode).toBeUndefined();
+    expect(JSON.parse(client.receipt.qrPayload)).toEqual({
+      type: 'CINETADEL_PURCHASE',
+      version: 1,
+      reference: 'ORD-000012',
+    });
+    overrides['SELECT CLIENT_ID AS'] = {
+      rows: [
+        {
+          clientId: null,
+          email: 'guest@example.com',
+          requestKey: valid.requestKey,
+        },
+      ],
+    };
+    const guest = await repo.findForEmail(12);
+    expect(guest.accessCode).toBe(guestPurchaseCode(12, valid.requestKey));
+    expect(guest.receipt.qrPayload).toBe(client.receipt.qrPayload);
+    const ticketSql = execute.mock.calls.find(([sql]) =>
+      String(sql).includes('FROM TICKETS tk'),
+    )?.[0] as string;
+    expect(ticketSql).toContain('c.BRANCH_ID=th.BRANCH_ID');
+    expect(ticketSql).toContain('c.NAME AS "branchName"');
+  });
+  it('does not prepare email for a missing, cancelled or ticketless invoice', async () => {
+    await expect(repo.findForEmail(12)).rejects.toMatchObject({ status: 404 });
+    overrides['SELECT CLIENT_ID AS'] = { rows: [{ clientId: 8 }] };
+    overrides['FROM TICKETS tk'] = { rows: [] };
+    await expect(repo.findForEmail(12)).rejects.toThrow('no tiene boletos');
+    expect(
+      execute.mock.calls.find(([sql]) =>
+        String(sql).includes('SELECT CLIENT_ID AS'),
+      )?.[0],
+    ).toContain("STATUS='PAID'");
+  });
+  it('does not enqueue another initial email when the payment key is replayed', async () => {
+    overrides['REQUEST_HASH AS'] = {
+      rows: [{ id: 12, hash: selectionHash(valid) }],
+    };
+    const receipt = await repo.confirm(8, valid);
+    expect(receipt.id).toBe(12);
+    expect(emails.enqueueInitial).not.toHaveBeenCalled();
   });
   it.each(['INSERT INTO INVOICES', 'FROM PRODUCTS WHERE'])(
     'rolls back when %s fails',
@@ -725,6 +790,7 @@ describe('Atomic purchase storage', () => {
       const concurrent = new PurchasesRepository(
         concurrentDb,
         catalog as unknown as PurchaseCatalogRepository,
+        emails as unknown as TicketEmailRepository,
       );
       const results = await Promise.allSettled([
         concurrent.confirm(8, valid),
