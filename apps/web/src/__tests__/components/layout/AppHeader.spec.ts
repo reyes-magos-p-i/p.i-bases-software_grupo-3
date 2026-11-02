@@ -83,6 +83,7 @@ describe('AppHeader authentication navigation', () => {
       routes: [
         { path: '/', component: { template: '<p>Portal</p>' } },
         { path: '/dashboard', component: { template: '<p>Dashboard</p>' } },
+        { path: '/buy-tickets', component: { template: '<p>Compra</p>' } },
         {
           path: '/account/profile',
           meta: { requiresClient: true },
@@ -641,6 +642,30 @@ describe('AppHeader authentication navigation', () => {
         })
       await flushPromises()
       expect(router.currentRoute.value.fullPath).toBe('/')
+    },
+  )
+  it.each(['local', 'social'])(
+    'keeps the checkout route after %s client login and removes only login parameters',
+    async (mode) => {
+      await router.push({
+        path: '/buy-tickets',
+        query: { movieId: '2', login: 'client', reason: 'required' },
+      })
+      await flushPromises()
+      const login = wrapper.getComponent(LoginModal)
+      if (mode === 'local')
+        login.vm.$emit('submit', { email: 'ana@example.com', password: 'valid-secret' })
+      else
+        login.vm.$emit('authenticated', {
+          id: 7,
+          email: 'ana@example.com',
+          firstName: 'Ana',
+          lastName: 'Rojas',
+        })
+      await flushPromises()
+      expect(router.currentRoute.value.path).toBe('/buy-tickets')
+      expect(router.currentRoute.value.query).toEqual({ movieId: '2' })
+      expect(page.findAll('dialog[open]')).toHaveLength(0)
     },
   )
   it('preserves unrelated query parameters when closing the login', async () => {

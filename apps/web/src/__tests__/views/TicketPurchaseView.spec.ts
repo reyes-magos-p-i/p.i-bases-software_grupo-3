@@ -6,6 +6,22 @@ import FunctionSelectionStep from '@/components/purchases/FunctionSelectionStep.
 import SeatSelectionStep from '@/components/purchases/SeatSelectionStep.vue'
 import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import GuestBuyerStep from '@/components/purchases/GuestBuyerStep.vue'
+import GuestPurchaseAccess from '@/components/purchases/GuestPurchaseAccess.vue'
+import {
+  getGuestPurchaseFunctions,
+  getGuestPurchaseSeats,
+  identifyGuestBuyer,
+  quoteGuestPurchase,
+  confirmGuestPurchase,
+} from '@/services/guest-purchase.service'
+vi.mock('@/services/guest-purchase.service', () => ({
+  getGuestPurchaseFunctions: vi.fn(),
+  getGuestPurchaseSeats: vi.fn(),
+  identifyGuestBuyer: vi.fn(),
+  quoteGuestPurchase: vi.fn(),
+  confirmGuestPurchase: vi.fn(),
+}))
 import { establishClientSession, clearClientSession } from '@/services/client-session.service'
 import {
   getPurchaseFunctions,
@@ -13,7 +29,10 @@ import {
   quotePurchase,
   confirmPurchase,
 } from '@/services/purchase.service'
-const navigation = vi.hoisted(() => ({ replace: vi.fn(), route: { query: { movieId: '2' } } }))
+const navigation = vi.hoisted(() => ({
+  replace: vi.fn(),
+  route: { path: '/buy-tickets', query: { movieId: '2' } },
+}))
 vi.mock('vue-router', () => ({ useRoute: () => navigation.route, useRouter: () => navigation }))
 vi.mock('@/facebook-auth', () => ({ fbAuth: { status: 'unknown' }, logoutFromFacebook: vi.fn() }))
 vi.mock('@/services/purchase.service', () => ({
@@ -59,13 +78,15 @@ function render() {
         FunctionSelectionStep: true,
         SeatSelectionStep: true,
         PurchaseSummary: true,
+        GuestBuyerStep: true,
+        GuestPurchaseAccess: true,
       },
     },
   })
 }
 beforeEach(() => {
   vi.resetAllMocks()
-  navigation.route = reactive({ query: { movieId: '2' } })
+  navigation.route = reactive({ path: '/buy-tickets', query: { movieId: '2' } })
   establishClientSession(
     { id: 8, email: 'a@example.com', firstName: 'Ana', lastName: 'Rojas' },
     'token',
@@ -102,6 +123,58 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 describe('TicketPurchaseView', () => {
+  it('adds buyer identification and displays the consultation code only for completed guest purchases', async () => {
+    clearClientSession()
+    vi.mocked(getGuestPurchaseFunctions).mockResolvedValue({
+      movie: { id: 2 },
+      functions: [context],
+    } as never)
+    vi.mocked(getGuestPurchaseSeats).mockResolvedValue({
+      function: context,
+      seats: [seat],
+      categories: [],
+    } as never)
+    vi.mocked(identifyGuestBuyer).mockResolvedValue({ email: 'guest@example.com' })
+    vi.mocked(quoteGuestPurchase).mockResolvedValue({
+      function: context,
+      lines: [],
+      seats: [seat],
+      total: 3000,
+      version: 'hash',
+    } as never)
+    vi.mocked(confirmGuestPurchase).mockResolvedValue({
+      id: 12,
+      accessCode: 'private',
+      function: context,
+      tickets: [],
+      lines: [],
+    } as never)
+    render()
+    await flushPromises()
+    wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
+    await flushPromises()
+    wrapper.getComponent(SeatSelectionStep).vm.$emit('selection', [seat])
+    wrapper.getComponent(SeatSelectionStep).vm.$emit('continue')
+    await flushPromises()
+    expect(wrapper.findComponent(GuestPurchaseAccess).exists()).toBe(false)
+    wrapper.getComponent(GuestBuyerStep).vm.$emit('login')
+    await flushPromises()
+    expect(navigation.replace).toHaveBeenCalledWith({
+      path: '/buy-tickets',
+      query: { movieId: '2', login: 'client' },
+    })
+    wrapper
+      .getComponent(GuestBuyerStep)
+      .vm.$emit('continue', { email: 'guest@example.com', confirmEmail: 'guest@example.com' })
+    await flushPromises()
+    expect(wrapper.getComponent(PurchaseSummary).props('buyerEmail')).toBe('guest@example.com')
+    expect(wrapper.text()).toContain('Volver al correo')
+    await wrapper.get('.actions .primary').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Tu compra como invitado quedó registrada')
+    expect(wrapper.getComponent(GuestPurchaseAccess).props('accessCode')).toBe('private')
+    expect(wrapper.text()).not.toContain('enviados')
+  })
   it('completes function, seat, review and simulated payment through reusable steps', async () => {
     render()
     await flushPromises()

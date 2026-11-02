@@ -9,6 +9,8 @@ import PurchaseStepper from '@/components/purchases/PurchaseStepper.vue'
 import FunctionSelectionStep from '@/components/purchases/FunctionSelectionStep.vue'
 import SeatSelectionStep from '@/components/purchases/SeatSelectionStep.vue'
 import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
+import GuestBuyerStep from '@/components/purchases/GuestBuyerStep.vue'
+import GuestPurchaseAccess from '@/components/purchases/GuestPurchaseAccess.vue'
 import { useTicketPurchase } from '@/composables/useTicketPurchase'
 import { clearClientSession } from '@/services/client-session.service'
 const route = useRoute(),
@@ -21,6 +23,14 @@ const flow = useTicketPurchase(() => {
   void router.replace({ path: '/', query: { login: 'client', reason: 'expired' } })
 })
 const {
+  guest,
+  guestBuyer,
+  guestReceipt,
+  buyerError,
+  loginRequired,
+  summaryStep,
+  finalStep,
+  labels,
   movie,
   functions,
   availability,
@@ -54,7 +64,7 @@ watch(
   <AppHeader />
   <main class="purchase-flow">
     <RouterLink to="/">← Volver al portal</RouterLink
-    ><PurchaseStepper :step="step" /><NotificationPopup
+    ><PurchaseStepper :step="step" :labels="labels" /><NotificationPopup
       v-if="error || notice"
       :type="error ? 'error' : 'alert'"
       :message="error || notice"
@@ -81,9 +91,19 @@ watch(
         @continue="flow.summarize"
         @back="flow.back"
       />
-      <section v-if="step === 3 && quote">
+      <GuestBuyerStep
+        v-if="guest && step === 3"
+        :buyer="guestBuyer"
+        :disabled="busy"
+        :error="buyerError"
+        :login-required="loginRequired"
+        @continue="flow.identify"
+        @back="flow.back"
+        @login="router.replace({ path: route.path, query: { ...route.query, login: 'client' } })"
+      />
+      <section v-if="step === summaryStep && quote">
         <h1>Revisa tu compra</h1>
-        <PurchaseSummary :purchase="quote" />
+        <PurchaseSummary :purchase="quote" :buyer-email="guestBuyer?.email" />
         <div class="actions">
           <button
             type="button"
@@ -91,15 +111,22 @@ watch(
             :disabled="busy || uncertain"
             @click="flow.back"
           >
-            Volver a los asientos</button
+            {{ guest ? 'Volver al correo' : 'Volver a los asientos' }}</button
           ><button type="button" class="purchase-action primary" :disabled="busy" @click="flow.pay">
             {{ busy ? 'Registrando compra...' : uncertain ? 'Reintentar pago' : 'Pagar' }}
           </button>
         </div>
       </section>
-      <section v-if="receipt && step === 4" aria-live="polite">
+      <section v-if="receipt && step === finalStep" aria-live="polite">
         <h1>¡Compra exitosa!</h1>
-        <p>Tu compra quedó registrada en tu cuenta.</p>
+        <p>
+          {{
+            guestReceipt
+              ? 'Tu compra como invitado quedó registrada.'
+              : 'Tu compra quedó registrada en tu cuenta.'
+          }}
+        </p>
+        <GuestPurchaseAccess v-if="guestReceipt" :access-code="guestReceipt.accessCode" />
         <PurchaseSummary :purchase="receipt" />
       </section>
       <p v-if="!movie && !loading && !receipt">

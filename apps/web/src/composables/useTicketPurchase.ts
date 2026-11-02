@@ -12,8 +12,18 @@ import {
   clientSessionRevision,
 } from '@/services/client-session.service'
 import { authErrorStatus } from '@/utils/auth-errors'
+import {
+  getGuestPurchaseFunctions,
+  getGuestPurchaseSeats,
+  quoteGuestPurchase,
+  confirmGuestPurchase,
+  identifyGuestBuyer,
+} from '@/services/guest-purchase.service'
+import { validEmail } from '@/utils/user-validation'
 import type { Seat } from '@/types/seats'
 import type {
+  GuestBuyer,
+  GuestPurchaseReceipt,
   PurchaseMovie,
   PurchaseFunction,
   SeatAvailability,
@@ -36,6 +46,26 @@ export function useTicketPurchase(onExpired: () => void) {
     uncertain = ref(false),
     error = ref(''),
     notice = ref('')
+  const guest = ref(!localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY))
+  const guestBuyer = ref<GuestBuyer | null>(null),
+    buyerError = ref(''),
+    loginRequired = ref(false)
+  const summaryStep = computed(() => (guest.value ? 4 : 3))
+  const finalStep = computed(() => summaryStep.value + 1)
+  const labels = computed(() =>
+    guest.value
+      ? ['Función', 'Asientos', 'Correo', 'Resumen', 'Compra lista']
+      : ['Función', 'Asientos', 'Resumen', 'Compra lista'],
+  )
+  let paying = false
+  const api = () =>
+    guest.value
+      ? {
+          functions: getGuestPurchaseFunctions,
+          seats: getGuestPurchaseSeats,
+          quote: quoteGuestPurchase,
+        }
+      : { functions: getPurchaseFunctions, seats: getPurchaseSeats, quote: quotePurchase }
   let generation = 0,
     disposed = false,
     request: AbortController | undefined,
@@ -57,13 +87,14 @@ export function useTicketPurchase(onExpired: () => void) {
       revision = clientSessionRevision()
     return () =>
       !disposed &&
-      !!token &&
-      token === localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY) &&
-      revision === clientSessionRevision()
+      (guest.value ||
+        (!!token &&
+          token === localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY) &&
+          revision === clientSessionRevision()))
   }
   function failed(error_: unknown) {
     error.value = purchaseError(error_)
-    if (authErrorStatus(error_) === 401) onExpired()
+    if (!guest.value && authErrorStatus(error_) === 401) onExpired()
   }
   function invalidate() {
     quote.value = null
@@ -80,7 +111,9 @@ export function useTicketPurchase(onExpired: () => void) {
     categories.value = { ...categories.value, [position]: category }
     invalidate()
   }
+  let currentMovieId = 0
   async function load(movieId: number) {
+    currentMovieId = movieId
     const current = session(),
       serial = ++generation
     request?.abort()
@@ -95,9 +128,12 @@ export function useTicketPurchase(onExpired: () => void) {
     receipt.value = null
     uncertain.value = false
     step.value = 1
+    guestBuyer.value = null
+    buyerError.value = ''
+    loginRequired.value = false
     invalidate()
     try {
-      const result = await getPurchaseFunctions(movieId, controller.signal)
+      const result = await api().functions(movieId, controller.signal)
       if (current() && serial === generation) {
         movie.value = result.movie
         functions.value = result.functions
@@ -122,7 +158,7 @@ export function useTicketPurchase(onExpired: () => void) {
     categories.value = {}
     invalidate()
     try {
-      const data = await getPurchaseSeats(id, controller.signal)
+      const data = await api().seats(id, controller.signal)
       if (current() && serial === generation) {
         availability.value = data
         step.value = 2
@@ -166,7 +202,7 @@ export function useTicketPurchase(onExpired: () => void) {
     const controller = new AbortController()
     request = controller
     try {
-      const data = await getPurchaseSeats(id, controller.signal)
+      const data = await api().seats(id, controller.signal)
       if (!current() || serial !== generation || busy.value) return
       applyAvailability(data)
     } catch (error_) {
@@ -189,17 +225,65 @@ export function useTicketPurchase(onExpired: () => void) {
       error.value = 'Selecciona al menos un asiento para continuar.'
       return
     }
+    if (guest.value) {
+      step.value = 3
+      buyerError.value = ''
+      loginRequired.value = false
+      return
+    }
+    await review()
+  }
+  async function identify(buyer: GuestBuyer) {
+    if (busy.value || uncertain.value || !guest.value) return
+    const normalized = {
+      email: buyer.email.trim().toLowerCase(),
+      confirmEmail: buyer.confirmEmail.trim().toLowerCase(),
+    }
+    if (!validEmail(normalized.email) || normalized.email !== normalized.confirmEmail) {
+      buyerError.value = 'Introduce un correo válido y confírmalo con la misma dirección.'
+      return
+    }
+    const current = session(),
+      serial = ++generation
+    request?.abort()
+    busy.value = true
+    buyerError.value = ''
+    loginRequired.value = false
+    let accepted = false
+    try {
+      await identifyGuestBuyer(normalized)
+      if (current() && serial === generation) {
+        guestBuyer.value = normalized
+        accepted = true
+      }
+    } catch (error_) {
+      if (current() && serial === generation) {
+        buyerError.value = purchaseError(error_)
+        loginRequired.value = requiresLogin(error_)
+      }
+    } finally {
+      if (serial === generation) busy.value = false
+    }
+    if (accepted) await review()
+  }
+  function requiresLogin(error_: unknown): boolean {
+    return (
+      (error_ as { response?: { data?: { code?: string } } } | null)?.response?.data?.code ===
+      'CLIENT_LOGIN_REQUIRED'
+    )
+  }
+  async function review() {
     request?.abort()
     const current = session(),
       serial = ++generation
     busy.value = true
     error.value = ''
     try {
-      const result = await quotePurchase(selection.value)
+      const result = await api().quote(selection.value)
       if (current() && serial === generation) {
         quote.value = result
         requestKey = crypto.randomUUID()
-        step.value = 3
+        step.value = summaryStep.value
       }
     } catch (error_) {
       if (current() && serial === generation) {
@@ -207,45 +291,61 @@ export function useTicketPurchase(onExpired: () => void) {
         step.value = 2
       }
     } finally {
-      busy.value = false
+      if (serial === generation) busy.value = false
     }
   }
   async function pay() {
-    if (!quote.value || busy.value) return
+    if (!quote.value || busy.value || (guest.value && !guestBuyer.value)) return
     request?.abort()
     const current = session(),
       serial = ++generation,
       wasUncertain = uncertain.value
     busy.value = true
+    paying = true
     error.value = ''
     try {
-      const result = await confirmPurchase({
+      const data = {
         ...selection.value,
         requestKey,
         quoteVersion: quote.value.version,
-      })
+      }
+      const result =
+        guest.value && guestBuyer.value
+          ? await confirmGuestPurchase({ ...data, ...guestBuyer.value })
+          : await confirmPurchase(data)
       if (current() && serial === generation) {
         receipt.value = result
         uncertain.value = false
-        step.value = 4
+        step.value = finalStep.value
       }
     } catch (error_) {
       if (!current() || serial !== generation) return
-      failed(error_)
-      const status = authErrorStatus(error_)
-      uncertain.value = wasUncertain || !status || status >= 500
-      if (uncertain.value) {
-        error.value +=
-          ' Puedes reintentar el pago de esta misma selección; la compra no se duplicará. También puedes consultar «Mis compras».'
-      } else if (status === 409) {
-        uncertain.value = false
-        invalidate()
-        step.value = 2
-        busy.value = false
-        await refresh()
-      }
+      await paymentFailed(error_, wasUncertain)
     } finally {
       busy.value = false
+      paying = false
+    }
+  }
+  async function paymentFailed(error_: unknown, wasUncertain: boolean) {
+    failed(error_)
+    const status = authErrorStatus(error_)
+    uncertain.value = wasUncertain || !status || status >= 500
+    if (uncertain.value) {
+      error.value += guest.value
+        ? ' Reintenta el pago de esta misma selección para recuperar tu compra sin duplicarla. Conservaremos la selección mientras comprobamos el resultado.'
+        : ' Puedes reintentar el pago de esta misma selección; la compra no se duplicará. También puedes consultar «Mis compras».'
+    } else if (requiresLogin(error_)) {
+      loginRequired.value = true
+      buyerError.value = purchaseError(error_)
+      error.value = ''
+      step.value = 3
+      invalidate()
+    } else if (status === 409) {
+      uncertain.value = false
+      invalidate()
+      step.value = 2
+      busy.value = false
+      await refresh()
     }
   }
   function back() {
@@ -253,7 +353,27 @@ export function useTicketPurchase(onExpired: () => void) {
     step.value = Math.max(1, step.value - 1)
   }
   const stop = watch(clientSession.status, (status) => {
-    if (status === 'anonymous') {
+    if (
+      status === 'authenticated' &&
+      guest.value &&
+      !paying &&
+      !uncertain.value &&
+      !receipt.value
+    ) {
+      generation++
+      request?.abort()
+      guest.value = false
+      loading.value = false
+      busy.value = false
+      guestBuyer.value = null
+      buyerError.value = ''
+      loginRequired.value = false
+      invalidate()
+      step.value = availability.value ? 2 : 1
+      if (selected.value.length) void review()
+      else if (!movie.value && currentMovieId) void load(currentMovieId)
+    }
+    if (status === 'anonymous' && !guest.value) {
       generation++
       request?.abort()
       movie.value = null
@@ -280,6 +400,19 @@ export function useTicketPurchase(onExpired: () => void) {
     stop()
   })
   return {
+    guest,
+    guestBuyer,
+    buyerError,
+    loginRequired,
+    summaryStep,
+    finalStep,
+    labels,
+    identify,
+    guestReceipt: computed(() =>
+      receipt.value && 'accessCode' in receipt.value
+        ? (receipt.value as GuestPurchaseReceipt)
+        : null,
+    ),
     movie,
     functions,
     availability,
