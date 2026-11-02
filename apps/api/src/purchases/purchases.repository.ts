@@ -226,9 +226,11 @@ export class PurchasesRepository {
       });
     }
     if ([54, 30006, 60].includes(failure?.errorNum ?? 0))
-      throw new ConflictException(
-        'Otra operación está actualizando la disponibilidad. Intenta nuevamente con la misma selección.',
-      );
+      throw new ConflictException({
+        code: 'PURCHASE_BUSY',
+        message:
+          'Otra operación está actualizando la disponibilidad. Intenta nuevamente con la misma selección.',
+      });
     throw error;
   }
   private async lockSeats(

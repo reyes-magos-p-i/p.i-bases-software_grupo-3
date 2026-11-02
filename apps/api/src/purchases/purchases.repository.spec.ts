@@ -276,7 +276,12 @@ describe('Atomic purchase storage', () => {
       overrides['SELECT MOVIE_FUNCTION_ID'] = Object.assign(new Error('lock'), {
         errorNum,
       });
-      await expect(repo.confirm(8, valid)).rejects.toThrow('Otra operación');
+      await expect(repo.confirm(8, valid)).rejects.toMatchObject({
+        response: {
+          code: 'PURCHASE_BUSY',
+          message: expect.stringContaining('Otra operación'),
+        },
+      });
       expect(rollback).toHaveBeenCalled();
       expect(commit).not.toHaveBeenCalled();
     },
@@ -550,6 +555,17 @@ describe('Atomic purchase storage', () => {
     expect(receipt?.[0]).toContain(
       'i.CLIENT_ID IS NULL AND i.BUYER_EMAIL=:email',
     );
+  });
+  it('keeps a previously issued long code valid and returns its compact equivalent', async () => {
+    const legacy =
+      'INV-12-8adc0e5af26517c87370976d3876faeeef71cdc5d87c4a6987bcba1a5a54ff12';
+    overrides['REQUEST_KEY AS'] = {
+      rows: [{ requestKey: valid.requestKey, email: 'guest@example.com' }],
+    };
+    await expect(repo.findGuest(legacy)).resolves.toMatchObject({
+      id: 12,
+      accessCode: '12.4AVG75NWK52Z476W4QDMW7DYQE',
+    });
   });
   it.each(['client', 'guest'])(
     'serializes a client and a %s competing for the same seat and commits exactly once',
