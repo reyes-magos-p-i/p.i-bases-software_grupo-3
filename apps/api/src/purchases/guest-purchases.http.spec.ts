@@ -96,7 +96,8 @@ describe('Guest purchase HTTP with mocked persistence', () => {
         forbidNonWhitelisted: true,
       }),
     );
-    await app.init();
+    // Keep the listener open across concurrent requests instead of letting Supertest close it.
+    await app.listen(0, '127.0.0.1');
     server = app.getHttpServer() as Server;
   });
   afterEach(async () => {
@@ -201,22 +202,32 @@ describe('Guest purchase HTTP with mocked persistence', () => {
     expect(result.body.tickets).toBeUndefined();
   });
   it('rate-limits guest confirmations and receipt lookups', async () => {
+    expect(server.listening).toBe(true);
     const results = await Promise.all(
       Array.from({ length: 11 }, () => post('', body())),
     );
     expect(results.filter((result) => result.status === 201)).toHaveLength(10);
     expect(results.filter((result) => result.status === 429)).toHaveLength(1);
+    expect(repository.confirmGuest).toHaveBeenCalledTimes(10);
+    expect(server.listening).toBe(true);
     const lookups = await Promise.all(
       Array.from({ length: 11 }, () =>
         post('/lookup', { accessCode: guestPurchaseCode(12, randomUUID()) }),
       ),
     );
+    expect(lookups.filter((result) => result.status === 200)).toHaveLength(10);
     expect(lookups.filter((result) => result.status === 429)).toHaveLength(1);
     expect(repository.findGuest).toHaveBeenCalledTimes(10);
-    expect(
-      Number(
-        lookups.find((result) => result.status === 429)?.headers['retry-after'],
-      ),
-    ).toBeGreaterThan(0);
+    expect(server.listening).toBe(true);
+    for (const blocked of [
+      results.find((result) => result.status === 429),
+      lookups.find((result) => result.status === 429),
+    ]) {
+      expect(blocked?.body.message).toBe(
+        'Has realizado demasiadas solicitudes de compra. Espera un minuto e intenta nuevamente.',
+      );
+      expect(Number(blocked?.headers['retry-after'])).toBeGreaterThan(0);
+      expect(Number(blocked?.headers['retry-after'])).toBeLessThanOrEqual(60);
+    }
   });
 });
