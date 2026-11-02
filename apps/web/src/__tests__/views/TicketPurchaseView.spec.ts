@@ -8,12 +8,15 @@ import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import GuestBuyerStep from '@/components/purchases/GuestBuyerStep.vue'
 import GuestPurchaseAccess from '@/components/purchases/GuestPurchaseAccess.vue'
+import PurchaseEmailStatus from '@/components/purchases/PurchaseEmailStatus.vue'
 import {
   getGuestPurchaseFunctions,
   getGuestPurchaseSeats,
   identifyGuestBuyer,
   quoteGuestPurchase,
   confirmGuestPurchase,
+  getGuestTicketEmailStatus,
+  resendGuestPurchaseTickets,
 } from '@/services/guest-purchase.service'
 vi.mock('@/services/guest-purchase.service', () => ({
   getGuestPurchaseFunctions: vi.fn(),
@@ -21,6 +24,8 @@ vi.mock('@/services/guest-purchase.service', () => ({
   identifyGuestBuyer: vi.fn(),
   quoteGuestPurchase: vi.fn(),
   confirmGuestPurchase: vi.fn(),
+  getGuestTicketEmailStatus: vi.fn(),
+  resendGuestPurchaseTickets: vi.fn(),
 }))
 import { establishClientSession, clearClientSession } from '@/services/client-session.service'
 import {
@@ -28,6 +33,8 @@ import {
   getPurchaseSeats,
   quotePurchase,
   confirmPurchase,
+  getTicketEmailStatus,
+  resendPurchaseTickets,
 } from '@/services/purchase.service'
 const navigation = vi.hoisted(() => ({
   replace: vi.fn(),
@@ -40,6 +47,8 @@ vi.mock('@/services/purchase.service', () => ({
   getPurchaseSeats: vi.fn(),
   quotePurchase: vi.fn(),
   confirmPurchase: vi.fn(),
+  getTicketEmailStatus: vi.fn(),
+  resendPurchaseTickets: vi.fn(),
   purchaseError: () => 'No se pudo completar.',
 }))
 let wrapper: ReturnType<typeof mount>
@@ -86,6 +95,30 @@ function render() {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(getTicketEmailStatus).mockResolvedValue({
+    status: 'SENT',
+    recipient: 'a@example.com',
+    sentAt: '2026-11-02T12:00:00Z',
+    retryAfter: 0,
+  })
+  vi.mocked(getGuestTicketEmailStatus).mockResolvedValue({
+    status: 'SENT',
+    recipient: 'guest@example.com',
+    sentAt: '2026-11-02T12:00:00Z',
+    retryAfter: 0,
+  })
+  vi.mocked(resendPurchaseTickets).mockResolvedValue({
+    status: 'SENT',
+    recipient: 'a@example.com',
+    sentAt: '2026-11-02T12:00:00Z',
+    retryAfter: 60,
+  })
+  vi.mocked(resendGuestPurchaseTickets).mockResolvedValue({
+    status: 'SENT',
+    recipient: 'guest@example.com',
+    sentAt: '2026-11-02T12:00:00Z',
+    retryAfter: 60,
+  })
   sessionStorage.clear()
   navigation.route = reactive({ path: '/buy-tickets', query: { movieId: '2' } })
   establishClientSession(
@@ -178,7 +211,14 @@ describe('TicketPurchaseView', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Tu compra como invitado quedó registrada')
     expect(wrapper.getComponent(GuestPurchaseAccess).props('accessCode')).toBe('private')
-    expect(wrapper.text()).not.toContain('enviados')
+    expect(wrapper.text()).toContain('Enviamos tus boletos a guest@example.com')
+    wrapper.getComponent(PurchaseEmailStatus).vm.$emit('resend')
+    await flushPromises()
+    expect(resendGuestPurchaseTickets).toHaveBeenCalledWith('private', expect.any(AbortSignal))
+    expect(wrapper.getComponent(NotificationPopup).props()).toMatchObject({
+      type: 'success',
+      placement: 'bottom-right',
+    })
   })
   it('completes function, seat, review and simulated payment through reusable steps', async () => {
     render()
@@ -213,6 +253,26 @@ describe('TicketPurchaseView', () => {
     expect(confirmPurchase).toHaveBeenCalledWith(
       expect.objectContaining({ seats: { GENERAL: [], CHILD: [1], SENIOR: [] } }),
     )
+    const email = wrapper.getComponent(PurchaseEmailStatus)
+    expect(email.props('status')).toMatchObject({ status: 'SENT', recipient: 'a@example.com' })
+    email.vm.$emit('resend')
+    await flushPromises()
+    expect(resendPurchaseTickets).toHaveBeenCalledWith(12, expect.any(AbortSignal))
+    expect(wrapper.getComponent(NotificationPopup).props()).toMatchObject({
+      type: 'success',
+      placement: 'bottom-right',
+    })
+    wrapper.getComponent(NotificationPopup).vm.$emit('close')
+    await flushPromises()
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
+    vi.mocked(resendPurchaseTickets).mockRejectedValueOnce(new Error('offline'))
+    email.vm.$emit('resend')
+    await flushPromises()
+    expect(wrapper.getComponent(NotificationPopup).props()).toMatchObject({
+      type: 'error',
+      placement: 'bottom-right',
+    })
+    expect(wrapper.text()).toContain('¡Compra exitosa!')
   })
   it('requires a movie ID and redirects only once on expired sessions', async () => {
     navigation.route.query.movieId = 'bad'
