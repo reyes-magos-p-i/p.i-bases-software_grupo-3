@@ -1,6 +1,7 @@
 import { getApi } from './api'
 import { clientRequestOptions } from './authService'
 import { clientProfileError } from './client-profile.service'
+import { PurchaseResponseError, readPurchaseReceipt } from '@/utils/purchase-response'
 import type {
   PurchaseList,
   PurchaseMovie,
@@ -8,7 +9,6 @@ import type {
   SeatAvailability,
   PurchaseSelection,
   PurchaseQuote,
-  PurchaseReceipt,
 } from '@/types/purchase'
 export async function getPurchaseFunctions(movieId: number, signal?: AbortSignal) {
   return (
@@ -38,13 +38,16 @@ export async function confirmPurchase(
   data: PurchaseSelection & { requestKey: string; quoteVersion: string },
   signal?: AbortSignal,
 ) {
-  return (
-    await getApi().post<PurchaseReceipt>('/purchases', data, {
-      ...clientRequestOptions(),
-      signal,
-      timeout: 30000,
-    })
-  ).data
+  return readPurchaseReceipt(
+    (
+      await getApi().post<unknown>('/purchases', data, {
+        ...clientRequestOptions(),
+        signal,
+        timeout: 30000,
+      })
+    ).data,
+    true,
+  )
 }
 export async function getMyPurchases(page = 1, signal?: AbortSignal) {
   return (
@@ -56,13 +59,16 @@ export async function getMyPurchases(page = 1, signal?: AbortSignal) {
   ).data
 }
 export async function getMyPurchase(id: number, signal?: AbortSignal) {
-  return (
-    await getApi().get<PurchaseReceipt>(`/purchases/me/${id}`, {
-      ...clientRequestOptions(),
-      signal,
-    })
-  ).data
+  return readPurchaseReceipt(
+    (
+      await getApi().get<unknown>(`/purchases/me/${id}`, {
+        ...clientRequestOptions(),
+        signal,
+      })
+    ).data,
+  )
 }
 export function purchaseError(error: unknown) {
+  if (error instanceof PurchaseResponseError) return error.message
   return clientProfileError(error, 'No se pudo completar la operación. Intenta nuevamente.')
 }
