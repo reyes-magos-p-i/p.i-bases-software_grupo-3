@@ -14,6 +14,8 @@ import { ProjectorsModule } from './projectors/projectors.module';
 import { ProjectionsModule } from './projections/projections.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { TransactionsModule } from './transactions/transactions.module';
+//import { ImagesModule } from './images/images.module';
+import { ImageHandlerModule } from './image-handler/image-handler.module';
 
 @Module({
   imports: [
@@ -34,6 +36,8 @@ import { TransactionsModule } from './transactions/transactions.module';
     ProjectionsModule,
     TicketsModule,
     TransactionsModule,
+    //ImagesModule,
+    ImageHandlerModule,
   ],
   controllers: [ImageController],
 })
