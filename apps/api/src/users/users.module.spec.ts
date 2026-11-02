@@ -23,6 +23,7 @@ import oracle from 'oracledb';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../app.module';
+import { TicketEmailService } from '../purchases/ticket-email.service';
 import { PasswordGenerator } from '../common/security/password-generator';
 import { PasswordHasher } from '../common/security/password-hasher';
 import { RandomPasswordGenerator } from '../common/security/random-password-generator.service';
@@ -69,6 +70,8 @@ describe('UsersModule (application HTTP integration)', () => {
 
   function buildModule() {
     return Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(TicketEmailService)
+      .useValue({})
       .overrideProvider(PasswordRecoveryRepository)
       .useValue({
         sessionRevoked: jest.fn().mockResolvedValue(false),
