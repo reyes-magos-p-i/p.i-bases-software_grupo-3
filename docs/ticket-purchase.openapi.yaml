@@ -80,7 +80,7 @@ paths:
     post:
       security: []
       summary: Confirma atómicamente la compra de invitado
-      description: Exige Origin permitido y correo no registrado. Máximo 10 solicitudes por hora. Aplica los límites configurados de boletos por función y compras por correo y hora (TICKET_LIMIT_REACHED, GUEST_EMAIL_LIMIT). Conserva requestKey, correo, selección y quoteVersion al reintentar un resultado incierto. No envía correos ni crea sesiones.
+      description: Exige Origin permitido y correo no registrado. Máximo 10 solicitudes por minuto. Aplica los límites configurados de boletos por función y compras por correo y hora (TICKET_LIMIT_REACHED, GUEST_EMAIL_LIMIT). Conserva requestKey, correo, selección y quoteVersion al reintentar un resultado incierto. No envía correos ni crea sesiones.
       requestBody:
         required: true
         content:

@@ -65,13 +65,12 @@ Las rutas requieren JWT de cliente y contraseña vigente. La cuenta se obtiene d
 
 ## Límites de compra — SCRUM-378
 
-Clientes e invitados pueden comprar los boletos que deseen según la disponibilidad de la sala, por decisión del PO. El límite efectivo es el menor entre el valor configurado y los asientos libres. Para reducirlo basta con cambiar `GLOBAL_SETTINGS`. Estos límites no sustituyen un cobro real.
+Clientes e invitados pueden comprar los boletos que deseen según la disponibilidad de la sala, por decisión del PO. El límite efectivo es el menor entre el valor configurado y los asientos libres. Con los valores iniciales, ninguna regla adicional restringe la compra; si el negocio decide reducirlos, basta con cambiar `GLOBAL_SETTINGS`. No sustituyen un cobro real. Las confirmaciones de invitado mantienen el límite técnico de 10 solicitudes por minuto, igual que las de clientes; una sola compra puede incluir todos los asientos disponibles.
 
 | Límite | Valor inicial | Dónde vive | Dónde se valida |
 | --- | ---: | --- | --- |
 | Boletos por comprador y función | 10000 | `GLOBAL_SETTINGS` | Cotización y transacción de confirmación |
-| Compras de invitado por correo y hora | 3 | `GLOBAL_SETTINGS` | Transacción de confirmación |
-| Confirmaciones de invitado por IP y hora | 10 | API | `POST /guest-purchases` |
+| Compras de invitado por correo y hora | 10000 | `GLOBAL_SETTINGS` | Transacción de confirmación |
 
 Los boletos ya comprados para la función cuentan dentro del límite, con el mismo bloqueo de la función, por lo que no se evade con varias compras pequeñas. Superarlo responde 409 con `TICKET_LIMIT_REACHED` o `GUEST_EMAIL_LIMIT`. Las comprobaciones se ejecutan después de reconocer un reintento, de modo que repetir una compra registrada sigue devolviendo su comprobante. Los valores de `GLOBAL_SETTINGS` se cambian con un `UPDATE`, sin recompilar ni desplegar, y aplican desde la siguiente compra. La disponibilidad de asientos devuelve `maxTickets`; si es menor que los asientos libres, la web limita la selección, y si no, mantiene «Seleccionar todos». Una restricción admite enteros de 1 a 10000, el tamaño máximo de una sala. Si no se pueden leer los límites, la compra responde 503 y no se vende nada.
 

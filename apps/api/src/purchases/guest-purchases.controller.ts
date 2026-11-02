@@ -58,7 +58,7 @@ export class GuestPurchasesController {
   @Post()
   @Header('Cache-Control', 'no-store')
   @UseGuards(SessionOriginGuard)
-  @Throttle({ default: { limit: 10, ttl: 3600000 } })
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   confirm(@Body() data: ConfirmGuestPurchaseDto) {
     return this.service.confirm(data);
   }

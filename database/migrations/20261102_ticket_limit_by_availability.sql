@@ -1,5 +1,6 @@
 -- SCRUM-378: buyers can take any available seat unless a lower limit is configured.
 -- 10000 is the largest theater, so availability is what limits a purchase by default.
+-- Purchases per guest email stay configurable, but at this value they restrict no one.
 WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK
 SET DEFINE OFF
 
@@ -13,4 +14,8 @@ ALTER TABLE GLOBAL_SETTINGS ADD CONSTRAINT CK_GLOBAL_SETTINGS_LIMITS CHECK (
 UPDATE GLOBAL_SETTINGS
    SET SETTING_VALUE = 10000, UPDATED_AT = SYSTIMESTAMP
  WHERE SETTING_KEY = 'MAX_TICKETS_PER_FUNCTION' AND SETTING_VALUE = 10;
+
+UPDATE GLOBAL_SETTINGS
+   SET SETTING_VALUE = 10000, UPDATED_AT = SYSTIMESTAMP
+ WHERE SETTING_KEY = 'MAX_GUEST_PURCHASES_PER_HOUR' AND SETTING_VALUE = 3;
 COMMIT;
