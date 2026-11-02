@@ -20,7 +20,7 @@ export function readEmailTheme(): EmailTheme {
   return Object.fromEntries(
     TOKENS.map((token) => {
       const color = new RegExp(
-        '--' + token + ':\\s*(#[a-fA-F0-9]{6})\\s*;',
+        String.raw`--${token}:\s*(#[a-fA-F0-9]{6})\s*;`,
       ).exec(css)?.[1];
       if (!color) throw new Error('Missing email theme token: ' + token);
       return [token, color];
