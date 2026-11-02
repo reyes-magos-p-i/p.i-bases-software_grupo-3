@@ -14,11 +14,7 @@ const email = computed(
 )
 const purchaseCode = computed(() => {
   if (!('reference' in props.purchase)) return ''
-  return JSON.stringify({
-    type: 'CINETADEL_PURCHASE',
-    version: 1,
-    reference: props.purchase.reference,
-  })
+  return props.purchase.qrPayload
 })
 </script>
 <template>
@@ -106,8 +102,9 @@ const purchaseCode = computed(() => {
         <li v-for="ticket in purchase.tickets" :key="ticket.id">
           <strong>Boleto {{ ticket.id }}</strong> · Fila {{ ticket.rowNumber }}, asiento
           {{ ticket.columnNumber }} · {{ TICKET_CATEGORY_LABELS[ticket.category]
-          }}<span v-if="ticket.functionId !== purchase.function.id"
-            >Reprogramado: {{ ticket.title }} · Sala {{ ticket.theaterId }} ·
+          }}<span
+            ><strong v-if="ticket.functionId !== purchase.function.id">Reprogramado: </strong
+            >{{ ticket.title }} · {{ ticket.branchName }} · Sala {{ ticket.theaterId }} ·
             {{ formatDateTime(ticket.startsAt) }} ({{
               PROJECTION_STATUS_LABELS[ticket.functionStatus as ProjectionStatus] ??
               ticket.functionStatus

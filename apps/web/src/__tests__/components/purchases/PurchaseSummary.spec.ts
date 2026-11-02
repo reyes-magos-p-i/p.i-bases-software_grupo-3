@@ -54,6 +54,11 @@ describe('PurchaseSummary', () => {
       ...quote,
       id: 12,
       reference: 'ORD-000012',
+      qrPayload: JSON.stringify({
+        type: 'CINETADEL_PURCHASE',
+        version: 1,
+        reference: 'ORD-000012',
+      }),
       buyerEmail: 'ana@example.com',
       purchasedAt: '2099-01-01T12:00:00-06:00',
       status: 'PAID',
@@ -65,6 +70,7 @@ describe('PurchaseSummary', () => {
           theaterId: 6,
           startsAt: '2099-01-02T20:00:00-06:00',
           functionStatus: 'ACTIVE',
+          branchName: 'Nueva sucursal',
           rowNumber: 2,
           columnNumber: 3,
           category: 'CHILD',
@@ -88,6 +94,7 @@ describe('PurchaseSummary', () => {
     expect(wrapper.find('svg[role="img"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Boleto 10')
     expect(wrapper.text()).toContain('Reprogramado: Nueva película')
+    expect(wrapper.text()).toContain('Nueva sucursal · Sala 6')
     await wrapper.setProps({
       purchase: {
         ...receipt,
@@ -100,7 +107,18 @@ describe('PurchaseSummary', () => {
     expect(wrapper.text()).toContain('Cancelada')
     expect(wrapper.text()).toContain('histórica no tiene boletos vinculados')
     expect(wrapper.getComponent(QrCode).props('value')).toBe(code)
-    await wrapper.setProps({ purchase: { ...receipt, id: 13, reference: 'ORD-000013' } })
+    await wrapper.setProps({
+      purchase: {
+        ...receipt,
+        id: 13,
+        reference: 'ORD-000013',
+        qrPayload: JSON.stringify({
+          type: 'CINETADEL_PURCHASE',
+          version: 1,
+          reference: 'ORD-000013',
+        }),
+      },
+    })
     expect(JSON.parse(wrapper.getComponent(QrCode).props('value')).reference).toBe('ORD-000013')
     await wrapper.setProps({ purchase: quote })
     expect(wrapper.findComponent(QrCode).exists()).toBe(false)
