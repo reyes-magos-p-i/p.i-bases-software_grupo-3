@@ -4,6 +4,7 @@ import { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import { PurchasesRepository } from './purchases.repository';
 import { purchaseQuote, selectionHash } from './purchase-rules';
 import type { PurchaseFunction, PurchaseSeat } from './purchase.types';
+import { guestPurchaseCode } from './guest-purchase-access';
 const context: PurchaseFunction = {
   id: 4,
   movieId: 2,
@@ -427,41 +428,248 @@ describe('Atomic purchase storage', () => {
       items: [],
     });
   });
-  it('serializes two clients competing for the same seat and commits exactly one purchase', async () => {
+  it('stores guest invoices without an account and restricts retries to the original email', async () => {
+    const receipt = await repo.confirmGuest('guest@example.com', valid);
+    expect(receipt.accessCode).toBe(guestPurchaseCode(12, valid.requestKey));
+    expect(
+      execute.mock.calls.find(([sql]) =>
+        sql.includes('INSERT INTO INVOICES'),
+      )?.[1],
+    ).toMatchObject({ clientId: null, email: 'guest@example.com' });
+    const lookup = execute.mock.calls.find(([sql]) =>
+      sql.includes('REQUEST_HASH AS'),
+    );
+    expect(lookup?.[0]).toContain(
+      'i.CLIENT_ID IS NULL AND i.BUYER_EMAIL=:email',
+    );
+    expect(lookup?.[1]).toEqual({
+      key: valid.requestKey,
+      email: 'guest@example.com',
+    });
+    expect(
+      execute.mock.calls.some(
+        ([sql]) =>
+          sql.includes('FOR UPDATE WAIT 5') && sql.includes('FROM CLIENTS'),
+      ),
+    ).toBe(false);
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+  it('rejects a guest email that became registered before confirmation', async () => {
+    overrides['SELECT CLIENT_ID FROM CLIENTS'] = { rows: [{ CLIENT_ID: 8 }] };
+    await expect(
+      repo.confirmGuest('client@example.com', valid),
+    ).rejects.toMatchObject({ response: { code: 'CLIENT_LOGIN_REQUIRED' } });
+    expect(executeMany).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+    expect(rollback).toHaveBeenCalledTimes(1);
+  });
+  it('returns a committed guest retry even if the email was subsequently registered', async () => {
+    overrides['REQUEST_HASH AS'] = {
+      rows: [{ id: 12, hash: selectionHash(valid) }],
+    };
+    overrides['SELECT CLIENT_ID FROM CLIENTS'] = { rows: [{ CLIENT_ID: 8 }] };
+    await expect(
+      repo.confirmGuest('guest@example.com', valid),
+    ).resolves.toMatchObject({
+      id: 12,
+      accessCode: guestPurchaseCode(12, valid.requestKey),
+    });
+    expect(executeMany).not.toHaveBeenCalled();
+    expect(
+      execute.mock.calls.some(([sql]) =>
+        sql.includes('SELECT CLIENT_ID FROM CLIENTS'),
+      ),
+    ).toBe(false);
+  });
+  it.each([0, 1])(
+    'rolls back a guest purchase when batch %i is incomplete',
+    async (batch) => {
+      if (batch === 0) executeMany.mockResolvedValueOnce({ rowsAffected: 0 });
+      else
+        executeMany
+          .mockResolvedValueOnce({ rowsAffected: 1 })
+          .mockResolvedValueOnce({ rowsAffected: 0 });
+      await expect(
+        repo.confirmGuest('guest@example.com', valid),
+      ).rejects.toThrow('Incomplete purchase');
+      expect(commit).not.toHaveBeenCalled();
+      expect(rollback).toHaveBeenCalledTimes(1);
+    },
+  );
+  it('recovers a guest unique-key race without changing the code', async () => {
+    overrides['INSERT INTO INVOICES'] = Object.assign(new Error('unique'), {
+      errorNum: 1,
+    });
+    const original = execute.getMockImplementation()!;
+    let calls = 0;
+    execute.mockImplementation((sql: string, ...args: unknown[]) => {
+      if (sql.includes('REQUEST_HASH AS'))
+        return Promise.resolve({
+          rows: ++calls === 3 ? [{ id: 12, hash: selectionHash(valid) }] : [],
+        });
+      return original(sql, ...args);
+    });
+    await expect(
+      repo.confirmGuest('guest@example.com', valid),
+    ).resolves.toMatchObject({
+      accessCode: guestPurchaseCode(12, valid.requestKey),
+    });
+    expect(rollback).toHaveBeenCalledTimes(1);
+  });
+  it('checks the consultation secret before reading tickets and excludes client invoices', async () => {
+    const code = guestPurchaseCode(12, valid.requestKey);
+    await expect(repo.findGuest('ORD-000012')).rejects.toThrow(
+      'código de consulta',
+    );
+    expect(execute).not.toHaveBeenCalled();
+    overrides['REQUEST_KEY AS'] = { rows: [] };
+    await expect(repo.findGuest(code)).rejects.toThrow('código de consulta');
+    overrides['REQUEST_KEY AS'] = {
+      rows: [{ requestKey: valid.requestKey, email: 'guest@example.com' }],
+    };
+    await expect(
+      repo.findGuest(guestPurchaseCode(12, 'other')),
+    ).rejects.toThrow('código de consulta');
+    expect(
+      execute.mock.calls.some(([sql]) => sql.includes('FROM TICKETS')),
+    ).toBe(false);
+    await expect(repo.findGuest(code)).resolves.toMatchObject({
+      id: 12,
+      accessCode: code,
+      tickets: [{ id: 1 }],
+    });
+    const access = execute.mock.calls.find(([sql]) =>
+      sql.includes('REQUEST_KEY AS'),
+    );
+    expect(access?.[0]).toContain('CLIENT_ID IS NULL');
+    expect(access?.[1]).toEqual({ id: 12 });
+    const receipt = execute.mock.calls.find(([sql]) =>
+      sql.includes('AS "contextJson"'),
+    );
+    expect(receipt?.[1]).toEqual({ id: 12, email: 'guest@example.com' });
+    expect(receipt?.[0]).toContain(
+      'i.CLIENT_ID IS NULL AND i.BUYER_EMAIL=:email',
+    );
+  });
+  it.each(['client', 'guest'])(
+    'serializes a client and a %s competing for the same seat and commits exactly once',
+    async (buyer) => {
+      let lock = Promise.resolve(),
+        sold = false,
+        committed = 0;
+      const sessions: {
+        commit: jest.Mock;
+        rollback: jest.Mock;
+        executeMany: jest.Mock;
+      }[] = [];
+      const originalExecute = execute.getMockImplementation()!;
+      const concurrentDb = new DatabaseService({} as ConfigService);
+      Object.assign(concurrentDb, {
+        pool: {
+          getConnection: jest.fn().mockImplementation(() => {
+            let release: (() => void) | undefined;
+            const session = {
+              execute: jest.fn(async (sql: string, ...args: unknown[]) => {
+                if (sql.startsWith('SELECT MOVIE_FUNCTION_ID')) {
+                  const previous = lock;
+                  lock = new Promise<void>((done) => (release = done));
+                  await previous;
+                  return { rows: [{ MOVIE_FUNCTION_ID: 4 }] };
+                }
+                if (sql.includes('FROM SEATS s'))
+                  return {
+                    rows: [{ ...seats[0], state: sold ? 'in-use' : 'free' }],
+                  };
+                return originalExecute(sql, ...args);
+              }),
+              executeMany: jest.fn((_sql: string, rows: unknown[]) =>
+                Promise.resolve({ rowsAffected: rows.length }),
+              ),
+              commit: jest.fn(() => {
+                sold = true;
+                committed++;
+                release?.();
+                return Promise.resolve();
+              }),
+              rollback: jest.fn(() => {
+                release?.();
+                return Promise.resolve();
+              }),
+              close: jest.fn(),
+            };
+            sessions.push(session);
+            return Promise.resolve(session);
+          }),
+        },
+      });
+      const concurrent = new PurchasesRepository(
+        concurrentDb,
+        catalog as unknown as PurchaseCatalogRepository,
+      );
+      const results = await Promise.allSettled([
+        concurrent.confirm(8, valid),
+        (buyer === 'client'
+          ? concurrent.confirm.bind(concurrent, 9)
+          : concurrent.confirmGuest.bind(concurrent, 'guest@example.com'))({
+          ...valid,
+          requestKey: 'ed36cbe4-3e88-4968-9950-66fbb8d567ff',
+        }),
+      ]);
+      expect(results.map((result) => result.status).sort()).toEqual([
+        'fulfilled',
+        'rejected',
+      ]);
+      expect(committed).toBe(1);
+      expect(
+        sessions.reduce(
+          (total, session) => total + session.executeMany.mock.calls.length,
+          0,
+        ),
+      ).toBe(2);
+      expect(
+        sessions.reduce(
+          (total, session) => total + session.rollback.mock.calls.length,
+          0,
+        ),
+      ).toBe(1);
+    },
+  );
+  it('replays two concurrent guest requests after the function lock without selling twice', async () => {
     let lock = Promise.resolve(),
-      sold = false,
-      committed = 0;
-    const sessions: {
-      commit: jest.Mock;
-      rollback: jest.Mock;
-      executeMany: jest.Mock;
-    }[] = [];
-    const originalExecute = execute.getMockImplementation()!;
-    const concurrentDb = new DatabaseService({} as ConfigService);
-    Object.assign(concurrentDb, {
+      committed = false;
+    const original = execute.getMockImplementation()!;
+    const sessions: { executeMany: jest.Mock; commit: jest.Mock }[] = [];
+    Object.assign(db, {
       pool: {
-        getConnection: jest.fn().mockImplementation(() => {
+        getConnection: jest.fn(() => {
           let release: (() => void) | undefined;
           const session = {
             execute: jest.fn(async (sql: string, ...args: unknown[]) => {
+              if (sql.includes('REQUEST_HASH AS'))
+                return {
+                  rows: committed
+                    ? [{ id: 12, hash: selectionHash(valid) }]
+                    : [],
+                };
               if (sql.startsWith('SELECT MOVIE_FUNCTION_ID')) {
                 const previous = lock;
-                lock = new Promise<void>((done) => (release = done));
+                lock = new Promise<void>((resolve) => {
+                  release = resolve;
+                });
                 await previous;
                 return { rows: [{ MOVIE_FUNCTION_ID: 4 }] };
               }
               if (sql.includes('FROM SEATS s'))
                 return {
-                  rows: [{ ...seats[0], state: sold ? 'in-use' : 'free' }],
+                  rows: [{ ...seats[0], state: committed ? 'in-use' : 'free' }],
                 };
-              return originalExecute(sql, ...args);
+              return original(sql, ...args);
             }),
             executeMany: jest.fn((_sql: string, rows: unknown[]) =>
               Promise.resolve({ rowsAffected: rows.length }),
             ),
             commit: jest.fn(() => {
-              sold = true;
-              committed++;
+              committed = true;
               release?.();
               return Promise.resolve();
             }),
@@ -476,22 +684,14 @@ describe('Atomic purchase storage', () => {
         }),
       },
     });
-    const concurrent = new PurchasesRepository(
-      concurrentDb,
-      catalog as unknown as PurchaseCatalogRepository,
-    );
-    const results = await Promise.allSettled([
-      concurrent.confirm(8, valid),
-      concurrent.confirm(9, {
-        ...valid,
-        requestKey: 'ed36cbe4-3e88-4968-9950-66fbb8d567ff',
-      }),
+    const receipts = await Promise.all([
+      repo.confirmGuest('guest@example.com', valid),
+      repo.confirmGuest('guest@example.com', valid),
     ]);
-    expect(results.map((result) => result.status).sort()).toEqual([
-      'fulfilled',
-      'rejected',
+    expect(receipts.map((receipt) => receipt.accessCode)).toEqual([
+      guestPurchaseCode(12, valid.requestKey),
+      guestPurchaseCode(12, valid.requestKey),
     ]);
-    expect(committed).toBe(1);
     expect(
       sessions.reduce(
         (total, session) => total + session.executeMany.mock.calls.length,
@@ -499,10 +699,7 @@ describe('Atomic purchase storage', () => {
       ),
     ).toBe(2);
     expect(
-      sessions.reduce(
-        (total, session) => total + session.rollback.mock.calls.length,
-        0,
-      ),
-    ).toBe(1);
+      sessions.every((session) => session.commit.mock.calls.length === 1),
+    ).toBe(true);
   });
 });
