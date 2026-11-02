@@ -101,14 +101,43 @@ describe('Pending purchase storage', () => {
     )
     sessionStorage.setItem('cinetadel.pending-purchase', JSON.stringify(value))
     expect(() => loadPurchaseAttempt()).toThrow(PurchaseAttemptStorageError)
+    expect(loadPurchaseAttempt()).toBeNull()
   })
   it('reports corrupted JSON and blocked storage before sending another payment', () => {
     sessionStorage.setItem('cinetadel.pending-purchase', '{')
     expect(() => loadPurchaseAttempt()).toThrow(PurchaseAttemptStorageError)
+    expect(sessionStorage.getItem('cinetadel.pending-purchase')).toBeNull()
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked')
     })
     expect(() => loadPurchaseAttempt()).toThrow(PurchaseAttemptStorageError)
+  })
+  it('reports discarded data once and leaves unrelated browser data intact', () => {
+    sessionStorage.setItem('cinetadel.pending-purchase', '{')
+    sessionStorage.setItem('other-feature', 'keep')
+    expect(() => loadPurchaseAttempt()).toThrow(
+      expect.objectContaining({
+        discarded: true,
+        message: expect.stringContaining('comprueba el resultado'),
+      }),
+    )
+    expect(loadPurchaseAttempt()).toBeNull()
+    expect(sessionStorage.getItem('other-feature')).toBe('keep')
+  })
+  it('does not erase a valid attempt when reading is blocked, or claim cleanup succeeded when removal fails', () => {
+    savePurchaseAttempt(attempt)
+    const read = vi.spyOn(Storage.prototype, 'getItem').mockImplementationOnce(() => {
+      throw new Error('blocked')
+    })
+    expect(() => loadPurchaseAttempt()).toThrow(expect.objectContaining({ discarded: false }))
+    read.mockRestore()
+    expect(loadPurchaseAttempt()).toEqual(attempt)
+    sessionStorage.setItem('cinetadel.pending-purchase', '{')
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementationOnce(() => {
+      throw new Error('blocked')
+    })
+    expect(() => loadPurchaseAttempt()).toThrow(expect.objectContaining({ discarded: false }))
+    expect(sessionStorage.getItem('cinetadel.pending-purchase')).toBe('{')
   })
   it('reports persistence failures, while a cleanup failure cannot invalidate a completed purchase', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {

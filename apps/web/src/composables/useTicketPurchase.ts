@@ -40,11 +40,16 @@ import type {
   TicketCategory,
 } from '@/types/purchase'
 
+const ACCOUNT_CONFLICTS = new Set([
+  'CLIENT_LOGIN_REQUIRED',
+  'CLIENT_ACCOUNT_INACTIVE',
+  'CLIENT_VERIFICATION_REQUIRED',
+])
 const DEFINITIVE_CONFLICTS = new Set([
   'QUOTE_CHANGED',
   'SEATS_UNAVAILABLE',
   'FUNCTION_UNAVAILABLE',
-  'CLIENT_LOGIN_REQUIRED',
+  ...ACCOUNT_CONFLICTS,
 ])
 function errorCode(error: unknown) {
   return (error as { response?: { data?: { code?: string } } } | null)?.response?.data?.code
@@ -63,7 +68,8 @@ export function useTicketPurchase(onExpired: () => void) {
     uncertain = ref(false),
     error = ref(''),
     notice = ref(''),
-    restored = ref(false)
+    restored = ref(false),
+    restartable = ref(false)
   const guest = ref(!localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)),
     guestBuyer = ref<GuestBuyer | null>(null),
     buyerError = ref(''),
@@ -104,6 +110,9 @@ export function useTicketPurchase(onExpired: () => void) {
     return { functionId: context?.id ?? 0, seats }
   })
   const locked = () => paymentSerial !== null || uncertain.value || attempt !== null
+  const canRestart = computed(
+    () => restartable.value && !busy.value && !loading.value && !uncertain.value && !receipt.value,
+  )
   function session() {
     const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY),
       revision = clientSessionRevision()
@@ -192,6 +201,7 @@ export function useTicketPurchase(onExpired: () => void) {
       return true
     } catch (error_) {
       failed(error_)
+      restartable.value = error_ instanceof PurchaseAttemptStorageError && error_.discarded
       return true
     }
   }
@@ -200,8 +210,8 @@ export function useTicketPurchase(onExpired: () => void) {
       notice.value = 'Comprueba el resultado de la compra pendiente antes de iniciar otra.'
       return
     }
-    if (recoverAttempt()) return
     currentMovieId = movieId
+    if (recoverAttempt()) return
     const operation = beginRead()
     loading.value = true
     busy.value = false
@@ -216,6 +226,7 @@ export function useTicketPurchase(onExpired: () => void) {
     guestBuyer.value = null
     buyerError.value = ''
     loginRequired.value = false
+    restartable.value = false
     invalidate()
     try {
       const result = await api().functions(movieId, operation.controller.signal)
@@ -232,6 +243,7 @@ export function useTicketPurchase(onExpired: () => void) {
   async function chooseFunction(id: number) {
     if (busy.value || locked()) return
     const operation = beginRead()
+    restartable.value = false
     loading.value = true
     error.value = ''
     availability.value = null
@@ -437,7 +449,7 @@ export function useTicketPurchase(onExpired: () => void) {
     failed(failure)
     const status = authErrorStatus(failure),
       code = errorCode(failure)
-    const definite = status === 409 && DEFINITIVE_CONFLICTS.has(code ?? '')
+    const definite = status === 404 || (status === 409 && DEFINITIVE_CONFLICTS.has(code ?? ''))
     uncertain.value =
       !definite && (wasUncertain || !status || status >= 500 || code === 'PURCHASE_BUSY')
     if (uncertain.value) {
@@ -446,9 +458,15 @@ export function useTicketPurchase(onExpired: () => void) {
         : ' Puedes reintentar el pago de esta misma selección; la compra no se duplicará. También puedes consultar «Historial de compras».'
       return
     }
+    const wasRestored = restored.value
     releaseAttempt()
-    if (code === 'CLIENT_LOGIN_REQUIRED') {
-      loginRequired.value = true
+    restartable.value = true
+    if (status === 404 || wasRestored) {
+      await reloadRejectedPurchase()
+      return
+    }
+    if (ACCOUNT_CONFLICTS.has(code ?? '')) {
+      loginRequired.value = code === 'CLIENT_LOGIN_REQUIRED'
       buyerError.value = purchaseError(failure)
       error.value = ''
       step.value = 3
@@ -461,6 +479,23 @@ export function useTicketPurchase(onExpired: () => void) {
       paymentSerial = null
       await refresh()
     }
+  }
+  async function reloadRejectedPurchase() {
+    busy.value = false
+    paymentSerial = null
+    const rejection = error.value
+    const pending = load(currentMovieId)
+    const serial = generation
+    await pending
+    if (disposed || serial !== generation) return
+    error.value =
+      error.value && error.value !== rejection ? `${rejection} ${error.value}` : rejection
+    restartable.value = true
+    adoptClient()
+  }
+  async function restart() {
+    if (!canRestart.value || locked()) return
+    await load(currentMovieId)
   }
   function back() {
     if (!busy.value && !locked()) step.value = Math.max(1, step.value - 1)
@@ -502,6 +537,7 @@ export function useTicketPurchase(onExpired: () => void) {
     selected.value = []
     invalidate()
     receipt.value = null
+    restartable.value = false
   }
   const stop = watch(
     () => [clientSession.status.value, clientSession.user.value?.id] as const,
@@ -546,6 +582,8 @@ export function useTicketPurchase(onExpired: () => void) {
     labels,
     identify,
     restored,
+    canRestart,
+    restart,
     guestReceipt: computed(() =>
       receipt.value && 'accessCode' in receipt.value
         ? (receipt.value as GuestPurchaseReceipt)

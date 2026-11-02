@@ -43,6 +43,7 @@ const {
   busy,
   uncertain,
   restored,
+  canRestart,
   error,
   notice,
 } = flow
@@ -73,7 +74,12 @@ watch(
       :duration="uncertain ? 0 : 7000"
       @close="dismissNotice"
     /><LoadingState v-if="loading" message="Cargando compra..." surface="dark" /><template v-else
-      ><FunctionSelectionStep
+      ><div v-if="canRestart" class="actions">
+        <button type="button" class="purchase-action" @click="flow.restart">
+          Volver a empezar
+        </button>
+      </div>
+      <FunctionSelectionStep
         v-if="step === 1 && movie"
         :movie="movie"
         :functions="functions"

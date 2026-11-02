@@ -12,9 +12,11 @@ const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{1
 const categories = ['GENERAL', 'CHILD', 'SENIOR']
 
 export class PurchaseAttemptStorageError extends Error {
-  constructor() {
+  constructor(readonly discarded = false) {
     super(
-      'No se pudo guardar o recuperar el intento de compra. Vuelve a cargar la página antes de continuar. Si el problema persiste, contacta con asistencia.',
+      discarded
+        ? 'No se pudo recuperar el intento anterior y se eliminó su información dañada. Si habías intentado pagar, comprueba el resultado de la compra antes de volver a empezar. Si necesitas ayuda, contacta con asistencia.'
+        : 'No se pudo guardar o recuperar el intento de compra. Comprueba que tu navegador permite guardar datos. Si el problema persiste, contacta con asistencia.',
     )
     this.name = 'PurchaseAttemptStorageError'
   }
@@ -121,14 +123,24 @@ function matchingSelection(value: unknown, quote: PurchaseQuote): boolean {
   })
 }
 export function loadPurchaseAttempt(): PendingPurchaseAttempt | null {
+  let stored: string | null
   try {
-    const stored = sessionStorage.getItem(STORAGE_KEY)
-    if (stored === null) return null
+    stored = sessionStorage.getItem(STORAGE_KEY)
+  } catch {
+    throw new PurchaseAttemptStorageError()
+  }
+  if (stored === null) return null
+  try {
     const value: unknown = JSON.parse(stored)
     if (!validAttempt(value)) throw new PurchaseAttemptStorageError()
     return value
   } catch {
-    throw new PurchaseAttemptStorageError()
+    try {
+      sessionStorage.removeItem(STORAGE_KEY)
+    } catch {
+      throw new PurchaseAttemptStorageError()
+    }
+    throw new PurchaseAttemptStorageError(true)
   }
 }
 export function savePurchaseAttempt(attempt: PendingPurchaseAttempt): PendingPurchaseAttempt {

@@ -573,12 +573,19 @@ describe('Ticket purchase coordination', () => {
     expect(flow.busy.value).toBe(false)
     expect(flow.error.value).toContain('No se pudo guardar o recuperar')
   })
-  it('blocks a new purchase if stored pending data is corrupted', async () => {
+  it('reports corrupted pending data once and allows explicitly starting again', async () => {
     sessionStorage.setItem('cinetadel.pending-purchase', '{')
     await flow.load(2)
     expect(getPurchaseFunctions).not.toHaveBeenCalled()
     expect(flow.movie.value).toBeNull()
-    expect(flow.error.value).toContain('Vuelve a cargar la página')
+    expect(flow.error.value).toContain('comprueba el resultado de la compra')
+    expect(loadPurchaseAttempt()).toBeNull()
+    expect(flow.canRestart.value).toBe(true)
+    await flow.restart()
+    expect(flow.movie.value?.id).toBe(2)
+    expect(flow.error.value).toBe('')
+    expect(flow.canRestart.value).toBe(false)
+    expect(confirmPurchase).not.toHaveBeenCalled()
   })
   it.each(['QUOTE_CHANGED', 'SEATS_UNAVAILABLE', 'FUNCTION_UNAVAILABLE'])(
     'releases a previously uncertain attempt after a definitive %s rejection',
@@ -602,6 +609,9 @@ describe('Ticket purchase coordination', () => {
     await flow.pay()
     expect(flow.uncertain.value).toBe(true)
     expect(flow.step.value).toBe(3)
+    expect(flow.canRestart.value).toBe(false)
+    await flow.restart()
+    expect(getPurchaseFunctions).toHaveBeenCalledTimes(1)
     const original = vi.mocked(confirmPurchase).mock.calls[0]![0]
     await flow.pay()
     expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(original)
@@ -725,5 +735,129 @@ describe('Ticket purchase coordination', () => {
     await pending
     expect(flow.buyerError.value).toBe('')
     expect(quoteGuestPurchase).not.toHaveBeenCalled()
+  })
+  it.each(['client', 'guest'])(
+    'unlocks a %s checkout after an uncertain payment is definitively rejected with 404',
+    async (buyerType) => {
+      if (buyerType === 'guest') {
+        await guestReady()
+        await flow.identify(buyer)
+        vi.mocked(confirmGuestPurchase)
+          .mockRejectedValueOnce(new Error('timeout'))
+          .mockRejectedValueOnce(error(404))
+      } else {
+        await ready()
+        vi.mocked(confirmPurchase)
+          .mockRejectedValueOnce(new Error('timeout'))
+          .mockRejectedValueOnce(error(404))
+      }
+      await flow.pay()
+      expect(flow.uncertain.value).toBe(true)
+      await flow.pay()
+      expect(flow.uncertain.value).toBe(false)
+      expect(flow.canRestart.value).toBe(true)
+      expect(flow.step.value).toBe(1)
+      expect(flow.quote.value).toBeNull()
+      expect(flow.functions.value).toEqual([context])
+      expect(loadPurchaseAttempt()).toBeNull()
+      expect(flow.error.value).toContain('No se pudo')
+      await flow.restart()
+      expect(flow.canRestart.value).toBe(false)
+      await flow.chooseFunction(4)
+      expect(flow.step.value).toBe(2)
+    },
+  )
+  it.each([
+    'QUOTE_CHANGED',
+    'SEATS_UNAVAILABLE',
+    'FUNCTION_UNAVAILABLE',
+    'CLIENT_LOGIN_REQUIRED',
+    'CLIENT_ACCOUNT_INACTIVE',
+    'CLIENT_VERIFICATION_REQUIRED',
+  ])('reloads showtimes after a restored guest attempt is rejected with %s', async (code) => {
+    await guestReady()
+    await flow.identify(buyer)
+    vi.mocked(confirmGuestPurchase).mockRejectedValueOnce(new Error('timeout'))
+    await flow.pay()
+    wrapper.unmount()
+    render()
+    await flow.load(2)
+    expect(flow.functions.value).toEqual([])
+    expect(flow.restored.value).toBe(true)
+    vi.mocked(confirmGuestPurchase).mockRejectedValueOnce(conflict(code))
+    await flow.pay()
+    expect(flow.functions.value).toEqual([context])
+    expect(flow.step.value).toBe(1)
+    expect(flow.busy.value).toBe(false)
+    expect(flow.loading.value).toBe(false)
+    expect(flow.uncertain.value).toBe(false)
+    expect(flow.restored.value).toBe(false)
+    expect(flow.canRestart.value).toBe(true)
+    expect(loadPurchaseAttempt()).toBeNull()
+    expect(getGuestPurchaseFunctions).toHaveBeenCalledTimes(2)
+    await flow.chooseFunction(4)
+    expect(flow.canRestart.value).toBe(false)
+    expect(flow.availability.value?.seats).toHaveLength(2)
+  })
+  it.each(['CLIENT_ACCOUNT_INACTIVE', 'CLIENT_VERIFICATION_REQUIRED'])(
+    'returns to email without requesting an impossible login on %s',
+    async (code) => {
+      await guestReady()
+      vi.mocked(identifyGuestBuyer).mockRejectedValueOnce(conflict(code))
+      await flow.identify(buyer)
+      expect(flow.loginRequired.value).toBe(false)
+      expect(flow.buyerError.value).toContain('No se pudo')
+      await flow.identify(buyer)
+      vi.mocked(confirmGuestPurchase).mockRejectedValueOnce(conflict(code))
+      await flow.pay()
+      expect(flow.step.value).toBe(3)
+      expect(flow.loginRequired.value).toBe(false)
+      expect(flow.buyerError.value).toContain('No se pudo')
+      expect(flow.error.value).toBe('')
+      expect(flow.quote.value).toBeNull()
+      expect(flow.canRestart.value).toBe(true)
+      expect(loadPurchaseAttempt()).toBeNull()
+    },
+  )
+  it('does not offer a false recovery if browser storage cannot be cleared', async () => {
+    sessionStorage.setItem('cinetadel.pending-purchase', '{')
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementationOnce(() => {
+      throw new Error('blocked')
+    })
+    await flow.load(2)
+    expect(flow.canRestart.value).toBe(false)
+    expect(flow.error.value).toContain('navegador permite guardar datos')
+    expect(getPurchaseFunctions).not.toHaveBeenCalled()
+  })
+  it('preserves the rejection and exposes a safe retry if reloading the catalog fails', async () => {
+    await ready()
+    vi.mocked(confirmPurchase).mockRejectedValueOnce(error(404))
+    vi.mocked(getPurchaseFunctions).mockRejectedValueOnce(error(503))
+    await flow.pay()
+    expect(flow.canRestart.value).toBe(true)
+    expect(flow.error.value).toContain('No se pudo')
+    expect(flow.movie.value).toBeNull()
+    await flow.restart()
+    expect(flow.movie.value?.id).toBe(2)
+    expect(flow.functions.value).toEqual([context])
+  })
+  it('ignores a rejection reload that completes after another movie was opened', async () => {
+    await ready()
+    let resolve!: (value: never) => void
+    vi.mocked(confirmPurchase).mockRejectedValueOnce(error(404))
+    vi.mocked(getPurchaseFunctions).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done
+      }),
+    )
+    const payment = flow.pay()
+    await flushPromises()
+    expect(flow.loading.value).toBe(true)
+    await flow.load(3)
+    resolve({ movie: { id: 2 }, functions: [] } as never)
+    await payment
+    expect(flow.canRestart.value).toBe(false)
+    expect(flow.error.value).toBe('')
+    expect(flow.loading.value).toBe(false)
   })
 })
