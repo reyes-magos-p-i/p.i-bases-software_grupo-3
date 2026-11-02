@@ -18,12 +18,13 @@ import {
   IsOptional,
 } from 'class-validator';
 import { applyDecorators } from '@nestjs/common';
+import { MAX_TICKETS_PER_PURCHASE } from './purchase-rules';
 function SeatPositions() {
   return applyDecorators(
     IsDefined({ message: 'Completa las categorías de boletos.' }),
     IsArray({ message: 'Selecciona asientos válidos.' }),
-    ArrayMaxSize(10000, {
-      message: 'La selección supera la capacidad máxima de la sala.',
+    ArrayMaxSize(MAX_TICKETS_PER_PURCHASE, {
+      message: `Puedes comprar hasta ${MAX_TICKETS_PER_PURCHASE} boletos por función.`,
     }),
     ArrayUnique({ message: 'Un asiento no puede repetirse.' }),
     IsInt({ each: true, message: 'Selecciona asientos válidos.' }),

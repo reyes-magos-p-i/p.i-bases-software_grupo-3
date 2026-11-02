@@ -10,19 +10,25 @@ const selection = {
   seats: { GENERAL: [1, 2], CHILD: [], SENIOR: [] },
 };
 describe('Purchase DTO validation', () => {
-  it('accepts a compact selection of all 10000 physical positions', async () => {
-    const data = plainToInstance(ConfirmPurchaseDto, {
+  const positions = (length: number) =>
+    plainToInstance(ConfirmPurchaseDto, {
       ...selection,
       seats: {
-        GENERAL: Array.from({ length: 10000 }, (_, i) => i + 1),
+        GENERAL: Array.from({ length }, (_, i) => 10000 - length + 1 + i),
         CHILD: [],
         SENIOR: [],
       },
       requestKey: 'b801323b-9057-460b-b6ab-a36aa4e9b7d2',
       quoteVersion: 'a'.repeat(64),
     });
+  it('accepts the ticket limit up to the last physical position', async () => {
+    const data = positions(10);
+    expect(data.seats.GENERAL.at(-1)).toBe(10000);
     expect(await validate(data)).toEqual([]);
-    expect(Buffer.byteLength(JSON.stringify(data))).toBeLessThan(100000);
+  });
+  it('rejects more tickets than one purchase allows', async () => {
+    const errors = await validate(positions(11));
+    expect(JSON.stringify(errors)).toContain('hasta 10 boletos');
   });
   it.each([
     { functionId: 0 },

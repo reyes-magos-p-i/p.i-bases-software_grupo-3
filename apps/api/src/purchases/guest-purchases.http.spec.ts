@@ -269,15 +269,17 @@ describe('Guest purchase HTTP with mocked persistence', () => {
     expect(lookups.filter((result) => result.status === 429)).toHaveLength(1);
     expect(repository.findGuest).toHaveBeenCalledTimes(10);
     expect(server.listening).toBe(true);
-    for (const blocked of [
-      results.find((result) => result.status === 429),
-      lookups.find((result) => result.status === 429),
-    ]) {
+    for (const [blocked, window] of [
+      [results.find((result) => result.status === 429), 3600],
+      [lookups.find((result) => result.status === 429), 60],
+    ] as const) {
       expect(blocked?.body.message).toBe(
-        'Has realizado demasiadas solicitudes de compra. Espera un minuto e intenta nuevamente.',
+        'Has realizado demasiadas solicitudes de compra. Intenta nuevamente más tarde.',
       );
       expect(Number(blocked?.headers['retry-after'])).toBeGreaterThan(0);
-      expect(Number(blocked?.headers['retry-after'])).toBeLessThanOrEqual(60);
+      expect(Number(blocked?.headers['retry-after'])).toBeLessThanOrEqual(
+        window,
+      );
     }
   });
 });

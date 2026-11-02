@@ -3,7 +3,11 @@ import { computed, useId } from 'vue'
 import SeatSelector from '@/components/Seats/SeatSelector.vue'
 import { formatDateTime } from '@/utils/transaction-format'
 import type { Seat } from '@/types/seats'
-import type { SeatAvailability, TicketCategory } from '@/types/purchase'
+import {
+  MAX_TICKETS_PER_PURCHASE,
+  type SeatAvailability,
+  type TicketCategory,
+} from '@/types/purchase'
 const props = defineProps<{
   availability: SeatAvailability
   selected: Seat[]
@@ -34,6 +38,7 @@ function categoryChange(seat: Seat, event: Event) {
       {{ availability.function.theaterId }} · {{ formatDateTime(availability.function.startsAt) }}
     </p>
     <p>La selección no reserva los asientos. Confirmaremos su disponibilidad al pagar.</p>
+    <p>Puedes comprar hasta {{ MAX_TICKETS_PER_PURCHASE }} boletos por función.</p>
     <p v-if="!available" role="status">Esta función no tiene asientos disponibles.</p>
     <SeatSelector
       :theater-id="availability.function.theaterId"
@@ -41,6 +46,7 @@ function categoryChange(seat: Seat, event: Event) {
       :columns="availability.function.columns"
       :seats="availability.seats"
       :disabled="disabled"
+      :max-selections="MAX_TICKETS_PER_PURCHASE"
       @selection-change="emit('selection', $event)"
     />
     <p aria-live="polite">

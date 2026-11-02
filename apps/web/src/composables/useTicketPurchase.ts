@@ -49,6 +49,8 @@ const DEFINITIVE_CONFLICTS = new Set([
   'QUOTE_CHANGED',
   'SEATS_UNAVAILABLE',
   'FUNCTION_UNAVAILABLE',
+  'TICKET_LIMIT_REACHED',
+  'GUEST_EMAIL_LIMIT',
   ...ACCOUNT_CONFLICTS,
 ])
 function errorCode(error: unknown) {

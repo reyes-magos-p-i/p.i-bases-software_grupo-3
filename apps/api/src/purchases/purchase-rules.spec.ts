@@ -1,3 +1,4 @@
+import type { ConflictException } from '@nestjs/common';
 import {
   purchaseQuote,
   purchaseQrPayload,
@@ -5,6 +6,9 @@ import {
   requireGuestEmailAvailable,
   selectionHash,
   selectionPositions,
+  requireTicketAllowance,
+  requireGuestPurchaseAllowance,
+  MAX_GUEST_PURCHASES_PER_HOUR,
 } from './purchase-rules';
 import type { PurchaseFunction, PurchaseSeat } from './purchase.types';
 it('keeps the transaction QR stable and free of guest access credentials', () => {
@@ -149,11 +153,52 @@ describe('Purchase rules', () => {
       selectionPositions({
         ...selection,
         seats: {
-          GENERAL: Array.from({ length: 10001 }, (_, i) => i + 1),
+          GENERAL: Array.from({ length: 11 }, (_, i) => i + 1),
           CHILD: [],
           SENIOR: [],
         },
       }),
-    ).toThrow('capacidad');
+    ).toThrow('hasta 10 boletos');
+  });
+  it('limits the tickets of a single selection across categories', () => {
+    const seats = {
+      GENERAL: [1, 2, 3, 4, 5, 6],
+      CHILD: [7, 8, 9],
+      SENIOR: [10],
+    };
+    expect(selectionPositions({ functionId: 1, seats })).toHaveLength(10);
+    expect(() =>
+      selectionPositions({
+        functionId: 1,
+        seats: { ...seats, SENIOR: [10, 11] },
+      }),
+    ).toThrow('hasta 10 boletos');
+  });
+  it('counts the tickets a buyer already has for the function', () => {
+    expect(() => requireTicketAllowance(7, 3)).not.toThrow();
+    let failure: unknown;
+    try {
+      requireTicketAllowance(8, 3);
+    } catch (error) {
+      failure = error;
+    }
+    expect((failure as ConflictException).getResponse()).toMatchObject({
+      code: 'TICKET_LIMIT_REACHED',
+      message: expect.stringContaining('Ya tienes 8'),
+    });
+  });
+  it('limits the guest purchases of one email per hour', () => {
+    expect(() =>
+      requireGuestPurchaseAllowance(MAX_GUEST_PURCHASES_PER_HOUR - 1),
+    ).not.toThrow();
+    let failure: unknown;
+    try {
+      requireGuestPurchaseAllowance(MAX_GUEST_PURCHASES_PER_HOUR);
+    } catch (error) {
+      failure = error;
+    }
+    expect((failure as ConflictException).getResponse()).toMatchObject({
+      code: 'GUEST_EMAIL_LIMIT',
+    });
   });
 });

@@ -371,85 +371,96 @@ describe('Atomic purchase storage', () => {
     expect(await repo.confirm(8, valid)).toMatchObject({ id: 12 });
     expect(commit).not.toHaveBeenCalled();
   });
-  it('uses parameterized batches for large selections', async () => {
-    const { large, data } = prepareLargeSelection(1001);
+  it('locks all the seats of the largest allowed selection at once', async () => {
+    const { large, data } = prepareLargeSelection(10);
     overrides['FROM SEATS s'] = { rows: large };
     await repo.confirm(8, data);
     expect(
       execute.mock.calls.filter(([sql]) =>
         String(sql).includes('FROM SEATS s'),
       ),
-    ).toHaveLength(2);
-    expect(executeMany.mock.calls[1][1]).toHaveLength(1001);
+    ).toHaveLength(1);
+    expect(executeMany.mock.calls[1][1]).toHaveLength(10);
   });
-  it('locks each seat batch only after the previous batch finishes', async () => {
-    const { large, data } = prepareLargeSelection(1001);
-    const original = execute.getMockImplementation()!;
-    let release!: () => void;
-    let started!: () => void;
-    const pending = new Promise<void>((resolve) => (release = resolve));
-    const reached = new Promise<void>((resolve) => (started = resolve));
-    let batches = 0;
-    execute.mockImplementation((sql: string, ...args: unknown[]) => {
-      if (!sql.includes('FROM SEATS s')) return original(sql, ...args);
-      batches++;
-      if (batches === 1) {
-        started();
-        return pending.then(() => ({ rows: large.slice(0, 1000) }));
-      }
-      return Promise.resolve({ rows: large.slice(1000) });
-    });
-
-    const result = repo.confirm(8, data);
-    await reached;
-    expect(batches).toBe(1);
-    expect(executeMany).not.toHaveBeenCalled();
-    expect(commit).not.toHaveBeenCalled();
-    release();
-    await expect(result).resolves.toMatchObject({ id: 12 });
-    const locks = execute.mock.calls.filter(([sql]) =>
-      String(sql).includes('FROM SEATS s'),
-    );
-    expect(locks).toHaveLength(2);
-    expect(locks[0][1]).toMatchObject({ p0: 1, p999: 1000 });
-    expect(locks[1][1]).toMatchObject({ p0: 1001 });
-    expect(locks[1][1]).not.toHaveProperty('p1');
-    expect(
-      locks.every(([sql]) => sql.includes('FOR UPDATE OF s.ROW_NUMBER WAIT 5')),
-    ).toBe(true);
-    expect(executeMany.mock.calls[1][1]).toHaveLength(1001);
-    expect(commit).toHaveBeenCalledTimes(1);
-    expect(rollback).not.toHaveBeenCalled();
-  });
-  it.each([1, 2])(
-    'rolls back and stops later seat batches when batch %i fails',
-    async (failedBatch) => {
-      const { large, data } = prepareLargeSelection(2001);
-      const original = execute.getMockImplementation()!;
-      const failure = new Error('Seat lock failed');
-      let batches = 0;
-      execute.mockImplementation((sql: string, ...args: unknown[]) => {
-        if (!sql.includes('FROM SEATS s')) return original(sql, ...args);
-        batches++;
-        if (batches === failedBatch) return Promise.reject(failure);
-        return Promise.resolve({
-          rows: large.slice((batches - 1) * 1000, batches * 1000),
-        });
+  it.each([
+    ['client', () => repo.confirm(8, valid)],
+    ['guest', () => repo.confirmGuest('guest@example.com', valid)],
+  ])(
+    'stops a %s buyer who would exceed the tickets of a function',
+    async (_buyer, buy) => {
+      overrides['COUNT(*) AS TOTAL FROM TICKETS'] = {
+        rows: [{ TOTAL: 10 }],
+      };
+      await expect(buy()).rejects.toMatchObject({
+        response: { code: 'TICKET_LIMIT_REACHED' },
       });
-
-      await expect(repo.confirm(8, data)).rejects.toBe(failure);
-      expect(batches).toBe(failedBatch);
       expect(executeMany).not.toHaveBeenCalled();
-      expect(
-        execute.mock.calls.some(([sql]) =>
-          sql.includes('INSERT INTO INVOICES'),
-        ),
-      ).toBe(false);
       expect(rollback).toHaveBeenCalledTimes(1);
-      expect(commit).not.toHaveBeenCalled();
-      expect(close).toHaveBeenCalledTimes(1);
+      const [, binds] = execute.mock.calls.find(([sql]) =>
+        String(sql).includes('COUNT(*) AS TOTAL FROM TICKETS'),
+      ) as [string, Record<string, unknown>];
+      expect(binds.functionId).toBe(valid.functionId);
     },
   );
+  it('counts only paid tickets of the buyer and the function', async () => {
+    await repo.confirm(8, valid);
+    const [sql, binds] = execute.mock.calls.find(([text]) =>
+      String(text).includes('COUNT(*) AS TOTAL FROM TICKETS'),
+    ) as [string, Record<string, unknown>];
+    expect(sql).toContain("i.STATUS='PAID'");
+    expect(sql).toContain('i.CLIENT_ID=:clientId');
+    expect(binds).toEqual({ functionId: valid.functionId, clientId: 8 });
+    expect(
+      execute.mock.calls.some(([text]) =>
+        String(text).includes('COUNT(*) AS TOTAL FROM INVOICES'),
+      ),
+    ).toBe(false);
+  });
+  it('stops a guest email after its purchases of the last hour', async () => {
+    overrides['COUNT(*) AS TOTAL FROM INVOICES'] = { rows: [{ TOTAL: 3 }] };
+    await expect(
+      repo.confirmGuest('guest@example.com', valid),
+    ).rejects.toMatchObject({ response: { code: 'GUEST_EMAIL_LIMIT' } });
+    expect(executeMany).not.toHaveBeenCalled();
+    const [sql, binds] = execute.mock.calls.find(([text]) =>
+      String(text).includes('COUNT(*) AS TOTAL FROM INVOICES'),
+    ) as [string, Record<string, unknown>];
+    expect(sql).toContain("INTERVAL '1' HOUR");
+    expect(binds).toEqual({ email: 'guest@example.com' });
+  });
+  it('recovers a registered purchase before checking the limits', async () => {
+    overrides['REQUEST_HASH AS'] = {
+      rows: [{ id: 12, hash: selectionHash(valid) }],
+    };
+    overrides['COUNT(*) AS TOTAL FROM TICKETS'] = { rows: [{ TOTAL: 10 }] };
+    await expect(repo.confirm(8, valid)).resolves.toMatchObject({ id: 12 });
+    expect(
+      execute.mock.calls.some(([sql]) =>
+        String(sql).includes('COUNT(*) AS TOTAL FROM TICKETS'),
+      ),
+    ).toBe(false);
+  });
+  it('rolls back without writing when the seat lock fails', async () => {
+    const { data } = prepareLargeSelection(10);
+    const original = execute.getMockImplementation()!;
+    const failure = new Error('Seat lock failed');
+    let locks = 0;
+    execute.mockImplementation((sql: string, ...args: unknown[]) => {
+      if (!sql.includes('FROM SEATS s')) return original(sql, ...args);
+      locks++;
+      return Promise.reject(failure);
+    });
+
+    await expect(repo.confirm(8, data)).rejects.toBe(failure);
+    expect(locks).toBe(1);
+    expect(executeMany).not.toHaveBeenCalled();
+    expect(
+      execute.mock.calls.some(([sql]) => sql.includes('INSERT INTO INVOICES')),
+    ).toBe(false);
+    expect(rollback).toHaveBeenCalledTimes(1);
+    expect(commit).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
   it('protects ownership and never fabricates tickets for historical invoices', async () => {
     overrides['AS "contextJson"'] = { rows: [] };
     await expect(repo.findOne(12, 99)).rejects.toThrow('no pertenece');

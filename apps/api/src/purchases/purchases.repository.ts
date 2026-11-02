@@ -17,6 +17,8 @@ import {
   purchaseQrPayload,
   requireAvailableFunction,
   requireGuestEmailAvailable,
+  requireGuestPurchaseAllowance,
+  requireTicketAllowance,
   selectionHash,
   selectionPositions,
 } from './purchase-rules';
@@ -170,6 +172,12 @@ export class PurchasesRepository {
       if (committed) return this.replay(committed, hash, buyer, connection);
       await this.requireGuestEmail(connection, email);
     }
+    await this.requireBuyerAllowance(
+      connection,
+      buyer,
+      data.functionId,
+      positions.length,
+    );
     const context = await this.catalog.getFunction(data.functionId, connection);
     requireAvailableFunction(context);
     await connection.execute(
@@ -224,6 +232,28 @@ export class PurchasesRepository {
         : null,
     );
   }
+  // The function row lock taken by the caller serializes purchases of this function.
+  private async requireBuyerAllowance(
+    connection: oracle.Connection,
+    buyer: Buyer,
+    functionId: number,
+    requested: number,
+  ) {
+    const scope = buyerScope(buyer);
+    const owned = await connection.execute<{ TOTAL: number }>(
+      `SELECT COUNT(*) AS TOTAL FROM TICKETS tk JOIN INVOICES i ON i.INVOICE_ID=tk.INVOICE_ID WHERE tk.MOVIE_FUNCTION_ID=:functionId AND i.STATUS='PAID' AND ${scope.condition}`,
+      { functionId, ...scope.binds },
+      OPTIONS,
+    );
+    requireTicketAllowance(owned.rows?.[0]?.TOTAL ?? 0, requested);
+    if ('clientId' in buyer) return;
+    const recent = await connection.execute<{ TOTAL: number }>(
+      `SELECT COUNT(*) AS TOTAL FROM INVOICES i WHERE ${scope.condition} AND i.CREATED_AT > SYSTIMESTAMP - INTERVAL '1' HOUR`,
+      scope.binds,
+      OPTIONS,
+    );
+    requireGuestPurchaseAllowance(recent.rows?.[0]?.TOTAL ?? 0);
+  }
   private async recoverFailure(
     error: unknown,
     buyer: Buyer,
@@ -252,30 +282,20 @@ export class PurchasesRepository {
     context: PurchaseFunction,
     positions: number[],
   ) {
-    const seats: PurchaseSeat[] = [];
-    const offsets = Array.from(
-      { length: Math.ceil(positions.length / 1000) },
-      (_, index) => index * 1000,
+    const binds: Binds = {
+      columns: context.columns,
+      theaterId: context.theaterId,
+      functionId: context.id,
+    };
+    positions.forEach((position, index) => {
+      binds['p' + index] = position;
+    });
+    const result = await connection.execute<PurchaseSeat>(
+      seatQuery(positions),
+      binds,
+      OPTIONS,
     );
-    await offsets.reduce(async (previous, offset) => {
-      await previous;
-      const batch = positions.slice(offset, offset + 1000);
-      const binds: Binds = {
-        columns: context.columns,
-        theaterId: context.theaterId,
-        functionId: context.id,
-      };
-      batch.forEach((position, index) => {
-        binds['p' + index] = position;
-      });
-      const result = await connection.execute<PurchaseSeat>(
-        seatQuery(batch),
-        binds,
-        OPTIONS,
-      );
-      seats.push(...(result.rows ?? []));
-    }, Promise.resolve());
-    return seats;
+    return result.rows ?? [];
   }
   private async writePurchase(
     connection: oracle.Connection,

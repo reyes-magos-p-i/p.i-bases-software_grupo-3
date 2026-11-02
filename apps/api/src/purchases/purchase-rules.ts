@@ -38,6 +38,27 @@ export function requireGuestEmailAvailable(
   });
 }
 
+export const MAX_TICKETS_PER_PURCHASE = 10;
+export const MAX_GUEST_PURCHASES_PER_HOUR = 3;
+const TICKET_LIMIT_MESSAGE = `Puedes comprar hasta ${MAX_TICKETS_PER_PURCHASE} boletos por función.`;
+
+export function requireTicketAllowance(owned: number, requested: number) {
+  if (owned + requested > MAX_TICKETS_PER_PURCHASE)
+    throw new ConflictException({
+      code: 'TICKET_LIMIT_REACHED',
+      message: `${TICKET_LIMIT_MESSAGE} Ya tienes ${owned} para esta función.`,
+    });
+}
+
+export function requireGuestPurchaseAllowance(recent: number) {
+  if (recent >= MAX_GUEST_PURCHASES_PER_HOUR)
+    throw new ConflictException({
+      code: 'GUEST_EMAIL_LIMIT',
+      message:
+        'Este correo alcanzó el máximo de compras por hora. Intenta más tarde.',
+    });
+}
+
 export function selectionPositions(selection: PurchaseSelection) {
   const positions = TICKET_CATEGORIES.flatMap(
     (category) => selection.seats[category],
@@ -46,10 +67,10 @@ export function selectionPositions(selection: PurchaseSelection) {
     throw new BadRequestException(
       'Selecciona al menos un asiento para continuar.',
     );
-  if (positions.length > 10000 || new Set(positions).size !== positions.length)
-    throw new BadRequestException(
-      'Un asiento no puede repetirse ni superar la capacidad de la sala.',
-    );
+  if (positions.length > MAX_TICKETS_PER_PURCHASE)
+    throw new BadRequestException(TICKET_LIMIT_MESSAGE);
+  if (new Set(positions).size !== positions.length)
+    throw new BadRequestException('Un asiento no puede repetirse.');
   return positions.sort((a, b) => a - b);
 }
 export function selectionHash(selection: PurchaseSelection) {
