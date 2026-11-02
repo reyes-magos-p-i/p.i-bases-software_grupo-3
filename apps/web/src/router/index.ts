@@ -56,7 +56,11 @@ const router = createRouter({
       path: '/buy-tickets',
       name: 'buy-tickets',
       component: () => import('@/views/TicketPurchaseView.vue'),
-      meta: { requiresClient: true },
+    },
+    {
+      path: '/guest-purchases',
+      name: 'guest-purchase-lookup',
+      component: () => import('@/views/GuestPurchaseLookupView.vue'),
     },
     {
       path: '/:pathMatch(.*)*',
