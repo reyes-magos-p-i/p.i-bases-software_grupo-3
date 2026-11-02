@@ -12,7 +12,7 @@ describe('UpdateSeatsDto', () => {
 
   it.each(['libre', 'indisponible', 'ocupado', 'reservado'])(
     'accepts state "%s" without a type',
-    async state => {
+    async (state) => {
       const errors = await validateDto({ seats, state });
 
       expect(errors).toHaveLength(0);
@@ -21,7 +21,7 @@ describe('UpdateSeatsDto', () => {
 
   it.each(['normal', 'vip', 'accesibilidad'])(
     'accepts type "%s" without a state',
-    async type => {
+    async (type) => {
       const errors = await validateDto({ seats, type });
 
       expect(errors).toHaveLength(0);
@@ -46,7 +46,7 @@ describe('UpdateSeatsDto', () => {
     { seats, state: 'libre', type: null },
     { seats, state: 'invalid', type: 'vip' },
     { seats, state: 'libre', type: 'invalid' },
-  ])('rejects missing changes or invalid values: %j', async payload => {
+  ])('rejects missing changes or invalid values: %j', async (payload) => {
     const errors = await validateDto(payload);
 
     expect(errors.length).toBeGreaterThan(0);
@@ -56,10 +56,10 @@ describe('UpdateSeatsDto', () => {
     { state: 'libre' },
     { seats: [], state: 'libre' },
     { seats: 'invalid', state: 'libre' },
-  ])('rejects missing, empty, or non-array seats: %j', async payload => {
+  ])('rejects missing, empty, or non-array seats: %j', async (payload) => {
     const errors = await validateDto(payload);
 
-    expect(errors.some(error => error.property === 'seats')).toBe(true);
+    expect(errors.some((error) => error.property === 'seats')).toBe(true);
   });
 
   it('accepts 10,000 seats', async () => {
@@ -84,13 +84,13 @@ describe('UpdateSeatsDto', () => {
     });
 
     expect(
-      errors.find(error => error.property === 'seats')?.constraints,
+      errors.find((error) => error.property === 'seats')?.constraints,
     ).toHaveProperty('arrayMaxSize');
   });
 
   it.each(['rowNumber', 'columnNumber'])(
     'accepts the maximum safe integer for %s',
-    async field => {
+    async (field) => {
       const errors = await validateDto({
         seats: [{ ...seats[0], [field]: Number.MAX_SAFE_INTEGER }],
         state: 'libre',
@@ -100,16 +100,16 @@ describe('UpdateSeatsDto', () => {
     },
   );
 
-  describe.each(['rowNumber', 'columnNumber'])('%s validation', field => {
+  describe.each(['rowNumber', 'columnNumber'])('%s validation', (field) => {
     it.each([0, -1, 1.5, '1', null, undefined, Number.MAX_SAFE_INTEGER + 1])(
       'rejects invalid coordinate %j',
-      async value => {
+      async (value) => {
         const errors = await validateDto({
           seats: [{ ...seats[0], [field]: value }],
           state: 'libre',
         });
 
-        const seatErrors = errors.find(error => error.property === 'seats');
+        const seatErrors = errors.find((error) => error.property === 'seats');
 
         expect(seatErrors?.children?.[0]?.children).toEqual(
           expect.arrayContaining([

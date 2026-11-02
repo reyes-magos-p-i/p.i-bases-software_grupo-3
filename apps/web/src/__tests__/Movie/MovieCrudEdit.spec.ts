@@ -63,7 +63,11 @@ const LimitedTextInputStub = defineComponent({
 // PositiveNumberInput stub
 const PositiveNumberInputStub = defineComponent({
   props: ['modelValue', 'label'],
-  emits: ['update:modelValue'],
+  emits: ['update:modelValue', 'validity-change'],
+  setup(_, { emit }) {
+    // Numeric validation is covered by PositiveNumberInput's own tests.
+    onMounted(() => emit('validity-change', true))
+  },
   template: `
     <div>
       <label>{{ label }}</label>
@@ -232,31 +236,22 @@ describe('MovieCrudEdit', () => {
     const wrapper = mountModal()
     await flushPromises()
 
-    expect(getMovieMock).toHaveBeenCalledWith(
-      24,
-      expect.any(AbortSignal),
+    expect(getMovieMock).toHaveBeenCalledWith(24, expect.any(AbortSignal))
+
+    expect(wrapper.get<HTMLInputElement>('input[data-test="Título"]').element.value).toBe(
+      'Interstellar',
     )
 
     expect(
-      wrapper.get<HTMLInputElement>('input[data-test="Título"]').element.value,
-    ).toBe('Interstellar')
-
-    expect(
-      wrapper.get<HTMLInputElement>(
-        'input[data-test="Duración en minutos"]',
-      ).element.value,
+      wrapper.get<HTMLInputElement>('input[data-test="Duración en minutos"]').element.value,
     ).toBe('169')
 
-    expect(
-      wrapper.get<HTMLSelectElement>(
-        'select[data-test="Clasificación"]',
-      ).element.value,
-    ).toBe('1')
+    expect(wrapper.get<HTMLSelectElement>('select[data-test="Clasificación"]').element.value).toBe(
+      '1',
+    )
 
     expect(
-      wrapper.get<HTMLInputElement | HTMLTextAreaElement>(
-        '[data-test="Sinopsis"]',
-      ).element.value,
+      wrapper.get<HTMLInputElement | HTMLTextAreaElement>('[data-test="Sinopsis"]').element.value,
     ).toBe('A journey through space.')
 
     wrapper.unmount()
@@ -271,15 +266,11 @@ describe('MovieCrudEdit', () => {
     expect(wrapper.text()).toContain('Drama')
 
     expect(
-      wrapper.get<HTMLInputElement>(
-        '[data-test="Idiomas"] input[value="1"]',
-      ).element.checked,
+      wrapper.get<HTMLInputElement>('[data-test="Idiomas"] input[value="1"]').element.checked,
     ).toBe(true)
 
     expect(
-      wrapper.get<HTMLInputElement>(
-        '[data-test="Idiomas"] input[value="2"]',
-      ).element.checked,
+      wrapper.get<HTMLInputElement>('[data-test="Idiomas"] input[value="2"]').element.checked,
     ).toBe(false)
 
     expect(
@@ -295,10 +286,7 @@ describe('MovieCrudEdit', () => {
     const wrapper = mountModal()
     await flushPromises()
 
-    expect(
-      wrapper.get<HTMLButtonElement>('button[type="submit"]')
-        .element.disabled,
-    ).toBe(true)
+    expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(true)
 
     expect(updateMovieMock).not.toHaveBeenCalled()
 
@@ -309,13 +297,9 @@ describe('MovieCrudEdit', () => {
     const wrapper = mountModal()
     await flushPromises()
 
-    await wrapper.get('input[data-test="Título"]')
-      .setValue('Interstellar Updated')
+    await wrapper.get('input[data-test="Título"]').setValue('Interstellar Updated')
 
-    expect(
-      wrapper.get<HTMLButtonElement>('button[type="submit"]')
-        .element.disabled,
-    ).toBe(false)
+    expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(false)
 
     wrapper.unmount()
   })
@@ -324,30 +308,45 @@ describe('MovieCrudEdit', () => {
     const wrapper = mountModal()
     await flushPromises()
 
-    await wrapper.get('input[data-test="Título"]')
-      .setValue('   ')
+    await wrapper.get('input[data-test="Título"]').setValue('   ')
 
-    expect(
-      wrapper.get<HTMLButtonElement>('button[type="submit"]')
-        .element.disabled,
-    ).toBe(true)
+    expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(true)
 
     expect(updateMovieMock).not.toHaveBeenCalled()
 
     wrapper.unmount()
   })
 
-  it('disables Save for an invalid duration', async () => {
+  it.each([0, 1])('blocks saving when numeric input %i reports invalid', async (index) => {
     const wrapper = mountModal()
     await flushPromises()
 
-    await wrapper.get('input[data-test="Duración en minutos"]')
-      .setValue('0')
+    await wrapper.get('input[data-test="Título"]').setValue('Interstellar Updated')
 
-    expect(
-      wrapper.get<HTMLButtonElement>('button[type="submit"]')
-        .element.disabled,
-    ).toBe(true)
+    const saveButton = wrapper.get<HTMLButtonElement>('button[type="submit"]')
+    expect(saveButton.element.disabled).toBe(false)
+
+    const inputs = wrapper.findAllComponents(PositiveNumberInputStub)
+    expect(inputs).toHaveLength(2)
+    const input = inputs[index]!
+
+    input.vm.$emit('validity-change', false)
+    await flushPromises()
+
+    expect(saveButton.element.disabled).toBe(true)
+
+    // Submitting directly also checks the save handler's guard.
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(updateMovieMock).not.toHaveBeenCalled()
+    expect(wrapper.emitted('saved')).toBeUndefined()
+    expect(wrapper.emitted('close')).toBeUndefined()
+
+    input.vm.$emit('validity-change', true)
+    await flushPromises()
+
+    expect(saveButton.element.disabled).toBe(false)
 
     wrapper.unmount()
   })
@@ -356,8 +355,7 @@ describe('MovieCrudEdit', () => {
     const wrapper = mountModal()
     await flushPromises()
 
-    await wrapper.get('input[data-test="Título"]')
-      .setValue('Interstellar Updated')
+    await wrapper.get('input[data-test="Título"]').setValue('Interstellar Updated')
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -427,27 +425,21 @@ describe('MovieCrudEdit', () => {
   })
 
   it('keeps edited values when saving fails', async () => {
-    updateMovieMock.mockRejectedValueOnce(
-      new Error('Network failure'),
-    )
+    updateMovieMock.mockRejectedValueOnce(new Error('Network failure'))
 
     const wrapper = mountModal()
     await flushPromises()
 
-    await wrapper.get('input[data-test="Título"]')
-      .setValue('Unsaved changes')
+    await wrapper.get('input[data-test="Título"]').setValue('Unsaved changes')
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text())
-      .toContain('No se pudieron guardar')
+    expect(wrapper.get('[role="alert"]').text()).toContain('No se pudieron guardar')
 
-    expect(
-      wrapper.get<HTMLInputElement>(
-        'input[data-test="Título"]',
-      ).element.value,
-    ).toBe('Unsaved changes')
+    expect(wrapper.get<HTMLInputElement>('input[data-test="Título"]').element.value).toBe(
+      'Unsaved changes',
+    )
 
     expect(wrapper.emitted('saved')).toBeUndefined()
     expect(wrapper.emitted('close')).toBeUndefined()
@@ -463,18 +455,14 @@ describe('MovieCrudEdit', () => {
     await flushPromises()
 
     // A change is now required before saving
-    await wrapper.get('input[data-test="Título"]')
-      .setValue('Updated title')
+    await wrapper.get('input[data-test="Título"]').setValue('Updated title')
 
     await wrapper.get('form').trigger('submit')
     await wrapper.get('form').trigger('submit')
 
     expect(updateMovieMock).toHaveBeenCalledTimes(1)
 
-    expect(
-      wrapper.get<HTMLButtonElement>('button[type="submit"]')
-        .element.disabled,
-    ).toBe(true)
+    expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(true)
 
     pending.resolve(undefined)
     await flushPromises()
@@ -487,48 +475,36 @@ describe('MovieCrudEdit', () => {
   it.each([
     [401, 'session-expired'],
     [403, 'forbidden'],
-  ] as const)(
-    'handles a %s load response',
-    async (status, event) => {
-      getMovieMock.mockRejectedValueOnce(
-        httpError(status, 'Access denied'),
-      )
-
-      const wrapper = mountModal()
-      await flushPromises()
-
-      expect(wrapper.emitted(event)).toHaveLength(1)
-      expect(wrapper.find('[role="alert"]').exists()).toBe(true)
-
-      wrapper.unmount()
-    },
-  )
-
-  it('shows when the movie no longer exists', async () => {
-    getMovieMock.mockRejectedValueOnce(
-      httpError(404, 'Not found'),
-    )
+  ] as const)('handles a %s load response', async (status, event) => {
+    getMovieMock.mockRejectedValueOnce(httpError(status, 'Access denied'))
 
     const wrapper = mountModal()
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text())
-      .toContain('ya no existe')
+    expect(wrapper.emitted(event)).toHaveLength(1)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
+
+  it('shows when the movie no longer exists', async () => {
+    getMovieMock.mockRejectedValueOnce(httpError(404, 'Not found'))
+
+    const wrapper = mountModal()
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('ya no existe')
 
     wrapper.unmount()
   })
 
   it('retries a failed load', async () => {
-    getMovieMock.mockRejectedValueOnce(
-      new Error('Network failure'),
-    )
+    getMovieMock.mockRejectedValueOnce(new Error('Network failure'))
 
     const wrapper = mountModal()
     await flushPromises()
 
-    const retry = wrapper
-      .findAll('button')
-      .find(button => button.text() === 'Reintentar')
+    const retry = wrapper.findAll('button').find((button) => button.text() === 'Reintentar')
 
     expect(retry).toBeDefined()
 
@@ -542,22 +518,18 @@ describe('MovieCrudEdit', () => {
   })
 
   it('displays backend validation errors', async () => {
-    updateMovieMock.mockRejectedValueOnce(
-      httpError(400, 'Invalid movie data'),
-    )
+    updateMovieMock.mockRejectedValueOnce(httpError(400, 'Invalid movie data'))
 
     const wrapper = mountModal()
     await flushPromises()
 
     // Must change something before submitting
-    await wrapper.get('input[data-test="Título"]')
-      .setValue('Updated title')
+    await wrapper.get('input[data-test="Título"]').setValue('Updated title')
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text())
-      .toContain('Invalid movie data')
+    expect(wrapper.get('[role="alert"]').text()).toContain('Invalid movie data')
 
     expect(wrapper.emitted('saved')).toBeUndefined()
 
@@ -565,11 +537,7 @@ describe('MovieCrudEdit', () => {
   })
 
   it('aborts loading when unmounted', () => {
-    getMovieMock.mockReturnValueOnce(
-      new Promise<Awaited<ReturnType<typeof getMovie>>>(
-        () => {},
-      ),
-    )
+    getMovieMock.mockReturnValueOnce(new Promise<Awaited<ReturnType<typeof getMovie>>>(() => {}))
 
     const wrapper = mountModal()
     const signal = getMovieMock.mock.calls[0]?.[1]

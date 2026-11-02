@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import SectionNavigation from '@/components/common/SectionNavigation.vue'
 import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
+import ClientPurchasesPanel from '@/components/purchases/ClientPurchasesPanel.vue'
 import ClientProfileForm from '@/components/clients/ClientProfileForm.vue'
 import ClientEmailChangeDialog from '@/components/clients/ClientEmailChangeDialog.vue'
 import ClientPreferencesForm from '@/components/clients/ClientPreferencesForm.vue'
@@ -43,9 +44,11 @@ import type {
 } from '@/types/client-profile'
 
 const router = useRouter()
+const route = useRoute()
 const sections = [
   { id: 'personal', label: 'Mis datos', icon: 'bi-person' },
   { id: 'security', label: 'Seguridad', icon: 'bi-shield-lock' },
+  { id: 'purchases', label: 'Historial de compras', icon: 'bi-ticket-perforated' },
   { id: 'preferences', label: 'Preferencias', icon: 'bi-sliders' },
   { id: 'deactivation', label: 'Desactivar cuenta', icon: 'bi-person-dash' },
 ]
@@ -55,7 +58,17 @@ const preferencesError = ref('')
 const preferencesFormKey = ref(0)
 let preferencesGeneration = 0
 let preferencesAbort: AbortController | undefined
-const selected = ref('personal')
+const selected = ref(route.query.section === 'purchases' ? 'purchases' : 'personal')
+// The open purchase lives in the URL, so a detail link can be reopened; the API checks ownership.
+const selectedPurchaseId = computed(() => {
+  const id = route.query.purchaseId
+  return typeof id === 'string' && /^\d+$/u.test(id) ? Number(id) : null
+})
+function selectPurchase(id: number | null) {
+  void router.replace({
+    query: { section: 'purchases', ...(id === null ? {} : { purchaseId: String(id) }) },
+  })
+}
 const profile = ref<ClientProfile | null>(null)
 const options = ref<ClientAddressOptions | null>(null)
 const loading = ref(true)
@@ -122,6 +135,12 @@ async function handleError(error: unknown, fallback: string, options: { notify?:
     clearClientSession()
     await router.replace({ path: '/', query: { login: 'client', reason: 'expired' } })
   }
+}
+function purchasesSessionExpired() {
+  void handleError(
+    Object.assign(new Error('Tu sesión terminó.'), { status: 401 }),
+    'Tu sesión terminó.',
+  )
 }
 async function load() {
   const session = sessionSnapshot()
@@ -469,6 +488,12 @@ onBeforeUnmount(() => {
             </dl>
           </template>
         </template>
+        <ClientPurchasesPanel
+          v-else-if="selected === 'purchases'"
+          :purchase-id="selectedPurchaseId"
+          @select="selectPurchase"
+          @session-expired="purchasesSessionExpired"
+        />
         <template v-else-if="selected === 'security'">
           <h2>Seguridad</h2>
           <p>Controla cómo accedes a tu cuenta.</p>

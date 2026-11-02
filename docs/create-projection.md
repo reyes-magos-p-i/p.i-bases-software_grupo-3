@@ -24,30 +24,41 @@ Aplicar una sola vez, conectado como `PRODUCTION`:
   sala, no se crea ninguna y se listan los horarios en conflicto (los primeros
   5 y cuántos más hay).
 - Las horas se guardan en hora local de Costa Rica. No se aceptan inicios en el pasado.
-- Precio por persona: ₡3500 por defecto (`DEFAULT_TICKET_PRICE`, se envía en `/options`) hasta que exista la configuración global; el administrador puede cambiarlo por proyección. Si `price` se omite, se usa el valor por defecto.
+- Precio general calculado: base ₡3000 más recargos de formato, tecnología y estreno. La vista previa se consulta al servidor; no se edita un importe libre.
 - Estado inicial `ACTIVE` o `INACTIVE`. El job pasa cada minuto `ACTIVE` →
   `IN_PROGRESS` al iniciar y → `FINISHED` al terminar.
 
 ## Endpoints
 
-| Método | Ruta | Uso |
-| --- | --- | --- |
-| `GET` | `/api/projections/options` | Sucursales, salas activas y `defaultTicketPrice` |
-| `GET` | `/api/projections/available-movies?branchId=&search=` | Búsqueda de películas disponibles (máx. 10) |
-| `POST` | `/api/projections` | Crea las proyecciones |
+| Método | Ruta                                                  | Uso                                              |
+| ------ | ----------------------------------------------------- | ------------------------------------------------ |
+| `GET`  | `/api/projections/options`                            | Sucursales, salas activas y `defaultTicketPrice` |
+| `GET`  | `/api/projections/available-movies?branchId=&search=` | Búsqueda de películas disponibles (máx. 10)      |
+| `POST` | `/api/projections`                                    | Crea las proyecciones                            |
 
 Cuerpo de `POST`:
 
 ```json
 {
-  "movieId": 3, "theaterId": 7,
-  "startDate": "2026-07-21", "endDate": "2026-07-29",
-  "startTime": "21:00", "endTime": "00:55",
-  "cleaningMinutes": 30, "advertisementMinutes": 15,
-  "price": 4500, "status": "ACTIVE"
+  "movieId": 3,
+  "theaterId": 7,
+  "startDate": "2026-07-21",
+  "endDate": "2026-07-29",
+  "startTime": "21:00",
+  "endTime": "00:55",
+  "cleaningMinutes": 30,
+  "advertisementMinutes": 15,
+  "format": "3D",
+  "technology": "IMAX",
+  "isPremiere": false,
+  "status": "ACTIVE"
 }
 ```
 
 Respuestas: `201` con `{ status, price, projections: [{ movieFunctionId, startTime, endTime }] }`;
 `400` validación; `403` sin permisos u origen no autorizado;
 `409` sala/película no disponible o conflicto de horario.
+
+## Política de boletos
+
+El formulario configura 2D/3D, estándar/IMAX/70 mm y estreno. El precio general se calcula en el servidor y se muestra de solo lectura. No se permite 70 mm en 3D. El precio final considera la categoría y el asiento al comprar. Véase [Tarifas](./ticket-purchase.md).

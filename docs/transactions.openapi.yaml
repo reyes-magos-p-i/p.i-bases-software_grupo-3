@@ -215,7 +215,7 @@ components:
           properties:
             paymentMethod:
               type: string
-              enum: [CARD, CASH]
+              enum: [CARD, CASH, SIMULATED]
             cardBrand:
               type: string
               nullable: true

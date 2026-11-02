@@ -1,4 +1,10 @@
 import {
+  pricingSettings,
+  ticketPrice,
+  TICKET_POLICY,
+  type PricingSettings,
+} from '../common/pricing/ticket-pricing';
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -39,6 +45,20 @@ export class ProjectionsService {
     };
   }
 
+  quotePrice(data: Partial<PricingSettings>) {
+    try {
+      const settings = pricingSettings(data);
+      return {
+        ...settings,
+        ...ticketPrice(settings),
+        categories: TICKET_POLICY.categories,
+      };
+    } catch (error) {
+      if (error instanceof RangeError)
+        throw new BadRequestException(error.message);
+      throw error;
+    }
+  }
   async getFilterOptions(): Promise<ProjectionFilterOptions> {
     const [catalogs, movies] = await Promise.all([
       this.repository.getCatalogs(false),
@@ -65,7 +85,10 @@ export class ProjectionsService {
   }
 
   findAvailableMovies(query: AvailableMoviesQueryDto) {
-    return this.repository.findAvailableMovies(query.branchId, query.search ?? '');
+    return this.repository.findAvailableMovies(
+      query.branchId,
+      query.search ?? '',
+    );
   }
 
   async create(
@@ -80,12 +103,19 @@ export class ProjectionsService {
       throw new BadRequestException(
         `El rango de fechas no puede superar ${MAX_SCHEDULE_DAYS} días.`,
       );
-    const duration = await this.scheduledDuration(data, PROJECTION_MESSAGES.unavailable);
+    const duration = await this.scheduledDuration(
+      data,
+      PROJECTION_MESSAGES.unavailable,
+    );
+    const pricing = this.quotePrice(data);
     return this.repository.createProjections(
       {
         movieId: data.movieId,
         theaterId: data.theaterId,
-        price: data.price ?? DEFAULT_TICKET_PRICE,
+        format: pricing.format,
+        technology: pricing.technology,
+        isPremiere: pricing.isPremiere,
+        price: pricing.unitPrice,
         status: data.status ?? 'ACTIVE',
         cleaningMinutes: data.cleaningMinutes,
         advertisementMinutes: data.advertisementMinutes,
@@ -95,7 +125,7 @@ export class ProjectionsService {
     );
   }
 
-  /** Reschedules one projection; omitted price or status keep their current value. */
+  /** Reschedules one projection and derives the price from its current settings. */
   async update(
     id: number,
     data: UpdateProjectionDto,
@@ -110,7 +140,9 @@ export class ProjectionsService {
       {
         movieId: data.movieId,
         theaterId: data.theaterId,
-        price: data.price,
+        format: data.format,
+        technology: data.technology,
+        isPremiere: data.isPremiere,
         status: data.status,
         cleaningMinutes: data.cleaningMinutes,
         advertisementMinutes: data.advertisementMinutes,

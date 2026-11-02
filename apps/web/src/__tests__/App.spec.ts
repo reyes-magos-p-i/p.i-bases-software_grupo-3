@@ -130,4 +130,13 @@ describe('App', () => {
       wrapper.unmount()
     }
   })
+  it('opens the purchase route for a guest without requiring a client session', async () => {
+    clearClientSession()
+    await router.push('/buy-tickets?movieId=2')
+    expect(router.currentRoute.value.path).toBe('/buy-tickets')
+    expect(router.currentRoute.value.query).toEqual({ movieId: '2' })
+    const matched = router.resolve('/buy-tickets?movieId=2').matched[0]!
+    expect(matched.meta.requiresClient).not.toBe(true)
+    expect(matched.components!.default).toMatchObject({ __name: 'TicketPurchaseView' })
+  })
 })

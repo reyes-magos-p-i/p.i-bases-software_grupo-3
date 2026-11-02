@@ -50,33 +50,30 @@ const existingPosterUrl = computed(() =>
 )
 
 const languageOptions = computed(() =>
-  props.languages.map(item => ({
+  props.languages.map((item) => ({
     value: item.id,
-    label: item.name
-  }))
+    label: item.name,
+  })),
 )
 
 const genreOptions = computed(() =>
-  props.genres.map(item => ({
+  props.genres.map((item) => ({
     value: item.id,
-    label: item.name
-  }))
+    label: item.name,
+  })),
 )
 
-const isFormValid = computed(() =>
-  form.title.trim().length > 0 &&
-  form.title.length <= TITLE_LIMIT &&
-  form.synopsis.trim().length > 0 &&
-  form.synopsis.length <= SYNOPSIS_LIMIT &&
-  form.runningTime !== null &&
-  Number.isInteger(form.runningTime) &&
-  form.runningTime > 0 &&
-  form.releaseYear !== null &&
-  Number.isInteger(form.releaseYear) &&
-  form.releaseYear > 0 &&
-  form.classificationId !== null &&
-  form.languageIds.length > 0 &&
-  form.genreIds.length > 0
+const isFormValid = computed(
+  () =>
+    form.title.trim().length > 0 &&
+    form.title.length <= TITLE_LIMIT &&
+    form.synopsis.trim().length > 0 &&
+    form.synopsis.length <= SYNOPSIS_LIMIT &&
+    runningTimeValid.value &&
+    releaseYearValid.value &&
+    form.classificationId !== null &&
+    form.languageIds.length > 0 &&
+    form.genreIds.length > 0,
 )
 
 async function save() {
@@ -86,11 +83,7 @@ async function save() {
   const releaseYear = form.releaseYear
   const classificationId = form.classificationId
 
-  if (
-    runningTime === null ||
-    releaseYear === null ||
-    classificationId === null
-  ) return
+  if (runningTime === null || releaseYear === null || classificationId === null) return
 
   saving.value = true
   error.value = ''
@@ -224,20 +217,11 @@ async function save() {
         </p>
 
         <footer class="form-footer">
-          <button
-            type="button"
-            class="secondary"
-            :disabled="saving"
-            @click="emit('close')"
-          >
+          <button type="button" class="secondary" :disabled="saving" @click="emit('close')">
             Cancelar
           </button>
 
-          <button
-            type="submit"
-            class="primary"
-            :disabled="!isFormValid || saving"
-          >
+          <button type="submit" class="primary" :disabled="!isFormValid || saving">
             {{ saving ? 'Creando...' : 'Crear película' }}
           </button>
         </footer>

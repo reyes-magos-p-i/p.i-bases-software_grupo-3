@@ -3,8 +3,9 @@ import {
   IsInt,
   IsNotEmpty,
   IsString,
+  MaxLength,
   Min,
-  IsOptional
+  IsOptional,
 } from 'class-validator';
 
 export class UpdateMovieDto {
@@ -18,6 +19,9 @@ export class UpdateMovieDto {
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(1000, {
+    message: 'La sinopsis no puede superar los 1000 caracteres.',
+  })
   synopsis?: string;
 
   @IsString()

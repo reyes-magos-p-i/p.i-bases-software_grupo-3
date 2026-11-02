@@ -5,7 +5,6 @@ import { TheaterRepository } from './theater.repository/theater.repository';
 import { ChairsRepository } from './chairs.repository';
 import { UpdateSeatsDto } from './dto/update-seats.dto';
 
-
 describe('TheatersService', () => {
   let service: TheatersService;
   let repository: {
@@ -76,7 +75,9 @@ describe('TheatersService', () => {
       projectorName: 'IMAX',
     };
 
-    await expect(service.create(theaterDto)).rejects.toThrow('Invalid theater seat dimensions');
+    await expect(service.create(theaterDto)).rejects.toThrow(
+      'Invalid theater seat dimensions',
+    );
     expect(repository.createTheater).not.toHaveBeenCalled();
   });
 
@@ -111,7 +112,9 @@ describe('TheatersService', () => {
     };
     repository.createTheater.mockResolvedValue({ theaterId: 8, ...theaterDto });
 
-    await expect(service.create(theaterDto)).resolves.toMatchObject({ theaterId: 8 });
+    await expect(service.create(theaterDto)).resolves.toMatchObject({
+      theaterId: 8,
+    });
   });
 
   it('returns all theaters from the repository', async () => {
@@ -201,16 +204,31 @@ describe('TheatersService', () => {
   ];
 
   it.each(validCases)('service accepts %i x %i = %i', async (x, y, seats) => {
-    const dto = { cinema: 'Cinema Test', dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' };
+    const dto = {
+      cinema: 'Cinema Test',
+      dimensionX: x,
+      dimensionY: y,
+      numberOfSeats: seats,
+      projectorName: 'IMAX',
+    };
     repository.createTheater.mockResolvedValue({ theaterId: 1, ...dto });
     await expect(service.create(dto)).resolves.toMatchObject({ theaterId: 1 });
   });
 
-  it.each(invalidCases)('service rejects %i x %i, seats %i', async (x, y, seats) => {
-    await expect(
-      service.create({ cinema: 'Cinema Test', dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' }),
-    ).rejects.toThrow('Invalid theater seat dimensions');
-  });
+  it.each(invalidCases)(
+    'service rejects %i x %i, seats %i',
+    async (x, y, seats) => {
+      await expect(
+        service.create({
+          cinema: 'Cinema Test',
+          dimensionX: x,
+          dimensionY: y,
+          numberOfSeats: seats,
+          projectorName: 'IMAX',
+        }),
+      ).rejects.toThrow('Invalid theater seat dimensions');
+    },
+  );
 
   describe('getSeats', () => {
     const seats = [
@@ -238,8 +256,9 @@ describe('TheatersService', () => {
     it('throws when the theater does not exist', async () => {
       repository.getTheaterById.mockResolvedValueOnce(null);
 
-      await expect(service.getSeats(999))
-        .rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getSeats(999)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
 
       expect(chairsRepository.findByTheater).not.toHaveBeenCalled();
     });

@@ -100,7 +100,7 @@ const columns = [
   { key: 'theater', label: 'Sala' },
   { key: 'date', label: 'Fecha' },
   { key: 'duration', label: 'Duración' },
-  { key: 'price', label: 'Precio' },
+  { key: 'price', label: 'Precio general desde' },
   { key: 'status', label: 'Estado' },
 ]
 const rows = computed(() =>

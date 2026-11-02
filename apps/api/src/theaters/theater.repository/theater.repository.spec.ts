@@ -7,7 +7,10 @@ describe('TheaterRepository', () => {
   let repository: TheaterRepository;
   let databaseService: { query: jest.Mock; transaction: jest.Mock };
   let connection: { execute: jest.Mock };
-  let chairsRepository: { createForTheater: jest.Mock; deleteForTheater: jest.Mock;};
+  let chairsRepository: {
+    createForTheater: jest.Mock;
+    deleteForTheater: jest.Mock;
+  };
 
   beforeEach(async () => {
     connection = {
@@ -15,8 +18,9 @@ describe('TheaterRepository', () => {
     };
     databaseService = {
       query: jest.fn(),
-      transaction: jest.fn((work: (conn: typeof connection) => Promise<unknown>) =>
-        work(connection),
+      transaction: jest.fn(
+        (work: (conn: typeof connection) => Promise<unknown>) =>
+          work(connection),
       ),
     };
     chairsRepository = {
@@ -76,25 +80,25 @@ describe('TheaterRepository', () => {
       );
     });
 
-      it('maps inactive theaters to isActive false', async () => {
-        databaseService.query.mockResolvedValue({
-          rows: [
-            {
-              THEATER_ID: 2,
-              CINEMA: 'Cinema 3',
-              NUMBER_SEATS: 80,
-              DIMENSION_X: 8,
-              DIMENSION_Y: 10,
-              PROJECTOR_NAME: 'Dolby',
-              IS_ACTIVE: 0,
-            },
-          ],
-        });
-
-        await expect(repository.getAllTheaters()).resolves.toEqual([
-          expect.objectContaining({ theaterId: 2, isActive: false }),
-        ]);
+    it('maps inactive theaters to isActive false', async () => {
+      databaseService.query.mockResolvedValue({
+        rows: [
+          {
+            THEATER_ID: 2,
+            CINEMA: 'Cinema 3',
+            NUMBER_SEATS: 80,
+            DIMENSION_X: 8,
+            DIMENSION_Y: 10,
+            PROJECTOR_NAME: 'Dolby',
+            IS_ACTIVE: 0,
+          },
+        ],
       });
+
+      await expect(repository.getAllTheaters()).resolves.toEqual([
+        expect.objectContaining({ theaterId: 2, isActive: false }),
+      ]);
+    });
 
     it.each([undefined, null, []])(
       'returns an empty list when database rows are %p',
@@ -150,7 +154,9 @@ describe('TheaterRepository', () => {
       );
       expect(connection.execute).toHaveBeenNthCalledWith(
         3,
-        expect.stringContaining('SELECT theater_status_id FROM TheaterStatuses'),
+        expect.stringContaining(
+          'SELECT theater_status_id FROM TheaterStatuses',
+        ),
         { name: 'Disponible' },
         expect.objectContaining({ outFormat: expect.anything() }),
       );
@@ -176,28 +182,30 @@ describe('TheaterRepository', () => {
       );
     });
 
-      it('defaults isActive to true when it is omitted', async () => {
-        const { isActive: ignoredIsActive, ...dtoWithoutActive } = theaterDto;
-        expect(ignoredIsActive).toBe(true);
+    it('defaults isActive to true when it is omitted', async () => {
+      const { isActive: ignoredIsActive, ...dtoWithoutActive } = theaterDto;
+      expect(ignoredIsActive).toBe(true);
 
-        connection.execute
-          .mockResolvedValueOnce({ rows: [{ PROJECTOR_ID: 42 }] })
-          .mockResolvedValueOnce({ rows: [{ BRANCH_ID: 2 }] })
-          .mockResolvedValueOnce({ rows: [{ THEATER_STATUS_ID: 1 }] })
+      connection.execute
+        .mockResolvedValueOnce({ rows: [{ PROJECTOR_ID: 42 }] })
+        .mockResolvedValueOnce({ rows: [{ BRANCH_ID: 2 }] })
+        .mockResolvedValueOnce({ rows: [{ THEATER_STATUS_ID: 1 }] })
         .mockResolvedValueOnce({ outBinds: { theaterId: [8] } });
 
-        await expect(repository.createTheater(dtoWithoutActive)).resolves.toEqual({
+      await expect(repository.createTheater(dtoWithoutActive)).resolves.toEqual(
+        {
           theaterId: 8,
           ...dtoWithoutActive,
           isActive: true,
           status: 'Disponible',
-        });
-        expect(connection.execute).toHaveBeenNthCalledWith(
-          4,
-          expect.stringContaining('INSERT INTO Theaters'),
-          expect.objectContaining({ isActive: 1 }),
-        );
-      });
+        },
+      );
+      expect(connection.execute).toHaveBeenNthCalledWith(
+        4,
+        expect.stringContaining('INSERT INTO Theaters'),
+        expect.objectContaining({ isActive: 1 }),
+      );
+    });
 
     it('rejects when the projector does not exist', async () => {
       connection.execute.mockResolvedValueOnce({ rows: [] });
@@ -383,11 +391,15 @@ describe('TheaterRepository', () => {
         .mockResolvedValueOnce({ rowsAffected: 1 });
       databaseService.query.mockResolvedValue({ rows: [] });
 
-      await repository.updateTheater(7, { status: 'En función' }).catch(() => undefined);
+      await repository
+        .updateTheater(7, { status: 'En función' })
+        .catch(() => undefined);
 
       expect(connection.execute).toHaveBeenNthCalledWith(
         2,
-        expect.stringContaining('UPDATE Theaters SET theater_status_id = :theaterStatusId'),
+        expect.stringContaining(
+          'UPDATE Theaters SET theater_status_id = :theaterStatusId',
+        ),
         expect.objectContaining({ id: 7, theaterStatusId: 2 }),
       );
     });
@@ -395,9 +407,9 @@ describe('TheaterRepository', () => {
     it('rejects an update with an unknown status', async () => {
       connection.execute.mockResolvedValueOnce({ rows: [] });
 
-      await expect(repository.updateTheater(7, { status: 'Roto' })).rejects.toThrow(
-        'Theater status not found: Roto',
-      );
+      await expect(
+        repository.updateTheater(7, { status: 'Roto' }),
+      ).rejects.toThrow('Theater status not found: Roto');
     });
 
     it('resolves the projector when updating projectorName', async () => {
@@ -437,7 +449,9 @@ describe('TheaterRepository', () => {
       );
       expect(connection.execute).toHaveBeenNthCalledWith(
         2,
-        expect.stringContaining('UPDATE Theaters SET projector_id = :projectorId'),
+        expect.stringContaining(
+          'UPDATE Theaters SET projector_id = :projectorId',
+        ),
         expect.objectContaining({ id: 7, projectorId: 42 }),
       );
     });
@@ -455,9 +469,9 @@ describe('TheaterRepository', () => {
     it('throws when the update affects no rows', async () => {
       connection.execute.mockResolvedValue({ rowsAffected: 0 });
 
-      await expect(repository.updateTheater(999, { isActive: true })).rejects.toThrow(
-        'Theater not found: 999',
-      );
+      await expect(
+        repository.updateTheater(999, { isActive: true }),
+      ).rejects.toThrow('Theater not found: 999');
       expect(databaseService.query).not.toHaveBeenCalled();
     });
 
@@ -465,21 +479,23 @@ describe('TheaterRepository', () => {
       const error = new Error('Database transaction failed');
       databaseService.transaction.mockRejectedValue(error);
 
-      await expect(repository.updateTheater(7, { isActive: false })).rejects.toBe(error);
+      await expect(
+        repository.updateTheater(7, { isActive: false }),
+      ).rejects.toBe(error);
     });
 
     it('throws when the theater disappears before the refreshed lookup', async () => {
       connection.execute.mockResolvedValue({ rowsAffected: 1 });
       databaseService.query.mockResolvedValue({ rows: [] });
 
-      await expect(repository.updateTheater(7, { isActive: false })).rejects.toThrow(
-        'Theater not found: 7',
-      );
+      await expect(
+        repository.updateTheater(7, { isActive: false }),
+      ).rejects.toThrow('Theater not found: 7');
     });
   });
 
   describe('deleteTheater', () => {
-    it('deactivates the theater and deletes its seats in the same transaction', async () => {
+    it('deactivates the theater while preserving seats and ticket history', async () => {
       connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
 
       await expect(repository.deleteTheater(7)).resolves.toBeUndefined();
@@ -494,11 +510,7 @@ describe('TheaterRepository', () => {
         { autoCommit: false },
       );
 
-      expect(chairsRepository.deleteForTheater).toHaveBeenCalledTimes(1);
-      expect(chairsRepository.deleteForTheater).toHaveBeenCalledWith(
-        7,
-        connection,
-      );
+      expect(chairsRepository.deleteForTheater).not.toHaveBeenCalled();
     });
 
     it('throws when the theater does not exist', async () => {
@@ -509,15 +521,6 @@ describe('TheaterRepository', () => {
       );
 
       expect(chairsRepository.deleteForTheater).not.toHaveBeenCalled();
-    });
-
-    it('propagates seat deletion errors', async () => {
-      const error = new Error('Seat deletion failed');
-
-      connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
-      chairsRepository.deleteForTheater.mockRejectedValueOnce(error);
-
-      await expect(repository.deleteTheater(7)).rejects.toBe(error);
     });
 
     it('propagates transaction errors', async () => {

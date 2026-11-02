@@ -81,7 +81,9 @@ describe('ProjectionDetailDialog', () => {
     expect(getProjectionDetail).toHaveBeenCalledWith(100, expect.any(AbortSignal))
     expect(wrapper!.get('h2').text()).toBe('Detalle de proyección')
     const fields = Object.fromEntries(
-      wrapper!.findAll('.detail-field').map((field) => [field.get('dt').text(), field.get('dd').text()]),
+      wrapper!
+        .findAll('.detail-field')
+        .map((field) => [field.get('dt').text(), field.get('dd').text()]),
     )
     expect(fields).toMatchObject({
       'ID de proyección': 'MF-100',
@@ -95,7 +97,7 @@ describe('ProjectionDetailDialog', () => {
       Anuncios: 'Sin registrar',
       'Duración de la película': '190 minutos',
       Limpieza: '30 minutos',
-      'Precio por persona': 'Sin precio',
+      'Precio general desde': 'Sin precio',
       'Fecha de creación': '01/07/2099 9:30 am',
     })
     expect(wrapper!.get('.poster-title').text()).toBe(detail.movieTitle)

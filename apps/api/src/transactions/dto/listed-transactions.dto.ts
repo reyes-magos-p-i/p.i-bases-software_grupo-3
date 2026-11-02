@@ -27,7 +27,7 @@ export interface ListedTransactionsDto {
   totalPages: number;
 }
 
-export type PaymentMethod = 'CARD' | 'CASH';
+export type PaymentMethod = 'CARD' | 'CASH' | 'SIMULATED';
 export type ProductType = 'TICKET' | 'FOOD';
 
 // UNIT_PRICE is what was charged, so later price changes do not alter it.
