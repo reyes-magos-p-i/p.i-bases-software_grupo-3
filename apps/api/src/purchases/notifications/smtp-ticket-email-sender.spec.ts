@@ -54,7 +54,7 @@ describe('SMTP ticket delivery', () => {
     } as ConfigService);
   });
   afterEach(() => jest.restoreAllMocks());
-  it('sends a readable PNG and logo as in-memory inline attachments with the canonical QR payload', async () => {
+  it('sends only the readable QR PNG as an in-memory inline attachment with the canonical payload', async () => {
     const generate = jest.spyOn(QRCode, 'toBuffer');
     await sender.send(message);
     expect(generate).toHaveBeenCalledWith(
@@ -79,10 +79,8 @@ describe('SMTP ticket delivery', () => {
     )!.content;
     expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     expect(png.readUInt32BE(16)).toBe(512);
-    expect(
-      mail.attachments.find((item) => item.cid === 'cinetadel-logo')!.content
-        .length,
-    ).toBeGreaterThan(0);
+    expect(mail.attachments).toHaveLength(1);
+    expect(mail.attachments[0]!.cid).toBe('purchase-qr');
   });
   it.each([
     { accepted: [], rejected: [message.email] },

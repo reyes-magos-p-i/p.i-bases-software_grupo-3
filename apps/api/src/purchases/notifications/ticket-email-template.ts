@@ -84,7 +84,6 @@ export function ticketEmailTemplate(
     <tr><td align="center" style="padding:24px 16px">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:${theme['surface-background']};color:${theme['content-background']}">
         <tr><td align="center" style="padding:24px">
-          <img src="cid:cinetadel-logo" alt="Cinetadel" width="64" height="64">
           <h1 style="font-size:26px">¡Nos vemos en el cine!</h1>
           <p>Tus boletos · <strong style="color:${theme['accent-color']}">${escapeHtml(receipt.reference)}</strong></p>
         </td></tr>

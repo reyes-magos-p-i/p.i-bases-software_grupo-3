@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { Mail, SMTPSentMessageInfo } from 'nodemailer';
 import QRCode from 'qrcode';
 import { createSmtpTransport } from '../../common/smtp-transport';
@@ -39,9 +37,6 @@ export class SmtpTicketEmailSender extends TicketEmailSender {
         },
       });
       const body = ticketEmailTemplate(message, theme);
-      const logo = readFileSync(
-        join(__dirname, '../../assets/cinetadel-logo.png'),
-      );
       submitted = true;
       const result = await this.transport.sendMail({
         from: { name: 'Cinetadel', address: this.from },
@@ -49,11 +44,6 @@ export class SmtpTicketEmailSender extends TicketEmailSender {
         subject: 'Tus boletos de Cinetadel · ' + message.receipt.reference,
         ...body,
         attachments: [
-          {
-            filename: 'cinetadel-logo.png',
-            content: logo,
-            cid: 'cinetadel-logo',
-          },
           {
             filename: 'compra-qr.png',
             content: qr,

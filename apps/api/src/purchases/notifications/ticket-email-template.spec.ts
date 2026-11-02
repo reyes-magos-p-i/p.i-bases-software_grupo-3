@@ -47,7 +47,7 @@ describe('Ticket email content', () => {
     expect(body.text).toContain('Esta función no está activa');
     expect(body.text).toContain('20:00');
     expect(body.html).toContain('cid:purchase-qr');
-    expect(body.html).toContain('cid:cinetadel-logo');
+    expect(body.html).not.toContain('cid:cinetadel-logo');
     expect(body.html).not.toContain('Código privado de consulta');
   });
   it('includes the guest private code separately from the purchase QR and handles senior tickets', () => {
