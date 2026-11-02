@@ -1,12 +1,151 @@
 openapi: 3.0.3
 info:
-  title: Cinetadel — Compra de boletos con sesión iniciada
-  version: 1.0.0
+  title: Cinetadel — Compra de boletos para clientes e invitados
+  version: 1.1.0
 servers:
   - url: /api
 security:
   - clientBearer: []
 paths:
+  /guest-purchases/movies/{id}/functions:
+    get:
+      security: []
+      summary: Película y funciones disponibles sin sesión
+      description: Máximo 60 solicitudes por minuto y cliente de red. Cache-Control no-store.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          $ref: "#/paths/~1purchases~1movies~1{id}~1functions/get/responses/200"
+        "400": { description: Identificador inválido }
+        "404": { description: La película no existe }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /guest-purchases/functions/{id}/seats:
+    get:
+      security: []
+      summary: Disponibilidad de asientos para invitados
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          $ref: "#/paths/~1purchases~1functions~1{id}~1seats/get/responses/200"
+        "400": { description: Identificador inválido }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /guest-purchases/quote:
+    post:
+      security: []
+      summary: Resumen de invitado con las mismas tarifas y sin reserva temporal
+      description: Exige Origin permitido. Máximo 60 solicitudes por minuto y cliente de red.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Selection" }
+      responses:
+        "200":
+          description: Resumen calculado en el servidor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+        "400": { description: Selección inválida }
+        "403": { description: Origen no autorizado }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /guest-purchases/buyer:
+    post:
+      security: []
+      summary: Comprueba el correo y su confirmación antes de continuar
+      description: Exige Origin permitido. Máximo 10 solicitudes por minuto. No crea una cuenta ni envía correos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuestBuyer" }
+      responses:
+        "200":
+          description: Correo normalizado para continuar como invitado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  email: { type: string, format: email }
+        "400": { description: Correo inválido o confirmación diferente }
+        "403": { description: Origen no autorizado }
+        "409":
+          {
+            description: CLIENT_LOGIN_REQUIRED; la cuenta existente debe iniciar sesión,
+          }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /guest-purchases:
+    post:
+      security: []
+      summary: Confirma atómicamente la compra de invitado
+      description: Exige Origin permitido y correo no registrado. Máximo 10 solicitudes por minuto. Conserva requestKey, correo, selección y quoteVersion al reintentar un resultado incierto. No envía correos ni crea sesiones.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/Selection"
+                - type: object
+                  required: [buyer, requestKey, quoteVersion]
+                  properties:
+                    buyer: { $ref: "#/components/schemas/GuestBuyer" }
+                    requestKey: { type: string, format: uuid }
+                    quoteVersion: { type: string, pattern: "^[a-fA-F0-9]{64}$" }
+      responses:
+        "201":
+          description: Comprobante y código privado estable de consulta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GuestReceipt" }
+        "400": { description: Solicitud inválida }
+        "403": { description: Origen no autorizado }
+        "404": { description: La función no existe }
+        "409":
+          {
+            description: Cuenta registrada (CLIENT_LOGIN_REQUIRED),
+            selección no disponible,
+            resumen modificado o referencia reutilizada,
+          }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { description: No se pudieron preparar los boletos }
+  /guest-purchases/lookup:
+    post:
+      security: []
+      summary: Consulta privada de una compra de invitado mediante su código
+      description: Exige Origin permitido. Máximo 10 solicitudes por minuto. Código en el cuerpo, sin caché. No acepta un correo o número de factura como autorización ni consulta facturas de cuentas registradas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accessCode]
+              additionalProperties: false
+              properties:
+                accessCode:
+                  {
+                    type: string,
+                    maxLength: 85,
+                    pattern: "^INV-[1-9][0-9]{0,15}-[a-fA-F0-9]{64}$",
+                  }
+      responses:
+        "200":
+          description: Comprobante con boletos; el QR se genera en la interfaz con la referencia pública
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GuestReceipt" }
+        "400": { description: Código incompleto o con formato inválido }
+        "403": { description: Origen no autorizado }
+        "404":
+          {
+            description: No se encontró una compra con ese código; no expone datos personales,
+          }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /purchases/movies/{id}/functions:
     get:
       summary: Película y funciones disponibles para comprar
@@ -200,6 +339,29 @@ components:
     Conflict:
       description: Función no disponible, asientos vendidos, resumen modificado o referencia reutilizada para otra selección. Puede incluir code FUNCTION_UNAVAILABLE, SEATS_UNAVAILABLE o QUOTE_CHANGED.
   schemas:
+    GuestBuyer:
+      type: object
+      required: [email, confirmEmail]
+      properties:
+        email: { type: string, format: email, maxLength: 150 }
+        confirmEmail:
+          {
+            type: string,
+            format: email,
+            maxLength: 150,
+            description: Debe coincidir con email; ambas direcciones se normalizan antes de comparar,
+          }
+    GuestReceipt:
+      allOf:
+        - $ref: "#/components/schemas/Receipt"
+        - type: object
+          required: [accessCode]
+          properties:
+            accessCode:
+              {
+                type: string,
+                description: Código privado de consulta; debe guardarse y no se incorpora al QR,
+              }
     PricingSettings:
       type: object
       properties:

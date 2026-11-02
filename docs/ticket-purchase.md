@@ -45,7 +45,21 @@ Las rutas requieren JWT de cliente y contraseña vigente. La cuenta se obtiene d
 
 «Mi perfil → Mis compras» pagina diez compras por página y muestra el detalle y los boletos propios. Los importes, correo y datos originales de función se conservan en la factura. Si el personal reprograma un boleto, se muestra también su función actual. Las facturas anteriores sin vínculo a boletos no inventan asientos ni vínculos históricos. El panel administrativo de transacciones distingue «Pago simulado» y consulta los datos originales cuando existe la instantánea.
 
-La compra de invitado no está habilitada: el modelo conserva un correo de comprador independiente del cliente para incorporar esa modalidad posteriormente. `/buy-tickets?movieId=…` exige sesión de cliente; un invitado debe iniciar sesión y volver a seleccionar la película.
+## Compra como invitado
+
+`/buy-tickets?movieId=…` permite comprar sin una cuenta. Reutiliza las funciones, el calendario, el selector de asientos, las tarifas y el resumen de la compra autenticada. Añade el paso «Correo» entre asientos y resumen: solicita únicamente correo y confirmación, con las mismas reglas de formato del CRUD y validaciones al salir del campo o continuar. Volver o iniciar sesión no dispara errores de validación que interrumpan la acción.
+
+Un correo que ya pertenece a cualquier cuenta de cliente exige iniciar sesión; no se crea una cuenta ni se vincula una factura por coincidencia de correo. Se comprueba al identificar al comprador y nuevamente dentro de la transacción de confirmación. Si el cliente inicia sesión desde la compra, conserva sus asientos y vuelve a obtener el resumen usando su sesión. Las contraseñas vencidas y las demás protecciones de la cuenta siguen aplicándose.
+
+Las facturas de invitado se distinguen por `CLIENT_ID IS NULL` y conservan `BUYER_EMAIL`. La escritura comparte los bloqueos, las comprobaciones de disponibilidad y el rollback con las compras de cliente. Como un invitado no tiene una fila de cliente que serialice sus reintentos, después de esperar el bloqueo de función se vuelve a comprobar la referencia de solicitud antes de consultar asientos. Dos solicitudes de la misma compra recuperan la misma factura; dos compradores diferentes no pueden adquirir el mismo asiento.
+
+La confirmación devuelve un código privado `INV-<id>-<digest>` que se muestra y permite copiar al terminar. Su digest SHA-256 incluye un propósito separado, la factura y el UUID privado de la solicitud. No se puede calcular usando solo el número de factura, el correo o el QR público. Se conserva estable en reintentos y no depende de claves de sesión ni requiere columnas nuevas. La consulta compara el código en tiempo constante y excluye las facturas de clientes autenticados antes de leer los boletos.
+
+El footer incluye «Consultar compra», una página pública que envía el código en el cuerpo de `POST /guest-purchases/lookup`, nunca en la URL. Devuelve exclusivamente el comprobante identificado, con los boletos y el mismo QR de verificación futura del cine. El código de consulta es una credencial privada: quien lo tenga puede leer esa compra. No inicia sesión ni permite acceder al perfil, al historial personal o a otras compras.
+
+Por decisión de alcance, esta historia no envía correos, boletos ni reenvíos. El comprador debe guardar el código mostrado; su envío al correo queda para la historia de notificaciones. Introducir dos veces una dirección comprueba su coincidencia y formato, no el acceso al buzón. Mientras el resultado del pago sea incierto se conserva la misma selección y referencia para reintentar y recuperar la confirmación; salir de ese intento antes de recuperarla puede impedir obtener su código en esta versión.
+
+Las operaciones de invitado usan rutas separadas `/guest-purchases`, con límites de solicitudes y respuestas sin caché. Las escrituras, la identificación y la consulta de comprobantes exigen un origen permitido. Las rutas privadas `/purchases/me` mantienen JWT, contraseña vigente y comprobación de pertenencia. Los códigos y las referencias privadas de solicitud no deben registrarse en logs ni incluirse en el QR.
 
 ## Cambios de Oracle aplicados
 
@@ -86,3 +100,14 @@ Resultados de la ejecución inicial de la compra:
 La cobertura de cambios se calculó cruzando los registros ejecutables de LCOV con las líneas añadidas frente a HEAD, incluyendo archivos nuevos y la integración de asientos, sin contar archivos de prueba. Es una medición local; SonarQube calcula su código nuevo con la referencia configurada del PR. El dominio nuevo de compra y la política de precios del backend alcanzaron 100 % de líneas. Se ejecutaron también los builds, las comprobaciones de tipos, ESLint y Prettier. Las pruebas críticas de registro se repitieron después de limitar la espera de los bloqueos a cinco segundos.
 
 Comandos utilizados: `npm run test:cov -- --runInBand`, `npm run build`, `npm run type-check` y `npm run lint` en API; `npm run test:cov -- --maxWorkers=2`, `npm run build` y `npm run lint` en web. Las pruebas HTTP son locales con persistencia simulada: no se realizaron compras de prueba contra la base configurada. La comprobación de consultas de Oracle terminó con rollback y liberó el bloqueo de asiento utilizado para validar la sintaxis.
+
+### Verificación de compra como invitado
+
+Las suites completas de API y web pasan con persistencia simulada. Las pruebas nuevas comprueban correos vacíos, inválidos, diferentes y registrados; la normalización de ambos campos; restricciones de origen y frecuencia; rechazo de importes o titulares inyectados; confidencialidad del código; separación de facturas de cliente e invitado; rollback de lotes incompletos; competencia entre ambos tipos de comprador; y reintentos simultáneos del mismo invitado después de esperar el bloqueo de función. La interfaz prueba validación diferida, regreso sin interrupciones, conservación de asientos tras iniciar sesión, reintentos inciertos, copia del código y consulta posterior sin exponerlo en la URL.
+
+| Aplicación | Suites/archivos | Pruebas aprobadas | Líneas globales | Líneas nuevas/modificadas | Cobertura nueva de líneas y ramas |
+| ---------- | --------------: | ----------------: | --------------: | ------------------------: | --------------------------------: |
+| API        |             115 |              2512 |         98,00 % |                  100,00 % |                           96,14 % |
+| Web        |             108 |              1514 |         95,21 % |                   98,90 % |                           98,05 % |
+
+La cobertura nueva cruza las líneas añadidas o modificadas frente a HEAD con los registros de líneas y ramas de LCOV, incluyendo los archivos nuevos de producción. Es una comprobación local; no sustituye el análisis de SonarQube con la referencia del PR. Las ramas globales alcanzan 89,27 % en API y 90,94 % en web. También pasan ESLint, Prettier, el build de Nest y el build con comprobación de tipos de Vue. El documento OpenAPI se pudo interpretar y sus 58 referencias internas se resolvieron. Esta implementación no realiza cambios en Oracle ni pruebas con compras o correos reales.
