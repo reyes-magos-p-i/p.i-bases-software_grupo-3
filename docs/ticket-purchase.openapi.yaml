@@ -56,7 +56,7 @@ paths:
     post:
       security: []
       summary: Comprueba el correo y su confirmación antes de continuar
-      description: Exige Origin permitido. Máximo 10 solicitudes por minuto. No crea una cuenta ni envía correos.
+      description: Exige Origin permitido. Máximo 10 solicitudes por minuto. Reutiliza la limpieza de registros pendientes con retención de siete días antes de comprobar el correo. No crea una cuenta ni envía correos.
       requestBody:
         required: true
         content:
@@ -74,9 +74,7 @@ paths:
         "400": { description: Correo inválido o confirmación diferente }
         "403": { description: Origen no autorizado }
         "409":
-          {
-            description: CLIENT_LOGIN_REQUIRED; la cuenta existente debe iniciar sesión,
-          }
+          description: CLIENT_LOGIN_REQUIRED para una cuenta activa y verificada; CLIENT_ACCOUNT_INACTIVE requiere reactivación; CLIENT_VERIFICATION_REQUIRED requiere confirmar el registro. No se permite continuar como invitado con una cuenta existente.
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /guest-purchases:
     post:
@@ -104,9 +102,12 @@ paths:
               schema: { $ref: "#/components/schemas/GuestReceipt" }
         "400": { description: Solicitud inválida }
         "403": { description: Origen no autorizado }
-        "404": { description: La función no existe }
+        "404":
+          {
+            description: La función no existe y no hay una compra previa recuperable con esa referencia; rechazo definitivo incluso después de un resultado incierto,
+          }
         "409":
-          description: Cuenta registrada (CLIENT_LOGIN_REQUIRED), selección no disponible, resumen modificado o referencia reutilizada. PURCHASE_BUSY indica un bloqueo temporal; conservar la misma solicitud al reintentar.
+          description: Cuenta registrada (CLIENT_LOGIN_REQUIRED), desactivada (CLIENT_ACCOUNT_INACTIVE), pendiente de verificación (CLIENT_VERIFICATION_REQUIRED), selección no disponible, resumen modificado o referencia reutilizada. El estado de cuenta se comprueba dentro de la transacción después de recuperar compras previas. PURCHASE_BUSY indica un bloqueo temporal; conservar la misma solicitud al reintentar.
         "429": { $ref: "#/components/responses/TooManyRequests" }
         "503": { description: No se pudieron preparar los boletos }
   /guest-purchases/lookup:
@@ -248,7 +249,10 @@ paths:
         "400": { description: Solicitud inválida }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { description: La función no existe }
+        "404":
+          {
+            description: La función no existe y no hay una compra previa recuperable con esa referencia; rechazo definitivo incluso después de un resultado incierto,
+          }
         "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
         "503": { description: No se pudieron preparar los boletos }
