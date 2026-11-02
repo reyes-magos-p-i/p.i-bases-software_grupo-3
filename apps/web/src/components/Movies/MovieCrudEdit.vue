@@ -30,6 +30,9 @@ const saving = ref(false)
 const error = ref('')
 const saveError = ref('')
 const retryable = ref(false)
+const runningTimeValid = ref(false)
+const releaseYearValid = ref(false)
+
 
 const form = reactive({
   title: '',
@@ -52,11 +55,9 @@ const isFormValid = computed(() => {
     form.synopsis.trim().length > 0 &&
     form.synopsis.length <= 1000 &&
     Number.isInteger(form.runningTime) &&
-    form.runningTime !== null &&
-    form.runningTime > 0 &&
     Number.isInteger(form.releaseYear) &&
-    form.releaseYear !== null &&
-    form.releaseYear > 0 &&
+    runningTimeValid.value &&
+    releaseYearValid.value &&
     form.classificationId !== null
   )
 })
@@ -322,7 +323,10 @@ onBeforeUnmount(() => {
                   v-model="form.runningTime"
                   label="Duración en minutos"
                   placeholder="Ej. 120"
+                  :min="1"
+                  :max="999"
                   required
+                  @validity-change="runningTimeValid = $event"
                 />
               </div>
 
@@ -331,7 +335,10 @@ onBeforeUnmount(() => {
                   v-model="form.releaseYear"
                   label="Año de estreno"
                   placeholder="Ej. 2026"
+                  :min="1888"
+                  :max="2077"
                   required
+                  @validity-change="releaseYearValid = $event"
                 />
               </div>
             </div>
