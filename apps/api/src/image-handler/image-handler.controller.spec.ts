@@ -1,8 +1,3 @@
-import {
-  BadRequestException,
-  PayloadTooLargeException,
-} from '@nestjs/common';
-
 import { ImageHandlerController } from './image-handler.controller';
 import { ImageHandlerService } from './image-handler.service';
 
@@ -11,15 +6,6 @@ describe('ImageHandlerController', () => {
   let service: {
     savePoster: jest.Mock;
   };
-
-  const file = {
-    fieldname: 'image',
-    originalname: 'poster.jpg',
-    encoding: '7bit',
-    mimetype: 'image/jpeg',
-    size: 1024,
-    buffer: Buffer.from('image-content'),
-  } as Express.Multer.File;
 
   beforeEach(() => {
     service = {
@@ -32,41 +18,38 @@ describe('ImageHandlerController', () => {
   });
 
   it('passes the uploaded file to the service and returns its result', async () => {
+    const file = {
+      fieldname: 'image',
+      originalname: 'poster.jpg',
+      mimetype: 'image/jpeg',
+      buffer: Buffer.from('poster'),
+      size: 6,
+    } as Express.Multer.File;
+
     const result = {
-      filename: 'poster.webp',
-      path: '/uploads/posters/poster.webp',
+      filename: 'saved.jpg',
+      path: '/uploads/posters/saved.jpg',
     };
 
-    service.savePoster.mockResolvedValueOnce(result);
+    service.savePoster.mockResolvedValue(result);
 
-    await expect(controller.uploadPoster(file))
-      .resolves.toEqual(result);
-
+    expect(await controller.uploadPoster(file)).toEqual(result);
     expect(service.savePoster).toHaveBeenCalledTimes(1);
     expect(service.savePoster).toHaveBeenCalledWith(file);
   });
 
-  it('delegates missing-file validation to the service', async () => {
-    const error = new BadRequestException(
-      'Debe seleccionar una imagen.',
-    );
+  it('passes undefined to the service when no file is provided', async () => {
+    service.savePoster.mockResolvedValue(undefined);
 
-    service.savePoster.mockRejectedValueOnce(error);
-
-    await expect(controller.uploadPoster())
-      .rejects.toBe(error);
+    await controller.uploadPoster();
 
     expect(service.savePoster).toHaveBeenCalledWith(undefined);
   });
 
-  it.each([
-    new BadRequestException('Imagen inválida.'),
-    new PayloadTooLargeException('La imagen supera 5 MB.'),
-    new Error('Disk full'),
-  ])('propagates service errors: %s', async (error) => {
-    service.savePoster.mockRejectedValueOnce(error);
+  it('propagates service errors', async () => {
+    const error = new Error('Invalid poster');
+    service.savePoster.mockRejectedValue(error);
 
-    await expect(controller.uploadPoster(file))
-      .rejects.toBe(error);
+    await expect(controller.uploadPoster()).rejects.toBe(error);
   });
 });

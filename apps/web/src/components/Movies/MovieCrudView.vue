@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { getMovie } from '@/services/movie.service'
 import type { MovieDetail, MovieOption } from '@/types/movie'
+import { getPosterUrl } from '@/services/image-handler.service'
 
 const props = defineProps<{
   movieId: number | null
@@ -17,10 +18,13 @@ const emit = defineEmits<{
 }>()
 
 const movie = ref<MovieDetail | null>(null)
-
 const loading = ref(false)
 const error = ref('')
 const retryable = ref(false)
+
+const posterUrl = computed(() =>
+  getPosterUrl(movie.value?.posterImage),
+)
 
 let request: AbortController | undefined
 
@@ -104,7 +108,7 @@ const groups = computed(() => {
     },
 
     {
-      label: 'Clasificación',
+      label: '',
       fields: [
         {
           label: 'Clasificación',
@@ -118,7 +122,7 @@ const groups = computed(() => {
     },
 
     {
-      label: 'Géneros',
+      label: '',
       fields: [
         {
           label: 'Géneros',
@@ -128,7 +132,7 @@ const groups = computed(() => {
     },
 
     {
-      label: 'Descripción',
+      label: '',
       fields: [
         {
           label: 'Sinopsis',
@@ -228,6 +232,7 @@ onBeforeUnmount(() => request?.abort())
     :title="title"
     @close="close"
   >
+
     <div
       class="movie-detail-content"
       :aria-busy="loading"
@@ -257,28 +262,43 @@ onBeforeUnmount(() => request?.abort())
         </button>
       </div>
 
-      <template v-else-if="movie">
-        <section
-          v-for="group in groups"
-          :key="group.label"
-          class="detail-group"
-          :aria-label="group.label"
-        >
-          <h3>{{ group.label }}</h3>
 
-          <dl class="detail-grid">
-            <div
-              v-for="field in group.fields"
-              :key="field.label"
-              class="detail-field"
-              :class="{ 'detail-field-wide': field.label === 'Sinopsis' }"
-            >
-              <dt>{{ field.label }}</dt>
-              <dd>{{ field.value }}</dd>
-            </div>
-          </dl>
-        </section>
-      </template>
+
+     <div v-else-if="movie" class="movie-layout">
+        <div class="movie-information">
+          <section
+            v-for="group in groups"
+            :key="group.label"
+            class="detail-group"
+            :aria-label="group.label"
+          >
+            <h3>{{ group.label }}</h3>
+
+            <dl class="detail-grid">
+              <div
+                v-for="field in group.fields"
+                :key="field.label"
+                class="detail-field"
+                :class="{ 'detail-field-wide': field.label === 'Sinopsis' }"
+              >
+                <dt>{{ field.label }}</dt>
+                <dd>{{ field.value }}</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+
+        <div class="movie-poster">
+          <img
+            v-if="posterUrl"
+            :src="posterUrl"
+            :alt="`Póster de ${movie.title}`"
+          />
+
+          <span v-else>Sin póster</span>
+        </div>
+      </div>
+
 
       <footer class="detail-footer">
         <button
@@ -412,5 +432,44 @@ dd {
 .detail-field-wide {
   grid-column: 1 / -1;
 }
+
+.movie-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 24px;
+  align-items: start;
+}
+
+.movie-information {
+  min-width: 0;
+}
+
+.movie-poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #f2f2f2;
+}
+
+.movie-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+@media (max-width: 700px) {
+  .movie-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .movie-poster {
+    max-width: 240px;
+    justify-self: center;
+  }
+}
+
 </style>
 

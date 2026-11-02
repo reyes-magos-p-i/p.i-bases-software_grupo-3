@@ -1,4 +1,3 @@
-
 import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { AxiosError } from 'axios'
@@ -182,6 +181,7 @@ function mountModal(movieId: number | null = 24) {
         PositiveNumberInput: PositiveNumberInputStub,
         SimpleDropdown: SimpleDropdownStub,
         ReusableSearchDropdown: ReusableSearchDropdownStub,
+        ImageUpload: true,
       },
     },
   })
@@ -284,7 +284,7 @@ describe('MovieCrudEdit', () => {
 
     expect(
       wrapper.get<HTMLInputElement>(
-        '.option-fieldset input[value="3"]',
+        '[data-test="Géneros"] input[value="3"]',
       ).element.checked,
     ).toBe(true)
 
@@ -377,6 +377,51 @@ describe('MovieCrudEdit', () => {
 
     expect(wrapper.emitted('saved')).toHaveLength(1)
     expect(wrapper.emitted('close')).toHaveLength(1)
+
+    wrapper.unmount()
+  })
+
+  it('saves language and genre changes from the search selectors', async () => {
+    const wrapper = mountModal()
+    await flushPromises()
+
+    await wrapper.get('[data-test="Idiomas"] input[value="2"]').setValue(true)
+    await wrapper.get('[data-test="Géneros"] input[value="3"]').setValue(false)
+    await wrapper.get('[data-test="Géneros"] input[value="4"]').setValue(true)
+
+    expect(
+      wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled,
+    ).toBe(false)
+
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(updateMovieMock).toHaveBeenCalledWith(
+      24,
+      expect.objectContaining({ languageIds: [1, 2], genreIds: [4] }),
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+
+    wrapper.unmount()
+  })
+
+  it('disables Save after selector changes are reverted', async () => {
+    const wrapper = mountModal()
+    await flushPromises()
+
+    const genre = wrapper.get('[data-test="Géneros"] input[value="4"]')
+    await genre.setValue(true)
+    expect(
+      wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled,
+    ).toBe(false)
+
+    await genre.setValue(false)
+
+    expect(
+      wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled,
+    ).toBe(true)
+    expect(updateMovieMock).not.toHaveBeenCalled()
 
     wrapper.unmount()
   })

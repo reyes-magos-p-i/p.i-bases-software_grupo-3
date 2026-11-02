@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
-
 import BaseModal from '@/components/common/BaseModal.vue'
 import { getMovie, updateMovie } from '@/services/movie.service'
 import type { MovieDetail, MovieOption } from '@/types/movie'
@@ -9,6 +8,9 @@ import ReusableSearchDropdown from '../common/ReusableSearchDropdown.vue'
 import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
 import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
+import ImageUpload from '../image/ImageUpload.vue'
+import { uploadPoster, getPosterUrl } from '@/services/image-handler.service'
+
 
 const props = defineProps<{
   movieId: number | null
@@ -30,6 +32,7 @@ const saving = ref(false)
 const error = ref('')
 const saveError = ref('')
 const retryable = ref(false)
+const selectedPoster = ref<File | null>(null)
 
 const form = reactive({
   title: '',
@@ -39,8 +42,12 @@ const form = reactive({
   classificationId: null as number | null,
   languageIds: [] as number[],
   genreIds: [] as number[],
-  posterImage: 'default-poster',
+  posterImage: null as string | null,
 })
+
+const existingPosterUrl = computed(() =>
+  getPosterUrl(form.posterImage),
+)
 
 let request: AbortController | undefined
 let saveRequest: AbortController | undefined
@@ -72,6 +79,8 @@ const hasChanges = computed(() => {
       .every((id, index) => id === [...b].sort((x, y) => x - y)[index])
 
   return (
+    selectedPoster.value !== null ||
+    form.posterImage !== (original.posterImage ?? null) ||
     form.title !== original.title ||
     form.synopsis !== original.synopsis ||
     form.runningTime !== original.runningTime ||
@@ -100,6 +109,13 @@ const languageOptions = computed(() =>
     value: language.id,
     label: language.name
   }))
+)
+
+const genreOptions = computed(() =>
+  props.genres.map(genre => ({
+    value: genre.id,
+    label: genre.name,
+  })),
 )
 
 function reportError(failure: unknown, operation: 'load' | 'save') {
@@ -149,6 +165,8 @@ async function load() {
   saveRequest?.abort()
 
   movie.value = null
+  selectedPoster.value = null
+  form.posterImage = null
   error.value = ''
   saveError.value = ''
   retryable.value = false
@@ -173,6 +191,7 @@ async function load() {
     movie.value = detail
 
     Object.assign(form, {
+      posterImage: detail.posterImage ?? null,
       title: detail.title ?? '',
       synopsis: detail.synopsis ?? '',
       runningTime: detail.runningTime ?? null,
@@ -214,9 +233,21 @@ async function save() {
   saving.value = true
 
   try {
+    if (selectedPoster.value) {
+      const uploaded = await uploadPoster(selectedPoster.value)
+
+      // An upload may finish after this modal closes or switches movies.
+      if (current.signal.aborted || props.movieId !== movieId) return
+
+      // Keep the uploaded path for a retry if updating the movie fails.
+      form.posterImage = uploaded.path
+      selectedPoster.value = null
+    }
+
     await updateMovie(
       movieId,
       {
+        posterImage: form.posterImage,
         title: form.title.trim(),
         synopsis: form.synopsis.trim(),
         runningTime: Number(form.runningTime),
@@ -269,6 +300,7 @@ onBeforeUnmount(() => {
   <BaseModal
     :open="movieId !== null"
     :title="title"
+    :close-disabled="saving"
     @close="close"
   >
     <div
@@ -298,94 +330,92 @@ onBeforeUnmount(() => {
 
       <form v-else-if="movie" @submit.prevent="save">
         <fieldset class="edit-fieldset" :disabled="saving">
-          <section class="detail-group">
-            <h3>Información general</h3>
+          <div class="movie-edit-layout">
 
-            <div class="detail-grid">
-              <div class="detail-field">
-                <span class="field-label">ID</span>
-                <p>MOV{{ movie.id }}</p>
-              </div>
 
-              <div class="detail-field">
+            <div class="movie-fields">
+              <!-- Your existing form fields and sections -->
+              <section class="detail-group">
+                <h3>Información general</h3>
+                <div class="detail-grid">
+                  <div class="detail-field">
+                    <span class="field-label">ID</span>
+                    <p>MOV{{ movie.id }}</p>
+                  </div>
+                  <div class="detail-field">
+                    <LimitedTextInput
+                      v-model="form.title"
+                      label="Título"
+                      placeholder="Ingrese el título"
+                      :limit="100"
+                      required
+                    />
+                  </div>
+                  <div class="detail-field">
+                    <PositiveNumberInput
+                      v-model="form.runningTime"
+                      label="Duración en minutos"
+                      placeholder="Ej. 120"
+                      required
+                    />
+                  </div>
+                  <div class="detail-field">
+                    <PositiveNumberInput
+                      v-model="form.releaseYear"
+                      label="Año de estreno"
+                      placeholder="Ej. 2026"
+                      required
+                    />
+                  </div>
+                </div>
+              </section>
+
+            <section class="detail-group">
+              <SimpleDropdown
+                v-model="form.classificationId"
+                label="Clasificación"
+                placeholder="Seleccione una clasificación"
+                :options="classifications"
+                required
+              />
+            </section>
+            <ReusableSearchDropdown
+              class="detail-group"
+              v-model="form.languageIds"
+              label="Idiomas"
+              placeholder="Buscar idiomas..."
+              :options="languageOptions"
+            />
+            <ReusableSearchDropdown
+              v-model="form.genreIds"
+              class="detail-group"
+              label="Géneros"
+              placeholder="Buscar géneros..."
+              :options="genreOptions"
+            />
+            <section class="detail-group">
                 <LimitedTextInput
-                  v-model="form.title"
-                  label="Título"
-                  placeholder="Ingrese el título"
-                  :limit="100"
-                  required
-                />
-              </div>
+                v-model="form.synopsis"
+                label="Sinopsis"
+                placeholder="Ingrese la sinopsis"
+                :limit="1000"
+                multiline
+                :rows="5"
+                required
+              />
+            </section>
 
-              <div class="detail-field">
-                <PositiveNumberInput
-                  v-model="form.runningTime"
-                  label="Duración en minutos"
-                  placeholder="Ej. 120"
-                  required
-                />
-              </div>
+          </div>
+          <aside class="poster-column">
+              <ImageUpload
+                v-model="selectedPoster"
+                label="Póster de la película"
+                :existing-image-url="existingPosterUrl"
+                :disabled="saving"
+              />
+            </aside>
+        </div>
 
-              <div class="detail-field">
-                <PositiveNumberInput
-                  v-model="form.releaseYear"
-                  label="Año de estreno"
-                  placeholder="Ej. 2026"
-                  required
-                />
-              </div>
-            </div>
-          </section>
-
-          <section class="detail-group">
-            <SimpleDropdown
-              v-model="form.classificationId"
-              label="Clasificación"
-              placeholder="Seleccione una clasificación"
-              :options="classifications"
-              required
-            />
-          </section>
-
-
-          <ReusableSearchDropdown
-            class="detail-group"
-            v-model="form.languageIds"
-            label="Idiomas"
-            placeholder="Buscar idiomas..."
-            :options="languageOptions"
-          />
-
-          <fieldset class="detail-group option-fieldset">
-            <legend>Géneros</legend>
-
-            <div class="edit-options">
-              <label
-                v-for="genre in genres"
-                :key="genre.id"
-                class="edit-option"
-              >
-                <input
-                  v-model="form.genreIds"
-                  type="checkbox"
-                  :value="genre.id"
-                />
-                {{ genre.name }}
-              </label>
-            </div>
-          </fieldset>
-
-          <section class="detail-group">
-              <LimitedTextInput
-              v-model="form.synopsis"
-              label="Sinopsis"
-              placeholder="Ingrese la sinopsis"
-              :limit="1000"
-              multiline
-              :rows="5"
-              required
-            />
-          </section>
         </fieldset>
 
         <p
@@ -474,12 +504,13 @@ onBeforeUnmount(() => {
 
 /* Sections */
 .detail-group {
-  margin-bottom: 24px;
+  margin: 0;
+  min-width: 0;
 }
 
 .detail-group h3,
 .option-fieldset legend {
-  margin: 0 0 16px;
+  margin: 0 0 10px;
   font-size: 1rem;
   font-weight: 700;
 }
@@ -488,7 +519,7 @@ onBeforeUnmount(() => {
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px 20px;
+  gap: 12px 16px;
   margin: 0;
 }
 
@@ -577,7 +608,7 @@ textarea.edit-input {
   justify-content: flex-end;
   gap: 12px;
   flex-wrap: wrap;
-  margin-top: 24px;
+  margin-top: 16px;
 }
 
 /* General buttons */
@@ -622,6 +653,35 @@ textarea.edit-input {
   outline-offset: 2px;
 }
 
+.movie-edit-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 24px;
+  align-items: start;
+}
+
+.poster-column,
+.movie-fields {
+  min-width: 0;
+}
+
+.movie-fields {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .movie-edit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .poster-column {
+    width: 100%;
+    max-width: 240px;
+    justify-self: center;
+  }
+}
 /* Mobile layout */
 @media (max-width: 575px) {
   .movie-detail-content {

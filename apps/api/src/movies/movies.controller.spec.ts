@@ -1,152 +1,105 @@
-import { Test, TestingModule } from '@nestjs/testing';
-
 import { MoviesController } from './movies.controller';
 import { MoviesService } from './movies.service';
+import { CreateMovieDto } from './dto/createMovie.dto/createMovie.dto';
+import { UpdateMovieDto } from './dto/createMovie.dto/updateMovie.dto';
 
 describe('MoviesController', () => {
   let controller: MoviesController;
-  let service: jest.Mocked<MoviesService>;
 
-  const movieAll = [
-    {
-    id: 24,
-    title: 'Interstellar',
-    runningTime: 169,
-    releaseYear: 2014,
-    classification: 'TP',
-      },
-    ];
+  const service = {
+    create: jest.fn(),
+    findAll: jest.fn(),
+    findClassifications: jest.fn(),
+    findGenres: jest.fn(),
+    findLanguages: jest.fn(),
+    findOne: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
+  };
 
-  const movieDetail = {
-    id: 24,
-    title: 'Interstellar',
-    synopsis: 'A team travels through space searching for a new home.',
-    runningTime: 169,
-    releaseYear: 2014,
+  beforeEach(() => {
+    jest.resetAllMocks();
 
-    classification: {
-      id: 1,
-      name: 'TP',
-    },
-
-    languages: [
-      {
-        id: 1,
-        name: 'afar',
-      },
-      {
-        id: 2,
-        name: 'abjasio',
-      },
-    ],
-
-    genres: [
-      {
-        id: 3,
-        name: 'Aventura',
-      },
-      {
-        id: 4,
-        name: 'Ciencia Ficción',
-      },
-    ],
-  }
-
-  beforeEach(async () => {
-    const serviceMock = {
-      create: jest.fn(),
-      findAll: jest.fn(),
-      findOne: jest.fn(),
-      update: jest.fn(),
-      remove: jest.fn(),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [MoviesController],
-      providers: [
-        {
-          provide: MoviesService,
-          useValue: serviceMock,
-        },
-      ],
-    }).compile();
-
-    controller = module.get(MoviesController);
-    service = module.get(MoviesService);
+    controller = new MoviesController(
+      service as unknown as MoviesService,
+    );
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
-
-  it('should return all movies', async () => {
-    service.findAll.mockResolvedValue(movieAll);
-
-    const result = await controller.findAll();
-
-    expect(result).toEqual(movieAll);
-    expect(service.findAll).toHaveBeenCalledTimes(1);
-  });
-
-  it('should return one movie', async () => {
-    service.findOne.mockResolvedValue(movieDetail);
-
-    const result = await controller.findOne(1);
-
-    expect(result).toEqual(movieDetail);
-    expect(service.findOne).toHaveBeenCalledWith(1);
-  });
-
-  it('should create a movie', async () => {
-    const dto = {
+  it('creates a movie', async () => {
+    const dto: CreateMovieDto = {
       title: 'Interstellar',
+      synopsis: 'Space adventure',
       runningTime: 169,
-      synopsis: 'Cristopher nolar goes to space AAAAAA',
-      posterImage:'intertelas.jpg',
       releaseYear: 2014,
       classificationId: 1,
       languageIds: [1],
       genreIds: [2],
+      posterImage: '/uploads/posters/interstellar.jpg',
     };
 
-    service.create.mockResolvedValue(10);
+    const result = { id: 24 };
+    service.create.mockResolvedValue(result);
 
-    const result = await controller.create(dto);
-
-    expect(result).toEqual(10);
+    expect(await controller.create(dto)).toEqual(result);
     expect(service.create).toHaveBeenCalledWith(dto);
   });
 
+  it('returns all movies', async () => {
+    const result = [{ id: 24, title: 'Interstellar' }];
+    service.findAll.mockResolvedValue(result);
 
-it('passes movie updates to the service', async () => {
-  const updatedMovie = {
-  id: 24,
-  title: 'Updated title',
-  synopsis: 'A journey through space.',
-  runningTime: 169,
-  releaseYear: 2014,
-  classification: { id: 1, name: 'TP' },
-  languages: [{ id: 1, name: 'English' }],
-  genres: [{ id: 3, name: 'Science fiction' }],
-};
-  const dto = { title: 'Updated title' };
-  service.update.mockResolvedValueOnce(updatedMovie);
+    expect(await controller.findAll()).toEqual(result);
+    expect(service.findAll).toHaveBeenCalledWith();
+  });
 
-  await controller.update(24, dto);
+  it('returns classifications', async () => {
+    const result = [{ id: 1, name: 'TP' }];
+    service.findClassifications.mockResolvedValue(result);
 
-  expect(service.update).toHaveBeenCalledWith(24, dto);
-});
-  it('should delete a movie', async () => {
-    service.remove.mockResolvedValue({
-      message: 'Movie 1 deleted successfully',
-    });
+    expect(await controller.findClassifications()).toEqual(result);
+    expect(service.findClassifications).toHaveBeenCalledWith();
+  });
 
-    const result = await controller.remove(1);
+  it('returns genres', async () => {
+    const result = [{ id: 2, name: 'Science fiction' }];
+    service.findGenres.mockResolvedValue(result);
 
-    expect(result).toEqual({
-      message: 'Movie 1 deleted successfully',
-    });
+    expect(await controller.findGenres()).toEqual(result);
+    expect(service.findGenres).toHaveBeenCalledWith();
+  });
 
-    expect(service.remove).toHaveBeenCalledWith(1);
+  it('returns languages', async () => {
+    const result = [{ id: 1, name: 'English' }];
+    service.findLanguages.mockResolvedValue(result);
+
+    expect(await controller.findLanguages()).toEqual(result);
+    expect(service.findLanguages).toHaveBeenCalledWith();
+  });
+
+  it('returns the requested movie', async () => {
+    const result = { id: 24, title: 'Interstellar' };
+    service.findOne.mockResolvedValue(result);
+
+    expect(await controller.findOne(24)).toEqual(result);
+    expect(service.findOne).toHaveBeenCalledWith(24);
+  });
+
+  it('updates the requested movie', async () => {
+    const dto: UpdateMovieDto = {
+      title: 'Updated title',
+    };
+
+    const result = { id: 24, title: 'Updated title' };
+    service.update.mockResolvedValue(result);
+
+    expect(await controller.update(24, dto)).toEqual(result);
+    expect(service.update).toHaveBeenCalledWith(24, dto);
+  });
+
+  it('removes the requested movie', async () => {
+    service.remove.mockResolvedValue(undefined);
+
+    expect(await controller.remove(24)).toBeUndefined();
+    expect(service.remove).toHaveBeenCalledWith(24);
   });
 });
