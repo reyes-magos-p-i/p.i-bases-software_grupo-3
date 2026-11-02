@@ -64,6 +64,11 @@ vi.mock('@/services/authService', () => ({
   }),
 }))
 describe('Purchase API', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    api.get.mockResolvedValue({ data: { id: 12 } })
+    api.post.mockResolvedValue({ data: { id: 12 } })
+  })
   it('queries delivery status and requests a resend using the authenticated identity', async () => {
     const status = {
       status: 'PENDING',
@@ -89,11 +94,6 @@ describe('Purchase API', () => {
       {},
       expect.objectContaining({ signal: controller.signal, withCredentials: false }),
     )
-  })
-  beforeEach(() => {
-    vi.resetAllMocks()
-    api.get.mockResolvedValue({ data: { id: 12 } })
-    api.post.mockResolvedValue({ data: { id: 12 } })
   })
   it('uses the client bearer token for every purchase and history request', async () => {
     const controller = new AbortController(),

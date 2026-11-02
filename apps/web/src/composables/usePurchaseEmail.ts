@@ -11,6 +11,11 @@ import {
 } from '@/services/guest-purchase.service'
 import { trackClientSession } from '@/services/client-session.service'
 
+function request(resend: boolean, id: number, code: string | undefined, signal: AbortSignal) {
+  if (code) return (resend ? resendGuestPurchaseTickets : getGuestTicketEmailStatus)(code, signal)
+  return (resend ? resendPurchaseTickets : getTicketEmailStatus)(id, signal)
+}
+
 export function usePurchaseEmail(
   receipt: Ref<PurchaseReceipt | null>,
   guest: Ref<GuestPurchaseReceipt | null>,
@@ -33,10 +38,6 @@ export function usePurchaseEmail(
   )
   function current(ownRevision: number, signal: AbortSignal) {
     return ownRevision === revision && currentSession() && !signal.aborted
-  }
-  function request(resend: boolean, id: number, code: string | undefined, signal: AbortSignal) {
-    if (code) return (resend ? resendGuestPurchaseTickets : getGuestTicketEmailStatus)(code, signal)
-    return (resend ? resendPurchaseTickets : getTicketEmailStatus)(id, signal)
   }
   function schedule() {
     poll = setTimeout(() => {

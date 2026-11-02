@@ -55,6 +55,11 @@ const receipt = {
   ],
 }
 describe('Guest purchase API', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    api.get.mockResolvedValue({ data: { id: 12 } })
+    api.post.mockResolvedValue({ data: { id: 12 } })
+  })
   it('keeps the private credential in the body of email status and resend requests', async () => {
     const status = { status: 'FAILED', recipient: 'guest@example.com', sentAt: null, retryAfter: 0 }
     api.post.mockResolvedValue({ data: status })
@@ -73,11 +78,6 @@ describe('Guest purchase API', () => {
         { signal: controller.signal, timeout: 10000 },
       ],
     ])
-  })
-  beforeEach(() => {
-    vi.resetAllMocks()
-    api.get.mockResolvedValue({ data: { id: 12 } })
-    api.post.mockResolvedValue({ data: { id: 12 } })
   })
   it('uses public purchase endpoints without a client identity or credentials', async () => {
     const controller = new AbortController()
