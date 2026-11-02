@@ -1,3 +1,4 @@
+import type { PricingSettings, PurchaseCategory } from './purchase'
 export type ProjectionStatus = 'ACTIVE' | 'INACTIVE' | 'CANCELLED' | 'IN_PROGRESS' | 'FINISHED'
 
 export const PROJECTION_STATUS_LABELS: Record<ProjectionStatus, string> = {
@@ -11,7 +12,11 @@ export const PROJECTION_STATUS_LABELS: Record<ProjectionStatus, string> = {
 /** Statuses an administrator can still modify. */
 export const EDITABLE_STATUSES: readonly ProjectionStatus[] = ['ACTIVE', 'INACTIVE']
 /** Statuses that can still be cancelled (not cancelled or finished yet). */
-export const CANCELLABLE_STATUSES: readonly ProjectionStatus[] = ['ACTIVE', 'INACTIVE', 'IN_PROGRESS']
+export const CANCELLABLE_STATUSES: readonly ProjectionStatus[] = [
+  'ACTIVE',
+  'INACTIVE',
+  'IN_PROGRESS',
+]
 
 export interface ProjectionCinema {
   branchId: number
@@ -37,7 +42,7 @@ export interface AvailableMovie {
   posterImage: string
 }
 
-export interface CreateProjectionRequest {
+export interface CreateProjectionRequest extends Partial<PricingSettings> {
   movieId: number
   theaterId: number
   startDate: string
@@ -79,7 +84,7 @@ export interface ProjectionListQuery {
   timeTo?: string
 }
 
-export interface ListedProjection {
+export interface ListedProjection extends Partial<PricingSettings> {
   movieFunctionId: number
   movieId: number
   movieTitle: string
@@ -111,4 +116,11 @@ export interface ProjectionDetail extends ListedProjection {
 export interface ProjectionApiError {
   statusCode?: number
   message?: string | string[]
+}
+
+export interface ProjectionPricePreview extends PricingSettings {
+  base: number
+  modifiers: { label: string; amount: number }[]
+  unitPrice: number
+  categories: PurchaseCategory[]
 }

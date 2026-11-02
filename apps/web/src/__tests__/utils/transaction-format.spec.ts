@@ -56,4 +56,9 @@ describe('transaction formats', () => {
   it('names the statuses in Spanish', () => {
     expect(TRANSACTION_STATUS_LABELS).toEqual({ PAID: 'Pagada', CANCELLED: 'Cancelada' })
   })
+  it('labels simulated payments explicitly without inventing a card', () => {
+    expect(
+      formatPaymentMethod({ paymentMethod: 'SIMULATED', cardBrand: null, cardLast4: null }),
+    ).toBe('Pago simulado')
+  })
 })

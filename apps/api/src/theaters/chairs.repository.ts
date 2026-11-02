@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import * as oracledb from 'oracledb';
 import { DatabaseService } from '../database/database.service';
 import { UpdateSeatsDto } from './dto/update-seats.dto';
@@ -7,7 +11,7 @@ import { UpdateSeatsDto } from './dto/update-seats.dto';
 export class ChairsRepository {
   constructor(private readonly db: DatabaseService) {}
 
-async createForTheater(
+  async createForTheater(
     theaterId: number,
     x: number,
     y: number,
@@ -24,9 +28,7 @@ async createForTheater(
     const total = x * y;
 
     if (!Number.isSafeInteger(total) || total > 10_000) {
-      throw new BadRequestException(
-        'A theater may have at most 10000 chairs',
-      );
+      throw new BadRequestException('A theater may have at most 10000 chairs');
     }
 
     const chairs: {
@@ -125,8 +127,16 @@ async createForTheater(
       theaterId: row.THEATER_ID,
       rowNumber: row.ROW_NUMBER,
       columnNumber: row.COLUMN_NUMBER,
-      type: row.SEAT_TYPE,
-      state: row.SEAT_STATE,
+      type: row.SEAT_TYPE === 'accesibilidad' ? 'accessibility' : row.SEAT_TYPE,
+      state:
+        (
+          {
+            libre: 'free',
+            ocupado: 'in-use',
+            reservado: 'reserved',
+            indisponible: 'unavailable',
+          } as Record<string, string>
+        )[row.SEAT_STATE] ?? row.SEAT_STATE,
     }));
   }
 
@@ -143,13 +153,10 @@ async createForTheater(
     >();
 
     for (const seat of dto.seats) {
-      positions.set(
-        `${seat.rowNumber}:${seat.columnNumber}`,
-        seat,
-      );
+      positions.set(`${seat.rowNumber}:${seat.columnNumber}`, seat);
     }
 
-    const binds = [...positions.values()].map(seat => ({
+    const binds = [...positions.values()].map((seat) => ({
       theaterId,
       rowNumber: seat.rowNumber,
       columnNumber: seat.columnNumber,
@@ -157,10 +164,9 @@ async createForTheater(
       type: dto.type ?? null,
     }));
 
-    return this.db.transaction(
-      async (connection: oracledb.Connection) => {
-        const result = await connection.executeMany(
-          `
+    return this.db.transaction(async (connection: oracledb.Connection) => {
+      const result = await connection.executeMany(
+        `
           UPDATE SEATS
           SET SEAT_STATE = COALESCE(:state, SEAT_STATE),
               SEAT_TYPE = COALESCE(:type, SEAT_TYPE)
@@ -168,31 +174,28 @@ async createForTheater(
             AND ROW_NUMBER = :rowNumber
             AND COLUMN_NUMBER = :columnNumber
           `,
-          binds,
-          {
-            autoCommit: false,
-            batchErrors: false,
-            bindDefs: {
-              theaterId: { type: oracledb.NUMBER },
-              rowNumber: { type: oracledb.NUMBER },
-              columnNumber: { type: oracledb.NUMBER },
-              state: { type: oracledb.STRING, maxSize: 32 },
-              type: { type: oracledb.STRING, maxSize: 32 },
-            },
+        binds,
+        {
+          autoCommit: false,
+          batchErrors: false,
+          bindDefs: {
+            theaterId: { type: oracledb.NUMBER },
+            rowNumber: { type: oracledb.NUMBER },
+            columnNumber: { type: oracledb.NUMBER },
+            state: { type: oracledb.STRING, maxSize: 32 },
+            type: { type: oracledb.STRING, maxSize: 32 },
           },
-        );
+        },
+      );
 
-        if (result.rowsAffected !== binds.length) {
-          throw new NotFoundException(
-            'One or more seats do not exist',
-          );
-        }
+      if (result.rowsAffected !== binds.length) {
+        throw new NotFoundException('One or more seats do not exist');
+      }
 
-        return {
-          theaterId,
-          seatsUpdated: result.rowsAffected,
-        };
-      },
-    );
+      return {
+        theaterId,
+        seatsUpdated: result.rowsAffected,
+      };
+    });
   }
 }

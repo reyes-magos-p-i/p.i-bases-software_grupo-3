@@ -37,7 +37,11 @@ function handleImageError(event: Event) {
               {{ movie.title }}
             </h3>
 
-            <router-link to="/buy-tickets" class="buy-button">Comprar boletos</router-link>
+            <router-link
+              :to="{ name: 'buy-tickets', query: { movieId: movie.id } }"
+              class="buy-button"
+              >Comprar boletos</router-link
+            >
           </div>
         </article>
       </div>

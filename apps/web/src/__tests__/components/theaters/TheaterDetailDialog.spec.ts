@@ -74,10 +74,7 @@ describe('TheaterDetailDialog', () => {
     expect(wrapper.text()).toContain('Centro')
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
 
-    expect(getTheaterSeats).toHaveBeenCalledWith(
-      7,
-      expect.any(AbortSignal),
-    )
+    expect(getTheaterSeats).toHaveBeenCalledWith(7, expect.any(AbortSignal))
 
     expect(wrapper.getComponent(SeatSelector).props()).toMatchObject({
       theaterId: 7,
@@ -97,9 +94,7 @@ describe('TheaterDetailDialog', () => {
       },
     })
 
-    expect(wrapper.get('[role="alert"]').text()).toBe(
-      'No se pudo mostrar el detalle de la sala.',
-    )
+    expect(wrapper.get('[role="alert"]').text()).toBe('No se pudo mostrar el detalle de la sala.')
     expect(wrapper.text()).not.toContain('Número de asientos')
     expect(getTheaterSeats).not.toHaveBeenCalled()
   })
@@ -114,9 +109,7 @@ describe('TheaterDetailDialog', () => {
 
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text()).toBe(
-      'No se pudieron cargar los asientos.',
-    )
+    expect(wrapper.get('[role="alert"]').text()).toBe('No se pudieron cargar los asientos.')
     expect(wrapper.findComponent(SeatSelector).exists()).toBe(false)
   })
 })

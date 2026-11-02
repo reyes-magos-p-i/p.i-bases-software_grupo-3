@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import SeatSelector from '../Seats/SeatSelector.vue'
-import {
-  getTheaterSeats,
-  updateSeatStatuses,
-} from '@/services/theater.service'
+import { getTheaterSeats, updateSeatStatuses } from '@/services/theater.service'
 import {
   seatStateLabels,
   seatTypeLabels,
   type Seat,
   type SeatState,
   type SeatType,
-} from '@/types/seats.ts';
-import SimpleDropdown from '../common/SimpleDropdown.vue';
+} from '@/types/seats.ts'
+import SimpleDropdown from '../common/SimpleDropdown.vue'
 import { isAxiosError } from 'axios'
 
 const props = withDefaults(
@@ -39,26 +36,17 @@ const error = ref('')
 const message = ref('')
 const selectorVersion = ref(0)
 
-const selectableStates: SeatState[] = [
-  'free',
-  'unavailable',
-  'in-use',
-  'reserved',
-]
+const selectableStates: SeatState[] = ['free', 'unavailable', 'in-use', 'reserved']
 
-const stateOptions = (Object.keys(seatStateLabels) as SeatState[]).map(
-  id => ({
-    id,
-    name: seatStateLabels[id],
-  }),
-)
+const stateOptions = (Object.keys(seatStateLabels) as SeatState[]).map((id) => ({
+  id,
+  name: seatStateLabels[id],
+}))
 
-const typeOptions = (Object.keys(seatTypeLabels) as SeatType[]).map(
-  id => ({
-    id,
-    name: seatTypeLabels[id],
-  }),
-)
+const typeOptions = (Object.keys(seatTypeLabels) as SeatType[]).map((id) => ({
+  id,
+  name: seatTypeLabels[id],
+}))
 
 // Prevent an older request from replacing another theater's seats.
 let loadVersion = 0
@@ -85,6 +73,11 @@ async function loadSeats() {
   }
 }
 
+function reloadSeats() {
+  message.value = ''
+  void loadSeats()
+}
+
 async function saveStatus() {
   if (
     props.readonly ||
@@ -105,16 +98,12 @@ async function saveStatus() {
 
   try {
     await updateSeatStatuses(theaterId, {
-      seats: selectedSeats.value.map(seat => ({
+      seats: selectedSeats.value.map((seat) => ({
         rowNumber: seat.rowNumber,
         columnNumber: seat.columnNumber,
       })),
-      ...(selectedState.value !== null
-        ? { state: selectedState.value }
-        : {}),
-      ...(selectedType.value !== null
-        ? { type: selectedType.value }
-        : {}),
+      ...(selectedState.value !== null ? { state: selectedState.value } : {}),
+      ...(selectedType.value !== null ? { type: selectedType.value } : {}),
     })
 
     if (theaterId !== props.theaterId) return
@@ -132,14 +121,9 @@ async function saveStatus() {
   } catch (err) {
     if (theaterId !== props.theaterId) return
 
-    console.error(
-      'Seat update failed:',
-      isAxiosError(err) ? err.response?.data : err,
-    )
+    console.error('Seat update failed:', isAxiosError(err) ? err.response?.data : err)
 
-    const backendMessage = isAxiosError(err)
-      ? err.response?.data?.message
-      : undefined
+    const backendMessage = isAxiosError(err) ? err.response?.data?.message : undefined
 
     error.value = Array.isArray(backendMessage)
       ? backendMessage.join(', ')
@@ -172,9 +156,7 @@ watch(
   <section class="seat-editor" aria-label="Modificar estado de asientos">
     <h2>Estado de los asientos</h2>
 
-    <p v-if="loading" role="status">
-      Cargando asientos…
-    </p>
+    <p v-if="loading" role="status">Cargando asientos…</p>
 
     <p v-if="error" role="alert">
       {{ error }}
@@ -184,62 +166,57 @@ watch(
       {{ message }}
     </p>
 
-
     <SeatSelector
       :key="selectorVersion"
       :theater-id="theaterId"
       :rows="rows"
       :columns="columns"
       :seats="seats"
-      :max-selections= "readonly ? 0 : 'all'"
+      :max-selections="readonly ? 0 : 'all'"
       :selectable-states="selectableStates"
       :disabled="readonly || disabled || loading || saving"
       @selection-change="selectedSeats = $event"
     />
 
-   <div v-if="!readonly" class="seat-controls">
-    <div class="seat-dropdowns">
-      <SimpleDropdown
-        v-model="selectedState"
-        :options="stateOptions"
-        label="Nuevo estado"
-        placeholder="Seleccione un estado"
-        :disabled="disabled || loading || saving"
-      />
+    <div v-if="!readonly" class="seat-controls">
+      <div class="seat-dropdowns">
+        <SimpleDropdown
+          v-model="selectedState"
+          :options="stateOptions"
+          label="Nuevo estado"
+          placeholder="Seleccione un estado"
+          :disabled="disabled || loading || saving"
+        />
 
-      <SimpleDropdown
-        v-model="selectedType"
-        :options="typeOptions"
-        label="Nuevo tipo"
-        placeholder="Seleccione un tipo"
-        :disabled="disabled || loading || saving"
-      />
-    </div>
-    <div class="seat-actions">
-      <button
-        type="button"
-        :disabled="disabled || loading || saving"
-        @click="message = ''; loadSeats()"
-      >
-        Actualizar asientos
-      </button>
+        <SimpleDropdown
+          v-model="selectedType"
+          :options="typeOptions"
+          label="Nuevo tipo"
+          placeholder="Seleccione un tipo"
+          :disabled="disabled || loading || saving"
+        />
+      </div>
+      <div class="seat-actions">
+        <button type="button" :disabled="disabled || loading || saving" @click="reloadSeats">
+          Actualizar asientos
+        </button>
 
-      <button
-        class="save-button"
-        type="button"
-        :disabled="
-          disabled ||
-          loading ||
-          saving ||
-          selectedSeats.length === 0 ||
-          (selectedState === null && selectedType === null)
-        "
-        @click="saveStatus"
-      >
-        {{ saving ? 'Guardando…' : 'Guardar cambios de asientos' }}
-      </button>
+        <button
+          class="save-button"
+          type="button"
+          :disabled="
+            disabled ||
+            loading ||
+            saving ||
+            selectedSeats.length === 0 ||
+            (selectedState === null && selectedType === null)
+          "
+          @click="saveStatus"
+        >
+          {{ saving ? 'Guardando…' : 'Guardar cambios de asientos' }}
+        </button>
+      </div>
     </div>
-  </div>
   </section>
 </template>
 
@@ -250,9 +227,8 @@ watch(
   padding-bottom: 24px;
   padding-left: 24px;
   padding-right: 24px;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--border-color);
 }
-
 
 button {
   cursor: pointer;
@@ -261,6 +237,8 @@ button {
   border: 1px solid var(--color-primary);
   border-radius: var(--radius-small);
   font: inherit;
+  color: var(--button-secondary-text);
+  background: var(--button-secondary-background);
 }
 
 .save-button {
@@ -272,7 +250,6 @@ button:disabled {
   cursor: default;
   opacity: 0.6;
 }
-
 
 .seat-controls {
   display: flex;
@@ -316,5 +293,4 @@ button:disabled {
     margin-left: 0;
   }
 }
-
 </style>

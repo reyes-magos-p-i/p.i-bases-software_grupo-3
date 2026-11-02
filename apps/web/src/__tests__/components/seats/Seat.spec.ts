@@ -39,14 +39,11 @@ describe('Seat', () => {
       expect(wrapper.get('button').classes()).toContain(`seat--${type}`)
 
       // Chair back for normal/VIP; wheelchair wheel/head for accessibility.
-      expect(wrapper.find('svg rect').exists())
-        .toBe(type !== 'accessibility')
-      expect(wrapper.find('svg circle').exists())
-        .toBe(type === 'accessibility')
+      expect(wrapper.find('svg rect').exists()).toBe(type !== 'accessibility')
+      expect(wrapper.find('svg circle').exists()).toBe(type === 'accessibility')
 
       // The VIP star is the filled path.
-      expect(wrapper.find('svg path[fill="currentColor"]').exists())
-        .toBe(type === 'vip')
+      expect(wrapper.find('svg path[fill="currentColor"]').exists()).toBe(type === 'vip')
     },
   )
 

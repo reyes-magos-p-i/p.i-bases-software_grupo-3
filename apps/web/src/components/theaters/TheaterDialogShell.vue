@@ -49,11 +49,22 @@ defineExpose({ open, close })
 </script>
 
 <template>
-  <dialog ref="dialog" class="theater-dialog" :style="{ '--dialog-width': props.width }"
-    :aria-labelledby="id + '-title'" @cancel.prevent="requestClose">
+  <dialog
+    ref="dialog"
+    class="theater-dialog"
+    :style="{ '--dialog-width': props.width }"
+    :aria-labelledby="id + '-title'"
+    @cancel.prevent="requestClose"
+  >
     <header class="dialog-heading">
       <h2 :id="id + '-title'">{{ title }}</h2>
-      <button type="button" class="close-button" :aria-label="closeLabel" :disabled="closeDisabled" @click="requestClose">
+      <button
+        type="button"
+        class="close-button"
+        :aria-label="closeLabel"
+        :disabled="closeDisabled"
+        @click="requestClose"
+      >
         <i class="bi bi-x-lg" aria-hidden="true"></i>
       </button>
     </header>
@@ -62,9 +73,44 @@ defineExpose({ open, close })
 </template>
 
 <style scoped>
-.theater-dialog { position: fixed; top: 50%; left: 50%; width: min(calc(100% - 32px), var(--dialog-width, 620px)); max-height: min(90dvh, 760px); margin: 0; padding: 0; border: 0; border-radius: var(--radius-medium); color: var(--text-primary); background: var(--dialog-background); transform: translate(-50%, -50%); }
-.theater-dialog::backdrop { background: color-mix(in srgb, var(--page-background) 55%, transparent); }
-.dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 24px; color: var(--dialog-heading-text); background: var(--dialog-heading-background); }
-.dialog-heading h2 { margin: 0; font-size: 1.25rem; }
-.close-button { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: var(--radius-small); color: inherit; background: transparent; }
+.theater-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(calc(100% - 32px), var(--dialog-width, 620px));
+  max-height: min(90dvh, 760px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-medium);
+  color: var(--text-primary);
+  background: var(--dialog-background);
+  transform: translate(-50%, -50%);
+}
+.theater-dialog::backdrop {
+  background: color-mix(in srgb, var(--page-background) 55%, transparent);
+}
+.dialog-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  color: var(--dialog-heading-text);
+  background: var(--dialog-heading-background);
+}
+.dialog-heading h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.close-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-small);
+  color: inherit;
+  background: transparent;
+}
 </style>

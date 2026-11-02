@@ -22,7 +22,10 @@ export const requireClientSession: NavigationGuard = async (to) => {
     if (to.meta.requiresClient || (hasClientSession() && !clientSession.user.value)) {
       const identity = await restoreClientSession(getClientSession)
       if (to.meta.requiresClient && !identity) {
-        return { path: '/', query: { login: 'client', reason: 'required' } }
+        return {
+          path: '/',
+          query: { login: 'client', reason: 'required' },
+        }
       }
     }
     if (!clientSession.user.value || !hasClientSession() || to.path === PASSWORD_PATH) return true
@@ -38,7 +41,10 @@ export const requireClientSession: NavigationGuard = async (to) => {
       return { path: '/', query: { login: 'client', reason: 'expired' } }
     }
     if (to.meta.requiresClient) {
-      return { path: '/', query: { login: 'client', reason: 'unavailable' } }
+      return {
+        path: '/',
+        query: { login: 'client', reason: 'unavailable' },
+      }
     }
   }
   return true
