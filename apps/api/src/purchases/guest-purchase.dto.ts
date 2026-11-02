@@ -10,7 +10,10 @@ import {
 } from 'class-validator';
 import { CreateUserBaseDto } from '../users/dto/create-user-base.dto';
 import { ConfirmPurchaseDto } from './purchase.dto';
-import { GUEST_PURCHASE_CODE } from './guest-purchase-access';
+import {
+  GUEST_PURCHASE_CODE,
+  normalizeGuestPurchaseCode,
+} from './guest-purchase-access';
 
 export class GuestBuyerDto extends PickType(CreateUserBaseDto, [
   'email',
@@ -33,7 +36,7 @@ export class ConfirmGuestPurchaseDto extends ConfirmPurchaseDto {
 
 export class GuestPurchaseLookupDto {
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim() : value,
+    typeof value === 'string' ? normalizeGuestPurchaseCode(value) : value,
   )
   @IsString({ message: 'Introduce el código de consulta de tu compra.' })
   @MaxLength(85, { message: 'El código de consulta no es válido.' })

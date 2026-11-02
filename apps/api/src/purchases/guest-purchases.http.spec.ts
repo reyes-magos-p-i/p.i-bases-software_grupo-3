@@ -182,6 +182,12 @@ describe('Guest purchase HTTP with mocked persistence', () => {
     expect(repository.findGuest).not.toHaveBeenCalled();
     expect(repository.confirmGuest).not.toHaveBeenCalled();
   });
+  it('accepts previous full-length codes without weakening receipt lookup', async () => {
+    const legacy = 'INV-12-' + 'a'.repeat(64);
+    const result = await post('/lookup', { accessCode: legacy.toLowerCase() });
+    expect(result.status).toBe(200);
+    expect(repository.findGuest).toHaveBeenCalledWith(legacy.toUpperCase());
+  });
   it('does not expose a receipt for an unknown or altered code', async () => {
     repository.findGuest.mockRejectedValue(
       new NotFoundException(

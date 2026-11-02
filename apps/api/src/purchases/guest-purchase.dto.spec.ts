@@ -52,4 +52,14 @@ describe('Guest purchase input', () => {
       ).length,
     ).toBeGreaterThan(0);
   });
+  it.each([' INV-12-' + 'a'.repeat(64) + ' ', '12.0' + 'l'.repeat(25)])(
+    'accepts and normalizes both consultation formats: %s',
+    async (accessCode) => {
+      const dto = plainToInstance(GuestPurchaseLookupDto, { accessCode });
+      expect(await validate(dto)).toEqual([]);
+      expect(dto.accessCode).toBe(
+        accessCode.trim().toUpperCase().replace(/L/gu, '1'),
+      );
+    },
+  );
 });
