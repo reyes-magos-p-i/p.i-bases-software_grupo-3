@@ -7,6 +7,7 @@ describe('Guest consultation code input', () => {
       '12.4AVG75NWK52Z476W4QDMW7DYQE',
     )
     expect(normalizeGuestPurchaseCode('12.olio' + '0'.repeat(22))).toBe('12.0110' + '0'.repeat(22))
+    expect(normalizeGuestPurchaseCode('12.OOOO' + '0'.repeat(22))).toBe('12.' + '0'.repeat(26))
   })
   it('keeps previously issued long codes usable', () => {
     expect(validGuestPurchaseCode('inv-12-' + 'a'.repeat(64))).toBe(true)

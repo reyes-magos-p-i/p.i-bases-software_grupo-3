@@ -34,6 +34,9 @@ describe('Private guest purchase codes', () => {
     expect(normalizeGuestPurchaseCode('12.olio' + '0'.repeat(22))).toBe(
       '12.0110' + '0'.repeat(22),
     );
+    expect(normalizeGuestPurchaseCode('12.OOOO' + '0'.repeat(22))).toBe(
+      '12.' + '0'.repeat(26),
+    );
   });
   it('continues verifying previously issued full-length codes', () => {
     const digest = createHash('sha256')

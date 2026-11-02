@@ -26,7 +26,7 @@ export function normalizeGuestPurchaseCode(code: string): string {
   const secret = value
     .slice(separator + 1)
     .replace(/[ -]/gu, '')
-    .replace(/O/gu, '0')
+    .replaceAll('O', '0')
     .replace(/[IL]/gu, '1');
   return value.slice(0, separator + 1) + secret;
 }
