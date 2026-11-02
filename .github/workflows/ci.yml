@@ -149,7 +149,8 @@ jobs:
   sonarqube:
     name: SonarQube
     needs: [changes, ci-result]
-    if: success() && needs.changes.outputs.apps != '[]'
+    # A plain success() would also skip this job when source-branch is skipped.
+    if: ${{ !cancelled() && needs.ci-result.result == 'success' && needs.changes.outputs.apps != '[]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -179,7 +180,7 @@ jobs:
   deploy:
     name: Deploy
     needs: [sonarqube]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ !cancelled() && needs.sonarqube.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - name: Build and serve
