@@ -100,6 +100,52 @@ describe('SMTP ticket delivery', () => {
     });
     expect(sendMail).toHaveBeenCalledTimes(1);
   });
+  // Error shapes recorded from nodemailer against a fake SMTP server.
+  it.each([
+    ['refused connection', { code: 'ESOCKET', syscall: 'connect' }, 'ESOCKET'],
+    ['failed DNS lookup', { code: 'EDNS' }, 'EDNS'],
+    ['bad credentials', { code: 'EAUTH', responseCode: 535 }, 'EAUTH'],
+    [
+      'refused recipient',
+      { code: 'EENVELOPE', responseCode: 550 },
+      'EENVELOPE',
+    ],
+    ['refused message', { code: 'EMESSAGE', responseCode: 554 }, 'EMESSAGE'],
+  ])('reports a %s as definitely not sent', async (_case, failure, code) => {
+    sendMail.mockRejectedValue(Object.assign(new Error('private'), failure));
+    await expect(sender.send(message)).rejects.toMatchObject({
+      uncertain: false,
+      code,
+    });
+  });
+  it('stays uncertain when the connection drops, since SMTP may have accepted the message', async () => {
+    sendMail.mockRejectedValue(
+      Object.assign(new Error('private'), {
+        code: 'ECONNECTION',
+        command: 'CONN',
+      }),
+    );
+    await expect(sender.send(message)).rejects.toMatchObject({
+      uncertain: true,
+      code: 'ECONNECTION',
+    });
+  });
+  it('keeps unexpected failure details out of the delivery code', async () => {
+    sendMail.mockRejectedValue(
+      Object.assign(new Error('private'), { code: 'user@example.com' }),
+    );
+    const failure: unknown = await sender
+      .send(message)
+      .catch((e: unknown) => e);
+    expect(failure).toMatchObject({ uncertain: true });
+    expect((failure as { code?: string }).code).toBeUndefined();
+  });
+  it('tolerates a rejection without details', async () => {
+    sendMail.mockRejectedValue(undefined);
+    await expect(sender.send(message)).rejects.toMatchObject({
+      uncertain: true,
+    });
+  });
   it('does not contact SMTP if QR preparation fails', async () => {
     jest
       .spyOn(QRCode, 'toBuffer')

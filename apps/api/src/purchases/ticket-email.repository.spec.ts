@@ -45,7 +45,9 @@ describe('Durable ticket email requests', () => {
     });
     expect(await repo.status(12)).toMatchObject({ status: 'UNKNOWN' });
     expect(query).toHaveBeenCalledWith(
-      expect.stringContaining('SYS_EXTRACT_UTC'),
+      expect.stringContaining(
+        "e.REQUESTED_AT+INTERVAL '60' SECOND-SYSTIMESTAMP",
+      ),
       { id: 12 },
     );
   });
@@ -58,6 +60,7 @@ describe('Durable ticket email requests', () => {
     });
     expect(query.mock.calls[0][0]).toContain("NOT IN ('PENDING','SENDING')");
     expect(query.mock.calls[0][0]).toContain("INTERVAL '60' SECOND");
+    expect(query.mock.calls[0][0]).toContain('e.SENT_AT=NULL');
     expect(query.mock.calls[0][1]).toMatchObject({
       id: 12,
       email: job.recipient,
