@@ -44,7 +44,7 @@ describe('Ticket email content', () => {
     expect(body.text).toContain('Boleto 2 · Reprogramado');
     expect(body.text).toContain('Sucursal nueva · Sala 8');
     expect(body.text).toContain('Fila 3, asiento 4 · Niño');
-    expect(body.text).toContain('Esta función no está activa');
+    expect(body.text).toContain('Esta función fue cancelada.');
     expect(body.text).toContain('20:00');
     expect(body.html).toContain('cid:purchase-qr');
     expect(body.html).not.toContain('cid:cinetadel-logo');

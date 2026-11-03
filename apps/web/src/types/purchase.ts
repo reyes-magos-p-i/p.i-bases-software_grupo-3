@@ -66,6 +66,7 @@ export interface PurchaseReceipt extends Omit<PurchaseQuote, 'seats' | 'quantity
   qrPayload: string
   status: string
   buyerEmail: string
+  functionCancelled: boolean
   paymentMethod: 'CARD' | 'CASH' | 'SIMULATED'
   cardBrand: string | null
   cardLast4: string | null
@@ -121,6 +122,7 @@ export interface PurchaseList {
     title: string
     startsAt: string
     quantity: number
+    functionCancelled: boolean
   }[]
   page: number
   total: number

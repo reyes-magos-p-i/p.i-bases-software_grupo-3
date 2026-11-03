@@ -21,6 +21,13 @@ const categories = {
   SENIOR: 'Adulto mayor',
 };
 
+function functionNotice(status: string) {
+  if (status === 'CANCELLED') return ['Esta función fue cancelada.'];
+  return status === 'ACTIVE'
+    ? []
+    : ['Esta función no está activa. Consulta su estado en tu compra.'];
+}
+
 export function ticketEmailTemplate(
   message: TicketEmailMessage,
   theme: EmailTheme,
@@ -32,9 +39,7 @@ export function ticketEmailTemplate(
     date(ticket.startsAt),
     `${ticket.branchName} · Sala ${ticket.theaterId}`,
     `Fila ${ticket.rowNumber}, asiento ${ticket.columnNumber} · ${categories[ticket.category]}`,
-    ...(ticket.functionStatus !== 'ACTIVE'
-      ? ['Esta función no está activa. Consulta su estado en tu compra.']
-      : []),
+    ...functionNotice(ticket.functionStatus),
   ]);
   const text = [
     'Tus boletos de Cinetadel',

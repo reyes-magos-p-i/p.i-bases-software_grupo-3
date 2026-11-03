@@ -54,6 +54,8 @@ function buyerScope(buyer: Buyer): { condition: string; binds: Binds } {
 type Binds = Exclude<oracle.BindParameters, unknown[]>;
 const OPTIONS = { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false };
 const ZONE = 'America/Costa_Rica';
+// A rescheduled ticket keeps the purchase valid even if its original function was cancelled.
+const FUNCTION_CANCELLED = `CASE WHEN mf.STATUS='CANCELLED' AND NOT EXISTS (SELECT 1 FROM TICKETS rt JOIN MOVIE_FUNCTIONS cur ON cur.MOVIE_FUNCTION_ID=rt.MOVIE_FUNCTION_ID WHERE rt.INVOICE_ID=i.INVOICE_ID AND cur.STATUS<>'CANCELLED') THEN 1 ELSE 0 END`;
 @Injectable()
 export class PurchasesRepository {
   constructor(
@@ -438,13 +440,14 @@ export class PurchasesRepository {
       purchasedAt: string;
       status: string;
       buyerEmail: string;
+      functionCancelled: number;
       paymentMethod: PurchaseReceipt['paymentMethod'];
       cardBrand: string | null;
       cardLast4: string | null;
       total: number;
       contextJson: string | null;
     }>(
-      `SELECT i.INVOICE_ID AS "id", i.MOVIE_FUNCTION_ID AS "functionId", TO_CHAR(i.CREATED_AT AT TIME ZONE 'America/Costa_Rica','YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "purchasedAt", i.STATUS AS "status", NVL(i.BUYER_EMAIL,c.EMAIL) AS "buyerEmail", i.PAYMENT_METHOD AS "paymentMethod", i.CARD_BRAND AS "cardBrand", i.CARD_LAST4 AS "cardLast4", i.TOTAL AS "total", i.PURCHASE_CONTEXT AS "contextJson" FROM INVOICES i LEFT JOIN CLIENTS c ON c.CLIENT_ID=i.CLIENT_ID WHERE i.INVOICE_ID=:id AND ${scope.condition} AND i.STATUS IN ('PAID','CANCELLED')`,
+      `SELECT i.INVOICE_ID AS "id", i.MOVIE_FUNCTION_ID AS "functionId", TO_CHAR(i.CREATED_AT AT TIME ZONE 'America/Costa_Rica','YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "purchasedAt", i.STATUS AS "status", NVL(i.BUYER_EMAIL,c.EMAIL) AS "buyerEmail", ${FUNCTION_CANCELLED} AS "functionCancelled", i.PAYMENT_METHOD AS "paymentMethod", i.CARD_BRAND AS "cardBrand", i.CARD_LAST4 AS "cardLast4", i.TOTAL AS "total", i.PURCHASE_CONTEXT AS "contextJson" FROM INVOICES i LEFT JOIN CLIENTS c ON c.CLIENT_ID=i.CLIENT_ID JOIN MOVIE_FUNCTIONS mf ON mf.MOVIE_FUNCTION_ID=i.MOVIE_FUNCTION_ID WHERE i.INVOICE_ID=:id AND ${scope.condition} AND i.STATUS IN ('PAID','CANCELLED')`,
       { id, ...scope.binds },
       connection,
       true,
@@ -501,6 +504,7 @@ export class PurchasesRepository {
       purchasedAt: row.purchasedAt,
       status: row.status,
       buyerEmail: row.buyerEmail,
+      functionCancelled: row.functionCancelled === 1,
       paymentMethod: row.paymentMethod,
       cardBrand: row.cardBrand,
       cardLast4: row.cardLast4,
@@ -550,13 +554,15 @@ export class PurchasesRepository {
       title: string;
       startsAt: string;
       quantity: number;
+      functionCancelled: number;
     }>(
-      `SELECT i.INVOICE_ID AS "id",TO_CHAR(i.CREATED_AT AT TIME ZONE 'America/Costa_Rica','YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "purchasedAt",i.STATUS AS "status",i.TOTAL AS "total",COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.title'),m.TITLE) AS "title",COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.startsAt'),TO_CHAR(mf.START_TIME,'YYYY-MM-DD"T"HH24:MI:SS') || '-06:00') AS "startsAt",(SELECT NVL(SUM(ip.QUANTITY),0) FROM INVOICE_PRODUCTS ip JOIN PRODUCTS p ON p.PRODUCT_ID=ip.PRODUCT_ID WHERE ip.INVOICE_ID=i.INVOICE_ID AND p.PRODUCT_TYPE='TICKET') AS "quantity" FROM INVOICES i JOIN MOVIE_FUNCTIONS mf ON mf.MOVIE_FUNCTION_ID=i.MOVIE_FUNCTION_ID JOIN MOVIES m ON m.MOVIE_ID=mf.MOVIE_ID WHERE ${where} ORDER BY i.CREATED_AT DESC,i.INVOICE_ID DESC OFFSET :offset ROWS FETCH NEXT 10 ROWS ONLY`,
+      `SELECT i.INVOICE_ID AS "id",TO_CHAR(i.CREATED_AT AT TIME ZONE 'America/Costa_Rica','YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "purchasedAt",i.STATUS AS "status",i.TOTAL AS "total",${FUNCTION_CANCELLED} AS "functionCancelled",COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.title'),m.TITLE) AS "title",COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.startsAt'),TO_CHAR(mf.START_TIME,'YYYY-MM-DD"T"HH24:MI:SS') || '-06:00') AS "startsAt",(SELECT NVL(SUM(ip.QUANTITY),0) FROM INVOICE_PRODUCTS ip JOIN PRODUCTS p ON p.PRODUCT_ID=ip.PRODUCT_ID WHERE ip.INVOICE_ID=i.INVOICE_ID AND p.PRODUCT_TYPE='TICKET') AS "quantity" FROM INVOICES i JOIN MOVIE_FUNCTIONS mf ON mf.MOVIE_FUNCTION_ID=i.MOVIE_FUNCTION_ID JOIN MOVIES m ON m.MOVIE_ID=mf.MOVIE_ID WHERE ${where} ORDER BY i.CREATED_AT DESC,i.INVOICE_ID DESC OFFSET :offset ROWS FETCH NEXT 10 ROWS ONLY`,
       { ...binds, offset: (page - 1) * 10 },
     );
     return {
       items: (result.rows ?? []).map((row) => ({
         ...row,
+        functionCancelled: row.functionCancelled === 1,
         reference: `ORD-${String(row.id).padStart(6, '0')}`,
       })),
       page,

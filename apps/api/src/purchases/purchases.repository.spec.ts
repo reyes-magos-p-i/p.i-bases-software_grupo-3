@@ -450,6 +450,45 @@ describe('Atomic purchase storage', () => {
       expect(close).toHaveBeenCalledTimes(1);
     },
   );
+  it('reports a cancelled function unless its tickets were rescheduled', async () => {
+    overrides['AS "contextJson"'] = {
+      rows: [
+        { id: 12, functionId: 4, contextJson: null, functionCancelled: 1 },
+      ],
+    };
+    overrides['FROM INVOICE_PRODUCTS ip JOIN'] = {};
+    overrides['FROM TICKETS tk JOIN MOVIE_FUNCTIONS mf'] = { rows: [] };
+    const query = jest.spyOn(db, 'query');
+    expect(await repo.findOne(12, 8)).toMatchObject({
+      functionCancelled: true,
+    });
+    const headerSql = query.mock.calls
+      .map(([sql]) => sql)
+      .find((sql) => sql.includes('AS "contextJson"'));
+    expect(headerSql).toContain("mf.STATUS='CANCELLED' AND NOT EXISTS");
+    expect(headerSql).toContain("cur.STATUS<>'CANCELLED'");
+    query.mockRestore();
+    overrides['AS "contextJson"'] = {
+      rows: [
+        { id: 12, functionId: 4, contextJson: null, functionCancelled: 0 },
+      ],
+    };
+    expect(await repo.findOne(12, 8)).toMatchObject({
+      functionCancelled: false,
+    });
+  });
+  it('marks cancelled functions in the purchase history', async () => {
+    overrides['COUNT(*)'] = { rows: [{ TOTAL: 2 }] };
+    overrides['JSON_VALUE'] = {
+      rows: [
+        { id: 12, functionCancelled: 1 },
+        { id: 13, functionCancelled: 0 },
+      ],
+    };
+    expect(await repo.list(8, { page: 1 })).toMatchObject({
+      items: [{ functionCancelled: true }, { functionCancelled: false }],
+    });
+  });
   it('protects ownership and never fabricates tickets for historical invoices', async () => {
     overrides['AS "contextJson"'] = { rows: [] };
     await expect(repo.findOne(12, 99)).rejects.toThrow('no pertenece');
