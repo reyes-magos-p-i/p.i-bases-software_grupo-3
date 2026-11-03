@@ -204,8 +204,13 @@ watch(
   color: var(--text-primary);
 }
 .purchase-flow :deep(.purchase-action:focus-visible) {
-  outline: 3px solid var(--primary-color);
+  outline: 3px solid var(--focus-on-dark);
   outline-offset: 3px;
+}
+@media (max-width: 576px) {
+  .purchase-flow {
+    padding-inline: 16px;
+  }
 }
 .actions {
   display: flex;

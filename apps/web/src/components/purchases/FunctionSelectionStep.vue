@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue'
 import DatePicker from '@/components/common/DatePicker.vue'
+import MoviePoster from '@/components/common/MoviePoster.vue'
 import { formatDateTime, formatColones } from '@/utils/transaction-format'
 import type { PurchaseMovie, PurchaseFunction } from '@/types/purchase'
 const props = defineProps<{
@@ -29,8 +30,13 @@ const filtered = computed(() =>
 </script>
 <template>
   <section aria-label="Seleccionar función">
-    <h1>{{ movie.title }}</h1>
-    <p class="synopsis">{{ movie.synopsis }}</p>
+    <div class="movie-introduction">
+      <MoviePoster :poster-image="movie.posterImage" :title="movie.title" class="purchase-poster" />
+      <div>
+        <h1>{{ movie.title }}</h1>
+        <p class="synopsis">{{ movie.synopsis }}</p>
+      </div>
+    </div>
     <div class="filters">
       <label :for="id + '-branch'"
         >Sucursal<select class="purchase-select" :id="id + '-branch'" v-model="branch">
@@ -77,6 +83,15 @@ const filtered = computed(() =>
   </section>
 </template>
 <style scoped>
+.movie-introduction {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
+  gap: clamp(16px, 4vw, 32px);
+  align-items: start;
+}
+.purchase-poster {
+  border-radius: var(--radius-medium);
+}
 .synopsis {
   max-width: 75ch;
   line-height: 1.7;
@@ -114,6 +129,12 @@ const filtered = computed(() =>
   color: var(--text-on-dark-secondary);
 }
 @media (max-width: 580px) {
+  .movie-introduction {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .purchase-poster {
+    max-width: 160px;
+  }
   .functions li {
     align-items: stretch;
     flex-direction: column;

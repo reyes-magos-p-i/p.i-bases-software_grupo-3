@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import FunctionSelectionStep from '@/components/purchases/FunctionSelectionStep.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
+import MoviePoster from '@/components/common/MoviePoster.vue'
 import type { PurchaseFunction } from '@/types/purchase'
 const functions = [
   {
@@ -30,11 +31,15 @@ describe('FunctionSelectionStep', () => {
   it('shows current branches and filters functions by branch and calendar date', async () => {
     const wrapper = mount(FunctionSelectionStep, {
       props: {
-        movie: { id: 2, title: 'Película', synopsis: 'Una aventura', posterImage: '' },
+        movie: { id: 2, title: 'Película', synopsis: 'Una aventura', posterImage: 'poster.jpg' },
         functions,
       },
     })
     expect(wrapper.text()).toContain('Una aventura')
+    expect(wrapper.getComponent(MoviePoster).props()).toMatchObject({
+      title: 'Película',
+      posterImage: 'poster.jpg',
+    })
     expect(wrapper.findAll('.functions li')).toHaveLength(2)
     await wrapper.get('select').setValue('2')
     expect(wrapper.findAll('.functions li')).toHaveLength(1)

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import QrCode from '@/components/common/QrCode.vue'
+import MoviePoster from '@/components/common/MoviePoster.vue'
 import { PROJECTION_STATUS_LABELS, type ProjectionStatus } from '@/types/projection'
 import { formatDateTime, formatColones, formatPaymentMethod } from '@/utils/transaction-format'
 import { TICKET_CATEGORY_LABELS, type PurchaseQuote, type PurchaseReceipt } from '@/types/purchase'
@@ -19,34 +20,41 @@ const purchaseCode = computed(() => {
 </script>
 <template>
   <section class="purchase-summary" aria-label="Resumen de compra">
-    <h2>{{ purchase.function.title }}</h2>
-    <dl>
-      <div v-if="email">
-        <dt>Correo del comprador</dt>
-        <dd>{{ email }}</dd>
-      </div>
+    <div class="summary-heading">
+      <MoviePoster :poster-image="purchase.function.posterImage" :title="purchase.function.title" />
       <div>
-        <dt>Sucursal</dt>
-        <dd>{{ purchase.function.branchName }}</dd>
+        <h2>{{ purchase.function.title }}</h2>
+        <dl>
+          <div v-if="email">
+            <dt>Correo del comprador</dt>
+            <dd>{{ email }}</dd>
+          </div>
+          <div>
+            <dt>Sucursal</dt>
+            <dd>{{ purchase.function.branchName }}</dd>
+          </div>
+          <div>
+            <dt>Sala</dt>
+            <dd>{{ purchase.function.theaterId }}</dd>
+          </div>
+          <div>
+            <dt>Función</dt>
+            <dd>{{ formatDateTime(purchase.function.startsAt) }}</dd>
+          </div>
+          <div>
+            <dt>Formato</dt>
+            <dd>
+              {{ purchase.function.format }} ·
+              {{
+                purchase.function.technology === 'STANDARD'
+                  ? 'Estándar'
+                  : purchase.function.technology
+              }}{{ purchase.function.isPremiere ? ' · Estreno' : '' }}
+            </dd>
+          </div>
+        </dl>
       </div>
-      <div>
-        <dt>Sala</dt>
-        <dd>{{ purchase.function.theaterId }}</dd>
-      </div>
-      <div>
-        <dt>Función</dt>
-        <dd>{{ formatDateTime(purchase.function.startsAt) }}</dd>
-      </div>
-      <div>
-        <dt>Formato</dt>
-        <dd>
-          {{ purchase.function.format }} ·
-          {{
-            purchase.function.technology === 'STANDARD' ? 'Estándar' : purchase.function.technology
-          }}{{ purchase.function.isPremiere ? ' · Estreno' : '' }}
-        </dd>
-      </div>
-    </dl>
+    </div>
     <p v-if="'seats' in purchase">
       Asientos:
       {{
@@ -58,7 +66,7 @@ const purchaseCode = computed(() => {
           .join('; ')
       }}
     </p>
-    <div class="line-scroll">
+    <div class="line-scroll" tabindex="0" aria-label="Productos de la compra">
       <table>
         <caption>
           Productos de la compra
@@ -124,6 +132,15 @@ const purchaseCode = computed(() => {
   border-radius: var(--radius-medium);
   overflow-wrap: anywhere;
 }
+.summary-heading {
+  display: grid;
+  grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+}
+.summary-heading img {
+  border-radius: var(--radius-small);
+}
 dl {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -177,6 +194,12 @@ td {
   color: var(--warning-text);
 }
 @media (max-width: 480px) {
+  .summary-heading {
+    grid-template-columns: 1fr;
+  }
+  .summary-heading img {
+    max-width: 140px;
+  }
   dl {
     grid-template-columns: 1fr;
   }
