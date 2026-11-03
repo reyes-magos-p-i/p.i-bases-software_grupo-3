@@ -68,10 +68,12 @@ export class TicketEmailService implements OnModuleInit, OnModuleDestroy {
       const message = await this.purchases.findForEmail(job.id);
       await this.sender.send({ ...message, email: job.recipient });
     } catch (error) {
-      status =
-        error instanceof TicketEmailDeliveryError && error.uncertain
-          ? 'UNKNOWN'
-          : 'FAILED';
+      const delivery = error instanceof TicketEmailDeliveryError;
+      status = delivery && error.uncertain ? 'UNKNOWN' : 'FAILED';
+      const reason = delivery ? error.code : 'PREPARATION';
+      this.logger.warn(
+        `Ticket email for invoice ${job.id} ended as ${status} (${reason ?? 'SMTP'}).`,
+      );
     }
     // Failure to persist an accepted send leaves SENDING for later reconciliation, not an automatic retry.
     await this.emails.finish(job, status);
