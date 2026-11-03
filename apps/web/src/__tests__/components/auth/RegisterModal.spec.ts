@@ -232,7 +232,12 @@ describe('RegisterModal.vue', () => {
     )
     expect(wrapper.text()).toContain('Te enviamos un enlace de confirmación')
     expect(wrapper.text()).toContain('juan.perez@example.com')
-    expect(wrapper.get('button[type="button"]').text()).toContain('Reenviar correo')
+    expect(
+      wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Reenviar correo'))!
+        .text(),
+    ).toContain('Reenviar correo')
     expect(wrapper.emitted('authenticated')).toBeUndefined()
     expect(wrapper.emitted('close')).toBeUndefined()
   })
@@ -256,7 +261,10 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('form').trigger('submit.prevent')
 
     expect(wrapper.text()).toContain('La cuenta quedó pendiente')
-    await wrapper.get('button[type="button"]').trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Reenviar correo'))!
+      .trigger('click')
     expect(resendEmailVerification).toHaveBeenCalledExactlyOnceWith('ana@example.com')
     expect(wrapper.text()).toContain('Te enviamos un enlace de confirmación')
   })
