@@ -119,7 +119,9 @@ describe('BranchFormDialog', () => {
     const view = render()
     await fill(view, 'Sucursal Liberia', 23)
     await view.setProps({ submissionError: 'No se pudo crear la sucursal, intenta de nuevo' })
-    expect(view.get('.form-error').text()).toBe('No se pudo crear la sucursal, intenta de nuevo')
+    expect(view.get('.notification-popup--floating .notification-message').text()).toBe(
+      'No se pudo crear la sucursal, intenta de nuevo',
+    )
     expect((view.get('input[name="name"]').element as HTMLInputElement).value).toBe(
       'Sucursal Liberia',
     )

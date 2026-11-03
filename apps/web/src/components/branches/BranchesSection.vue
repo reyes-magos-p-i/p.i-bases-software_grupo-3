@@ -453,7 +453,12 @@ onBeforeUnmount(() => {
       @submit="submitForm"
     />
     <div v-if="notice" class="branch-notification">
-      <NotificationPopup type="success" :message="notice" @close="notice = ''" />
+      <NotificationPopup
+        type="success"
+        :message="notice"
+        placement="bottom-right"
+        @close="notice = ''"
+      />
     </div>
     <BranchDetailDialog
       :branch-id="selectedBranchId"

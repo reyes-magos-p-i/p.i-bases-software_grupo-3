@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import BaseModal from '@/components/common/BaseModal.vue'
@@ -76,7 +77,12 @@ onBeforeUnmount(() => request?.abort())
 <template>
   <BaseModal :open="branchId !== null" title="Detalle de sucursal" @close="close">
     <div class="branch-detail-content" :aria-busy="loading">
-      <p v-if="loading" class="detail-feedback" role="status">Cargando datos de la sucursal…</p>
+      <LoadingState
+        v-if="loading"
+        class="detail-feedback"
+        message="Cargando datos de la sucursal…"
+        compact
+      />
       <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         <p>{{ error }}</p>
         <button v-if="retryable" type="button" class="detail-button" @click="load">

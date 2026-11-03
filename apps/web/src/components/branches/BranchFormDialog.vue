@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { computed, nextTick, reactive, ref, useTemplateRef, watch } from 'vue'
 import TheaterDialogShell from '@/components/theaters/TheaterDialogShell.vue'
 import FormField from '@/components/theaters/FormField.vue'
@@ -117,7 +119,13 @@ defineExpose({ open, complete })
       <p class="required-note">
         Los campos con <span class="required-marker">*</span> son obligatorios.
       </p>
-      <p v-if="submissionError" class="form-error" role="alert">{{ submissionError }}</p>
+      <NotificationPopup
+        v-if="submissionError"
+        type="error"
+        :message="submissionError"
+        placement="bottom-right"
+        :duration="0"
+      />
 
       <fieldset class="form-card">
         <legend><span class="group-number" aria-hidden="true">1</span> Datos de la sucursal</legend>
@@ -161,7 +169,12 @@ defineExpose({ open, complete })
             </select>
           </FormField>
         </div>
-        <p v-if="companiesLoading" class="form-hint" role="status">Cargando compañías…</p>
+        <LoadingState
+          v-if="companiesLoading"
+          class="form-hint"
+          message="Cargando compañías…"
+          compact
+        />
         <p v-else-if="companiesError" class="form-error" role="alert">
           No se pudieron cargar las compañías.
           <button type="button" class="link-button" @click="emit('retryCompanies')">
