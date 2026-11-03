@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppFooter from '@/components/layout/AppFooter.vue'
@@ -28,8 +29,7 @@ async function verify() {
     await confirmEmailVerification(token)
     await router.replace({ name: 'home' })
   } catch (error) {
-    status.value =
-      error instanceof InvalidEmailVerificationError ? 'invalid' : 'error'
+    status.value = error instanceof InvalidEmailVerificationError ? 'invalid' : 'error'
   }
 }
 
@@ -60,7 +60,10 @@ async function resend() {
     <section class="verification-card" aria-live="polite">
       <template v-if="status === 'checking'">
         <h1>Confirmando tu correo</h1>
-        <p>Estamos verificando el enlace. Te llevaremos al portal en un momento.</p>
+        <LoadingState
+          compact
+          message="Estamos verificando el enlace. Te llevaremos al portal en un momento."
+        />
       </template>
       <template v-else-if="status === 'error'">
         <h1>No se pudo confirmar el correo</h1>

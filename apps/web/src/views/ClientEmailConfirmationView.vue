@@ -84,6 +84,7 @@ async function confirm() {
         type="error"
         :message="error"
         :duration="0"
+        placement="bottom-right"
         @close="error = ''"
       />
     </section>

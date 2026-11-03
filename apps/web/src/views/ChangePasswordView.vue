@@ -279,17 +279,13 @@ function goHome() {
         </p>
       </header>
 
-      <template v-if="statusLoading">
-        <LoadingState
-          v-if="props.embedded && props.accountType === 'client'"
-          message="Cargando seguridad…"
-          surface="light"
-        />
-        <p v-else class="page-status" role="status">
-          <span class="loading-spinner" aria-hidden="true"></span>
-          Comprobando el estado de tu contraseña…
-        </p>
-      </template>
+      <LoadingState
+        v-if="statusLoading"
+        :message="
+          props.embedded ? 'Cargando seguridad…' : 'Comprobando el estado de tu contraseña…'
+        "
+        :surface="props.embedded ? 'light' : 'dark'"
+      />
 
       <div v-else class="password-layout">
         <section class="form-card" aria-labelledby="password-form-title">
@@ -932,15 +928,6 @@ function goHome() {
   color: var(--text-secondary);
 }
 
-.loading-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--primary-color);
-  border-radius: 50%;
-  animation: spin 700ms linear infinite;
-}
-
 .success-state {
   display: grid;
   justify-items: start;
@@ -965,12 +952,6 @@ function goHome() {
 .success-state p {
   margin: 0 0 8px;
   color: var(--text-secondary);
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (max-width: 760px) {

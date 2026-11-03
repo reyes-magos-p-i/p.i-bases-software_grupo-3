@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, useId, watch } from 'vue'
 import ReusableSearchDropdown from '@/components/common/ReusableSearchDropdown.vue'
+import { displayText } from '@/utils/display-text'
 import type {
   ClientPreferenceSelection,
   ClientPreferenceSettings,
@@ -35,7 +36,7 @@ watch(dirty, (value) => emit('dirty', value), { immediate: true })
 const displayOptions = (options: ClientPreferenceSettings['genres']) =>
   options.map((option) => ({
     value: option.id,
-    label: option.name.charAt(0).toLocaleUpperCase('es') + option.name.slice(1),
+    label: displayText(option.name),
   }))
 const groups = computed(() => [
   {
