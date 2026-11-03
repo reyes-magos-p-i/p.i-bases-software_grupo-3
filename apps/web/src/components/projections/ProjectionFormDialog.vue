@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import {
   computed,
   nextTick,
@@ -498,7 +499,12 @@ defineExpose({ open, edit, complete })
       <p class="required-note">
         Los campos con <span class="required-marker">*</span> son obligatorios.
       </p>
-      <p v-if="optionsLoading" class="form-status" role="status">Cargando sucursales y salas…</p>
+      <LoadingState
+        v-if="optionsLoading"
+        class="form-status"
+        message="Cargando sucursales y salas…"
+        compact
+      />
       <p v-if="optionsError" class="form-error" role="alert">
         {{ optionsError }}
         <button type="button" class="link-button" @click="emit('retryOptions')">Reintentar</button>
@@ -645,7 +651,12 @@ defineExpose({ open, edit, complete })
                 <small :id="id + '-movie-hint'" class="field-hint">
                   Escribe parte del título y elige una opción de la lista (flechas + Enter o clic).
                 </small>
-                <p v-if="searching" class="field-hint" role="status">Buscando películas…</p>
+                <LoadingState
+                  v-if="searching"
+                  class="field-hint"
+                  message="Buscando películas…"
+                  compact
+                />
                 <p v-else-if="searchError" class="field-error" role="alert">{{ searchError }}</p>
                 <p
                   v-else-if="listOpen && draft.movieQuery && !results.length && !movie"
@@ -865,7 +876,7 @@ defineExpose({ open, edit, complete })
                 Calculado con la política de boletos. La categoría de edad y el asiento VIP se
                 determinan al comprar.
               </p>
-              <p v-if="previewLoading" role="status">Calculando precio...</p>
+              <LoadingState v-if="previewLoading" message="Calculando precio..." compact />
               <template v-if="preview"
                 ><small v-for="modifier in preview.modifiers" :key="modifier.label"
                   >{{ modifier.label }}: +{{ formatPrice(modifier.amount) }}</small

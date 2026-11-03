@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import ProjectionDialogShell from './ProjectionDialogShell.vue'
@@ -104,7 +105,7 @@ onBeforeUnmount(() => request?.abort())
 <template>
   <ProjectionDialogShell ref="shell" title="Detalle de proyección" @close="emit('close')">
     <div class="detail-content" :aria-busy="loading">
-      <p v-if="loading" class="detail-feedback" role="status">Cargando el detalle…</p>
+      <LoadingState v-if="loading" class="detail-feedback" message="Cargando el detalle…" compact />
       <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         {{ error }}
         <button type="button" class="link-button" @click="retry">Reintentar</button>
