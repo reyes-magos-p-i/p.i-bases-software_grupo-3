@@ -26,10 +26,7 @@ describe('uploadPoster', () => {
     const result = await uploadPoster(file)
 
     expect(getApi).toHaveBeenCalledOnce()
-    expect(post).toHaveBeenCalledExactlyOnceWith(
-      '/image-handler/posters',
-      expect.any(FormData),
-    )
+    expect(post).toHaveBeenCalledExactlyOnceWith('/image-handler/posters', expect.any(FormData))
     const data = post.mock.calls[0]![1] as FormData
     expect(data.get('image')).toBe(file)
     expect(result).toEqual(response)
@@ -44,21 +41,19 @@ describe('uploadPoster', () => {
 })
 
 describe('getPosterUrl', () => {
-  it.each([undefined, null, '', '/uploads/posters/'])(
-    'returns null for %s',
-    (value) => {
-      expect(getPosterUrl(value)).toBeNull()
-    },
-  )
+  it('resolves legacy posters under the configured API path', () => {
+    expect(getPosterUrl('/uploads/posters/old.jpg', true)).toBe(
+      'https://cinema.example.com/api/image/old.jpg',
+    )
+  })
 
-  it.each(['poster.jpg', '/uploads/posters/poster.jpg'])(
-    'builds a URL from %s',
-    (value) => {
-      expect(getPosterUrl(value)).toBe(
-        'https://cinema.example.com/uploads/posters/poster.jpg',
-      )
-    },
-  )
+  it.each([undefined, null, '', '/uploads/posters/'])('returns null for %s', (value) => {
+    expect(getPosterUrl(value)).toBeNull()
+  })
+
+  it.each(['poster.jpg', '/uploads/posters/poster.jpg'])('builds a URL from %s', (value) => {
+    expect(getPosterUrl(value)).toBe('https://cinema.example.com/uploads/posters/poster.jpg')
+  })
 
   it('encodes special characters in the filename', () => {
     expect(getPosterUrl('my poster #1.jpg')).toBe(
@@ -69,19 +64,14 @@ describe('getPosterUrl', () => {
   it('trims whitespace from the configured API URL', () => {
     vi.stubEnv('VITE_API_BASE_URL', '  https://cinema.example.com/api  ')
 
-    expect(getPosterUrl('poster.jpg')).toBe(
-      'https://cinema.example.com/uploads/posters/poster.jpg',
-    )
+    expect(getPosterUrl('poster.jpg')).toBe('https://cinema.example.com/uploads/posters/poster.jpg')
   })
 
-  it.each([undefined, '', '   '])(
-    'throws when the API URL is missing or blank (%s)',
-    (value) => {
-      vi.stubEnv('VITE_API_BASE_URL', value)
+  it.each([undefined, '', '   '])('throws when the API URL is missing or blank (%s)', (value) => {
+    vi.stubEnv('VITE_API_BASE_URL', value)
 
-      expect(() => getPosterUrl('poster.jpg')).toThrow('Falta configurar VITE_API_BASE_URL.')
-    },
-  )
+    expect(() => getPosterUrl('poster.jpg')).toThrow('Falta configurar VITE_API_BASE_URL.')
+  })
 
   it('returns null for an empty value even when the API URL is missing', () => {
     vi.stubEnv('VITE_API_BASE_URL', undefined)
@@ -92,8 +82,6 @@ describe('getPosterUrl', () => {
   it('uses the frontend origin when the API base URL is relative', () => {
     vi.stubEnv('VITE_API_BASE_URL', '/api')
 
-    expect(getPosterUrl('poster.jpg')).toBe(
-      `${window.location.origin}/uploads/posters/poster.jpg`,
-    )
+    expect(getPosterUrl('poster.jpg')).toBe(`${window.location.origin}/uploads/posters/poster.jpg`)
   })
 })

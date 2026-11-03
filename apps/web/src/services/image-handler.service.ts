@@ -1,28 +1,20 @@
-// src/services/image-handler.service.ts
-import { getApi } from '@/services/api' // Adjust to its actual location.
+import { getApi } from '@/services/api'
 
 export interface PosterUploadResponse {
   filename: string
   path: string
 }
 
-export async function uploadPoster(
-  file: File,
-): Promise<PosterUploadResponse> {
+export async function uploadPoster(file: File): Promise<PosterUploadResponse> {
   const data = new FormData()
   data.append('image', file)
 
-  const response = await getApi().post<PosterUploadResponse>(
-    '/image-handler/posters',
-    data,
-  )
+  const response = await getApi().post<PosterUploadResponse>('/image-handler/posters', data)
 
   return response.data
 }
 
-export function getPosterUrl(
-  storedValue?: string | null,
-): string | null {
+export function getPosterUrl(storedValue?: string | null, legacy = false): string | null {
   if (!storedValue) return null
 
   const filename = storedValue.split('/').pop()
@@ -38,8 +30,11 @@ export function getPosterUrl(
     ? window.location.origin
     : new URL(apiBaseUrl).origin
 
-  return new URL(
-    `/uploads/posters/${encodeURIComponent(filename)}`,
-    imageOrigin,
-  ).href
+  if (legacy) {
+    const base = new URL(apiBaseUrl, window.location.origin)
+    if (!base.pathname.endsWith('/')) base.pathname += '/'
+    return new URL(`image/${encodeURIComponent(filename)}`, base).href
+  }
+
+  return new URL(`/uploads/posters/${encodeURIComponent(filename)}`, imageOrigin).href
 }
