@@ -10,7 +10,7 @@ const post = vi.fn()
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(getApi).mockReturnValue({ post } as unknown as ReturnType<typeof getApi>)
-  vi.stubEnv('VITE_API_URL', 'https://cinema.example.com/api')
+  vi.stubEnv('VITE_API_BASE_URL', 'https://cinema.example.com/api')
 })
 
 afterEach(() => {
@@ -67,7 +67,7 @@ describe('getPosterUrl', () => {
   })
 
   it('trims whitespace from the configured API URL', () => {
-    vi.stubEnv('VITE_API_URL', '  https://cinema.example.com/api  ')
+    vi.stubEnv('VITE_API_BASE_URL', '  https://cinema.example.com/api  ')
 
     expect(getPosterUrl('poster.jpg')).toBe(
       'https://cinema.example.com/uploads/posters/poster.jpg',
@@ -77,15 +77,23 @@ describe('getPosterUrl', () => {
   it.each([undefined, '', '   '])(
     'throws when the API URL is missing or blank (%s)',
     (value) => {
-      vi.stubEnv('VITE_API_URL', value)
+      vi.stubEnv('VITE_API_BASE_URL', value)
 
-      expect(() => getPosterUrl('poster.jpg')).toThrow('Falta configurar VITE_API_URL.')
+      expect(() => getPosterUrl('poster.jpg')).toThrow('Falta configurar VITE_API_BASE_URL.')
     },
   )
 
   it('returns null for an empty value even when the API URL is missing', () => {
-    vi.stubEnv('VITE_API_URL', undefined)
+    vi.stubEnv('VITE_API_BASE_URL', undefined)
 
     expect(getPosterUrl(null)).toBeNull()
+  })
+
+  it('uses the frontend origin when the API base URL is relative', () => {
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+
+    expect(getPosterUrl('poster.jpg')).toBe(
+      `${window.location.origin}/uploads/posters/poster.jpg`,
+    )
   })
 })

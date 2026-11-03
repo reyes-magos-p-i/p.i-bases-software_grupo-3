@@ -25,14 +25,18 @@ export function getPosterUrl(
 ): string | null {
   if (!storedValue) return null
 
-  // Supports both existing paths and filename-only values.
   const filename = storedValue.split('/').pop()
   if (!filename) return null
 
-  const imageOrigin = import.meta.env.VITE_API_URL?.trim()
-  if (!imageOrigin) {
-    throw new Error('Falta configurar VITE_API_URL.')
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
+
+  if (!apiBaseUrl) {
+    throw new Error('Falta configurar VITE_API_BASE_URL.')
   }
+
+  const imageOrigin = apiBaseUrl.startsWith('/')
+    ? window.location.origin
+    : new URL(apiBaseUrl).origin
 
   return new URL(
     `/uploads/posters/${encodeURIComponent(filename)}`,
