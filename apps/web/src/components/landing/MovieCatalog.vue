@@ -1,20 +1,14 @@
 <script setup lang="ts">
 import type { PortalMovie } from '@/types/movie'
-import { stripTrailingSlashes } from '@/services/movieFunctions'
+import MoviePoster from '@/components/common/MoviePoster.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
-import placeholderImage from '../../assets/images/placeholder.svg'
 
 defineProps<{ movies: readonly PortalMovie[]; loading?: boolean; error?: string }>()
 const emit = defineEmits<{ retry: [] }>()
-const imagesBaseUrl = `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image`
-function handleImageError(event: Event) {
-  const img = event.target as HTMLImageElement
-  if (img.getAttribute('src') !== placeholderImage) img.src = placeholderImage
-}
 </script>
 
 <template>
-  <section class="movie-catalog">
+  <section id="cartelera" class="movie-catalog" aria-label="Cartelera">
     <div class="landing-container">
       <LoadingState v-if="loading" message="Cargando películas..." surface="dark" />
 
@@ -25,11 +19,10 @@ function handleImageError(event: Event) {
 
       <div v-else-if="movies.length" class="movie-grid">
         <article v-for="movie in movies" :key="movie.id" class="movie-card">
-          <img
-            :src="`${imagesBaseUrl}/${movie.posterImage}`"
-            :alt="movie.title"
+          <MoviePoster
+            :poster-image="movie.posterImage"
+            :title="movie.title"
             class="movie-poster"
-            @error="handleImageError"
           />
 
           <div class="movie-overlay">
@@ -99,7 +92,8 @@ function handleImageError(event: Event) {
   pointer-events: none;
 }
 
-.movie-card:hover::after {
+.movie-card:hover::after,
+.movie-card:focus-within::after {
   opacity: 1;
 }
 
@@ -148,7 +142,12 @@ function handleImageError(event: Event) {
   position: absolute;
   bottom: 16px;
 
-  padding: 4px 96px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  width: calc(100% - 32px);
+  padding: 10px 16px;
 
   border: 0;
   border-radius: 6px;
@@ -162,6 +161,16 @@ function handleImageError(event: Event) {
   background-color: var(--button-background);
 
   transition: background-color var(--transition-fast);
+}
+
+@media (hover: none) {
+  .movie-overlay {
+    opacity: 1;
+    pointer-events: auto;
+    background: linear-gradient(transparent, var(--hero-overlay-start));
+    justify-content: flex-end;
+    padding-bottom: 76px;
+  }
 }
 
 .buy-button:hover {

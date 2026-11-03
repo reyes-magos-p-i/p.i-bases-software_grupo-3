@@ -46,6 +46,7 @@ describe('MovieCatalog', () => {
     const wrapper = render({ movies: [movies[0]!] })
     const image = wrapper.get('img')
     await image.trigger('error')
+    await image.trigger('error')
     const placeholder = image.attributes('src')
     expect(placeholder).toBe(placeholderImage)
     await image.trigger('error')
