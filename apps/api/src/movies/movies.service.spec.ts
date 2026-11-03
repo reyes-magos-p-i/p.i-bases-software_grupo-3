@@ -24,6 +24,7 @@ describe('MoviesService', () => {
     synopsis: 'A team travels through space.',
     runningTime: 169,
     releaseYear: 2014,
+    posterImage: null,
     classification: { id: 1, name: 'TP' },
     languages: [{ id: 1, name: 'English' }],
     genres: [{ id: 3, name: 'Adventure' }],
