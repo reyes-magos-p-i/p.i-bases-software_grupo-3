@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
+import { useBlurValidation } from '@/composables/useBlurValidation'
 
 const props = withDefaults(
   defineProps<{
@@ -9,12 +10,14 @@ const props = withDefaults(
     required?: boolean
     min?: number
     max?: number
+    error?: string
   }>(),
   {
     placeholder: '',
     disabled: false,
     required: false,
     min: 1,
+    error: '',
   },
 )
 
@@ -28,6 +31,7 @@ const emit = defineEmits<{
 
 const id = useId()
 const touched = ref(false)
+const shouldValidate = useBlurValidation()
 
 const isInvalid = computed(() => {
   if (value.value === null) return false
@@ -45,10 +49,13 @@ watch(isValid, (valid) => emit('validity-change', valid), { immediate: true })
 
 // Display errors after the user interacts with the field
 const showError = computed(
-  () => touched.value && (isInvalid.value || (props.required && value.value === null)),
+  () =>
+    !!props.error ||
+    (touched.value && (isInvalid.value || (props.required && value.value === null))),
 )
 
 const errorMessage = computed(() => {
+  if (props.error) return props.error
   if (value.value === null) {
     return 'Este campo es obligatorio.'
   }
@@ -88,7 +95,7 @@ function handleInput(event: Event) {
       :aria-invalid="showError"
       :aria-describedby="showError ? `${id}-error` : undefined"
       @input="handleInput"
-      @blur="touched = true"
+      @blur="shouldValidate($event) && (touched = true)"
     />
 
     <p v-if="showError" :id="`${id}-error`" class="input-error" role="alert">

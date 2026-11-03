@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { dateParts, todayInCostaRica, validDate } from '@/utils/date-only'
+import { displayText } from '@/utils/display-text'
 
 defineOptions({ inheritAttrs: false })
 const props = withDefaults(
@@ -206,7 +207,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
           <label :for="id + '-month'" class="visually-hidden">Mes</label>
           <select :id="id + '-month'" v-model.number="month" class="month-select">
             <option v-for="(label, index) in months" :key="label" :value="index + 1">
-              {{ label }}
+              {{ displayText(label) }}
             </option>
           </select>
           <div class="day-grid" aria-label="Días del mes">
@@ -302,7 +303,7 @@ select:focus-visible {
 }
 button {
   min-width: 32px;
-  min-height: 36px;
+  min-height: 44px;
   padding: 4px 6px;
   border: 0;
   border-radius: var(--radius-small);

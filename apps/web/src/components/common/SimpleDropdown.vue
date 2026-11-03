@@ -1,23 +1,27 @@
 <script setup lang="ts" generic="T extends string | number">
-import { useId } from 'vue'
+import { computed, ref, useId } from 'vue'
+import { useBlurValidation } from '@/composables/useBlurValidation'
+import { displayText } from '@/utils/display-text'
 
 interface DropdownOption {
   id: T
   name: string
 }
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     options: DropdownOption[]
     label: string
     placeholder?: string
     disabled?: boolean
     required?: boolean
+    error?: string
   }>(),
   {
     placeholder: 'Seleccione una opción',
     disabled: false,
     required: false,
+    error: '',
   },
 )
 
@@ -26,11 +30,19 @@ const selected = defineModel<T | null>({
 })
 
 const id = useId()
+const touched = ref(false)
+const shouldValidate = useBlurValidation()
+const feedback = computed(
+  () =>
+    props.error ||
+    (touched.value && props.required && selected.value === null ? 'Selecciona una opción.' : ''),
+)
 </script>
 <template>
   <div class="simple-dropdown">
     <label :for="id">
       {{ label }}
+      <span v-if="required" aria-hidden="true"> *</span>
     </label>
 
     <select
@@ -39,15 +51,19 @@ const id = useId()
       class="dropdown-select"
       :disabled="disabled"
       :required="required"
+      :aria-invalid="!!feedback"
+      :aria-describedby="feedback ? `${id}-error` : undefined"
+      @blur="shouldValidate($event) && (touched = true)"
     >
       <option :value="null">
         {{ placeholder }}
       </option>
 
       <option v-for="option in options" :key="option.id" :value="option.id">
-        {{ option.name }}
+        {{ displayText(option.name) }}
       </option>
     </select>
+    <p v-if="feedback" :id="`${id}-error`" class="input-error" role="alert">{{ feedback }}</p>
   </div>
 </template>
 
@@ -89,5 +105,10 @@ const id = useId()
 .dropdown-select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.input-error {
+  margin: 6px 0 0;
+  color: var(--error-color);
+  font-size: 0.875rem;
 }
 </style>

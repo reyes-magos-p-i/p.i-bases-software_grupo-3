@@ -5,6 +5,17 @@ import ReusableSearchDropdown from '@/components/common/ReusableSearchDropdown.v
 enableAutoUnmount(afterEach)
 
 describe('ReusableSearchDropdown', () => {
+  it('keeps missing-selection feedback next to the field and does not consume Escape when closed', async () => {
+    const wrapper = mount(ReusableSearchDropdown, {
+      props: { label: 'Géneros', options: [], required: true },
+    })
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    await wrapper.get('.search-input').trigger('focusout')
+    expect(wrapper.get('[role="alert"]').text()).toBe('Selecciona al menos una opción.')
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    wrapper.get('.search-input').element.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
+  })
   const props = {
     label: 'Géneros',
     options: [
