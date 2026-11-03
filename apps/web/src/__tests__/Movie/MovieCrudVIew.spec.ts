@@ -10,6 +10,16 @@ vi.mock('@/services/movie.service', () => ({
   getMovie: vi.fn(),
 }))
 
+vi.mock('@/services/image-handler.service', () => ({
+  getPosterUrl: vi.fn((value?: string | null) => {
+    const filename = value?.split('/').pop()
+
+    return filename
+      ? `http://localhost:3000/uploads/posters/${encodeURIComponent(filename)}`
+      : null
+  }),
+}))
+
 vi.mock('axios', () => ({
   isAxiosError: vi.fn(),
 }))

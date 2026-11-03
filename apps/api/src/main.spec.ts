@@ -20,6 +20,7 @@ describe('function bootstrap', () => {
     enableCors: jest.fn(),
     enableShutdownHooks: jest.fn(),
     listen: jest.fn().mockResolvedValue(undefined),
+    useStaticAssets: jest.fn(),
   });
 
   afterEach(() => {
