@@ -76,7 +76,7 @@ describe('TheatersService', () => {
     };
 
     await expect(service.create(theaterDto)).rejects.toThrow(
-      'Invalid theater seat dimensions',
+      'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
     );
     expect(repository.createTheater).not.toHaveBeenCalled();
   });
@@ -96,7 +96,9 @@ describe('TheatersService', () => {
           ...dimensions,
           projectorName: 'IMAX',
         }),
-      ).rejects.toThrow('Invalid theater seat dimensions');
+      ).rejects.toThrow(
+        'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
+      );
     }
 
     expect(repository.createTheater).not.toHaveBeenCalled();
@@ -157,7 +159,7 @@ describe('TheatersService', () => {
     });
 
     await expect(service.update(4, { dimensionX: 11 })).rejects.toThrow(
-      'Invalid theater seat dimensions',
+      'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
     );
     expect(repository.updateTheater).not.toHaveBeenCalled();
   });
@@ -171,7 +173,7 @@ describe('TheatersService', () => {
     });
 
     await expect(service.update(4, { numberOfSeats: 0 })).rejects.toThrow(
-      'Invalid theater seat dimensions',
+      'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
     );
     expect(repository.updateTheater).not.toHaveBeenCalled();
   });
@@ -226,7 +228,9 @@ describe('TheatersService', () => {
           numberOfSeats: seats,
           projectorName: 'IMAX',
         }),
-      ).rejects.toThrow('Invalid theater seat dimensions');
+      ).rejects.toThrow(
+        'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
+      );
     },
   );
 
@@ -311,7 +315,7 @@ describe('TheatersService', () => {
       repository.getTheaterById.mockResolvedValueOnce(null);
 
       await expect(service.updateSelected(999, dto)).rejects.toThrow(
-        new NotFoundException('Theater not found: 999'),
+        new NotFoundException('La sala seleccionada ya no existe.'),
       );
 
       expect(repository.getTheaterById).toHaveBeenCalledWith(999);

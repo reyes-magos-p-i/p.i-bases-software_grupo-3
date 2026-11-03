@@ -11,16 +11,53 @@ import { UpdateSeatsDto } from './dto/update-seats.dto';
 export class ChairsRepository {
   constructor(private readonly db: DatabaseService) {}
 
+  async synchronizeLayout(
+    theaterId: number,
+    rows: number,
+    columns: number,
+    connection: oracledb.Connection,
+  ): Promise<void> {
+    if (
+      ![theaterId, rows, columns].every(
+        (value) => Number.isSafeInteger(value) && value > 0,
+      ) ||
+      rows * columns > 5000
+    ) {
+      throw new BadRequestException(
+        'Las filas y columnas deben ser números enteros positivos, con un máximo de 5000 asientos.',
+      );
+    }
+    await connection.execute(
+      'DELETE FROM SEATS WHERE THEATER_ID = :theaterId AND (ROW_NUMBER > :rows OR COLUMN_NUMBER > :columns)',
+      { theaterId, rows, columns },
+      { autoCommit: false },
+    );
+    // Matched seats keep their current type and state; only new positions use defaults.
+    await connection.execute(
+      `MERGE INTO SEATS target
+       USING (SELECT :theaterId AS THEATER_ID,
+                     FLOOR((LEVEL - 1) / :columns) + 1 AS ROW_NUMBER,
+                     MOD(LEVEL - 1, :columns) + 1 AS COLUMN_NUMBER
+                FROM DUAL CONNECT BY LEVEL <= :quantity) source
+          ON (target.THEATER_ID = source.THEATER_ID AND target.ROW_NUMBER = source.ROW_NUMBER
+              AND target.COLUMN_NUMBER = source.COLUMN_NUMBER)
+       WHEN NOT MATCHED THEN INSERT (THEATER_ID, ROW_NUMBER, COLUMN_NUMBER)
+         VALUES (source.THEATER_ID, source.ROW_NUMBER, source.COLUMN_NUMBER)`,
+      { theaterId, columns, quantity: rows * columns },
+      { autoCommit: false },
+    );
+  }
+
   async createForTheater(
     theaterId: number,
     x: number,
     y: number,
     conn?: oracledb.Connection,
   ) {
-    for (const [name, value] of Object.entries({ theaterId, x, y })) {
+    for (const value of Object.values({ theaterId, x, y })) {
       if (!Number.isSafeInteger(value) || value <= 0) {
         throw new BadRequestException(
-          `${name} must be a positive safe integer`,
+          'La sala, las filas y las columnas deben ser números enteros positivos.',
         );
       }
     }
@@ -28,7 +65,9 @@ export class ChairsRepository {
     const total = x * y;
 
     if (!Number.isSafeInteger(total) || total > 10_000) {
-      throw new BadRequestException('A theater may have at most 10000 chairs');
+      throw new BadRequestException(
+        'Una sala puede tener como máximo 10000 asientos.',
+      );
     }
 
     const chairs: {
@@ -75,7 +114,7 @@ export class ChairsRepository {
   ): Promise<void> {
     if (!Number.isSafeInteger(theaterId) || theaterId <= 0) {
       throw new BadRequestException(
-        'theaterId must be a positive safe integer',
+        'El número de sala debe ser un entero positivo.',
       );
     }
 
@@ -97,7 +136,7 @@ export class ChairsRepository {
   async findByTheater(theaterId: number) {
     if (!Number.isSafeInteger(theaterId) || theaterId <= 0) {
       throw new BadRequestException(
-        'theaterId must be a positive safe integer',
+        'El número de sala debe ser un entero positivo.',
       );
     }
 
@@ -143,7 +182,7 @@ export class ChairsRepository {
   async updateSelected(theaterId: number, dto: UpdateSeatsDto) {
     if (!Number.isSafeInteger(theaterId) || theaterId <= 0) {
       throw new BadRequestException(
-        'theaterId must be a positive safe integer',
+        'El número de sala debe ser un entero positivo.',
       );
     }
 
@@ -189,7 +228,9 @@ export class ChairsRepository {
       );
 
       if (result.rowsAffected !== binds.length) {
-        throw new NotFoundException('One or more seats do not exist');
+        throw new NotFoundException(
+          'Uno o más asientos seleccionados ya no existen.',
+        );
       }
 
       return {

@@ -46,6 +46,24 @@ describe('TheatersController', () => {
     expect(controller).toBeDefined();
   });
 
+  it.each(['0', '-1', '1.5', 'abc', '9007199254740992'])(
+    'rejects an invalid route identifier %s without calling the service',
+    (id) => {
+      expect(() => controller.findOne(id)).toThrow(
+        'El número de sala debe ser un entero positivo.',
+      );
+      expect(() => controller.update(id, {})).toThrow(
+        'El número de sala debe ser un entero positivo.',
+      );
+      expect(() => controller.remove(id)).toThrow(
+        'El número de sala debe ser un entero positivo.',
+      );
+      expect(service.findOne).not.toHaveBeenCalled();
+      expect(service.update).not.toHaveBeenCalled();
+      expect(service.remove).not.toHaveBeenCalled();
+    },
+  );
+
   it('creates a theater through the service', async () => {
     const theaterDto = {
       cinema: 'Cinema Test',

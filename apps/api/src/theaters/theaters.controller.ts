@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { TheatersService } from './theaters.service';
 import { CreateTheaterDto } from './dto/create-theater.dto';
@@ -21,6 +22,16 @@ import { UpdateSeatsDto } from './dto/update-seats.dto';
 @Controller('theaters')
 export class TheatersController {
   constructor(private readonly theatersService: TheatersService) {}
+
+  private theaterId(value: string): number {
+    const id = Number(value);
+    if (!/^\d+$/u.test(value) || !Number.isSafeInteger(id) || id < 1) {
+      throw new BadRequestException(
+        'El número de sala debe ser un entero positivo.',
+      );
+    }
+    return id;
+  }
 
   @Post()
   create(@Body() createTheaterDto: CreateTheaterDto) {
@@ -39,17 +50,17 @@ export class TheatersController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.theatersService.findOne(+id);
+    return this.theatersService.findOne(this.theaterId(id));
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateTheaterDto: UpdateTheaterDto) {
-    return this.theatersService.update(+id, updateTheaterDto);
+    return this.theatersService.update(this.theaterId(id), updateTheaterDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.theatersService.remove(+id);
+    return this.theatersService.remove(this.theaterId(id));
   }
 
   @Get(':id/seats')

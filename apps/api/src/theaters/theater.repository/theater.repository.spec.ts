@@ -10,6 +10,7 @@ describe('TheaterRepository', () => {
   let chairsRepository: {
     createForTheater: jest.Mock;
     deleteForTheater: jest.Mock;
+    synchronizeLayout: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -26,6 +27,7 @@ describe('TheaterRepository', () => {
     chairsRepository = {
       createForTheater: jest.fn().mockResolvedValue(undefined),
       deleteForTheater: jest.fn().mockResolvedValue(undefined),
+      synchronizeLayout: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -72,6 +74,7 @@ describe('TheaterRepository', () => {
           dimensionY: 12,
           projectorName: 'IMAX',
           isActive: true,
+          canResize: false,
         },
       ]);
       expect(databaseService.query).toHaveBeenCalledTimes(1);
@@ -138,6 +141,7 @@ describe('TheaterRepository', () => {
       await expect(repository.createTheater(theaterDto)).resolves.toEqual({
         theaterId: 7,
         ...theaterDto,
+        canResize: true,
       });
       expect(databaseService.transaction).toHaveBeenCalledTimes(1);
       expect(connection.execute).toHaveBeenNthCalledWith(
@@ -196,6 +200,7 @@ describe('TheaterRepository', () => {
         {
           theaterId: 8,
           ...dtoWithoutActive,
+          canResize: true,
           isActive: true,
           status: 'Disponible',
         },
@@ -211,7 +216,7 @@ describe('TheaterRepository', () => {
       connection.execute.mockResolvedValueOnce({ rows: [] });
 
       await expect(repository.createTheater(theaterDto)).rejects.toThrow(
-        'Projector not found: IMAX',
+        'Selecciona un proyector válido.',
       );
       expect(connection.execute).toHaveBeenCalledTimes(1);
     });
@@ -222,7 +227,7 @@ describe('TheaterRepository', () => {
         .mockResolvedValueOnce({ rows: [] });
 
       await expect(repository.createTheater(theaterDto)).rejects.toThrow(
-        'Cinema not found: Cinema 2',
+        'Selecciona una sucursal válida.',
       );
       expect(connection.execute).toHaveBeenCalledTimes(2);
     });
@@ -235,7 +240,7 @@ describe('TheaterRepository', () => {
 
       await expect(
         repository.createTheater({ ...theaterDto, status: 'Roto' }),
-      ).rejects.toThrow('Theater status not found: Roto');
+      ).rejects.toThrow('Selecciona un estado de sala válido.');
       expect(connection.execute).toHaveBeenCalledTimes(3);
     });
 
@@ -271,6 +276,7 @@ describe('TheaterRepository', () => {
         dimensionY: 12,
         projectorName: 'IMAX',
         isActive: true,
+        canResize: false,
       });
       expect(databaseService.query).toHaveBeenCalledWith(
         expect.stringContaining('WHERE t.theater_id = :id'),
@@ -299,6 +305,120 @@ describe('TheaterRepository', () => {
   });
 
   describe('updateTheater', () => {
+    function prepareLayout(functions: number) {
+      connection.execute.mockImplementation((sql: string) =>
+        Promise.resolve(
+          sql.includes('FOR UPDATE')
+            ? { rows: [{ DIMENSION_X: 2, DIMENSION_Y: 3, NUMBER_SEATS: 6 }] }
+            : sql.includes('COUNT(*)')
+              ? { rows: [{ TOTAL: functions }] }
+              : { rowsAffected: 1 },
+        ),
+      );
+      databaseService.query.mockResolvedValue({
+        rows: [
+          {
+            THEATER_ID: 7,
+            DIMENSION_X: 3,
+            DIMENSION_Y: 4,
+            NUMBER_SEATS: 12,
+            CAN_RESIZE: functions ? 0 : 1,
+          },
+        ],
+      });
+    }
+
+    it('synchronizes seats under the theater lock before committing new dimensions', async () => {
+      prepareLayout(0);
+      const result = await repository.updateTheater(7, {
+        dimensionX: 3,
+        dimensionY: 4,
+        numberOfSeats: 12,
+      });
+      expect(result.canResize).toBe(true);
+      expect(connection.execute.mock.calls[0][0]).toContain(
+        'FOR UPDATE WAIT 5',
+      );
+      expect(chairsRepository.synchronizeLayout).toHaveBeenCalledWith(
+        7,
+        3,
+        4,
+        connection,
+      );
+      expect(
+        chairsRepository.synchronizeLayout.mock.invocationCallOrder[0],
+      ).toBeLessThan(connection.execute.mock.invocationCallOrder[2]);
+    });
+
+    it('rejects changes to seat coordinates even if the total capacity is unchanged', async () => {
+      prepareLayout(1);
+      await expect(
+        repository.updateTheater(7, { dimensionX: 3, dimensionY: 2 }),
+      ).rejects.toThrow('No puedes cambiar las dimensiones');
+      expect(chairsRepository.synchronizeLayout).not.toHaveBeenCalled();
+      expect(connection.execute).not.toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE Theaters'),
+        expect.anything(),
+      );
+    });
+
+    it('allows ordinary edits with unchanged dimensions in a theater with historical functions', async () => {
+      prepareLayout(4);
+      await expect(
+        repository.updateTheater(7, {
+          dimensionX: 2,
+          dimensionY: 3,
+          numberOfSeats: 6,
+          isActive: true,
+        }),
+      ).resolves.toMatchObject({ canResize: false });
+      expect(chairsRepository.synchronizeLayout).not.toHaveBeenCalled();
+      expect(connection.execute).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE Theaters'),
+        expect.objectContaining({ isActive: 1 }),
+      );
+    });
+
+    it('repairs missing positions when saving an unreferenced theater without changing its dimensions', async () => {
+      prepareLayout(0);
+      await repository.updateTheater(7, { numberOfSeats: 6 });
+      expect(chairsRepository.synchronizeLayout).toHaveBeenCalledWith(
+        7,
+        2,
+        3,
+        connection,
+      );
+    });
+
+    it('revalidates capacity against the locked values', async () => {
+      prepareLayout(0);
+      await expect(
+        repository.updateTheater(7, { dimensionX: 4 }),
+      ).rejects.toThrow('El número de asientos');
+      expect(chairsRepository.synchronizeLayout).not.toHaveBeenCalled();
+    });
+
+    it('does not update the theater when synchronizing its seats fails', async () => {
+      prepareLayout(0);
+      const failure = new Error('Failed to synchronize seats');
+      chairsRepository.synchronizeLayout.mockRejectedValueOnce(failure);
+      await expect(
+        repository.updateTheater(7, {
+          dimensionX: 3,
+          dimensionY: 4,
+          numberOfSeats: 12,
+        }),
+      ).rejects.toBe(failure);
+      expect(connection.execute).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports a missing theater before altering any seats', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [] });
+      await expect(
+        repository.updateTheater(7, { dimensionX: 1 }),
+      ).rejects.toThrow('La sala seleccionada ya no existe.');
+      expect(chairsRepository.synchronizeLayout).not.toHaveBeenCalled();
+    });
     it('returns the existing theater when no fields are provided', async () => {
       databaseService.query.mockResolvedValue({
         rows: [
@@ -322,6 +442,7 @@ describe('TheaterRepository', () => {
         dimensionY: 12,
         projectorName: 'IMAX',
         isActive: true,
+        canResize: false,
       });
       expect(databaseService.transaction).not.toHaveBeenCalled();
       expect(databaseService.query).toHaveBeenCalledTimes(1);
@@ -331,13 +452,17 @@ describe('TheaterRepository', () => {
       databaseService.query.mockResolvedValue({ rows: [] });
 
       await expect(repository.updateTheater(999, {})).rejects.toThrow(
-        'Theater not found: 999',
+        'La sala seleccionada ya no existe.',
       );
       expect(databaseService.transaction).not.toHaveBeenCalled();
     });
 
     it('updates theater fields and returns the refreshed theater', async () => {
       connection.execute
+        .mockResolvedValueOnce({
+          rows: [{ DIMENSION_X: 10, DIMENSION_Y: 12, NUMBER_SEATS: 120 }],
+        })
+        .mockResolvedValueOnce({ rows: [{ TOTAL: 0 }] })
         .mockResolvedValueOnce({ rows: [{ BRANCH_ID: 3 }] })
         .mockResolvedValueOnce({ rowsAffected: 1 });
       databaseService.query.mockResolvedValue({
@@ -345,7 +470,7 @@ describe('TheaterRepository', () => {
           {
             THEATER_ID: 7,
             CINEMA: 'Cinema 3',
-            NUMBER_SEATS: 150,
+            NUMBER_SEATS: 168,
             DIMENSION_X: 12,
             DIMENSION_Y: 14,
             PROJECTOR_NAME: 'IMAX',
@@ -357,7 +482,7 @@ describe('TheaterRepository', () => {
       await expect(
         repository.updateTheater(7, {
           cinema: 'Cinema 3',
-          numberOfSeats: 150,
+          numberOfSeats: 168,
           dimensionX: 12,
           dimensionY: 14,
           isActive: false,
@@ -365,11 +490,12 @@ describe('TheaterRepository', () => {
       ).resolves.toEqual({
         theaterId: 7,
         cinema: 'Cinema 3',
-        numberOfSeats: 150,
+        numberOfSeats: 168,
         dimensionX: 12,
         dimensionY: 14,
         projectorName: 'IMAX',
         isActive: false,
+        canResize: false,
       });
       expect(databaseService.transaction).toHaveBeenCalledTimes(1);
       expect(connection.execute).toHaveBeenCalledWith(
@@ -377,7 +503,7 @@ describe('TheaterRepository', () => {
         expect.objectContaining({
           id: 7,
           branchId: 3,
-          numberOfSeats: 150,
+          numberOfSeats: 168,
           dimensionX: 12,
           dimensionY: 14,
           isActive: 0,
@@ -409,7 +535,7 @@ describe('TheaterRepository', () => {
 
       await expect(
         repository.updateTheater(7, { status: 'Roto' }),
-      ).rejects.toThrow('Theater status not found: Roto');
+      ).rejects.toThrow('Selecciona un estado de sala válido.');
     });
 
     it('resolves the projector when updating projectorName', async () => {
@@ -440,6 +566,7 @@ describe('TheaterRepository', () => {
         dimensionY: 12,
         projectorName: 'Dolby',
         isActive: true,
+        canResize: false,
       });
       expect(connection.execute).toHaveBeenNthCalledWith(
         1,
@@ -461,7 +588,7 @@ describe('TheaterRepository', () => {
 
       await expect(
         repository.updateTheater(7, { projectorName: 'Unknown' }),
-      ).rejects.toThrow('Projector not found: Unknown');
+      ).rejects.toThrow('Selecciona un proyector válido.');
       expect(connection.execute).toHaveBeenCalledTimes(1);
       expect(databaseService.query).not.toHaveBeenCalled();
     });
@@ -471,7 +598,7 @@ describe('TheaterRepository', () => {
 
       await expect(
         repository.updateTheater(999, { isActive: true }),
-      ).rejects.toThrow('Theater not found: 999');
+      ).rejects.toThrow('La sala seleccionada ya no existe.');
       expect(databaseService.query).not.toHaveBeenCalled();
     });
 
@@ -490,7 +617,7 @@ describe('TheaterRepository', () => {
 
       await expect(
         repository.updateTheater(7, { isActive: false }),
-      ).rejects.toThrow('Theater not found: 7');
+      ).rejects.toThrow('La sala seleccionada ya no existe.');
     });
   });
 
@@ -517,7 +644,7 @@ describe('TheaterRepository', () => {
       connection.execute.mockResolvedValueOnce({ rowsAffected: 0 });
 
       await expect(repository.deleteTheater(999)).rejects.toThrow(
-        'Theater not found: 999',
+        'La sala seleccionada ya no existe.',
       );
 
       expect(chairsRepository.deleteForTheater).not.toHaveBeenCalled();
