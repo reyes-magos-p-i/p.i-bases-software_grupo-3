@@ -1,4 +1,5 @@
 :root {
+  --font-family: Helvetica, Arial, sans-serif;
   /* Palette */
   --primary-color: #8a2be2;
   --accent-color: #ffd700;
@@ -113,6 +114,7 @@
 
   /* Bootstrap and DaisyUI use their own token names. */
   --bs-primary: var(--primary-color);
+  --bs-body-font-family: var(--font-family);
   --bs-secondary: var(--surface-background);
   --bs-body-color: var(--text-primary);
   --bs-body-bg: var(--content-background);
