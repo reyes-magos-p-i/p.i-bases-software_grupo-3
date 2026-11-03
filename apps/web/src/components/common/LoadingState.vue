@@ -1,13 +1,14 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ message: string; surface?: 'light' | 'dark' }>(), {
+withDefaults(defineProps<{ message: string; surface?: 'light' | 'dark'; compact?: boolean }>(), {
   surface: 'light',
+  compact: false,
 })
 </script>
 
 <template>
   <div
     class="loading-state"
-    :class="{ 'loading-state--dark': surface === 'dark' }"
+    :class="{ 'loading-state--dark': surface === 'dark', 'loading-state--compact': compact }"
     role="status"
     aria-live="polite"
     aria-atomic="true"
@@ -115,6 +116,27 @@ withDefaults(defineProps<{ message: string; surface?: 'light' | 'dark' }>(), {
   line-height: 1.5;
   text-align: center;
   overflow-wrap: anywhere;
+}
+
+.loading-state--compact {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  min-height: 44px;
+  padding: 0.5rem 0;
+  border: 0;
+  background: transparent;
+}
+
+.loading-state--compact .loading-indicator {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+}
+
+.loading-state--compact .loading-message {
+  text-align: left;
 }
 
 @keyframes loading-reveal {

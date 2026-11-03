@@ -3,6 +3,16 @@ import { mount } from '@vue/test-utils'
 import LoadingState from '@/components/common/LoadingState.vue'
 
 describe('LoadingState', () => {
+  it('uses the same accessible indicator in compact contexts', () => {
+    const wrapper = mount(LoadingState, {
+      props: { message: 'Buscando películas…', compact: true, surface: 'dark' },
+    })
+    expect(wrapper.classes()).toContain('loading-state--compact')
+    expect(wrapper.classes()).toContain('loading-state--dark')
+    expect(wrapper.findAll('svg')).toHaveLength(1)
+    expect(wrapper.get('[role="status"]').text()).toBe('Buscando películas…')
+    wrapper.unmount()
+  })
   it('announces the supplied message and hides the decoration from assistive technology', () => {
     const wrapper = mount(LoadingState, { props: { message: 'Cargando clientes…' } })
 
