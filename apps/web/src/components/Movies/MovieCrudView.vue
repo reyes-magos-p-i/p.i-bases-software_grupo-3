@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 
 import BaseModal from '@/components/common/BaseModal.vue'
 import { getMovie } from '@/services/movie.service'
 import type { MovieDetail, MovieOption } from '@/types/movie'
-import { getPosterUrl } from '@/services/image-handler.service'
+import MoviePoster from '@/components/common/MoviePoster.vue'
+import { displayText } from '@/utils/display-text'
 
 const props = defineProps<{
   movieId: number | null
@@ -21,10 +23,6 @@ const movie = ref<MovieDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
 const retryable = ref(false)
-
-const posterUrl = computed(() =>
-  getPosterUrl(movie.value?.posterImage),
-)
 
 let request: AbortController | undefined
 
@@ -45,7 +43,7 @@ function text(value: unknown) {
 }
 
 function optionName(value: MovieOption | null | undefined) {
-  return value?.name?.trim() ? value.name : 'Sin registrar'
+  return value?.name?.trim() ? displayText(value.name) : 'Sin registrar'
 }
 
 function optionList(values: MovieOption[] | null | undefined) {
@@ -53,7 +51,7 @@ function optionList(values: MovieOption[] | null | undefined) {
     return 'Sin registrar'
   }
 
-  const names = values.map((value) => value.name).filter((name) => name?.trim())
+  const names = values.map((value) => displayText(value.name)).filter(Boolean)
 
   return names.length > 0 ? names.join(', ') : 'Sin registrar'
 }
@@ -156,10 +154,6 @@ async function load() {
 
   try {
     const detail = await getMovie(movieId, current.signal)
-    //debug stuff
-    console.log('MOVIE DETAIL:', detail)
-    console.log('MOVIE DETAIL:', detail)
-    console.log('CLASSIFICATION:', detail.classification)
     if (!current.signal.aborted) {
       movie.value = detail
     }
@@ -212,7 +206,12 @@ onBeforeUnmount(() => request?.abort())
 <template>
   <BaseModal :open="movieId !== null" :title="title" @close="close">
     <div class="movie-detail-content" :aria-busy="loading">
-      <p v-if="loading" class="detail-feedback" role="status">Cargando datos de la película…</p>
+      <LoadingState
+        v-if="loading"
+        class="detail-feedback"
+        message="Cargando datos de la película…"
+        compact
+      />
 
       <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         <p>{{ error }}</p>
@@ -222,9 +221,7 @@ onBeforeUnmount(() => request?.abort())
         </button>
       </div>
 
-
-
-     <div v-else-if="movie" class="movie-layout">
+      <div v-else-if="movie" class="movie-layout">
         <div class="movie-information">
           <section
             v-for="group in groups"
@@ -249,16 +246,9 @@ onBeforeUnmount(() => request?.abort())
         </div>
 
         <div class="movie-poster">
-          <img
-            v-if="posterUrl"
-            :src="posterUrl"
-            :alt="`Póster de ${movie.title}`"
-          />
-
-          <span v-else>Sin póster</span>
+          <MoviePoster :poster-image="movie.posterImage" :title="movie.title" />
         </div>
       </div>
-
 
       <footer class="detail-footer">
         <button type="button" class="detail-button" @click="close">Cerrar</button>
@@ -405,7 +395,7 @@ dd {
   place-items: center;
   overflow: hidden;
   border-radius: 8px;
-  background: #f2f2f2;
+  background: var(--content-background);
 }
 
 .movie-poster img {
@@ -424,5 +414,4 @@ dd {
     justify-self: center;
   }
 }
-
 </style>

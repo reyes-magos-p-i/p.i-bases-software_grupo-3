@@ -3,8 +3,8 @@ import { ref } from 'vue'
 import { isAxiosError } from 'axios'
 
 import BaseModal from '@/components/common/BaseModal.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { deleteMovie } from '@/services/movie.service'
-
 
 const props = defineProps<{
   movie: {
@@ -45,7 +45,6 @@ async function confirmDelete() {
       const status = failure.response?.status
 
       if (status === 401) {
-
         error.value = 'La sesión ha expirado.'
       } else if (status === 403) {
         error.value = 'No tienes permiso para eliminar esta película.'
@@ -71,47 +70,37 @@ async function confirmDelete() {
     @close="close"
   >
     <div class="movie-delete-content movie-form-modal">
-
       <p>
         ¿Estás seguro de que deseas eliminar la película
-        <strong>{{ movie?.title }}</strong>?
+        <strong>{{ movie?.title }}</strong
+        >?
       </p>
 
-      <p class="delete-warning">
-        Esta acción no se puede deshacer.
-      </p>
+      <p class="delete-warning">Esta acción no se puede deshacer.</p>
 
-      <p v-if="error" class="delete-error" role="alert">
-        {{ error }}
-      </p>
+      <NotificationPopup
+        v-if="error"
+        type="error"
+        :message="error"
+        :duration="0"
+        placement="bottom-right"
+        @close="error = ''"
+      />
 
       <footer class="delete-footer">
-        <button
-          type="button"
-          class="secondary"
-          :disabled="deleting"
-          @click="close"
-        >
+        <button type="button" class="secondary" :disabled="deleting" @click="close">
           Cancelar
         </button>
 
-        <button
-          type="button"
-          class="danger"
-          :disabled="deleting"
-          @click="confirmDelete"
-        >
+        <button type="button" class="danger" :disabled="deleting" @click="confirmDelete">
           {{ deleting ? 'Eliminando...' : 'Eliminar película' }}
         </button>
       </footer>
-
     </div>
   </BaseModal>
 </template>
 
-
 <style scoped>
-
 .movie-delete-content {
   padding: 24px;
   color: var(--text-primary);
@@ -156,7 +145,7 @@ async function confirmDelete() {
 .danger {
   background: var(--error-color);
   border-color: var(--error-color) !important;
-  color: white;
+  color: var(--text-on-dark);
 }
 
 .danger:hover:not(:disabled) {
@@ -173,4 +162,3 @@ button:focus-visible {
   outline-offset: 2px;
 }
 </style>
-

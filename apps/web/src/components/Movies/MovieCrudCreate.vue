@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 
 import BaseModal from '@/components/common/BaseModal.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import {
+  MOVIE_TITLE_LIMIT as TITLE_LIMIT,
+  MOVIE_SYNOPSIS_LIMIT as SYNOPSIS_LIMIT,
+  movieErrorsFromApi,
+  validateMovie,
+  type MovieErrors,
+} from '@/utils/movie-validation'
 import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
 import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
@@ -27,9 +35,6 @@ const emit = defineEmits<{
   forbidden: []
 }>()
 
-const TITLE_LIMIT = 100
-const SYNOPSIS_LIMIT = 1000
-
 const form = reactive({
   title: '',
   synopsis: '',
@@ -43,13 +48,12 @@ const form = reactive({
 
 const saving = ref(false)
 const error = ref('')
+const validationNotice = ref('')
+const fieldErrors = reactive<MovieErrors>({})
+const formElement = useTemplateRef<HTMLFormElement>('form-element')
 const selectedPoster = ref<File | null>(null)
 
-const existingPosterUrl = computed(() =>
-  getPosterUrl(form.posterImage),
-)
-const runningTimeValid = ref(false)
-const releaseYearValid = ref(false)
+const existingPosterUrl = computed(() => getPosterUrl(form.posterImage))
 
 const languageOptions = computed(() =>
   props.languages.map((item) => ({
@@ -65,21 +69,17 @@ const genreOptions = computed(() =>
   })),
 )
 
-const isFormValid = computed(
-  () =>
-    form.title.trim().length > 0 &&
-    form.title.length <= TITLE_LIMIT &&
-    form.synopsis.trim().length > 0 &&
-    form.synopsis.length <= SYNOPSIS_LIMIT &&
-    runningTimeValid.value &&
-    releaseYearValid.value &&
-    form.classificationId !== null &&
-    form.languageIds.length > 0 &&
-    form.genreIds.length > 0,
-)
-
 async function save() {
-  if (saving.value || !isFormValid.value) return
+  if (saving.value) return
+  error.value = ''
+  for (const field of Object.keys(fieldErrors)) delete fieldErrors[field as keyof MovieErrors]
+  validationNotice.value = ''
+  Object.assign(fieldErrors, validateMovie(form, props))
+  if (Object.keys(fieldErrors).length) {
+    await nextTick()
+    formElement.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+    return
+  }
 
   const runningTime = form.runningTime
   const releaseYear = form.releaseYear
@@ -117,6 +117,12 @@ async function save() {
         emit('session-expired')
       } else if (failure.response?.status === 403) {
         emit('forbidden')
+      } else if (failure.response?.status === 400) {
+        Object.assign(fieldErrors, movieErrorsFromApi(failure.response.data?.message))
+        if (!Object.keys(fieldErrors).length)
+          validationNotice.value =
+            'Revisa los datos y la imagen seleccionada antes de volver a intentarlo.'
+        return
       }
     }
 
@@ -130,72 +136,97 @@ async function save() {
 <template>
   <BaseModal :open="true" title="Crear película" :close-disabled="saving" @close="emit('close')">
     <div class="movie-create-content">
-      <form @submit.prevent="save">
+      <form
+        ref="form-element"
+        novalidate
+        @submit.prevent="save"
+        @input="validationNotice = ''"
+        @change="validationNotice = ''"
+      >
         <fieldset class="create-fieldset" :disabled="saving">
           <div class="movie-create-layout">
             <div class="movie-fields">
               <!-- All your movie fields -->
-               <h3>Información general</h3>
+              <h3>Información general</h3>
 
-        <div class="form-grid">
-          <LimitedTextInput v-model="form.title" label="Título" :limit="TITLE_LIMIT" required />
+              <div class="form-grid">
+                <LimitedTextInput
+                  v-model="form.title"
+                  label="Título"
+                  :limit="TITLE_LIMIT"
+                  :error="fieldErrors.title"
+                  required
+                  @update:model-value="delete fieldErrors.title"
+                />
 
-          <PositiveNumberInput
-            v-model="form.runningTime"
-            label="Duración en minutos"
-            :min="1"
-            :max="999"
-            required
-            @validity-change="runningTimeValid = $event"
-          />
+                <PositiveNumberInput
+                  v-model="form.runningTime"
+                  label="Duración en minutos"
+                  :min="1"
+                  :max="999"
+                  required
+                  :error="fieldErrors.runningTime"
+                  @update:model-value="delete fieldErrors.runningTime"
+                />
 
-          <PositiveNumberInput
-            v-model="form.releaseYear"
-            label="Año de estreno"
-            :min="1888"
-            :max="2077"
-            required
-            @validity-change="releaseYearValid = $event"
-          />
-        </div>
+                <PositiveNumberInput
+                  v-model="form.releaseYear"
+                  label="Año de estreno"
+                  :min="1888"
+                  :max="2077"
+                  required
+                  :error="fieldErrors.releaseYear"
+                  @update:model-value="delete fieldErrors.releaseYear"
+                />
+              </div>
 
-                <div class="form-group">
-                  <SimpleDropdown
-                    v-model="form.classificationId"
-                    label="Clasificación"
-                    :options="classifications"
-                    required
-                  />
-                </div>
+              <div class="form-group">
+                <SimpleDropdown
+                  v-model="form.classificationId"
+                  label="Clasificación"
+                  :options="classifications"
+                  :error="fieldErrors.classificationId"
+                  @update:model-value="delete fieldErrors.classificationId"
+                  required
+                />
+              </div>
 
-                <div class="form-group">
-                  <ReusableSearchDropdown
-                    v-model="form.languageIds"
-                    label="Idiomas"
-                    placeholder="Buscar idiomas..."
-                    :options="languageOptions"
-                  />
-                </div>
+              <div class="form-group">
+                <ReusableSearchDropdown
+                  v-model="form.languageIds"
+                  label="Idiomas"
+                  placeholder="Buscar idiomas..."
+                  :options="languageOptions"
+                  required
+                  :error="fieldErrors.languageIds"
+                  @update:model-value="delete fieldErrors.languageIds"
+                />
+              </div>
 
-                <div class="form-group">
-                  <ReusableSearchDropdown
-                    v-model="form.genreIds"
-                    label="Géneros"
-                    placeholder="Buscar géneros..."
-                    :options="genreOptions"
-                  />
-                </div>
+              <div class="form-group">
+                <ReusableSearchDropdown
+                  v-model="form.genreIds"
+                  label="Géneros"
+                  placeholder="Buscar géneros..."
+                  :options="genreOptions"
+                  required
+                  :error="fieldErrors.genreIds"
+                  @update:model-value="delete fieldErrors.genreIds"
+                />
+              </div>
 
-                <div class="form-group">
-                  <LimitedTextInput
-                    v-model="form.synopsis"
-                    label="Sinopsis"
-                    :limit="SYNOPSIS_LIMIT"
-                    multiline
-                    :rows="5"
-                    required
-                  />
-                </div>
+              <div class="form-group">
+                <LimitedTextInput
+                  v-model="form.synopsis"
+                  label="Sinopsis"
+                  :limit="SYNOPSIS_LIMIT"
+                  :error="fieldErrors.synopsis"
+                  @update:model-value="delete fieldErrors.synopsis"
+                  multiline
+                  :rows="5"
+                  required
+                />
+              </div>
             </div>
 
             <aside class="poster-column">
@@ -209,16 +240,22 @@ async function save() {
           </div>
         </fieldset>
 
-        <p v-if="error" class="form-error" role="alert">
-          {{ error }}
-        </p>
+        <p v-if="validationNotice" class="form-error" role="alert">{{ validationNotice }}</p>
+        <NotificationPopup
+          v-if="error"
+          type="error"
+          :message="error"
+          :duration="0"
+          placement="bottom-right"
+          @close="error = ''"
+        />
 
         <footer class="form-footer">
           <button type="button" class="secondary" :disabled="saving" @click="emit('close')">
             Cancelar
           </button>
 
-          <button type="submit" class="primary" :disabled="!isFormValid || saving">
+          <button type="submit" class="primary" :disabled="saving">
             {{ saving ? 'Creando...' : 'Crear película' }}
           </button>
         </footer>

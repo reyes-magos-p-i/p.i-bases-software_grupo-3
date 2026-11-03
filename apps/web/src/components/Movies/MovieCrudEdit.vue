@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import LoadingState from '@/components/common/LoadingState.vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, useTemplateRef, watch } from 'vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import { movieErrorsFromApi, validateMovie, type MovieErrors } from '@/utils/movie-validation'
 import { isAxiosError } from 'axios'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { getMovie, updateMovie } from '@/services/movie.service'
@@ -10,7 +13,6 @@ import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
 import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 import ImageUpload from '../image/ImageUpload.vue'
 import { uploadPoster, getPosterUrl } from '@/services/image-handler.service'
-
 
 const props = defineProps<{
   movieId: number | null
@@ -31,10 +33,11 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const saveError = ref('')
+const validationNotice = ref('')
+const fieldErrors = reactive<MovieErrors>({})
+const formElement = useTemplateRef<HTMLFormElement>('form-element')
 const retryable = ref(false)
 const selectedPoster = ref<File | null>(null)
-const runningTimeValid = ref(false)
-const releaseYearValid = ref(false)
 
 const form = reactive({
   title: '',
@@ -47,26 +50,10 @@ const form = reactive({
   posterImage: null as string | null,
 })
 
-const existingPosterUrl = computed(() =>
-  getPosterUrl(form.posterImage),
-)
+const existingPosterUrl = computed(() => getPosterUrl(form.posterImage))
 
 let request: AbortController | undefined
 let saveRequest: AbortController | undefined
-
-const isFormValid = computed(() => {
-  return (
-    form.title.trim().length > 0 &&
-    form.title.length <= 100 &&
-    form.synopsis.trim().length > 0 &&
-    form.synopsis.length <= 1000 &&
-    Number.isInteger(form.runningTime) &&
-    Number.isInteger(form.releaseYear) &&
-    runningTimeValid.value &&
-    releaseYearValid.value &&
-    form.classificationId !== null
-  )
-})
 
 const hasChanges = computed(() => {
   if (!movie.value) return false
@@ -84,7 +71,7 @@ const hasChanges = computed(() => {
     form.synopsis !== original.synopsis ||
     form.runningTime !== original.runningTime ||
     form.releaseYear !== original.releaseYear ||
-    form.classificationId !== original.classification.id ||
+    form.classificationId !== (original.classification?.id ?? null) ||
     !sameIds(
       form.languageIds,
       original.languages.map((l) => l.id),
@@ -96,9 +83,7 @@ const hasChanges = computed(() => {
   )
 })
 
-const canSave = computed(
-  () => hasChanges.value && isFormValid.value && !saving.value && !loading.value,
-)
+const canSave = computed(() => hasChanges.value && !saving.value && !loading.value)
 
 const title = computed(() =>
   movie.value ? `Modificar ${movie.value.title}` : 'Modificar película',
@@ -112,7 +97,7 @@ const languageOptions = computed(() =>
 )
 
 const genreOptions = computed(() =>
-  props.genres.map(genre => ({
+  props.genres.map((genre) => ({
     value: genre.id,
     label: genre.name,
   })),
@@ -132,13 +117,14 @@ function reportError(failure: unknown, operation: 'load' | 'save') {
   } else if (status === 404) {
     message = 'La película seleccionada ya no existe.'
   } else if (status === 400 && operation === 'save') {
-    const backendMessage = isAxiosError(failure) ? failure.response?.data?.message : undefined
-
-    message = Array.isArray(backendMessage)
-      ? backendMessage.join(' ')
-      : typeof backendMessage === 'string'
-        ? backendMessage
-        : 'Revisa los datos ingresados.'
+    Object.assign(
+      fieldErrors,
+      movieErrorsFromApi(isAxiosError(failure) ? failure.response?.data?.message : undefined),
+    )
+    if (!Object.keys(fieldErrors).length)
+      validationNotice.value =
+        'Revisa los datos y la imagen seleccionada antes de volver a intentarlo.'
+    return
   } else {
     message =
       operation === 'load'
@@ -166,6 +152,8 @@ async function load() {
   form.posterImage = null
   error.value = ''
   saveError.value = ''
+  validationNotice.value = ''
+  for (const field of Object.keys(fieldErrors)) delete fieldErrors[field as keyof MovieErrors]
   retryable.value = false
   saving.value = false
 
@@ -215,12 +203,16 @@ async function save() {
   if (movieId === null || saving.value || loading.value) return
 
   saveError.value = ''
+  validationNotice.value = ''
 
   // Validate again after trimming and before sending the request.
   if (!hasChanges.value) return
 
-  if (!isFormValid.value) {
-    saveError.value = 'Completa los campos requeridos con valores válidos.'
+  for (const field of Object.keys(fieldErrors)) delete fieldErrors[field as keyof MovieErrors]
+  Object.assign(fieldErrors, validateMovie(form, props, false))
+  if (Object.keys(fieldErrors).length) {
+    await nextTick()
+    formElement.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
     return
   }
 
@@ -295,7 +287,12 @@ onBeforeUnmount(() => {
 <template>
   <BaseModal :open="movieId !== null" :title="title" @close="close">
     <div class="movie-detail-content" :aria-busy="loading || saving">
-      <p v-if="loading" class="detail-feedback" role="status">Cargando datos de la película…</p>
+      <LoadingState
+        v-if="loading"
+        class="detail-feedback"
+        message="Cargando datos de la película…"
+        compact
+      />
 
       <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         <p>{{ error }}</p>
@@ -305,7 +302,14 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <form v-else-if="movie" @submit.prevent="save">
+      <form
+        v-else-if="movie"
+        ref="form-element"
+        novalidate
+        @submit.prevent="save"
+        @input="validationNotice = ''"
+        @change="validationNotice = ''"
+      >
         <fieldset class="edit-fieldset" :disabled="saving">
           <div class="movie-edit-layout">
             <div class="movie-fields">
@@ -323,6 +327,8 @@ onBeforeUnmount(() => {
                       label="Título"
                       placeholder="Ingrese el título"
                       :limit="100"
+                      :error="fieldErrors.title"
+                      @update:model-value="delete fieldErrors.title"
                       required
                     />
                   </div>
@@ -337,7 +343,8 @@ onBeforeUnmount(() => {
                   :min="1"
                   :max="999"
                   required
-                  @validity-change="runningTimeValid = $event"
+                  :error="fieldErrors.runningTime"
+                  @update:model-value="delete fieldErrors.runningTime"
                 />
               </div>
 
@@ -349,7 +356,8 @@ onBeforeUnmount(() => {
                   :min="1888"
                   :max="2077"
                   required
-                  @validity-change="releaseYearValid = $event"
+                  :error="fieldErrors.releaseYear"
+                  @update:model-value="delete fieldErrors.releaseYear"
                 />
               </div>
               <section class="detail-group">
@@ -358,6 +366,8 @@ onBeforeUnmount(() => {
                   label="Clasificación"
                   placeholder="Seleccione una clasificación"
                   :options="classifications"
+                  :error="fieldErrors.classificationId"
+                  @update:model-value="delete fieldErrors.classificationId"
                   required
                 />
               </section>
@@ -367,6 +377,8 @@ onBeforeUnmount(() => {
                 label="Idiomas"
                 placeholder="Buscar idiomas..."
                 :options="languageOptions"
+                :error="fieldErrors.languageIds"
+                @update:model-value="delete fieldErrors.languageIds"
               />
               <ReusableSearchDropdown
                 v-model="form.genreIds"
@@ -374,34 +386,45 @@ onBeforeUnmount(() => {
                 label="Géneros"
                 placeholder="Buscar géneros..."
                 :options="genreOptions"
+                :error="fieldErrors.genreIds"
+                @update:model-value="delete fieldErrors.genreIds"
               />
               <section class="detail-group">
-                  <LimitedTextInput
+                <LimitedTextInput
                   v-model="form.synopsis"
                   label="Sinopsis"
                   placeholder="Ingrese la sinopsis"
                   :limit="1000"
+                  :error="fieldErrors.synopsis"
+                  @update:model-value="delete fieldErrors.synopsis"
                   multiline
                   :rows="5"
                   required
                 />
               </section>
-
-          </div>
-              <aside class="poster-column">
-                <ImageUpload
-                  v-model="selectedPoster"
-                  label="Póster de la película"
-                  :existing-image-url="existingPosterUrl"
-                  :disabled="saving"
-                />
-              </aside>
+            </div>
+            <aside class="poster-column">
+              <ImageUpload
+                v-model="selectedPoster"
+                label="Póster de la película"
+                :existing-image-url="existingPosterUrl"
+                :disabled="saving"
+              />
+            </aside>
           </div>
         </fieldset>
 
-        <p v-if="saveError" class="detail-feedback detail-error" role="alert">
-          {{ saveError }}
+        <p v-if="validationNotice" class="detail-feedback detail-error" role="alert">
+          {{ validationNotice }}
         </p>
+        <NotificationPopup
+          v-if="saveError"
+          type="error"
+          :message="saveError"
+          :duration="0"
+          placement="bottom-right"
+          @close="saveError = ''"
+        />
 
         <footer class="detail-footer">
           <button type="button" class="detail-button" :disabled="saving" @click="close">
