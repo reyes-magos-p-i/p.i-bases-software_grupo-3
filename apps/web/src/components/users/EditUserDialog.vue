@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { useBlurValidation } from '@/composables/useBlurValidation'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
@@ -53,6 +54,7 @@ const blocked = ref(false)
 const confirming = ref(false)
 const errors = reactive<Record<string, string>>({})
 const feedback = ref<HTMLElement | null>(null)
+const formElement = ref<HTMLFormElement | null>(null)
 let request: AbortController | undefined
 let catalogRequest: AbortController | undefined
 let disposed = false
@@ -423,7 +425,7 @@ async function save() {
           message === 'El correo electrónico ya está registrado para otro empleado.'
         ) {
           errors.email = 'El correo electrónico ya está registrado para otro usuario.'
-          error.value = 'Revisa el correo electrónico antes de guardar.'
+          error.value = ''
         } else {
           error.value =
             message === 'Debe permanecer al menos un administrador activo.'
@@ -458,9 +460,11 @@ async function save() {
                       : lower.includes('rol')
                         ? 'role'
                         : 'address')
-          errors[field] = value
+          errors[field] = /ORA-|SELECT\b|INSERT\b|stack|UTF-8|bytes|must|should/iu.test(value)
+            ? 'Revisa este campo e inténtalo nuevamente.'
+            : value
         }
-        error.value = 'Revisa los campos indicados antes de guardar.'
+        error.value = ''
       } else {
         error.value =
           'No se pudo confirmar si los cambios se guardaron. Cierra y vuelve a abrir el usuario para comprobar sus datos antes de intentar otra modificación.'
@@ -468,7 +472,8 @@ async function save() {
       }
     }
     await nextTick()
-    feedback.value?.focus()
+    if (error.value) feedback.value?.focus()
+    else formElement.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
   } finally {
     if (!disposed) saving.value = false
   }
@@ -496,7 +501,7 @@ onBeforeUnmount(() => {
 <template>
   <BaseModal :open="!!selection" :title="title" :close-disabled="saving" @close="close">
     <div class="user-edit-content" :aria-busy="loading || saving">
-      <p v-if="loading" role="status">Cargando datos del usuario…</p>
+      <LoadingState v-if="loading" message="Cargando datos del usuario…" compact />
       <div v-if="error" ref="feedback" class="edit-feedback edit-error" tabindex="-1">
         <NotificationPopup type="error" :message="error" :duration="0" />
         <button v-if="retryable" class="secondary" type="button" @click="load">Reintentar</button>
@@ -537,6 +542,7 @@ onBeforeUnmount(() => {
         </div>
         <form
           v-else
+          ref="formElement"
           novalidate
           @submit.prevent="prepare"
           @input="editedField"

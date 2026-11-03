@@ -469,6 +469,7 @@ describe('EditUserDialog', () => {
     await confirm()
     expect(page.get('input[name="email"]').attributes('aria-invalid')).toBe('true')
     expect(page.text()).toContain('El correo electrónico ya está registrado para otro usuario.')
+    expect(page.find('.notification-popup').exists()).toBe(false)
     expect(updateUser).toHaveBeenCalledTimes(1)
   })
   it('explains the last-administrator conflict without marking the email', async () => {

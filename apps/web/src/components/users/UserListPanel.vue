@@ -378,7 +378,7 @@ defineExpose({ refresh })
           :disabled="optionsLoading || !!optionsError"
         >
           <legend class="visually-hidden">Filtrar por sucursales</legend>
-          <p v-if="optionsLoading" role="status">Cargando sucursales…</p>
+          <LoadingState v-if="optionsLoading" message="Cargando sucursales…" compact />
           <p v-else-if="optionsError">Sucursales no disponibles.</p>
           <p v-else-if="!branches.length">No hay sucursales registradas.</p>
           <label v-for="branch in branches" :key="branch.id"

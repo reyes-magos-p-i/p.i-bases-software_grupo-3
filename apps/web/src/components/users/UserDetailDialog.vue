@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import UserStatusBadge from '@/components/users/UserStatusBadge.vue'
@@ -176,7 +177,12 @@ onBeforeUnmount(() => request?.abort())
 <template>
   <BaseModal :open="!!selection" :title="title" @close="close">
     <div class="user-detail-content" :aria-busy="loading">
-      <p v-if="loading" class="detail-feedback" role="status">Cargando datos del usuario…</p>
+      <LoadingState
+        v-if="loading"
+        class="detail-feedback"
+        message="Cargando datos del usuario…"
+        compact
+      />
       <div v-else-if="error" class="detail-feedback detail-error">
         <NotificationPopup type="error" :message="error" :duration="0" />
         <button v-if="retryable" type="button" class="detail-button" @click="load">
