@@ -7,7 +7,9 @@ import AppFooter from '@/components/layout/AppFooter.vue'
   <AppHeader />
   <main>
     <div class="landing-container home-content">
-        <h1>Oops, no hay nada aqui. Estamos trabajando en ello.</h1>
+      <h1>No encontramos esta página</h1>
+      <p>Revisa la dirección o vuelve al portal para continuar.</p>
+      <RouterLink to="/">Volver al portal</RouterLink>
     </div>
   </main>
   <AppFooter />

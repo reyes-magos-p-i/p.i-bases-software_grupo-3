@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import defaultProfileImage from '@/assets/profile/profile-circle-svgrepo-com.svg'
 import type { ClientIdentity } from '@/types/client-auth'
 
@@ -11,6 +11,7 @@ const emit = defineEmits<{
 }>()
 const menuOpen = ref(false)
 const root = ref<HTMLElement | null>(null)
+const opener = ref<HTMLButtonElement | null>(null)
 const dropdownId = useId()
 const fullName = computed(() =>
   [props.user.firstName, props.user.lastName].filter(Boolean).join(' '),
@@ -30,6 +31,21 @@ function closeOnOutsideClick(event: PointerEvent) {
 function closeOnEscape(event: KeyboardEvent) {
   if (event.key === 'Escape' && menuOpen.value) {
     menuOpen.value = false
+    opener.value?.focus()
+  }
+}
+
+async function openWithKeyboard(event: KeyboardEvent) {
+  if (event.key !== 'ArrowDown') return
+  event.preventDefault()
+  menuOpen.value = true
+  await nextTick()
+  root.value?.querySelector<HTMLButtonElement>('.account-actions button')?.focus()
+}
+
+function leave(event: FocusEvent) {
+  if (event.relatedTarget instanceof Node && !root.value?.contains(event.relatedTarget)) {
+    menuOpen.value = false
   }
 }
 
@@ -45,15 +61,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root" class="account-menu">
+  <div ref="root" class="account-menu" @focusout="leave">
     <span class="account-name">{{ fullName }}</span>
     <button
       class="account-avatar"
+      ref="opener"
       type="button"
       :aria-label="`Abrir menú de perfil de ${fullName}`"
       :aria-controls="dropdownId"
       :aria-expanded="menuOpen"
       @click="menuOpen = !menuOpen"
+      @keydown="openWithKeyboard"
     >
       <img :src="defaultProfileImage" alt="" aria-hidden="true" />
     </button>
@@ -80,7 +98,7 @@ onBeforeUnmount(() => {
         </button>
         <button type="button" @click="emit('change-password')">
           <i class="bi bi-key" aria-hidden="true"></i>
-          Cambiar Contraseña
+          Cambiar contraseña
         </button>
       </div>
     </section>
@@ -103,11 +121,15 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 18px;
   padding-inline: 20px;
+  min-width: 0;
 }
 
 .account-name {
   font-weight: 700;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .account-avatar {
@@ -192,6 +214,7 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--text-primary);
   text-align: left;
+  min-height: 44px;
 }
 
 .account-logout {
@@ -238,7 +261,8 @@ onBeforeUnmount(() => {
   }
 
   .account-dropdown {
-    right: 48px;
+    right: 0;
+    max-width: calc(100vw - 32px);
   }
 }
 </style>

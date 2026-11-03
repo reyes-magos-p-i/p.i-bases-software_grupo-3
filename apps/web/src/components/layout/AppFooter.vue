@@ -23,9 +23,9 @@
       <section>
         <h2>CARTELERA</h2>
 
-        <a href="#">Ver cartelera</a>
-        <a href="place-holder">Preventas</a>
-        <a href="place-holder">Estrenos</a>
+        <RouterLink :to="{ path: '/', hash: '#cartelera' }">Ver cartelera</RouterLink>
+        <span class="pending-option">Preventas · Próximamente</span>
+        <span class="pending-option">Estrenos · Próximamente</span>
       </section>
 
       <section>
@@ -33,7 +33,7 @@
         <router-link to="/guest-purchases">Consultar compra</router-link>
         <router-link to="/terms-and-conditions">Términos y condiciones</router-link>
         <router-link to="/refund-policy">Política de reembolso</router-link>
-        <router-link to="/privacy-policy">Aviso de Privacidad</router-link>
+        <router-link to="/privacy-policy">Aviso de privacidad</router-link>
       </section>
     </div>
   </footer>
@@ -73,12 +73,21 @@
 }
 
 .footer-grid p,
-.footer-grid a {
+.footer-grid a,
+.pending-option {
   margin: 0;
 
   color: var(--text-on-dark-secondary);
 
   font-size: 0.9rem;
+}
+.pending-option {
+  color: var(--sidebar-disabled-text);
+}
+.footer-grid a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 
 .footer-grid a:hover {

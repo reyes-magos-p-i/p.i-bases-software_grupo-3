@@ -206,7 +206,7 @@ describe('AppHeader authentication navigation', () => {
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
     expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
       'Mi perfil',
-      'Cambiar Contraseña',
+      'Cambiar contraseña',
     ])
 
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')

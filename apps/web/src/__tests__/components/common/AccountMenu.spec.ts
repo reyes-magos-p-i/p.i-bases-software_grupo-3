@@ -23,10 +23,10 @@ describe('AccountMenu.vue', () => {
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
     expect(wrapper.get('.account-dropdown').text()).toContain('Mi perfil')
     expect(wrapper.get('.account-dropdown').text()).not.toContain('Ajustes de Cuenta')
-    expect(wrapper.get('.account-dropdown').text()).toContain('Cambiar Contraseña')
+    expect(wrapper.get('.account-dropdown').text()).toContain('Cambiar contraseña')
     expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
       'Mi perfil',
-      'Cambiar Contraseña',
+      'Cambiar contraseña',
     ])
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     await nextTick()
@@ -46,6 +46,32 @@ describe('AccountMenu.vue', () => {
     await wrapper.findAll('.account-actions button')[0]!.trigger('click')
     expect(wrapper.emitted('profile')).toEqual([[]])
     expect(wrapper.find('.account-dropdown').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('supports keyboard opening, escape focus restoration and leaving the menu', async () => {
+    const wrapper = mount(AccountMenu, { props: { user }, attachTo: document.body })
+    const opener = wrapper.get<HTMLButtonElement>('.account-avatar')
+    await opener.trigger('keydown', { key: 'ArrowDown' })
+    await nextTick()
+    expect(document.activeElement).toBe(wrapper.get('.account-actions button').element)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+    expect(wrapper.find('.account-dropdown').exists()).toBe(false)
+    expect(document.activeElement).toBe(opener.element)
+
+    await opener.trigger('keydown', { key: 'Enter' })
+    expect(wrapper.find('.account-dropdown').exists()).toBe(false)
+    await opener.trigger('keydown', { key: 'ArrowDown' })
+    wrapper.get<HTMLButtonElement>('[aria-label="Cerrar sesión"]').element.focus()
+    await nextTick()
+    expect(wrapper.find('.account-dropdown').exists()).toBe(true)
+    const outside = document.createElement('button')
+    document.body.append(outside)
+    outside.focus()
+    await nextTick()
+    expect(wrapper.find('.account-dropdown').exists()).toBe(false)
+    outside.remove()
     wrapper.unmount()
   })
 })
