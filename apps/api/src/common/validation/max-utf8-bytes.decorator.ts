@@ -16,7 +16,7 @@ export function MaxUtf8Bytes(
           !/[\uD800-\uDFFF]/u.test(value) &&
           Buffer.byteLength(value, 'utf8') <= maxBytes,
         defaultMessage: () =>
-          'El texto debe ser Unicode válido y no superar $constraint1 bytes en UTF-8.',
+          'El texto es demasiado largo o contiene caracteres no admitidos. Revisa el campo.',
       },
     },
     validationOptions,
