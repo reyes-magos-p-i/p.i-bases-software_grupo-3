@@ -9,7 +9,7 @@ VITE_API_BASE_URL ?= /api
 export VITE_API_BASE_URL
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev debug prod clean check-node check-env check-deps \
+.PHONY: help install dev debug prod clean check-node check-env check-deps wait-api \
 	dev-api dev-web debug-api prod-api prod-web
 
 help:
@@ -30,20 +30,24 @@ prod: check-node check-env check-deps
 	npm --prefix $(WEB_DIR) run build-only
 	@$(MAKE) --no-print-directory -j2 prod-api prod-web
 
+# Neither app clears the terminal, and the web starts last so its link stays visible.
 dev-api:
-	npm --prefix $(API_DIR) run start:dev
+	npm --prefix $(API_DIR) run start:dev -- --preserveWatchOutput
 
-dev-web:
-	npm --prefix $(WEB_DIR) run dev
+dev-web: wait-api
+	npm --prefix $(WEB_DIR) run dev -- --clearScreen false
 
 debug-api:
-	npm --prefix $(API_DIR) run start:debug
+	npm --prefix $(API_DIR) run start:debug -- --preserveWatchOutput
 
 prod-api:
 	npm --prefix $(API_DIR) run start:prod
 
-prod-web:
+prod-web: wait-api
 	npm --prefix $(WEB_DIR) run preview
+
+wait-api:
+	@node -e "const net = require('node:net'); const deadline = Date.now() + 120000; const retry = () => Date.now() < deadline ? setTimeout(check, 500) : (console.error('The API did not start on port 3000.'), process.exit(1)); const check = () => net.connect(3000, '127.0.0.1').once('connect', () => process.exit(0)).once('error', retry); check()"
 
 # Leaves apps/api/.env, the wallet and apps/api/uploads untouched.
 clean:
