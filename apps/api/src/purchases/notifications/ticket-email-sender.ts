@@ -7,7 +7,10 @@ export interface TicketEmailMessage {
 }
 
 export class TicketEmailDeliveryError extends Error {
-  constructor(readonly uncertain: boolean) {
+  constructor(
+    readonly uncertain: boolean,
+    readonly code?: string,
+  ) {
     super('Ticket email could not be sent.');
   }
 }

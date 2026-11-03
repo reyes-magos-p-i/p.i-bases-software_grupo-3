@@ -21,6 +21,7 @@ const data = {
     { code: 'GENERAL', label: 'General', base: 3000, description: 'Tarifa general' },
     { code: 'CHILD', label: 'Niño', base: 2500, description: '2 a 12 años' },
   ],
+  maxTickets: 6,
 } as SeatAvailability
 describe('SeatSelectionStep', () => {
   it('reuses the seat map and emits per-seat ticket categories without pricing locally', async () => {
@@ -28,6 +29,8 @@ describe('SeatSelectionStep', () => {
       props: { availability: data, selected: [data.seats[0]!], categories: {} },
     })
     expect(wrapper.getComponent(SeatSelector).props('theaterId')).toBe(3)
+    expect(wrapper.getComponent(SeatSelector).props('maxSelections')).toBe('all')
+    expect(wrapper.text()).not.toContain('Puedes comprar hasta')
     expect(wrapper.text()).toContain('1 asientos disponibles')
     expect(wrapper.text()).toContain('VIP')
     expect(wrapper.text()).toContain('2 a 12 años')
@@ -42,7 +45,18 @@ describe('SeatSelectionStep', () => {
     expect(wrapper.emitted('continue')).toHaveLength(1)
     await wrapper.get('.step-actions button').trigger('click')
     expect(wrapper.emitted('back')).toHaveLength(1)
+    const free = { ...data.seats[0]!, state: 'free' as const }
+    await wrapper.setProps({
+      availability: {
+        ...data,
+        maxTickets: 2,
+        seats: [free, { ...free, positionId: 2 }, { ...free, positionId: 3 }],
+      },
+    })
+    expect(wrapper.getComponent(SeatSelector).props('maxSelections')).toBe(2)
+    expect(wrapper.text()).toContain('Puedes comprar hasta 2 boletos por función.')
     await wrapper.setProps({ availability: { ...data, seats: [] }, disabled: true })
+    expect(wrapper.text()).not.toContain('Puedes comprar hasta')
     expect(wrapper.text()).toContain('no tiene asientos disponibles')
     expect(wrapper.get('.primary').attributes('disabled')).toBeDefined()
     wrapper.unmount()

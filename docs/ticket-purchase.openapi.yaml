@@ -80,7 +80,7 @@ paths:
     post:
       security: []
       summary: Confirma atómicamente la compra de invitado
-      description: Exige Origin permitido y correo no registrado. Máximo 10 solicitudes por minuto. Conserva requestKey, correo, selección y quoteVersion al reintentar un resultado incierto. No envía correos ni crea sesiones.
+      description: Exige Origin permitido y correo no registrado. Máximo 10 solicitudes por minuto. Aplica los límites configurados de boletos por función y compras por correo y hora (TICKET_LIMIT_REACHED, GUEST_EMAIL_LIMIT). Conserva requestKey, correo, selección y quoteVersion al reintentar un resultado incierto. No envía correos ni crea sesiones.
       requestBody:
         required: true
         content:
@@ -187,6 +187,9 @@ paths:
                   seats:
                     type: array
                     items: { $ref: "#/components/schemas/Seat" }
+                  maxTickets:
+                    type: integer
+                    description: Boletos que un comprador puede tener por función, configurado en la base de datos.
                   categories:
                     type: array
                     items:
@@ -227,7 +230,7 @@ paths:
   /purchases:
     post:
       summary: Registra la compra completa mediante pago simulado
-      description: Exige Origin permitido. Máximo 10 solicitudes por minuto y cliente de red. No acepta importes ni un identificador de cliente. Repetir la referencia con la misma selección devuelve la factura existente. Después de un timeout u otra respuesta incierta, conservar requestKey y la selección al reintentar, incluso si la siguiente respuesta es un 409 por bloqueo o un 429.
+      description: Exige Origin permitido. Máximo 10 solicitudes por minuto y cliente de red. Aplica el límite configurado de boletos por función (TICKET_LIMIT_REACHED). No acepta importes ni un identificador de cliente. Repetir la referencia con la misma selección devuelve la factura existente. Después de un timeout u otra respuesta incierta, conservar requestKey y la selección al reintentar, incluso si la siguiente respuesta es un 409 por bloqueo o un 429.
       requestBody:
         required: true
         content:
@@ -419,7 +422,7 @@ components:
               statusCode: { type: integer, example: 429 }
               message:
                 type: string
-                example: Has realizado demasiadas solicitudes de compra. Espera un minuto e intenta nuevamente.
+                example: Has realizado demasiadas solicitudes de compra. Intenta nuevamente más tarde.
     Unauthorized:
       { description: Sesión ausente, vencida, revocada o cuenta desactivada }
     Forbidden:

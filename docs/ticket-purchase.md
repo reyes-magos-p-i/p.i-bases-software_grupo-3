@@ -24,7 +24,7 @@ La confirmación muestra el estado persistido y permite solicitar otro envío. L
 
 Los reenvíos responden 202 cuando la solicitud queda registrada. Se limita a cinco solicitudes por minuto y a un nuevo intento por compra cada 60 segundos; un envío pendiente o en curso produce 409. Las compras canceladas o sin boletos no se reenvían. Las compras anteriores no generan envíos automáticos retroactivos; el servicio puede registrar su primer envío ante una solicitud manual autorizada.
 
-Estados: `NOT_REQUESTED` para compras sin solicitud, `PENDING`, `SENDING`, `SENT`, `FAILED` y `UNKNOWN`. `SENT` confirma que SMTP aceptó al destinatario, no que el mensaje llegó a su bandeja de entrada. Un fallo antes de contactar SMTP o un rechazo explícito deja `FAILED`. Una excepción después de iniciar la comunicación deja `UNKNOWN`; también se aplica a un envío que permanece `SENDING` por diez minutos tras una interrupción. Un fallo al persistir el resultado no vuelve a enviar el mensaje automáticamente. El identificador de intento impide que una finalización tardía sobrescriba un reenvío posterior.
+Estados: `NOT_REQUESTED` para compras sin solicitud, `PENDING`, `SENDING`, `SENT`, `FAILED` y `UNKNOWN`. `SENT` confirma que SMTP aceptó al destinatario, no que el mensaje llegó a su bandeja de entrada. Un fallo antes de contactar SMTP, una conexión que no se pudo establecer o un rechazo explícito del servidor deja `FAILED`. Cualquier otra excepción después de iniciar la comunicación deja `UNKNOWN`, porque una conexión perdida no permite saber si el servidor ya aceptó el mensaje; también se aplica a un envío que permanece `SENDING` por diez minutos tras una interrupción. Un fallo al persistir el resultado no vuelve a enviar el mensaje automáticamente. El identificador de intento impide que una finalización tardía sobrescriba un reenvío posterior.
 
 Solo se procesan automáticamente solicitudes pendientes. Los fallos y resultados desconocidos requieren reenvío manual; se pide revisar el buzón antes de repetir un resultado incierto. SMTP no garantiza envío exactamente una vez: un reenvío manual tras un resultado desconocido podría duplicar un mensaje que el proveedor ya hubiera aceptado. La interfaz consulta cada dos segundos durante un máximo de 30 repeticiones; después permite comprobar el estado explícitamente. Un timeout del reenvío provoca una consulta de estado, no otra solicitud de envío ni una confirmación falsa de éxito.
 
@@ -62,6 +62,19 @@ Crear y modificar funciones permite configurar formato, tecnología y estreno. E
 Las rutas requieren JWT de cliente y contraseña vigente. La cuenta se obtiene de la sesión, no del cuerpo de la solicitud; también se comprueba su estado bajo bloqueo al confirmar. Las escrituras exigen un origen permitido y tienen límite de solicitudes: 60 resúmenes y 10 confirmaciones por minuto y cliente de red. `PurchaseThrottlerGuard` reutiliza el mecanismo existente y devuelve un mensaje de compras y `Retry-After` al responder 429; no usa el texto de inicio de sesión. Las respuestas privadas llevan `Cache-Control: no-store`.
 
 «Mi perfil → Historial de compras» ([especificación](./purchase-history.md)) pagina diez compras por página y muestra el detalle y los boletos propios. Los importes, correo y datos originales de función se conservan en la factura. Si el personal reprograma un boleto, se muestra también su función actual. Las facturas anteriores sin vínculo a boletos no inventan asientos ni vínculos históricos. El panel administrativo de transacciones distingue «Pago simulado» y consulta los datos originales cuando existe la instantánea.
+
+## Límites de compra — SCRUM-378
+
+Clientes e invitados pueden comprar los boletos que deseen según la disponibilidad de la sala, por decisión del PO. El límite efectivo es el menor entre el valor configurado y los asientos libres. Con los valores iniciales, ninguna regla adicional restringe la compra; si el negocio decide reducirlos, basta con cambiar `GLOBAL_SETTINGS`. No sustituyen un cobro real. Las confirmaciones de invitado mantienen el límite técnico de 10 solicitudes por minuto, igual que las de clientes; una sola compra puede incluir todos los asientos disponibles.
+
+| Límite | Valor inicial | Dónde vive | Dónde se valida |
+| --- | ---: | --- | --- |
+| Boletos por comprador y función | 10000 | `GLOBAL_SETTINGS` | Cotización y transacción de confirmación |
+| Compras de invitado por correo y hora | 10000 | `GLOBAL_SETTINGS` | Transacción de confirmación |
+
+Los boletos ya comprados para la función cuentan dentro del límite, con el mismo bloqueo de la función, por lo que no se evade con varias compras pequeñas. Superarlo responde 409 con `TICKET_LIMIT_REACHED` o `GUEST_EMAIL_LIMIT`. Las comprobaciones se ejecutan después de reconocer un reintento, de modo que repetir una compra registrada sigue devolviendo su comprobante. Los valores de `GLOBAL_SETTINGS` se cambian con un `UPDATE`, sin recompilar ni desplegar, y aplican desde la siguiente compra. La disponibilidad de asientos devuelve `maxTickets`; si es menor que los asientos libres, la web limita la selección, y si no, mantiene «Seleccionar todos». Una restricción admite enteros de 1 a 10000, el tamaño máximo de una sala. Si no se pueden leer los límites, la compra responde 503 y no se vende nada.
+
+La tabla se crea con [20261102_global_settings.sql](../database/migrations/20261102_global_settings.sql), y [20261102_ticket_limit_by_availability.sql](../database/migrations/20261102_ticket_limit_by_availability.sql) amplía el límite. Ambas deben aplicarse **antes** de desplegar la API. Queda preparada para los demás valores de SCRUM-366 y para un futuro trigger que valide estos límites en Oracle.
 
 ## Compra como invitado
 
@@ -106,7 +119,7 @@ La desactivación de sala conserva los asientos para respetar las referencias de
 
 ## Contratos y errores
 
-Véase [OpenAPI de compra](./ticket-purchase.openapi.yaml). La selección compacta contiene posiciones físicas 1..filas×columnas, agrupadas en GENERAL/CHILD/SENIOR; cada posición debe aparecer una sola vez. El servidor resuelve fila y columna; no acepta importes ni cliente en el cuerpo. El límite de 10000 posiciones cabe en el límite JSON existente, sin modificar la configuración global.
+Véase [OpenAPI de compra](./ticket-purchase.openapi.yaml). La selección compacta contiene posiciones físicas 1..filas×columnas, agrupadas en GENERAL/CHILD/SENIOR; cada posición debe aparecer una sola vez. El servidor resuelve fila y columna; no acepta importes ni cliente en el cuerpo. El límite de 10000 posiciones cabe en el límite JSON existente, sin modificar la configuración global. El máximo de boletos es un valor configurable; véase [Límites de compra](#límites-de-compra--scrum-378).
 
 Errores relevantes: 400 para selección o referencia inválida; 401 para sesión ausente, vencida o cuenta desactivada; 403 para personal, contraseña bloqueada u origen inválido; 404 para película/compra inexistente; 409 para función no disponible, asientos vendidos, resumen desactualizado o bloqueo temporal (`PURCHASE_BUSY`); 429 para exceso de solicitudes; 503 cuando no se pueden preparar las tarifas. Los errores generales usan `NotificationPopup` abajo a la derecha.
 

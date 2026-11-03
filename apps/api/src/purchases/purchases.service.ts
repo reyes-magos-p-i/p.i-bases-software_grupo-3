@@ -2,7 +2,12 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import { PurchasesRepository } from './purchases.repository';
 import { TicketEmailService } from './ticket-email.service';
-import { purchaseQuote, requireAvailableFunction } from './purchase-rules';
+import {
+  purchaseQuote,
+  requireAvailableFunction,
+  requireTicketAllowance,
+  selectionPositions,
+} from './purchase-rules';
 import type {
   ConfirmPurchaseDto,
   ListPurchasesQueryDto,
@@ -27,6 +32,11 @@ export class PurchasesService {
   }
   async quote(data: PurchaseSelectionDto) {
     const result = await this.seats(data.functionId);
+    requireTicketAllowance(
+      0,
+      selectionPositions(data).length,
+      result.maxTickets,
+    );
     return purchaseQuote(result.function, result.seats, data);
   }
   confirm(clientId: number, data: ConfirmPurchaseDto) {

@@ -1,3 +1,4 @@
+import type { ConflictException } from '@nestjs/common';
 import {
   purchaseQuote,
   purchaseQrPayload,
@@ -5,6 +6,8 @@ import {
   requireGuestEmailAvailable,
   selectionHash,
   selectionPositions,
+  requireTicketAllowance,
+  requireGuestPurchaseAllowance,
 } from './purchase-rules';
 import type { PurchaseFunction, PurchaseSeat } from './purchase.types';
 it('keeps the transaction QR stable and free of guest access credentials', () => {
@@ -155,5 +158,35 @@ describe('Purchase rules', () => {
         },
       }),
     ).toThrow('capacidad');
+  });
+  it('applies the configured tickets per function', () => {
+    expect(() => requireTicketAllowance(7, 3, 10)).not.toThrow();
+    expect(() => requireTicketAllowance(7, 3, 9)).toThrow(
+      'hasta 9 boletos por función. Ya tienes 7',
+    );
+    expect(() => requireTicketAllowance(0, 3, 2)).toThrow(
+      /^Puedes comprar hasta 2 boletos por función\.$/u,
+    );
+    let failure: unknown;
+    try {
+      requireTicketAllowance(8, 3, 10);
+    } catch (error) {
+      failure = error;
+    }
+    expect((failure as ConflictException).getResponse()).toMatchObject({
+      code: 'TICKET_LIMIT_REACHED',
+    });
+  });
+  it('applies the configured guest purchases per hour', () => {
+    expect(() => requireGuestPurchaseAllowance(2, 3)).not.toThrow();
+    let failure: unknown;
+    try {
+      requireGuestPurchaseAllowance(3, 3);
+    } catch (error) {
+      failure = error;
+    }
+    expect((failure as ConflictException).getResponse()).toMatchObject({
+      code: 'GUEST_EMAIL_LIMIT',
+    });
   });
 });
