@@ -44,7 +44,9 @@ function categoryChange(seat: Seat, event: Event) {
       @selection-change="emit('selection', $event)"
     />
     <p aria-live="polite">
-      {{ selected.length }} boletos seleccionados · {{ available }} asientos disponibles
+      {{ selected.length }}
+      {{ selected.length === 1 ? 'boleto seleccionado' : 'boletos seleccionados' }} ·
+      {{ available }} {{ available === 1 ? 'asiento disponible' : 'asientos disponibles' }}
     </p>
     <fieldset :disabled="disabled" class="categories">
       <legend>Tipo de boleto por asiento</legend>
@@ -82,7 +84,7 @@ function categoryChange(seat: Seat, event: Event) {
       ><button
         type="button"
         class="purchase-action primary"
-        :disabled="disabled || !available"
+        :disabled="disabled || !available || !selected.length"
         @click="emit('continue')"
       >
         Revisar compra

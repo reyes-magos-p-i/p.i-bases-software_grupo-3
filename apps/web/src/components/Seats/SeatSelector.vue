@@ -4,6 +4,7 @@ import MovieSeat from './MovieSeat.vue'
 import {
   seatKey,
   seatStateLabels,
+  seatStateIcons,
   type Seat,
   type SeatSelectionLimit,
   type SeatState,
@@ -18,11 +19,13 @@ const props = withDefaults(
     maxSelections?: SeatSelectionLimit
     selectableStates?: SeatState[]
     disabled?: boolean
+    readonly?: boolean
   }>(),
   {
     maxSelections: 'all',
     selectableStates: () => ['free'],
     disabled: false,
+    readonly: false,
   },
 )
 
@@ -68,6 +71,7 @@ const seatMap = computed(() => {
 })
 
 const selectedKeySet = computed(() => new Set(selectedKeys.value))
+const selectableSeats = computed(() => Array.from(seatMap.value.values()).filter(canSelect))
 
 const selectedSeats = computed(() =>
   selectedKeys.value
@@ -112,6 +116,7 @@ function isSelected(seat: Seat): boolean {
 
 function isDisabled(seat: Seat): boolean {
   return (
+    props.readonly ||
     props.disabled ||
     !canSelect(seat) ||
     (!isSelected(seat) && selectedKeys.value.length >= limit.value)
@@ -127,12 +132,13 @@ function toggleSeat(seat: Seat) {
 }
 
 function clearSelection() {
+  if (props.disabled || props.readonly) return
   selectedKeys.value = []
 }
 
 function selectAll() {
-  if (props.disabled || props.maxSelections !== 'all') return
-  selectedKeys.value = Array.from(seatMap.value.values()).filter(canSelect).map(seatKey)
+  if (props.disabled || props.readonly || props.maxSelections !== 'all') return
+  selectedKeys.value = selectableSeats.value.map(seatKey)
 }
 
 // Reconcile selections after an API refresh, theater change, or limit change.
@@ -176,46 +182,57 @@ defineExpose({ clearSelection })
       Las dimensiones deben ser enteros positivos con un máximo de 10000 asientos.
     </p>
 
-    <div v-else class="seat-scroll" tabindex="0" aria-label="Plano de asientos">
-      <div class="theater">
-        <div class="screen">PANTALLA</div>
-
-        <div class="seat-matrix">
-          <div
-            v-for="row in gridRows"
-            :key="row.number"
-            class="seat-row"
-            :class="{ 'horizontal-aisle': row.number === horizontalAisle && row.number < rows }"
-            role="group"
-            :aria-label="`Fila ${row.number}`"
-          >
-            <span class="row-label" aria-hidden="true">{{ row.number }}</span>
-
+    <p v-else-if="seatMap.size === 0" class="message" role="status">No hay asientos registrados.</p>
+    <template v-else>
+      <div class="screen">PANTALLA</div>
+      <div
+        class="seat-scroll"
+        tabindex="0"
+        aria-label="Plano de asientos. Desplázate horizontalmente para ver todas las columnas."
+      >
+        <div class="theater">
+          <div class="seat-matrix">
             <div
-              v-for="cell in row.cells"
-              :key="cell.key"
-              class="seat-cell"
-              :class="{ 'vertical-aisle': verticalAisles.has(cell.column) }"
+              v-for="row in gridRows"
+              :key="row.number"
+              class="seat-row"
+              :class="{ 'horizontal-aisle': row.number === horizontalAisle && row.number < rows }"
+              role="group"
+              :aria-label="`Fila ${row.number}`"
             >
-              <MovieSeat
-                v-if="cell.seat"
-                :seat="cell.seat"
-                :selected="isSelected(cell.seat)"
-                :disabled="isDisabled(cell.seat)"
-                @toggle="toggleSeat"
-              />
-              <span v-else class="missing-seat" aria-hidden="true" />
+              <span class="row-label" aria-hidden="true">{{ row.number }}</span>
+
+              <div
+                v-for="cell in row.cells"
+                :key="cell.key"
+                class="seat-cell"
+                :class="{ 'vertical-aisle': verticalAisles.has(cell.column) }"
+              >
+                <MovieSeat
+                  v-if="cell.seat"
+                  :seat="cell.seat"
+                  :selected="isSelected(cell.seat)"
+                  :disabled="isDisabled(cell.seat)"
+                  @toggle="toggleSeat"
+                />
+                <span v-else class="missing-seat" aria-hidden="true" />
+              </div>
+              <span v-if="!row.cells.some((cell) => cell.seat)" class="empty-row"
+                >Sin asientos registrados</span
+              >
             </div>
           </div>
         </div>
-
-        <p v-if="seatMap.size === 0" class="message">No hay asientos registrados.</p>
       </div>
-    </div>
+    </template>
 
     <div class="legend" aria-label="Estados de los asientos">
       <span v-for="(label, state) in seatStateLabels" :key="state">
-        <i class="legend-dot" :class="`state-${state}`" aria-hidden="true" />
+        <i
+          class="legend-dot bi"
+          :class="[`state-${state}`, seatStateIcons[state]]"
+          aria-hidden="true"
+        />
         {{ label }}
       </span>
       <span><i class="selected-sample" aria-hidden="true" />Seleccionado</span>
@@ -225,7 +242,18 @@ defineExpose({ clearSelection })
       Silla: normal · Silla con estrella: VIP · Silla de ruedas: accesibilidad
     </p>
 
-    <div class="selection-summary">
+    <p
+      v-if="validDimensions && seatMap.size && seatMap.size !== rows * columns"
+      class="message"
+      role="status"
+    >
+      El plano contiene posiciones sin asientos registrados. Solo se muestran los asientos
+      existentes.
+    </p>
+    <p v-if="seatMap.size" class="scroll-hint">
+      Desplázate por el plano para ver todas las columnas.
+    </p>
+    <div v-if="!readonly" class="selection-summary">
       <span role="status" aria-live="polite">
         Seleccionados: {{ selectedKeys.length }}
         <template v-if="maxSelections !== 'all'"> / {{ limit }}</template>
@@ -234,7 +262,7 @@ defineExpose({ clearSelection })
         <button
           v-if="maxSelections === 'all'"
           type="button"
-          :disabled="disabled || seatMap.size === 0"
+          :disabled="disabled || !selectableSeats.length"
           @click="selectAll"
         >
           Seleccionar todos
@@ -270,17 +298,20 @@ defineExpose({ clearSelection })
   box-sizing: border-box;
   width: 100%;
   overflow-x: auto;
+  max-height: min(60dvh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 10px 20px;
 }
 .seat-scroll:focus-visible {
-  outline: 2px solid var(--accent-color);
+  outline: 2px solid var(--focus-color);
 }
 .theater {
   width: max-content;
   min-width: 100%;
 }
 .screen {
-  margin: 0 0 60px;
+  margin: 0 0 24px;
   padding: 10px;
   color: var(--text-secondary);
   background: var(--surface-hover);
@@ -299,11 +330,19 @@ defineExpose({ clearSelection })
   margin: auto;
 }
 .seat-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--seat-gap);
 }
 .row-label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  background: var(--content-background);
   width: 24px;
   flex-shrink: 0;
   color: var(--text-secondary);
@@ -344,6 +383,21 @@ defineExpose({ clearSelection })
   height: 12px;
   border: 1px solid currentColor;
   border-radius: 3px;
+}
+.legend-dot {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+}
+.empty-row,
+.scroll-hint {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+.empty-row {
+  position: absolute;
+  left: 40px;
 }
 .state-free {
   color: var(--success-text);
@@ -398,7 +452,19 @@ defineExpose({ clearSelection })
   cursor: not-allowed;
 }
 .actions button:focus-visible {
-  outline: 3px solid var(--accent-color);
+  outline: 3px solid var(--focus-color);
   outline-offset: 3px;
+}
+@media (max-width: 576px) {
+  .seat-selector {
+    padding: 12px;
+    --seat-width: 48px;
+    --seat-height: 60px;
+    --seat-gap: 12px;
+    --aisle-size: 20px;
+  }
+  .screen {
+    margin-bottom: 16px;
+  }
 }
 </style>

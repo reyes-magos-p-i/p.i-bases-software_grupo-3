@@ -55,6 +55,15 @@ describe('Seat', () => {
       })
 
       expect(wrapper.get('button').classes()).toContain(`seat--${state}`)
+      expect(
+        wrapper
+          .get('.state-mark')
+          .classes()
+          .some((name) =>
+            ['bi-check-circle', 'bi-slash-circle', 'bi-person-fill', 'bi-clock'].includes(name),
+          ),
+      ).toBe(true)
+      expect(wrapper.get('.state-mark').attributes('aria-hidden')).toBe('true')
     },
   )
 

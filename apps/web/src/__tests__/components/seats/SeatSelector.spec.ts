@@ -35,6 +35,7 @@ function makeSeat(rowNumber: number, columnNumber: number, overrides: Partial<Se
 }
 
 interface SelectorProps {
+  readonly: boolean
   theaterId: number
   rows: number
   columns: number
@@ -89,6 +90,31 @@ function actionButton(wrapper: SelectorWrapper, label: string) {
 }
 
 describe('SeatSelector', () => {
+  it('does not draw misleading empty rows when the theater has no registered seats', () => {
+    const wrapper = mountSelector({ seats: [] })
+    expect(wrapper.findAll('.seat-row')).toHaveLength(0)
+    expect(wrapper.get('[role="status"]').text()).toBe('No hay asientos registrados.')
+    wrapper.unmount()
+  })
+
+  it('preserves real coordinates and explicitly identifies incomplete rows', () => {
+    const wrapper = mountSelector({ seats: [makeSeat(2, 3)] })
+    expect(wrapper.findAll('.seat-row')).toHaveLength(2)
+    expect(wrapper.get('.seat-row').text()).toContain('Sin asientos registrados')
+    expect(wrapper.findAll('[data-seat]')).toHaveLength(1)
+    expect(wrapper.get('[data-seat]').attributes('data-seat')).toBe('2-3')
+    expect(wrapper.text()).toContain('Solo se muestran los asientos existentes')
+    wrapper.unmount()
+  })
+
+  it('shows the complete map without selection controls in read-only views', async () => {
+    const wrapper = mountSelector({ readonly: true })
+    expect(wrapper.find('.selection-summary').exists()).toBe(false)
+    expect(wrapper.findAll('[data-seat]')).toHaveLength(6)
+    await wrapper.get('[data-seat="1-1"]').trigger('click')
+    expect(lastSelection(wrapper)).toEqual([])
+    wrapper.unmount()
+  })
   it('renders the screen, rows, seats and initial empty selection', () => {
     const wrapper = mountSelector()
 
@@ -103,7 +129,7 @@ describe('SeatSelector', () => {
     const wrapper = mountSelector({
       rows: 4,
       columns: 9,
-      seats: [],
+      seats: [makeSeat(1, 1)],
     })
 
     const rows = wrapper.findAll('.seat-row')
