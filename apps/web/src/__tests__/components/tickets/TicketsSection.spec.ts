@@ -66,12 +66,12 @@ describe('TicketsSection', () => {
   // it('opens the ticket detail dialog from the "Ver detalle" button', async () => {
   //   getTicket.mockResolvedValue(ticket)
   //   const wrapper = mount(TicketsSection)
-//
+  //
   //   await search(wrapper, '1001')
   //   expect(wrapper.findComponent(TicketDetailDialog).props('ticket')).toBeNull()
-//
+  //
   //   await wrapper.get('button[aria-label="Ver detalle"]').trigger('click')
-//
+  //
   //   expect(wrapper.findComponent(TicketDetailDialog).props('ticket')).toMatchObject({
   //     id: 1001,
   //     title: 'Dune',
@@ -85,7 +85,7 @@ describe('TicketsSection', () => {
 
     await search(wrapper, '999')
 
-    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El ticket no existe')
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El boleto no existe')
     expect(wrapper.find('table').exists()).toBe(false)
   })
 
@@ -96,7 +96,7 @@ describe('TicketsSection', () => {
 
     expect(getTicket).not.toHaveBeenCalled()
     expect(wrapper.findComponent(NotificationPopup).props('message')).toBe(
-      'Ingresa un número de ticket válido.',
+      'Ingresa un número de boleto válido.',
     )
   })
 
@@ -105,13 +105,13 @@ describe('TicketsSection', () => {
     const wrapper = mount(TicketsSection)
 
     await search(wrapper, '999')
-    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El ticket no existe')
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El boleto no existe')
 
     await search(wrapper, '0')
 
     expect(getTicket).toHaveBeenCalledTimes(1)
     expect(wrapper.findComponent(NotificationPopup).props('message')).toBe(
-      'Ingresa un número de ticket válido.',
+      'Ingresa un número de boleto válido.',
     )
   })
 })

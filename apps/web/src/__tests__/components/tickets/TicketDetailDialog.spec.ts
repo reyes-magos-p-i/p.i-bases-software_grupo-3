@@ -15,7 +15,12 @@ const ticket: TicketDetail = {
 describe('TicketDetailDialog', () => {
   beforeEach(() => {
     const prototype = HTMLDialogElement.prototype
-    Object.defineProperty(prototype, 'showModal', { configurable: true, value: vi.fn() })
+    Object.defineProperty(prototype, 'showModal', {
+      configurable: true,
+      value: vi.fn(function (this: HTMLDialogElement) {
+        this.setAttribute('open', '')
+      }),
+    })
     Object.defineProperty(prototype, 'close', { configurable: true, value: vi.fn() })
   })
 
@@ -24,13 +29,17 @@ describe('TicketDetailDialog', () => {
     Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
   })
 
-  it('shows the ticket details', () => {
+  it('shows the ticket details and closes on request', async () => {
     const wrapper = mount(TicketDetailDialog, { props: { ticket } })
 
     expect(wrapper.text()).toContain('Dune')
     expect(wrapper.text()).toContain('C5')
     expect(wrapper.text()).toContain('10/10/2026, 18:00')
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    await wrapper.get('.dialog-actions button').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    expect(HTMLDialogElement.prototype.close).toHaveBeenCalledOnce()
+    wrapper.unmount()
   })
 
   it('shows an error message when the ticket cannot be shown', () => {

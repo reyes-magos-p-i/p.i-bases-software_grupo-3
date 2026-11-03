@@ -15,25 +15,53 @@ function syncDialog() {
   else shell.value?.close()
 }
 
+function closeDialog() {
+  shell.value?.close()
+  emit('close')
+}
+
 onMounted(syncDialog)
 watch(() => [props.ticket, props.error], syncDialog, { flush: 'post' })
 </script>
 
 <template>
-  <TicketDialogShell ref="shell" title="Detalle de tiquete" close-label="Cerrar" @close="emit('close')">
+  <TicketDialogShell
+    ref="shell"
+    title="Detalle de boleto"
+    close-label="Cerrar"
+    @close="emit('close')"
+  >
     <div v-if="ticket || error" class="ticket-detail-content">
       <p v-if="!ticket" class="detail-error" role="alert">{{ error }}</p>
       <template v-else>
         <div class="detail-grid">
-          <div class="readonly-field"><label>ID</label><div class="readonly-input">{{ ticket.id }}</div></div>
-          <div class="readonly-field"><label>Película</label><div class="readonly-input">{{ ticket.title }}</div></div>
-          <div class="readonly-field"><label>Sala</label><div class="readonly-input">{{ ticket.theaterId }}</div></div>
-          <div class="readonly-field"><label>Inicio</label><div class="readonly-input">{{ formatTicketDate(ticket.startTime) }}</div></div>
-          <div class="readonly-field"><label>Finalización</label><div class="readonly-input">{{ formatTicketDate(ticket.endTime) }}</div></div>
-          <div class="readonly-field"><label>Asiento</label><div class="readonly-input">{{ ticket.seat }}</div></div>
+          <div class="readonly-field">
+            <label>ID</label>
+            <div class="readonly-input">{{ ticket.id }}</div>
+          </div>
+          <div class="readonly-field">
+            <label>Película</label>
+            <div class="readonly-input">{{ ticket.title }}</div>
+          </div>
+          <div class="readonly-field">
+            <label>Sala</label>
+            <div class="readonly-input">{{ ticket.theaterId }}</div>
+          </div>
+          <div class="readonly-field">
+            <label>Inicio</label>
+            <div class="readonly-input">{{ formatTicketDate(ticket.startTime) }}</div>
+          </div>
+          <div class="readonly-field">
+            <label>Finalización</label>
+            <div class="readonly-input">{{ formatTicketDate(ticket.endTime) }}</div>
+          </div>
+          <div class="readonly-field">
+            <label>Asiento</label>
+            <div class="readonly-input">{{ ticket.seat }}</div>
+          </div>
         </div>
         <footer class="dialog-actions">
-          <button type="button" class="secondary-button" @click="shell?.close(); emit('close')">Cerrar</button>
+          <button type="button" class="secondary-button" @click="closeDialog">Cerrar</button>
         </footer>
       </template>
     </div>
@@ -87,7 +115,7 @@ watch(() => [props.ticket, props.error], syncDialog, { flush: 'post' })
   padding: 12px 14px;
   border: 1px solid var(--primary-color);
   border-radius: 4px;
-  box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 4px 0 var(--shadow-strong-color);
   color: var(--text-primary);
   background: var(--content-background);
   font: inherit;

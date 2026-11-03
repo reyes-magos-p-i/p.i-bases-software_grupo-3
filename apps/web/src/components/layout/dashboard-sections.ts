@@ -63,7 +63,7 @@ export const dashboardSections: readonly DashboardSectionDefinition[] = [
   },
   {
     id: 'tickets',
-    label: 'Tickets',
+    label: 'Boletos',
     icon: 'bi-ticket-perforated',
     adminOnly: true,
     roles: ['ADMINISTRATOR'],

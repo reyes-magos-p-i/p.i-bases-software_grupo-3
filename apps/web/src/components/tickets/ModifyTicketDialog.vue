@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { ref, useTemplateRef } from 'vue'
 import TicketDialogShell from './TicketDialogShell.vue'
 import type { AlternativeShowtime, UpdateTicketRequest } from '@/types/ticket'
@@ -45,7 +46,12 @@ function complete() {
 }
 
 function submit() {
-  if (!movieFunctionId.value) return
+  if (
+    props.submitting ||
+    props.optionsLoading ||
+    !props.showtimes.some((showtime) => showtime.movieFunctionId === Number(movieFunctionId.value))
+  )
+    return
   emit('submit', { movieFunctionId: Number(movieFunctionId.value) })
 }
 
@@ -55,7 +61,7 @@ defineExpose({ open, complete })
 <template>
   <TicketDialogShell
     ref="shell"
-    title="Modificar tiquete"
+    title="Modificar boleto"
     :close-disabled="submitting"
     @close="emit('close')"
   >
@@ -72,7 +78,7 @@ defineExpose({ open, complete })
         </option>
       </select>
 
-      <p v-if="optionsLoading" role="status">Cargando proyecciones…</p>
+      <LoadingState v-if="optionsLoading" message="Cargando proyecciones…" compact />
       <p v-else-if="optionsError" class="form-error" role="alert">
         {{ optionsError }}
         <button type="button" @click="emit('retryOptions')">Reintentar</button>
@@ -93,7 +99,7 @@ defineExpose({ open, complete })
           class="create-button"
           :disabled="submitting || optionsLoading || !movieFunctionId"
         >
-          {{ submitting ? 'Modificando…' : 'Modificar tiquete' }}
+          {{ submitting ? 'Modificando…' : 'Modificar boleto' }}
         </button>
       </footer>
     </form>
@@ -151,11 +157,11 @@ select:focus {
   border-radius: var(--radius-small);
   font: inherit;
   font-weight: 500;
-  box-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 4px var(--shadow-strong-color);
 }
 .secondary-button {
   min-width: 118px;
-  color: var(--primary-color);
+  color: var(--button-secondary-text);
   background: var(--button-secondary-background);
 }
 .create-button {
