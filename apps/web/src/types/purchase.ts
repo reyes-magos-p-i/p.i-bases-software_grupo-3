@@ -101,6 +101,7 @@ export interface SeatAvailability {
   function: PurchaseFunction
   seats: PurchaseSeat[]
   categories: PurchaseCategory[]
+  maxTickets: number
 }
 export interface PurchaseMovie extends PortalMovie {
   synopsis: string

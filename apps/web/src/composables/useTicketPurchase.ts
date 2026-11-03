@@ -49,6 +49,8 @@ const DEFINITIVE_CONFLICTS = new Set([
   'QUOTE_CHANGED',
   'SEATS_UNAVAILABLE',
   'FUNCTION_UNAVAILABLE',
+  'TICKET_LIMIT_REACHED',
+  'GUEST_EMAIL_LIMIT',
   ...ACCOUNT_CONFLICTS,
 ])
 function errorCode(error: unknown) {
@@ -190,6 +192,7 @@ export function useTicketPurchase(onExpired: () => void) {
         function: saved.quote.function,
         seats: saved.quote.seats,
         categories: [],
+        maxTickets: saved.quote.seats.length,
       }
       selected.value = saved.quote.seats
       categories.value = Object.fromEntries(
