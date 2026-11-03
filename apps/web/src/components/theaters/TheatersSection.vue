@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 import CreateTheaterDialog from './CreateTheaterDialog.vue'
@@ -34,6 +35,7 @@ const options = ref<TheaterCreationOptions | null>(null)
 const optionsLoading = ref(false)
 const optionsError = ref('')
 const creationResult = ref('')
+const operationError = ref('')
 const submitting = ref(false)
 const theaters = ref<Theater[]>([])
 const theatersLoading = ref(false)
@@ -141,6 +143,7 @@ async function loadTheaters() {
 function openCreate() {
   if (props.disabled || optionsLoading.value) return
   theaterSubmissionErrors.value = []
+  operationError.value = ''
   createDialog.value?.open()
   void loadOptions()
 }
@@ -156,6 +159,7 @@ async function doSubmit(
   emit('busy', true)
   theaterSubmissionErrors.value = []
   creationResult.value = ''
+  operationError.value = ''
   try {
     const theater = await apiCall()
     if (state.disposed) return
@@ -164,19 +168,21 @@ async function doSubmit(
     theaterSubmissionErrors.value = []
     onComplete()
     await nextTick()
-    resultNotice.value?.focus()
+    resultNotice.value?.querySelector<HTMLButtonElement>('.notification-close')?.focus()
   } catch (error) {
     if (state.disposed) return
     if (isAxiosError(error) && error.response?.status === 401) sessionExpired()
     else if (isAxiosError(error) && error.response?.status === 403) {
-      theaterSubmissionErrors.value = [`No tienes permiso para ${action} salas.`]
+      operationError.value = `No tienes permiso para ${action} salas.`
       void refreshPermissions()
     } else if (isAxiosError(error) && error.response?.status === 400) {
       theaterSubmissionErrors.value = ['Revisa los datos de la sala e inténtalo nuevamente.']
-    } else {
+    } else if (isAxiosError(error) && error.response?.status === 409) {
       theaterSubmissionErrors.value = [
-        `El resultado no pudo ser confirmado. Verifica si la sala fue ${participio} antes de intentarlo de nuevo.`,
+        'No puedes cambiar las dimensiones de una sala con funciones asociadas. Sus asientos e historial deben conservarse.',
       ]
+    } else {
+      operationError.value = `El resultado no pudo ser confirmado. Verifica si la sala fue ${participio} antes de intentarlo de nuevo.`
     }
   } finally {
     submitting.value = false
@@ -217,6 +223,7 @@ function retryTheaters() {
 async function editTheater(row: { theater?: Theater }) {
   if (!row.theater || props.disabled || optionsLoading.value) return
   editingTheater.value = row.theater
+  operationError.value = ''
   theaterSubmissionErrors.value = []
   await nextTick()
   modifyDialog.value?.open()
@@ -330,15 +337,22 @@ onBeforeUnmount(() => {
         <p>Las salas aparecerán aquí cuando se registren.</p>
       </div>
     </div>
-    <p
-      v-if="creationResult"
-      ref="result-notice"
-      class="creation-result"
-      role="status"
-      tabindex="-1"
-    >
-      {{ creationResult }}
-    </p>
+    <div v-if="creationResult" ref="result-notice" tabindex="-1">
+      <NotificationPopup
+        type="success"
+        :message="creationResult"
+        placement="bottom-right"
+        @close="creationResult = ''"
+      />
+    </div>
+    <NotificationPopup
+      v-if="operationError"
+      type="error"
+      :message="operationError"
+      placement="bottom-right"
+      :duration="0"
+      @close="operationError = ''"
+    />
     <CreateTheaterDialog
       ref="create-dialog"
       :projectors="options?.projectors"

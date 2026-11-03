@@ -32,6 +32,7 @@ export interface CreateTheaterRequest {
 export type UpdateTheaterRequest = Partial<CreateTheaterRequest> & { isActive?: boolean }
 
 export interface Theater {
+  canResize?: boolean
   theaterId: number
   cinema: string
   numberOfSeats: number

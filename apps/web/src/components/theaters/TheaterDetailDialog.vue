@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { onMounted, ref, useTemplateRef, watch } from 'vue'
 import TheaterDialogShell from './TheaterDialogShell.vue'
 import SeatSelector from '../Seats/SeatSelector.vue'
@@ -119,7 +120,7 @@ watch(
       <section v-if="theater" class="theater-seats">
         <h3>Asientos de la sala</h3>
 
-        <p v-if="loadingSeats" role="status">Cargando asientos...</p>
+        <LoadingState v-if="loadingSeats" message="Cargando asientos..." compact />
 
         <p v-else-if="seatsError" class="detail-error" role="alert">
           {{ seatsError }}
@@ -134,6 +135,7 @@ watch(
             :seats="seats"
             max-selections="all"
             disabled
+            readonly
             :selectable-states="['free', 'unavailable', 'in-use', 'reserved']"
             @selection-change="handleSelection"
           />

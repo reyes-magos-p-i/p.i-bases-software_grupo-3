@@ -91,6 +91,9 @@ defineExpose({ open, close })
   background: color-mix(in srgb, var(--page-background) 55%, transparent);
 }
 .dialog-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -106,11 +109,20 @@ defineExpose({ open, close })
 .close-button {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
   border: 0;
   border-radius: var(--radius-small);
   color: inherit;
   background: transparent;
+}
+.close-button:focus-visible {
+  outline-color: var(--focus-on-dark);
+}
+@media (max-width: 520px) {
+  .dialog-heading {
+    padding: 16px;
+  }
 }
 </style>

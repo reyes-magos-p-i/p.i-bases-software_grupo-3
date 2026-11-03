@@ -46,7 +46,7 @@ describe('TheaterSeatEditor', () => {
   it('loads the existing seats and allows selection of every administrative state', async () => {
     render()
     expect(wrapper.get('[role="status"]').text()).toBe('Cargando asientos…')
-    expect(wrapper.getComponent(SeatSelector).props('disabled')).toBe(true)
+    expect(wrapper.findComponent(SeatSelector).exists()).toBe(false)
     await flushPromises()
     expect(getTheaterSeats).toHaveBeenCalledExactlyOnceWith(7)
     expect(wrapper.getComponent(SeatSelector).props()).toMatchObject({
@@ -91,7 +91,7 @@ describe('TheaterSeatEditor', () => {
         ...changes,
       })
       expect(getTheaterSeats).toHaveBeenCalledTimes(2)
-      expect(wrapper.get('[role="status"]').text()).toBe('Asientos actualizados.')
+      expect(wrapper.get('[role="status"]').text()).toContain('Asientos actualizados.')
       expect(wrapper.findAll('select').map((select) => select.element.selectedIndex)).toEqual([
         0, 0,
       ])
@@ -137,7 +137,7 @@ describe('TheaterSeatEditor', () => {
     vi.mocked(getTheaterSeats).mockRejectedValueOnce(new Error('offline'))
     render()
     await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toBe('No se pudieron cargar los asientos.')
+    expect(wrapper.get('[role="alert"]').text()).toContain('No se pudieron cargar los asientos.')
     await wrapper.get('.seat-actions button').trigger('click')
     await flushPromises()
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
@@ -153,7 +153,7 @@ describe('TheaterSeatEditor', () => {
     await chooseChanges('', 'vip')
     await wrapper.get('.save-button').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toBe('No se pudieron cargar los asientos.')
+    expect(wrapper.get('[role="alert"]').text()).toContain('No se pudieron cargar los asientos.')
     expect(wrapper.text()).not.toContain('Asientos actualizados.')
   })
 
@@ -161,12 +161,18 @@ describe('TheaterSeatEditor', () => {
     [
       {
         isAxiosError: true,
-        response: { data: { message: ['Selecciona un estado.', 'Selecciona un tipo.'] } },
+        response: {
+          status: 400,
+          data: { message: ['Selecciona un estado.', 'Selecciona un tipo.'] },
+        },
       },
       'Selecciona un estado., Selecciona un tipo.',
     ],
     [
-      { isAxiosError: true, response: { data: { message: 'El asiento ya no está disponible.' } } },
+      {
+        isAxiosError: true,
+        response: { status: 409, data: { message: 'El asiento ya no está disponible.' } },
+      },
       'El asiento ya no está disponible.',
     ],
     [{ isAxiosError: true }, 'No se pudieron actualizar los asientos.'],
@@ -178,7 +184,7 @@ describe('TheaterSeatEditor', () => {
     await chooseChanges('unavailable')
     await wrapper.get('.save-button').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toBe(message)
+    expect(wrapper.get('[role="alert"]').text()).toContain(message)
     expect(wrapper.get('.save-button').attributes('disabled')).toBeUndefined()
     expect(getTheaterSeats).toHaveBeenCalledTimes(1)
   })

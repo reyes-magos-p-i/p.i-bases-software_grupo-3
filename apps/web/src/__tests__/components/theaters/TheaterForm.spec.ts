@@ -4,6 +4,33 @@ import TheaterForm from '@/components/theaters/TheaterForm.vue'
 
 const props = { submitLabel: 'Guardar', submittingLabel: 'Guardando…' }
 
+describe('TheaterForm layout protection', () => {
+  it('keeps protected dimensions read-only while allowing the other fields to be edited', async () => {
+    const view = mount(TheaterForm, { props })
+    view.vm.fill({
+      theaterId: 7,
+      cinema: 'Centro',
+      numberOfSeats: 6,
+      dimensionX: 2,
+      dimensionY: 3,
+      projectorName: 'IMAX',
+      status: 'Disponible',
+      isActive: true,
+      canResize: false,
+    })
+    await view.vm.$nextTick()
+    for (const name of ['numberOfSeats', 'dimensionX', 'dimensionY']) {
+      expect(view.get(`[name="${name}"]`).attributes('readonly')).toBeDefined()
+    }
+    expect(view.get('[name="projectorName"]').attributes('disabled')).toBeUndefined()
+    expect(view.text()).toContain('Sus dimensiones y cantidad de asientos se conservan')
+    view.vm.reset()
+    await view.vm.$nextTick()
+    expect(view.get('[name="dimensionX"]').attributes('readonly')).toBeUndefined()
+    view.unmount()
+  })
+})
+
 describe('TheaterForm projector select', () => {
   it('shows "No hay proyectores" when there are no projectors', () => {
     const select = mount(TheaterForm, { props }).get('[name="projectorName"]')

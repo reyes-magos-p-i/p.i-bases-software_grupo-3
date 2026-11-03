@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { ref, watch } from 'vue'
 import SeatSelector from '../Seats/SeatSelector.vue'
 import { getTheaterSeats, updateSeatStatuses } from '@/services/theater.service'
@@ -121,9 +123,11 @@ async function saveStatus() {
   } catch (err) {
     if (theaterId !== props.theaterId) return
 
-    console.error('Seat update failed:', isAxiosError(err) ? err.response?.data : err)
-
-    const backendMessage = isAxiosError(err) ? err.response?.data?.message : undefined
+    const status = isAxiosError(err) ? err.response?.status : undefined
+    const backendMessage =
+      status && [400, 404, 409].includes(status) && isAxiosError(err)
+        ? err.response?.data?.message
+        : undefined
 
     error.value = Array.isArray(backendMessage)
       ? backendMessage.join(', ')
@@ -156,17 +160,26 @@ watch(
   <section class="seat-editor" aria-label="Modificar estado de asientos">
     <h2>Estado de los asientos</h2>
 
-    <p v-if="loading" role="status">Cargando asientos…</p>
+    <LoadingState v-if="loading" message="Cargando asientos…" compact />
 
-    <p v-if="error" role="alert">
-      {{ error }}
-    </p>
-
-    <p v-if="message" role="status">
-      {{ message }}
-    </p>
+    <NotificationPopup
+      v-if="error"
+      type="error"
+      :message="error"
+      :duration="0"
+      placement="bottom-right"
+      @close="error = ''"
+    />
+    <NotificationPopup
+      v-if="message"
+      type="success"
+      :message="message"
+      placement="bottom-right"
+      @close="message = ''"
+    />
 
     <SeatSelector
+      v-if="!loading && (!error || seats.length)"
       :key="selectorVersion"
       :theater-id="theaterId"
       :rows="rows"
@@ -175,6 +188,7 @@ watch(
       :max-selections="readonly ? 0 : 'all'"
       :selectable-states="selectableStates"
       :disabled="readonly || disabled || loading || saving"
+      :readonly="readonly"
       @selection-change="selectedSeats = $event"
     />
 
