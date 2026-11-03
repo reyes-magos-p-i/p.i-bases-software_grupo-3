@@ -11,6 +11,11 @@ vi.mock('@/services/movie.service', () => ({
   createMovie: vi.fn(),
 }))
 
+vi.mock('@/services/image-handler.service', () => ({
+  uploadPoster: vi.fn(),
+  getPosterUrl: vi.fn(() => null),
+}))
+
 describe('MovieCrudCreate', () => {
   const props = {
     classifications: [{ id: 1, name: 'TP' }],
@@ -24,10 +29,11 @@ describe('MovieCrudCreate', () => {
       global: {
         stubs: {
           BaseModal: {
-            template: '<div><slot /></div>',
+            template: '<div><slot /></div>'
           },
-        },
-      },
+          ImageUpload: true,
+        }
+      }
     })
   }
 
@@ -81,6 +87,7 @@ describe('MovieCrudCreate', () => {
       classificationId: 1,
       languageIds: [1],
       genreIds: [2],
+      posterImage: null,
     })
 
     expect(wrapper.emitted('saved')).toHaveLength(1)
@@ -105,7 +112,8 @@ describe('MovieCrudCreate', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(wrapper.find('[role="alert"]').text()).toBe('No se pudo crear la película.')
+    expect(wrapper.find('[role="alert"]').text())
+      .toBe('No se pudo crear la película. Vuelve a intentarlo.')
 
     expect(wrapper.emitted('saved')).toBeUndefined()
   })

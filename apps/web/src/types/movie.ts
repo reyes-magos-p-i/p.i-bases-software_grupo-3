@@ -24,9 +24,8 @@ export interface MovieDetail {
   synopsis: string | null
   runningTime: number
   releaseYear: number | null
-
+  posterImage?: string | null
   classification: MovieOption
-
   languages: MovieOption[]
   genres: MovieOption[]
 }
