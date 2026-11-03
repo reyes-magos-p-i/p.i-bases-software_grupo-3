@@ -1,3 +1,4 @@
+import type oracle from 'oracledb';
 import {
   PurchaseCatalogRepository,
   seatQuery,
@@ -65,10 +66,47 @@ describe('Purchase catalog repository', () => {
     connection.execute.mockResolvedValue({});
     expect(await repo.getFunction(8, connection as never)).toBeNull();
   });
+  const settings = {
+    rows: [
+      { key: 'MAX_TICKETS_PER_FUNCTION', value: 6 },
+      { key: 'MAX_GUEST_PURCHASES_PER_HOUR', value: 2 },
+    ],
+  };
+  it('reads the limits from the database, also inside a transaction', async () => {
+    db.query.mockResolvedValue(settings);
+    expect(await repo.getLimits()).toEqual({
+      maxTickets: 6,
+      maxGuestPurchases: 2,
+    });
+    connection.execute.mockResolvedValue(settings);
+    expect(
+      await repo.getLimits(connection as unknown as oracle.Connection),
+    ).toEqual({ maxTickets: 6, maxGuestPurchases: 2 });
+    expect(connection.execute).toHaveBeenCalledWith(
+      expect.stringContaining('FROM GLOBAL_SETTINGS'),
+      {},
+      expect.objectContaining({ autoCommit: false }),
+    );
+  });
+  it.each([
+    { rows: [] },
+    {},
+    { rows: [{ key: 'MAX_TICKETS_PER_FUNCTION', value: 6 }] },
+    { rows: [{ key: 'MAX_GUEST_PURCHASES_PER_HOUR', value: 2 }] },
+  ])('refuses to sell without both limits %j', async (result) => {
+    db.query.mockResolvedValue(result);
+    await expect(repo.getLimits()).rejects.toMatchObject({ status: 503 });
+  });
   it('overlays tickets per function and respects inaccessible physical seats', async () => {
-    db.query.mockResolvedValue({ rows: [{ positionId: 1, state: 'in-use' }] });
+    let seatResult: object = {
+      rows: [{ positionId: 1, state: 'in-use' }],
+    };
+    db.query.mockImplementation((sql: string) =>
+      Promise.resolve(sql.includes('GLOBAL_SETTINGS') ? settings : seatResult),
+    );
     const context = { id: 4, theaterId: 3, columns: 2 } as never;
     expect(await repo.getSeats(context)).toMatchObject({
+      maxTickets: 6,
       seats: [{ state: 'in-use' }],
       categories: expect.any(Array),
     });
@@ -76,7 +114,7 @@ describe('Purchase catalog repository', () => {
       expect.stringContaining('tk.MOVIE_FUNCTION_ID=:functionId'),
       { columns: 2, theaterId: 3, functionId: 4 },
     );
-    db.query.mockResolvedValue({});
+    seatResult = {};
     expect(await repo.getSeats(context)).toMatchObject({ seats: [] });
     expect(seatQuery([1, 2])).toContain('IN (:p0,:p1)');
     expect(seatQuery([1])).toContain('FOR UPDATE');

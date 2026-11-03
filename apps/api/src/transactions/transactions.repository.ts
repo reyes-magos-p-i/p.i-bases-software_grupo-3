@@ -30,6 +30,12 @@ const ZONE = 'America/Costa_Rica';
 // Oracle concatenates NULL as '', so missing name parts leave only spaces.
 const CLIENT_NAME = `TRIM(REGEXP_REPLACE(c.FIRST_NAME || ' ' || c.SECOND_NAME || ' ' || c.FIRST_SURNAME || ' ' || c.SECOND_SURNAME, ' +', ' '))`;
 
+// Guests have no client row. Search uses these same values, so a row is always
+// found by what it shows.
+const BUYER_NAME = `CASE WHEN i.CLIENT_ID IS NULL THEN 'Invitado' ELSE ${CLIENT_NAME} END`;
+const BUYER_EMAIL = 'COALESCE(i.BUYER_EMAIL,c.EMAIL)';
+const MOVIE_TITLE = `COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.title'),m.TITLE)`;
+
 // Paid and cancelled invoices with their client, function, movie and branch.
 const TRANSACTIONS = `FROM INVOICES i
        LEFT JOIN CLIENTS c ON c.CLIENT_ID = i.CLIENT_ID
@@ -41,8 +47,8 @@ const TRANSACTIONS = `FROM INVOICES i
 
 const TRANSACTION_COLUMNS = `i.INVOICE_ID AS ID,
        TO_CHAR(i.CREATED_AT AT TIME ZONE '${ZONE}', 'YYYY-MM-DD"T"HH24:MI') AS PURCHASED_AT,
-       ${CLIENT_NAME} AS CLIENT_NAME, COALESCE(i.BUYER_EMAIL,c.EMAIL) AS CLIENT_EMAIL,
-       COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.title'),m.TITLE) AS MOVIE_TITLE, COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.branchName'),TRIM(b.NAME)) AS BRANCH_NAME, COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.theaterId' RETURNING NUMBER),f.THEATER_ID) AS THEATER_ID,
+       ${BUYER_NAME} AS CLIENT_NAME, ${BUYER_EMAIL} AS CLIENT_EMAIL,
+       ${MOVIE_TITLE} AS MOVIE_TITLE, COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.branchName'),TRIM(b.NAME)) AS BRANCH_NAME, COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.theaterId' RETURNING NUMBER),f.THEATER_ID) AS THEATER_ID,
        COALESCE(SUBSTR(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.startsAt'),1,16),TO_CHAR(f.START_TIME, 'YYYY-MM-DD"T"HH24:MI')) AS FUNCTION_START,
        (SELECT NVL(SUM(l.QUANTITY), 0)
           FROM INVOICE_PRODUCTS l
@@ -92,9 +98,9 @@ export class TransactionsRepository {
         val: likePattern(fold(query.search)),
         type: oracle.STRING,
       };
-      const byText = String.raw`(${foldSql(CLIENT_NAME)} LIKE :search ESCAPE '\'
-            OR LOWER(c.EMAIL) LIKE :search ESCAPE '\'
-            OR ${foldSql('m.TITLE')} LIKE :search ESCAPE '\'`;
+      const byText = String.raw`(${foldSql(BUYER_NAME)} LIKE :search ESCAPE '\'
+            OR LOWER(${BUYER_EMAIL}) LIKE :search ESCAPE '\'
+            OR ${foldSql(MOVIE_TITLE)} LIKE :search ESCAPE '\'`;
       const id = INVOICE_ID_SEARCH.exec(query.search)?.[1];
       if (id && Number.isSafeInteger(Number(id))) {
         binds.invoiceId = { val: Number(id), type: oracle.NUMBER };

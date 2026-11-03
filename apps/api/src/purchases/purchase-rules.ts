@@ -38,6 +38,31 @@ export function requireGuestEmailAvailable(
   });
 }
 
+export function requireTicketAllowance(
+  owned: number,
+  requested: number,
+  maxTickets: number,
+) {
+  const ownedNote = owned ? ` Ya tienes ${owned} para esta función.` : '';
+  if (owned + requested > maxTickets)
+    throw new ConflictException({
+      code: 'TICKET_LIMIT_REACHED',
+      message: `Puedes comprar hasta ${maxTickets} boletos por función.${ownedNote}`,
+    });
+}
+
+export function requireGuestPurchaseAllowance(
+  recent: number,
+  maxGuestPurchases: number,
+) {
+  if (recent >= maxGuestPurchases)
+    throw new ConflictException({
+      code: 'GUEST_EMAIL_LIMIT',
+      message:
+        'Este correo alcanzó el máximo de compras por hora. Intenta más tarde.',
+    });
+}
+
 export function selectionPositions(selection: PurchaseSelection) {
   const positions = TICKET_CATEGORIES.flatMap(
     (category) => selection.seats[category],

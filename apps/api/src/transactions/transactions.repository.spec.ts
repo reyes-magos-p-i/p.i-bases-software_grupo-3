@@ -104,14 +104,27 @@ describe('TransactionsRepository', () => {
       expect(result.items).toEqual([]);
     });
 
+    it('shows guests as Invitado and searches the same values each row displays', async () => {
+      mockList(1, [row]);
+      await repository.listTransactions({ ...query, search: 'invitado' });
+      const sql = String(db.query.mock.calls[0]![0]);
+      expect(sql).toContain("CASE WHEN i.CLIENT_ID IS NULL THEN 'Invitado'");
+      expect(sql).not.toContain('LOWER(c.EMAIL)');
+      expect(sql).not.toContain("LOWER(m.TITLE), 'áéíóúüñ'");
+      const listSql = String(db.query.mock.calls[1]![0]);
+      expect(listSql).toContain("THEN 'Invitado' ELSE");
+      expect(listSql).toContain('AS CLIENT_NAME');
+    });
     it('searches client, email and movie ignoring case, accents and LIKE wildcards', async () => {
       mockList(0);
       await repository.listTransactions({ ...query, search: 'Volcán 50%_' });
       const [sql, binds] = call(0);
       expect(sql).toContain(
-        "TRANSLATE(LOWER(m.TITLE), 'áéíóúüñ', 'aeiouun') LIKE :search",
+        "TRANSLATE(LOWER(COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.title'),m.TITLE)), 'áéíóúüñ', 'aeiouun') LIKE :search",
       );
-      expect(sql).toContain("LOWER(c.EMAIL) LIKE :search ESCAPE '\\'");
+      expect(sql).toContain(
+        "LOWER(COALESCE(i.BUYER_EMAIL,c.EMAIL)) LIKE :search ESCAPE '\\'",
+      );
       expect(sql).not.toContain(':invoiceId');
       expect(binds).toEqual({
         search: { val: '%volcan 50\\%\\_%', type: oracle.STRING },

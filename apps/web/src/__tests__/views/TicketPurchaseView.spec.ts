@@ -133,6 +133,7 @@ beforeEach(() => {
     function: context,
     seats: [seat],
     categories: [],
+    maxTickets: 10,
   } as never)
   vi.mocked(quotePurchase).mockImplementation((data) =>
     Promise.resolve({
@@ -170,6 +171,7 @@ describe('TicketPurchaseView', () => {
       function: context,
       seats: [seat],
       categories: [],
+      maxTickets: 10,
     } as never)
     vi.mocked(identifyGuestBuyer).mockResolvedValue({ email: 'guest@example.com' })
     vi.mocked(quoteGuestPurchase).mockResolvedValue({
