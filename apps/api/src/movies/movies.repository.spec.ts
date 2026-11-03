@@ -109,6 +109,7 @@ describe('MoviesRepository', () => {
         id: 24,
         title: 'Interstellar',
         synopsis: 'Space adventure',
+        posterImage: null,
         runningTime: 169,
         releaseYear: 2014,
         classification: { id: 1, name: 'TP' },

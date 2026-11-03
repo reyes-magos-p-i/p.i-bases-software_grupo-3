@@ -11,6 +11,9 @@ import ReusableSearchDropdown from '@/components/common/ReusableSearchDropdown.v
 import { createMovie } from '@/services/movie.service'
 import type { MovieOption } from '@/types/movie'
 
+import ImageUpload from '../image/ImageUpload.vue'
+import { uploadPoster, getPosterUrl } from '@/services/image-handler.service.ts'
+
 const props = defineProps<{
   classifications: MovieOption[]
   languages: MovieOption[]
@@ -35,10 +38,16 @@ const form = reactive({
   classificationId: null as number | null,
   languageIds: [] as number[],
   genreIds: [] as number[],
+  posterImage: null as string | null,
 })
 
 const saving = ref(false)
 const error = ref('')
+const selectedPoster = ref<File | null>(null)
+
+const existingPosterUrl = computed(() =>
+  getPosterUrl(form.posterImage),
+)
 const runningTimeValid = ref(false)
 const releaseYearValid = ref(false)
 
@@ -72,7 +81,6 @@ const isFormValid = computed(
 async function save() {
   if (saving.value || !isFormValid.value) return
 
-  // Local variables let TypeScript narrow nullable values.
   const runningTime = form.runningTime
   const releaseYear = form.releaseYear
   const classificationId = form.classificationId
@@ -83,6 +91,13 @@ async function save() {
   error.value = ''
 
   try {
+    if (selectedPoster.value) {
+      const uploaded = await uploadPoster(selectedPoster.value)
+
+      form.posterImage = uploaded.path
+      selectedPoster.value = null
+    }
+
     await createMovie({
       title: form.title.trim(),
       synopsis: form.synopsis.trim(),
@@ -91,6 +106,7 @@ async function save() {
       classificationId,
       languageIds: [...form.languageIds],
       genreIds: [...form.genreIds],
+      posterImage: form.posterImage,
     })
 
     emit('saved')
@@ -104,7 +120,7 @@ async function save() {
       }
     }
 
-    error.value = 'No se pudo crear la película.'
+    error.value = 'No se pudo crear la película. Vuelve a intentarlo.'
   } finally {
     saving.value = false
   }
@@ -115,7 +131,11 @@ async function save() {
   <BaseModal :open="true" title="Crear película" :close-disabled="saving" @close="emit('close')">
     <div class="movie-create-content">
       <form @submit.prevent="save">
-        <h3>Información general</h3>
+        <fieldset class="create-fieldset" :disabled="saving">
+          <div class="movie-create-layout">
+            <div class="movie-fields">
+              <!-- All your movie fields -->
+               <h3>Información general</h3>
 
         <div class="form-grid">
           <LimitedTextInput v-model="form.title" label="Título" :limit="TITLE_LIMIT" required />
@@ -139,43 +159,55 @@ async function save() {
           />
         </div>
 
-        <div class="form-group">
-          <SimpleDropdown
-            v-model="form.classificationId"
-            label="Clasificación"
-            :options="classifications"
-            required
-          />
-        </div>
+                <div class="form-group">
+                  <SimpleDropdown
+                    v-model="form.classificationId"
+                    label="Clasificación"
+                    :options="classifications"
+                    required
+                  />
+                </div>
 
-        <div class="form-group">
-          <ReusableSearchDropdown
-            v-model="form.languageIds"
-            label="Idiomas"
-            placeholder="Buscar idiomas..."
-            :options="languageOptions"
-          />
-        </div>
+                <div class="form-group">
+                  <ReusableSearchDropdown
+                    v-model="form.languageIds"
+                    label="Idiomas"
+                    placeholder="Buscar idiomas..."
+                    :options="languageOptions"
+                  />
+                </div>
 
-        <div class="form-group">
-          <ReusableSearchDropdown
-            v-model="form.genreIds"
-            label="Géneros"
-            placeholder="Buscar géneros..."
-            :options="genreOptions"
-          />
-        </div>
+                <div class="form-group">
+                  <ReusableSearchDropdown
+                    v-model="form.genreIds"
+                    label="Géneros"
+                    placeholder="Buscar géneros..."
+                    :options="genreOptions"
+                  />
+                </div>
 
-        <div class="form-group">
-          <LimitedTextInput
-            v-model="form.synopsis"
-            label="Sinopsis"
-            :limit="SYNOPSIS_LIMIT"
-            multiline
-            :rows="5"
-            required
-          />
-        </div>
+                <div class="form-group">
+                  <LimitedTextInput
+                    v-model="form.synopsis"
+                    label="Sinopsis"
+                    :limit="SYNOPSIS_LIMIT"
+                    multiline
+                    :rows="5"
+                    required
+                  />
+                </div>
+            </div>
+
+            <aside class="poster-column">
+              <ImageUpload
+                v-model="selectedPoster"
+                label="Póster de la película"
+                :existing-image-url="existingPosterUrl"
+                :disabled="saving"
+              />
+            </aside>
+          </div>
+        </fieldset>
 
         <p v-if="error" class="form-error" role="alert">
           {{ error }}
@@ -293,6 +325,41 @@ async function save() {
 .form-footer button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.create-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.movie-create-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 24px;
+  align-items: start;
+}
+
+.movie-fields,
+.poster-column {
+  min-width: 0;
+}
+
+.movie-fields > h3 {
+  margin: 0 0 12px;
+}
+
+@media (max-width: 700px) {
+  .movie-create-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .poster-column {
+    width: 100%;
+    max-width: 240px;
+    justify-self: center;
+  }
 }
 
 @media (max-width: 575px) {
