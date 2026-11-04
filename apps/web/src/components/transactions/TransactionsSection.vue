@@ -393,6 +393,7 @@ onBeforeUnmount(() => {
 .filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  align-items: end;
   gap: 12px;
 }
 .filters label {
@@ -400,6 +401,9 @@ onBeforeUnmount(() => {
   max-width: 100%;
 }
 .filters :is(input, select) {
+  box-sizing: border-box;
+  height: var(--filter-control-height);
+  min-height: var(--filter-control-height);
   width: 100%;
   min-width: 0;
   max-width: 100%;

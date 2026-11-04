@@ -489,7 +489,8 @@ defineExpose({ refresh })
 /* Fixed-width columns: a long option never pushes a field over its neighbour. */
 .filters {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr));
+  align-items: end;
   gap: 12px;
   margin: 0;
   padding: 0;
@@ -541,6 +542,9 @@ input[aria-invalid='true'] {
 }
 .filters input,
 .filters select {
+  box-sizing: border-box;
+  height: var(--filter-control-height);
+  min-height: var(--filter-control-height);
   width: 100%;
   min-width: 0;
 }

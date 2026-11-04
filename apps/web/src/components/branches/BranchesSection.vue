@@ -544,6 +544,18 @@ input[aria-invalid='true'] {
 .filters label {
   min-width: min(100%, 220px);
 }
+.filters select {
+  box-sizing: border-box;
+  height: var(--filter-control-height);
+  min-height: var(--filter-control-height);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .filter-error {
   margin: 0;
   align-self: center;

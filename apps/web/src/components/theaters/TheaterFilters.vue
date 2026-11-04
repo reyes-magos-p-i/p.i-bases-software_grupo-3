@@ -109,7 +109,14 @@ label {
 }
 select {
   box-sizing: border-box;
-  height: 44px;
+  height: var(--filter-control-height);
+  min-height: var(--filter-control-height);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   line-height: 20px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-small);

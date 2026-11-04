@@ -651,7 +651,14 @@ input[aria-invalid='true'] {
 .filters select,
 .filter-picker summary {
   box-sizing: border-box;
-  height: 44px;
+  height: var(--filter-control-height);
+  min-height: var(--filter-control-height);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 20px;
   padding: 11px 12px;
 }
@@ -662,7 +669,6 @@ input[aria-invalid='true'] {
   align-self: end;
 }
 .filter-picker summary {
-  min-height: 44px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
   background: var(--content-background);
