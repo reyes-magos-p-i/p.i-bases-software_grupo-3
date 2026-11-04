@@ -78,7 +78,7 @@ defineExpose({ open, close })
   top: 50%;
   left: 50%;
   width: min(calc(100% - 32px), var(--dialog-width, 620px));
-  max-height: min(90dvh, 760px);
+  max-height: calc(100dvh - 32px);
   margin: 0;
   padding: 0;
   border: 0;
@@ -86,8 +86,13 @@ defineExpose({ open, close })
   color: var(--text-primary);
   background: var(--dialog-background);
   transform: translate(-50%, -50%);
+  overflow: hidden;
+}
+.theater-dialog[open] {
+  display: flex;
+  flex-direction: column;
 }
 .theater-dialog::backdrop {
-  background: color-mix(in srgb, var(--page-background) 55%, transparent);
+  background: var(--overlay-background);
 }
 </style>

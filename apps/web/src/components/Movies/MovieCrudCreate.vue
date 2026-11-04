@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
 import { computed, nextTick, reactive, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 
@@ -145,77 +146,68 @@ async function save() {
       >
         <fieldset class="create-fieldset" :disabled="saving">
           <div class="movie-create-layout">
-            <div class="movie-fields">
-              <!-- All your movie fields -->
-              <h3>Información general</h3>
-
-              <div class="form-grid">
-                <LimitedTextInput
-                  v-model="form.title"
-                  label="Título"
-                  :limit="TITLE_LIMIT"
-                  :error="fieldErrors.title"
-                  required
-                  @update:model-value="delete fieldErrors.title"
-                />
-
-                <PositiveNumberInput
-                  v-model="form.runningTime"
-                  label="Duración en minutos"
-                  :min="1"
-                  :max="999"
-                  required
-                  :error="fieldErrors.runningTime"
-                  @update:model-value="delete fieldErrors.runningTime"
-                />
-
-                <PositiveNumberInput
-                  v-model="form.releaseYear"
-                  label="Año de estreno"
-                  :min="1888"
-                  :max="2077"
-                  required
-                  :error="fieldErrors.releaseYear"
-                  @update:model-value="delete fieldErrors.releaseYear"
-                />
-              </div>
-
-              <div class="form-group">
-                <SimpleDropdown
-                  v-model="form.classificationId"
-                  label="Clasificación"
-                  :options="classifications"
-                  :error="fieldErrors.classificationId"
-                  @update:model-value="delete fieldErrors.classificationId"
-                  required
-                />
-              </div>
-
-              <div class="form-group">
-                <ReusableSearchDropdown
-                  v-model="form.languageIds"
-                  label="Idiomas"
-                  placeholder="Buscar idiomas..."
-                  :options="languageOptions"
-                  required
-                  :error="fieldErrors.languageIds"
-                  @update:model-value="delete fieldErrors.languageIds"
-                />
-              </div>
-
-              <div class="form-group">
-                <ReusableSearchDropdown
-                  v-model="form.genreIds"
-                  label="Géneros"
-                  placeholder="Buscar géneros..."
-                  :options="genreOptions"
-                  required
-                  :error="fieldErrors.genreIds"
-                  @update:model-value="delete fieldErrors.genreIds"
-                />
-              </div>
-
-              <div class="form-group">
+            <div class="movie-fields dialog-sections">
+              <DialogSection title="Información general">
+                <div class="form-grid">
+                  <LimitedTextInput
+                    v-model="form.title"
+                    label="Título"
+                    :limit="TITLE_LIMIT"
+                    :error="fieldErrors.title"
+                    required
+                    @update:model-value="delete fieldErrors.title"
+                  />
+                  <PositiveNumberInput
+                    v-model="form.runningTime"
+                    label="Duración en minutos"
+                    :min="1"
+                    :max="999"
+                    required
+                    :error="fieldErrors.runningTime"
+                    @update:model-value="delete fieldErrors.runningTime"
+                  />
+                  <PositiveNumberInput
+                    v-model="form.releaseYear"
+                    label="Año de estreno"
+                    :min="1888"
+                    :max="2077"
+                    required
+                    :error="fieldErrors.releaseYear"
+                    @update:model-value="delete fieldErrors.releaseYear"
+                  />
+                  <SimpleDropdown
+                    v-model="form.classificationId"
+                    label="Clasificación"
+                    :options="classifications"
+                    :error="fieldErrors.classificationId"
+                    @update:model-value="delete fieldErrors.classificationId"
+                    required
+                  />
+                </div>
+              </DialogSection>
+              <DialogSection title="Idiomas y géneros">
+                <div class="option-grid">
+                  <ReusableSearchDropdown
+                    v-model="form.languageIds"
+                    label="Idiomas"
+                    placeholder="Buscar idiomas..."
+                    :options="languageOptions"
+                    required
+                    :error="fieldErrors.languageIds"
+                    @update:model-value="delete fieldErrors.languageIds"
+                  />
+                  <ReusableSearchDropdown
+                    v-model="form.genreIds"
+                    label="Géneros"
+                    placeholder="Buscar géneros..."
+                    :options="genreOptions"
+                    required
+                    :error="fieldErrors.genreIds"
+                    @update:model-value="delete fieldErrors.genreIds"
+                  />
+                </div>
+              </DialogSection>
+              <DialogSection title="Sinopsis">
                 <LimitedTextInput
                   v-model="form.synopsis"
                   label="Sinopsis"
@@ -226,16 +218,17 @@ async function save() {
                   :rows="5"
                   required
                 />
-              </div>
+              </DialogSection>
             </div>
-
             <aside class="poster-column">
-              <ImageUpload
-                v-model="selectedPoster"
-                label="Póster de la película"
-                :existing-image-url="existingPosterUrl"
-                :disabled="saving"
-              />
+              <DialogSection title="Póster">
+                <ImageUpload
+                  v-model="selectedPoster"
+                  label="Póster de la película"
+                  :existing-image-url="existingPosterUrl"
+                  :disabled="saving"
+                />
+              </DialogSection>
             </aside>
           </div>
         </fieldset>
@@ -265,6 +258,10 @@ async function save() {
 </template>
 
 <style scoped>
+.option-grid {
+  display: grid;
+  gap: 16px;
+}
 /* Modal size and appearance */
 :global(.app-modal-card:has(.movie-create-content)) {
   width: min(880px, 100%);

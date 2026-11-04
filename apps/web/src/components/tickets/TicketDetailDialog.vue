@@ -63,10 +63,10 @@ watch(() => [props.ticket, props.error], syncDialog, { flush: 'post' })
             </div>
           </dl>
         </section>
-        <footer class="dialog-actions">
-          <button type="button" class="secondary-button" @click="closeDialog">Cerrar</button>
-        </footer>
       </template>
+      <footer class="dialog-actions">
+        <button type="button" class="secondary-button" @click="closeDialog">Cerrar</button>
+      </footer>
     </div>
   </TicketDialogShell>
 </template>

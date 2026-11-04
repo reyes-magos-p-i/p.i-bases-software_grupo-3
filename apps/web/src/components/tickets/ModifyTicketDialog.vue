@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import { ref, useTemplateRef } from 'vue'
 import TicketDialogShell from './TicketDialogShell.vue'
@@ -66,30 +67,31 @@ defineExpose({ open, complete })
     @close="emit('close')"
   >
     <form novalidate :aria-busy="submitting" @submit.prevent="submit">
-      <label for="ticket-showtime" class="field-label">Proyecciones futuras</label>
-      <select
-        id="ticket-showtime"
-        v-model="movieFunctionId"
-        :disabled="submitting || optionsLoading"
-      >
-        <option value="">Seleccione una proyección</option>
-        <option v-for="s in showtimes" :key="s.movieFunctionId" :value="s.movieFunctionId">
-          {{ s.date }}{{ '\t' }}{{ s.time }}
-        </option>
-      </select>
+      <DialogSection as="fieldset" title="Proyección de destino" :number="1">
+        <label for="ticket-showtime" class="field-label">Proyecciones futuras</label>
+        <select
+          id="ticket-showtime"
+          v-model="movieFunctionId"
+          :disabled="submitting || optionsLoading"
+        >
+          <option value="">Seleccione una proyección</option>
+          <option v-for="s in showtimes" :key="s.movieFunctionId" :value="s.movieFunctionId">
+            {{ s.date }}{{ '\t' }}{{ s.time }}
+          </option>
+        </select>
 
-      <LoadingState v-if="optionsLoading" message="Cargando proyecciones…" compact />
-      <p v-else-if="optionsError" class="form-error" role="alert">
-        {{ optionsError }}
-        <button type="button" @click="emit('retryOptions')">Reintentar</button>
-      </p>
-      <p v-else-if="!showtimes.length" role="status">
-        No hay proyecciones alternativas disponibles.
-      </p>
-      <p v-if="submissionErrors.length" class="form-error" role="alert">
-        {{ submissionErrors.join(' ') }}
-      </p>
-
+        <LoadingState v-if="optionsLoading" message="Cargando proyecciones…" compact />
+        <p v-else-if="optionsError" class="form-error" role="alert">
+          {{ optionsError }}
+          <button type="button" @click="emit('retryOptions')">Reintentar</button>
+        </p>
+        <p v-else-if="!showtimes.length" role="status">
+          No hay proyecciones alternativas disponibles.
+        </p>
+        <p v-if="submissionErrors.length" class="form-error" role="alert">
+          {{ submissionErrors.join(' ') }}
+        </p>
+      </DialogSection>
       <footer class="dialog-actions">
         <button type="button" class="secondary-button" :disabled="submitting" @click="close">
           Cancelar

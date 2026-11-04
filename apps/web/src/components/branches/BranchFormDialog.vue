@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { computed, nextTick, reactive, ref, useTemplateRef, watch } from 'vue'
@@ -127,8 +128,12 @@ defineExpose({ open, complete })
         :duration="0"
       />
 
-      <fieldset class="form-card">
-        <legend>Datos de la sucursal</legend>
+      <DialogSection
+        as="fieldset"
+        class="form-card"
+        title="Datos de la sucursal"
+        :number="editing ? 1 : undefined"
+      >
         <div class="field-grid">
           <FormField
             v-slot="{ id, invalid, describedby }"
@@ -181,7 +186,7 @@ defineExpose({ open, complete })
             Reintentar
           </button>
         </p>
-      </fieldset>
+      </DialogSection>
 
       <footer class="dialog-actions">
         <button type="button" class="secondary-button" :disabled="submitting" @click="close">
@@ -208,23 +213,6 @@ defineExpose({ open, complete })
 }
 .required-marker {
   color: var(--color-error);
-  font-weight: 700;
-}
-.form-card {
-  display: grid;
-  gap: 12px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.form-card legend {
-  float: none;
-  display: block;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  font-size: 1rem;
   font-weight: 700;
 }
 .field-grid {

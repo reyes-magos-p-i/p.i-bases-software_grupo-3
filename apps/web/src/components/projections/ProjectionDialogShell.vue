@@ -58,13 +58,13 @@ defineExpose({ open, close, element: dialog })
   top: 50%;
   left: 50%;
   width: min(calc(100% - 32px), 1200px);
-  max-height: 94dvh;
+  max-height: calc(100dvh - 32px);
   margin: 0;
   padding: 0;
   border: 0;
   border-radius: var(--radius-medium);
   color: var(--text-primary);
-  background: var(--content-background);
+  background: var(--dialog-background);
   transform: translate(-50%, -50%);
   overflow: hidden;
 }
@@ -73,6 +73,6 @@ defineExpose({ open, close, element: dialog })
   flex-direction: column;
 }
 .projection-dialog::backdrop {
-  background: color-mix(in srgb, var(--page-background) 55%, transparent);
+  background: var(--overlay-background);
 }
 </style>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import {
   computed,
@@ -517,10 +518,9 @@ defineExpose({ open, edit, complete })
       </p>
 
       <div class="form-body">
-        <fieldset class="form-sections" :disabled="confirming">
+        <fieldset class="form-sections dialog-sections" :disabled="confirming">
           <legend class="visually-hidden">Datos de la proyección</legend>
-          <section class="form-section" :aria-labelledby="id + '-place-title'">
-            <h3 :id="id + '-place-title'"><span>1</span> Película y sala</h3>
+          <DialogSection class="form-section" :number="1" title="Película y sala">
             <div class="section-grid">
               <div class="field">
                 <label :for="id + '-branch'">Sucursal <span class="required-marker">*</span></label>
@@ -675,10 +675,9 @@ defineExpose({ open, edit, complete })
                 La proyección no será visible para los Clientes hasta activarla.
               </p>
             </div>
-          </section>
+          </DialogSection>
 
-          <section class="form-section" :aria-labelledby="id + '-schedule-title'">
-            <h3 :id="id + '-schedule-title'"><span>2</span> Fecha y horario</h3>
+          <DialogSection class="form-section" :number="2" title="Fecha y horario">
             <div class="section-grid two-columns">
               <div class="field">
                 <label :for="id + '-start-date'"
@@ -779,10 +778,9 @@ defineExpose({ open, edit, complete })
                 </small>
               </div>
             </div>
-          </section>
+          </DialogSection>
 
-          <section class="form-section" :aria-labelledby="id + '-times-title'">
-            <h3 :id="id + '-times-title'"><span>3</span> Tiempos de la función</h3>
+          <DialogSection class="form-section" :number="3" title="Tiempos de la función">
             <div class="minutes-grid">
               <div class="field minutes-field">
                 <label :for="id + '-advertisement'">Anuncios</label>
@@ -840,10 +838,9 @@ defineExpose({ open, edit, complete })
                 'Selecciona una película para calcular el tiempo total de la función.'
               }}
             </p>
-          </section>
+          </DialogSection>
 
-          <section class="form-section" :aria-labelledby="id + '-price-title'">
-            <h3 :id="id + '-price-title'"><span>4</span> Precio</h3>
+          <DialogSection class="form-section" :number="4" title="Precio">
             <div class="section-grid two-columns">
               <label
                 >Formato<select v-model="draft.format" name="format">
@@ -891,7 +888,7 @@ defineExpose({ open, edit, complete })
                 visibleError('price')
               }}</small>
             </div>
-          </section>
+          </DialogSection>
         </fieldset>
 
         <ProjectionPoster
@@ -995,37 +992,10 @@ form {
 }
 .form-sections {
   display: grid;
-  gap: 16px;
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
-}
-.form-section {
-  display: grid;
-  gap: 12px;
-  padding: 18px 20px;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-  color: var(--text-primary);
-}
-.form-section h3 {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-}
-.form-section h3 span {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  color: var(--text-on-dark);
-  font-size: 0.85rem;
-  background: var(--primary-color);
 }
 .section-grid {
   display: grid;

@@ -101,6 +101,12 @@ describe('ProjectionFormDialog', () => {
   it('schedules a projection with the suggested end time', async () => {
     render()
     expect(wrapper!.get('h2').text()).toBe('Agregar nueva proyección')
+    expect(wrapper!.findAll('.dialog-section-title').map((heading) => heading.text())).toEqual([
+      '1 Película y sala',
+      '2 Fecha y horario',
+      '3 Tiempos de la función',
+      '4 Precio',
+    ])
     expect(field('movie').attributes('disabled')).toBeDefined()
 
     await field('branchId').setValue('2')

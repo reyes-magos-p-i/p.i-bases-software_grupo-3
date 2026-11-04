@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { ref, watch } from 'vue'
@@ -16,6 +17,7 @@ import { isAxiosError } from 'axios'
 
 const props = withDefaults(
   defineProps<{
+    sectionNumber?: number
     theaterId: number
     rows: number
     columns: number
@@ -157,9 +159,7 @@ watch(
 </script>
 
 <template>
-  <section class="seat-editor" aria-label="Modificar estado de asientos">
-    <h2>Estado de los asientos</h2>
-
+  <DialogSection class="seat-editor" title="Estado de los asientos" :number="sectionNumber">
     <LoadingState v-if="loading" message="Cargando asientos…" compact />
 
     <NotificationPopup
@@ -232,22 +232,13 @@ watch(
         </button>
       </div>
     </div>
-  </section>
+  </DialogSection>
 </template>
 
 <style scoped>
-.seat-editor {
-  margin-top: 24px;
-  padding-top: 20px;
-  padding-bottom: 24px;
-  padding-left: 24px;
-  padding-right: 24px;
-  border-top: 1px solid var(--border-color);
-}
-
 button {
   cursor: pointer;
-  min-height: 42px;
+  min-height: var(--dialog-control-height);
   padding: 9px 16px;
   border: 1px solid var(--color-primary);
   border-radius: var(--radius-small);

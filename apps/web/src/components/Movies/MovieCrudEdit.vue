@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, useTemplateRef, watch } from 'vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
@@ -285,7 +286,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <BaseModal :open="movieId !== null" :title="title" @close="close">
+  <BaseModal :open="movieId !== null" :title="title" :close-disabled="saving" @close="close">
     <div class="movie-detail-content dialog-content" :aria-busy="loading || saving">
       <LoadingState
         v-if="loading"
@@ -312,84 +313,74 @@ onBeforeUnmount(() => {
       >
         <fieldset class="edit-fieldset" :disabled="saving">
           <div class="movie-edit-layout">
-            <div class="movie-fields">
-              <!-- Your existing form fields and sections -->
-              <section class="detail-group">
-                <h3>Información general</h3>
-                <div class="detail-grid">
+            <div class="movie-fields dialog-sections">
+              <DialogSection title="Información general" :number="1">
+                <div class="form-grid">
                   <div class="detail-field">
                     <span class="field-label">ID</span>
                     <p>MOV{{ movie.id }}</p>
                   </div>
-                  <div class="detail-field">
-                    <LimitedTextInput
-                      v-model="form.title"
-                      label="Título"
-                      placeholder="Ingrese el título"
-                      :limit="100"
-                      :error="fieldErrors.title"
-                      @update:model-value="delete fieldErrors.title"
-                      required
-                    />
-                  </div>
+                  <LimitedTextInput
+                    v-model="form.title"
+                    label="Título"
+                    placeholder="Ingrese el título"
+                    :limit="100"
+                    :error="fieldErrors.title"
+                    @update:model-value="delete fieldErrors.title"
+                    required
+                  />
+                  <PositiveNumberInput
+                    v-model="form.runningTime"
+                    label="Duración en minutos"
+                    placeholder="Ej. 120"
+                    :min="1"
+                    :max="999"
+                    required
+                    :error="fieldErrors.runningTime"
+                    @update:model-value="delete fieldErrors.runningTime"
+                  />
+                  <PositiveNumberInput
+                    v-model="form.releaseYear"
+                    label="Año de estreno"
+                    placeholder="Ej. 2026"
+                    :min="1888"
+                    :max="2077"
+                    required
+                    :error="fieldErrors.releaseYear"
+                    @update:model-value="delete fieldErrors.releaseYear"
+                  />
+                  <SimpleDropdown
+                    v-model="form.classificationId"
+                    label="Clasificación"
+                    placeholder="Seleccione una clasificación"
+                    :options="classifications"
+                    :error="fieldErrors.classificationId"
+                    @update:model-value="delete fieldErrors.classificationId"
+                    required
+                  />
                 </div>
-              </section>
-
-              <div class="detail-field">
-                <PositiveNumberInput
-                  v-model="form.runningTime"
-                  label="Duración en minutos"
-                  placeholder="Ej. 120"
-                  :min="1"
-                  :max="999"
-                  required
-                  :error="fieldErrors.runningTime"
-                  @update:model-value="delete fieldErrors.runningTime"
-                />
-              </div>
-
-              <div class="detail-field">
-                <PositiveNumberInput
-                  v-model="form.releaseYear"
-                  label="Año de estreno"
-                  placeholder="Ej. 2026"
-                  :min="1888"
-                  :max="2077"
-                  required
-                  :error="fieldErrors.releaseYear"
-                  @update:model-value="delete fieldErrors.releaseYear"
-                />
-              </div>
-              <section class="detail-group">
-                <SimpleDropdown
-                  v-model="form.classificationId"
-                  label="Clasificación"
-                  placeholder="Seleccione una clasificación"
-                  :options="classifications"
-                  :error="fieldErrors.classificationId"
-                  @update:model-value="delete fieldErrors.classificationId"
-                  required
-                />
-              </section>
-              <ReusableSearchDropdown
-                class="detail-group"
-                v-model="form.languageIds"
-                label="Idiomas"
-                placeholder="Buscar idiomas..."
-                :options="languageOptions"
-                :error="fieldErrors.languageIds"
-                @update:model-value="delete fieldErrors.languageIds"
-              />
-              <ReusableSearchDropdown
-                v-model="form.genreIds"
-                class="detail-group"
-                label="Géneros"
-                placeholder="Buscar géneros..."
-                :options="genreOptions"
-                :error="fieldErrors.genreIds"
-                @update:model-value="delete fieldErrors.genreIds"
-              />
-              <section class="detail-group">
+              </DialogSection>
+              <DialogSection title="Idiomas y géneros" :number="2">
+                <div class="option-grid">
+                  <ReusableSearchDropdown
+                    v-model="form.languageIds"
+                    label="Idiomas"
+                    placeholder="Buscar idiomas..."
+                    :options="languageOptions"
+                    :error="fieldErrors.languageIds"
+                    @update:model-value="delete fieldErrors.languageIds"
+                  />
+                  <ReusableSearchDropdown
+                    v-model="form.genreIds"
+                    label="Géneros"
+                    placeholder="Buscar géneros..."
+                    :options="genreOptions"
+                    :error="fieldErrors.genreIds"
+                    @update:model-value="delete fieldErrors.genreIds"
+                  />
+                </div>
+              </DialogSection>
+              <DialogSection title="Sinopsis" :number="3">
                 <LimitedTextInput
                   v-model="form.synopsis"
                   label="Sinopsis"
@@ -401,15 +392,17 @@ onBeforeUnmount(() => {
                   :rows="5"
                   required
                 />
-              </section>
+              </DialogSection>
             </div>
             <aside class="poster-column">
-              <ImageUpload
-                v-model="selectedPoster"
-                label="Póster de la película"
-                :existing-image-url="existingPosterUrl"
-                :disabled="saving"
-              />
+              <DialogSection title="Póster" :number="4">
+                <ImageUpload
+                  v-model="selectedPoster"
+                  label="Póster de la película"
+                  :existing-image-url="existingPosterUrl"
+                  :disabled="saving"
+                />
+              </DialogSection>
             </aside>
           </div>
         </fieldset>
@@ -466,11 +459,6 @@ onBeforeUnmount(() => {
 }
 
 /* Sections */
-.detail-group {
-  margin: 0;
-  min-width: 0;
-}
-
 .detail-group h3,
 .option-fieldset legend {
   margin: 0 0 10px;
@@ -479,6 +467,15 @@ onBeforeUnmount(() => {
 }
 
 /* Form layout */
+.option-grid {
+  display: grid;
+  gap: 16px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -628,12 +625,6 @@ textarea.edit-input {
   min-width: 0;
 }
 
-.movie-fields {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
 @media (max-width: 700px) {
   .movie-edit-layout {
     grid-template-columns: 1fr;
@@ -651,6 +642,7 @@ textarea.edit-input {
     padding: 20px 16px;
   }
 
+  .form-grid,
   .detail-grid {
     grid-template-columns: minmax(0, 1fr);
   }

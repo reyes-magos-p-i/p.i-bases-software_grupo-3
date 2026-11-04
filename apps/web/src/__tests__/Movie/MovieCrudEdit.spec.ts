@@ -235,6 +235,12 @@ describe('MovieCrudEdit', () => {
   it('loads existing movie values', async () => {
     const wrapper = mountModal()
     await flushPromises()
+    expect(wrapper.findAll('.dialog-section-title').map((heading) => heading.text())).toEqual([
+      '1 Información general',
+      '2 Idiomas y géneros',
+      '3 Sinopsis',
+      '4 Póster',
+    ])
 
     expect(getMovieMock).toHaveBeenCalledWith(24, expect.any(AbortSignal))
 
@@ -461,6 +467,10 @@ describe('MovieCrudEdit', () => {
     expect(updateMovieMock).toHaveBeenCalledTimes(1)
 
     expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(true)
+
+    expect(wrapper.get<HTMLButtonElement>('[data-test="modal-close"]').element.disabled).toBe(true)
+    await wrapper.get('[data-test="modal-close"]').trigger('click')
+    expect(wrapper.emitted('close')).toBeUndefined()
 
     pending.resolve(undefined)
     await flushPromises()

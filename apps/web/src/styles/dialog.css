@@ -70,7 +70,10 @@ dialog.cinema-dialog::backdrop {
 }
 
 dialog.cinema-dialog[open] > :not(.dialog-heading) {
+  min-height: 0;
   padding: var(--dialog-content-padding);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .cinema-dialog .detail-group {
@@ -80,6 +83,11 @@ dialog.cinema-dialog[open] > :not(.dialog-heading) {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.cinema-dialog .dialog-sections {
+  display: grid;
+  gap: var(--dialog-section-gap);
 }
 
 .cinema-dialog :is(.detail-group, .edit-group) > h3 {
@@ -126,7 +134,7 @@ dialog.cinema-dialog[open] > :not(.dialog-heading) {
   white-space: pre-wrap;
 }
 
-.cinema-dialog :is(footer, .confirmation-actions) {
+.cinema-dialog > :not(.dialog-heading) :is(footer, .confirmation-actions, .dialog-actions) {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -135,22 +143,44 @@ dialog.cinema-dialog[open] > :not(.dialog-heading) {
   margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid var(--border-color);
+  flex-direction: row;
 }
 
-.cinema-dialog :is(footer, .confirmation-actions) > button {
-  min-height: 44px;
-  padding: 10px 16px;
+.cinema-dialog
+  > :not(.dialog-heading)
+  :is(footer, .confirmation-actions, .dialog-actions)
+  > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: var(--dialog-control-height);
+  height: auto;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px 16px;
+  border: 1px solid transparent;
   border-radius: var(--radius-small);
   font: inherit;
+  font-weight: 600;
+  box-shadow: none;
   cursor: pointer;
 }
 
 .cinema-dialog
-  :is(footer, .confirmation-actions)
-  > :is(.secondary-button, .detail-button):not(.primary) {
+  > :not(.dialog-heading)
+  :is(footer, .confirmation-actions, .dialog-actions)
+  > :is(.secondary, .secondary-button, .detail-button):not(.primary, .save-button) {
   border: 1px solid var(--border-strong);
   color: var(--button-secondary-text);
   background: var(--button-secondary-background);
+}
+
+.cinema-dialog > :not(.dialog-heading) :is(input:not([type='checkbox'], [type='radio']), select) {
+  min-height: var(--dialog-control-height);
 }
 
 .cinema-dialog :is(label, legend) {

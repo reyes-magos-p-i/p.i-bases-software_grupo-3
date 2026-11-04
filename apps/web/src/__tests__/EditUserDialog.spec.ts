@@ -167,6 +167,11 @@ describe('EditUserDialog', () => {
   })
   it('shows immutable information and prefilled editable data without gender or password controls', async () => {
     await render()
+    expect(
+      page
+        .findAll('.dialog-section-title:has(.dialog-section-number)')
+        .map((heading) => heading.text()),
+    ).toEqual(['1 Datos personales', '2 Contacto', '3 Dirección (opcional)'])
     expect(getUserDetail).toHaveBeenCalledWith(
       { section: 'clients', id: 42 },
       expect.any(AbortSignal),
@@ -299,6 +304,11 @@ describe('EditUserDialog', () => {
   it('allows staff role changes and displays immutable hiring information', async () => {
     getUserDetail.mockResolvedValue(employee)
     await render({ section: 'employees', id: 42 })
+    expect(
+      page
+        .findAll('.dialog-section-title:has(.dialog-section-number)')
+        .map((heading) => heading.text()),
+    ).toEqual(['1 Datos personales', '2 Contacto', '3 Rol y sucursal', '4 Dirección *'])
     expect(page.text()).toContain('ADM42')
     expect(page.text()).toContain('01/10/2026')
     await page.get('select[name="role"]').setValue('EMPLOYEE')

@@ -66,12 +66,12 @@ function submit() {
       />
       <p :id="`${fieldId}-feedback`" class="error" aria-live="polite">{{ validation }}</p>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
-      <div class="actions">
+      <footer class="dialog-actions">
         <button type="button" :disabled="pending" @click="emit('close')">Cancelar</button
         ><button class="primary" type="submit" :disabled="pending">
           {{ pending ? 'Enviando…' : 'Enviar confirmación' }}
         </button>
-      </div>
+      </footer>
     </form>
   </BaseModal>
 </template>
@@ -103,12 +103,6 @@ input {
 .error {
   color: var(--error-color);
   font-size: 0.9rem;
-}
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  flex-wrap: wrap;
 }
 button {
   min-height: 44px;

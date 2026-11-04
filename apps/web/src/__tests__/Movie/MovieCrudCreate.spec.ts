@@ -63,6 +63,12 @@ describe('MovieCrudCreate', () => {
 
   it('identifies missing fields before sending an incomplete form', async () => {
     const wrapper = mountForm()
+    expect(wrapper.findAll('.dialog-section-title').map((heading) => heading.text())).toEqual([
+      'Información general',
+      'Idiomas y géneros',
+      'Sinopsis',
+      'Póster',
+    ])
 
     expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
 

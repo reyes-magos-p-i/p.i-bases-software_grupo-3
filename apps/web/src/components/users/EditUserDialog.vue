@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import { useBlurValidation } from '@/composables/useBlurValidation'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, watch } from 'vue'
@@ -507,15 +508,14 @@ onBeforeUnmount(() => {
         <button v-if="retryable" class="secondary" type="button" @click="load">Reintentar</button>
       </div>
       <template v-if="user && !loading">
-        <section aria-label="Información del usuario">
-          <h3>Información del usuario</h3>
-          <dl class="edit-grid readonly-grid">
+        <DialogSection title="Información del usuario">
+          <dl class="detail-grid readonly-grid">
             <div v-for="field in readonlyFields" :key="field.label">
               <dt>{{ field.label }}</dt>
               <dd>{{ field.value }}</dd>
             </div>
           </dl>
-        </section>
+        </DialogSection>
         <div v-if="confirming" ref="feedback" class="edit-feedback" role="alert" tabindex="-1">
           <h3>Confirmar modificación</h3>
           <p>Vas a modificar los siguientes datos de {{ prefix }}{{ user.id }}:</p>
@@ -548,227 +548,245 @@ onBeforeUnmount(() => {
           @input="editedField"
           @focusout="blurredField"
         >
-          <fieldset :disabled="saving || blocked">
-            <legend>Datos editables</legend>
-            <div class="edit-grid">
-              <div v-for="field in nameFields" :key="field.name" class="edit-field">
-                <label :for="`${id}-${field.name}`"
-                  >{{ field.label }}{{ field.required ? ' *' : ' (opcional)' }}</label
-                >
-                <input
-                  :id="`${id}-${field.name}`"
-                  v-model="draft[field.name]"
-                  :name="field.name"
-                  type="text"
-                  autocomplete="off"
-                  :required="field.required"
-                  :aria-invalid="!!errors[field.name]"
-                  :aria-describedby="errors[field.name] ? `${id}-${field.name}-error` : undefined"
-                  @input="delete errors[field.name]"
-                />
-                <p v-if="errors[field.name]" :id="`${id}-${field.name}-error`" class="field-error">
-                  {{ errors[field.name] }}
-                </p>
+          <fieldset class="dialog-sections" :disabled="saving || blocked">
+            <legend class="visually-hidden">Datos editables</legend>
+            <DialogSection title="Datos personales" :number="1">
+              <div class="edit-grid">
+                <div v-for="field in nameFields" :key="field.name" class="edit-field">
+                  <label :for="`${id}-${field.name}`"
+                    >{{ field.label }}{{ field.required ? ' *' : ' (opcional)' }}</label
+                  >
+                  <input
+                    :id="`${id}-${field.name}`"
+                    v-model="draft[field.name]"
+                    :name="field.name"
+                    type="text"
+                    autocomplete="off"
+                    :required="field.required"
+                    :aria-invalid="!!errors[field.name]"
+                    :aria-describedby="errors[field.name] ? `${id}-${field.name}-error` : undefined"
+                    @input="delete errors[field.name]"
+                  />
+                  <p
+                    v-if="errors[field.name]"
+                    :id="`${id}-${field.name}-error`"
+                    class="field-error"
+                  >
+                    {{ errors[field.name] }}
+                  </p>
+                </div>
               </div>
-              <div class="edit-field">
-                <label :for="`${id}-email`">Correo electrónico *</label>
-                <input
-                  :id="`${id}-email`"
-                  v-model="draft.email"
-                  name="email"
-                  type="email"
-                  autocomplete="off"
-                  required
-                  :aria-invalid="!!errors.email"
-                  :aria-describedby="errors.email ? `${id}-email-error` : undefined"
-                />
-                <p v-if="errors.email" :id="`${id}-email-error`" class="field-error">
-                  {{ errors.email }}
-                </p>
+            </DialogSection>
+            <DialogSection title="Contacto" :number="2">
+              <div class="edit-grid">
+                <div class="edit-field">
+                  <label :for="`${id}-email`">Correo electrónico *</label>
+                  <input
+                    :id="`${id}-email`"
+                    v-model="draft.email"
+                    name="email"
+                    type="email"
+                    autocomplete="off"
+                    required
+                    :aria-invalid="!!errors.email"
+                    :aria-describedby="errors.email ? `${id}-email-error` : undefined"
+                  />
+                  <p v-if="errors.email" :id="`${id}-email-error`" class="field-error">
+                    {{ errors.email }}
+                  </p>
+                </div>
+                <div class="edit-field">
+                  <label :for="`${id}-phone`"
+                    >Número de celular{{ isClient ? ' (opcional)' : ' *' }}</label
+                  >
+                  <input
+                    :id="`${id}-phone`"
+                    v-model="draft.phoneNumber"
+                    name="phoneNumber"
+                    type="tel"
+                    autocomplete="off"
+                    placeholder="8888-8888"
+                    :required="!isClient"
+                    :aria-invalid="!!errors.phoneNumber"
+                    :aria-describedby="errors.phoneNumber ? `${id}-phone-error` : undefined"
+                  />
+                  <p v-if="errors.phoneNumber" :id="`${id}-phone-error`" class="field-error">
+                    {{ errors.phoneNumber }}
+                  </p>
+                </div>
               </div>
-              <div class="edit-field">
-                <label :for="`${id}-phone`"
-                  >Número de celular{{ isClient ? ' (opcional)' : ' *' }}</label
-                >
-                <input
-                  :id="`${id}-phone`"
-                  v-model="draft.phoneNumber"
-                  name="phoneNumber"
-                  type="tel"
-                  autocomplete="off"
-                  placeholder="8888-8888"
-                  :required="!isClient"
-                  :aria-invalid="!!errors.phoneNumber"
-                  :aria-describedby="errors.phoneNumber ? `${id}-phone-error` : undefined"
-                />
-                <p v-if="errors.phoneNumber" :id="`${id}-phone-error`" class="field-error">
-                  {{ errors.phoneNumber }}
-                </p>
+            </DialogSection>
+            <DialogSection v-if="!isClient" title="Rol y sucursal" :number="3">
+              <div class="edit-grid">
+                <div v-if="!isClient" class="edit-field">
+                  <label :for="`${id}-role`">Rol *</label>
+                  <select
+                    :id="`${id}-role`"
+                    v-model="draft.role"
+                    name="role"
+                    :aria-invalid="!!errors.role"
+                    :aria-describedby="errors.role ? `${id}-role-error` : undefined"
+                  >
+                    <option value="EMPLOYEE">{{ roleNames.EMPLOYEE }}</option>
+                    <option value="ADMINISTRATOR">{{ roleNames.ADMINISTRATOR }}</option>
+                  </select>
+                  <p v-if="errors.role" :id="`${id}-role-error`" class="field-error">
+                    {{ errors.role }}
+                  </p>
+                </div>
+                <div v-if="!isClient" class="edit-field">
+                  <label :for="`${id}-branch`">Sucursal *</label>
+                  <select
+                    :id="`${id}-branch`"
+                    v-model="draft.branchId"
+                    name="branchId"
+                    :disabled="!!branchesError || catalogsLoading || !branches.length"
+                    :aria-invalid="!!errors.branchId"
+                    :aria-describedby="errors.branchId ? `${id}-branch-error` : undefined"
+                  >
+                    <option
+                      v-if="
+                        user.role !== 'CLIENT' &&
+                        !branches.some((branch) => branch.id === draft.branchId)
+                      "
+                      :value="user.branchId"
+                    >
+                      {{ user.branchName }}
+                    </option>
+                    <option v-for="branch in branches" :key="branch.id" :value="branch.id">
+                      {{ branch.label }}
+                    </option>
+                  </select>
+                  <p v-if="errors.branchId" :id="`${id}-branch-error`" class="field-error">
+                    {{ errors.branchId }}
+                  </p>
+                  <div v-if="branchesError" class="edit-feedback">
+                    <NotificationPopup type="error" :message="branchesError" :duration="0" />
+                    <button
+                      type="button"
+                      class="secondary"
+                      :disabled="catalogsLoading"
+                      @click="retryCatalogs"
+                    >
+                      Reintentar sucursales
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div v-if="!isClient" class="edit-field">
-                <label :for="`${id}-role`">Rol *</label>
-                <select
-                  :id="`${id}-role`"
-                  v-model="draft.role"
-                  name="role"
-                  :aria-invalid="!!errors.role"
-                  :aria-describedby="errors.role ? `${id}-role-error` : undefined"
-                >
-                  <option value="EMPLOYEE">{{ roleNames.EMPLOYEE }}</option>
-                  <option value="ADMINISTRATOR">{{ roleNames.ADMINISTRATOR }}</option>
-                </select>
-                <p v-if="errors.role" :id="`${id}-role-error`" class="field-error">
-                  {{ errors.role }}
-                </p>
-              </div>
-            </div>
-            <div v-if="!isClient" class="edit-field">
-              <label :for="`${id}-branch`">Sucursal *</label>
-              <select
-                :id="`${id}-branch`"
-                v-model="draft.branchId"
-                name="branchId"
-                :disabled="!!branchesError || catalogsLoading || !branches.length"
-                :aria-invalid="!!errors.branchId"
-                :aria-describedby="errors.branchId ? `${id}-branch-error` : undefined"
-              >
-                <option
-                  v-if="
-                    user.role !== 'CLIENT' &&
-                    !branches.some((branch) => branch.id === draft.branchId)
-                  "
-                  :value="user.branchId"
-                >
-                  {{ user.branchName }}
-                </option>
-                <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-                  {{ branch.label }}
-                </option>
-              </select>
-              <p v-if="errors.branchId" :id="`${id}-branch-error`" class="field-error">
-                {{ errors.branchId }}
-              </p>
-              <div v-if="branchesError" class="edit-feedback">
-                <NotificationPopup type="error" :message="branchesError" :duration="0" />
+            </DialogSection>
+            <DialogSection
+              :title="isClient ? 'Dirección (opcional)' : 'Dirección *'"
+              :number="isClient ? 3 : 4"
+            >
+              <div v-if="catalogsError" class="edit-feedback">
+                <NotificationPopup type="error" :message="catalogsError" :duration="0" />
                 <button
                   type="button"
                   class="secondary"
                   :disabled="catalogsLoading"
                   @click="retryCatalogs"
                 >
-                  Reintentar sucursales
+                  {{ catalogsLoading ? 'Cargando…' : 'Reintentar opciones' }}
                 </button>
               </div>
-            </div>
-            <h3>Dirección{{ isClient ? ' (opcional)' : ' *' }}</h3>
-            <div v-if="catalogsError" class="edit-feedback">
-              <NotificationPopup type="error" :message="catalogsError" :duration="0" />
-              <button
-                type="button"
-                class="secondary"
-                :disabled="catalogsLoading"
-                @click="retryCatalogs"
+              <label v-if="isClient" class="checkbox-label"
+                ><input
+                  v-model="draft.addressEnabled"
+                  name="addressEnabled"
+                  type="checkbox"
+                  :disabled="!catalogs || catalogsLoading"
+                />Registrar dirección</label
               >
-                {{ catalogsLoading ? 'Cargando…' : 'Reintentar opciones' }}
-              </button>
-            </div>
-            <label v-if="isClient" class="checkbox-label"
-              ><input
-                v-model="draft.addressEnabled"
-                name="addressEnabled"
-                type="checkbox"
-                :disabled="!catalogs || catalogsLoading"
-              />Registrar dirección</label
-            >
-            <p v-if="errors.address" class="field-error">{{ errors.address }}</p>
-            <div v-if="draft.addressEnabled" class="edit-grid">
-              <div class="edit-field">
-                <label :for="`${id}-province`">Provincia *</label>
-                <select
-                  :id="`${id}-province`"
-                  v-model="draft.provinceId"
-                  name="provinceId"
-                  :disabled="!catalogs || catalogsLoading"
-                  :aria-invalid="!!errors.provinceId"
-                  :aria-describedby="errors.provinceId ? `${id}-province-error` : undefined"
-                  @change="changeProvince"
-                >
-                  <option :value="0">Selecciona una provincia</option>
-                  <option v-for="item in catalogs?.provinces" :key="item.id" :value="item.id">
-                    {{ item.label }}
-                  </option>
-                  <option v-if="!catalogs && user.address" :value="user.address.provinceId">
-                    {{ user.address.provinceName }}
-                  </option>
-                </select>
-                <p v-if="errors.provinceId" :id="`${id}-province-error`" class="field-error">
-                  {{ errors.provinceId }}
-                </p>
+              <p v-if="errors.address" class="field-error">{{ errors.address }}</p>
+              <div v-if="draft.addressEnabled" class="edit-grid">
+                <div class="edit-field">
+                  <label :for="`${id}-province`">Provincia *</label>
+                  <select
+                    :id="`${id}-province`"
+                    v-model="draft.provinceId"
+                    name="provinceId"
+                    :disabled="!catalogs || catalogsLoading"
+                    :aria-invalid="!!errors.provinceId"
+                    :aria-describedby="errors.provinceId ? `${id}-province-error` : undefined"
+                    @change="changeProvince"
+                  >
+                    <option :value="0">Selecciona una provincia</option>
+                    <option v-for="item in catalogs?.provinces" :key="item.id" :value="item.id">
+                      {{ item.label }}
+                    </option>
+                    <option v-if="!catalogs && user.address" :value="user.address.provinceId">
+                      {{ user.address.provinceName }}
+                    </option>
+                  </select>
+                  <p v-if="errors.provinceId" :id="`${id}-province-error`" class="field-error">
+                    {{ errors.provinceId }}
+                  </p>
+                </div>
+                <div class="edit-field">
+                  <label :for="`${id}-canton`">Cantón *</label>
+                  <select
+                    :id="`${id}-canton`"
+                    v-model="draft.cantonId"
+                    name="cantonId"
+                    :disabled="!catalogs || !draft.provinceId || catalogsLoading"
+                    :aria-invalid="!!errors.cantonId"
+                    :aria-describedby="errors.cantonId ? `${id}-canton-error` : undefined"
+                    @change="changeCanton"
+                  >
+                    <option :value="0">Selecciona un cantón</option>
+                    <option v-for="item in cantons" :key="item.id" :value="item.id">
+                      {{ item.label }}
+                    </option>
+                    <option v-if="!catalogs && user.address" :value="user.address.cantonId">
+                      {{ user.address.cantonName }}
+                    </option>
+                  </select>
+                  <p v-if="errors.cantonId" :id="`${id}-canton-error`" class="field-error">
+                    {{ errors.cantonId }}
+                  </p>
+                </div>
+                <div class="edit-field">
+                  <label :for="`${id}-district`">Distrito *</label>
+                  <select
+                    :id="`${id}-district`"
+                    v-model="draft.districtId"
+                    name="districtId"
+                    :disabled="!catalogs || !draft.cantonId || catalogsLoading"
+                    :aria-invalid="!!errors.districtId"
+                    :aria-describedby="errors.districtId ? `${id}-district-error` : undefined"
+                  >
+                    <option :value="0">Selecciona un distrito</option>
+                    <option v-for="item in districts" :key="item.id" :value="item.id">
+                      {{ item.label }}
+                    </option>
+                    <option v-if="!catalogs && user.address" :value="user.address.districtId">
+                      {{ user.address.districtName }}
+                    </option>
+                  </select>
+                  <p v-if="errors.districtId" :id="`${id}-district-error`" class="field-error">
+                    {{ errors.districtId }}
+                  </p>
+                </div>
+                <div class="edit-field address-details">
+                  <label :for="`${id}-details`">Detalle de dirección (opcional)</label>
+                  <textarea
+                    :id="`${id}-details`"
+                    v-model="draft.details"
+                    name="details"
+                    rows="3"
+                    :disabled="!catalogs || catalogsLoading"
+                    :aria-invalid="!!errors.details"
+                    :aria-describedby="`${id}-details-hint${errors.details ? ` ${id}-details-error` : ''}`"
+                  ></textarea>
+                  <p :id="`${id}-details-hint`" class="field-hint">
+                    {{ characterCount(draft.details) }}/255
+                  </p>
+                  <p v-if="errors.details" :id="`${id}-details-error`" class="field-error">
+                    {{ errors.details }}
+                  </p>
+                </div>
               </div>
-              <div class="edit-field">
-                <label :for="`${id}-canton`">Cantón *</label>
-                <select
-                  :id="`${id}-canton`"
-                  v-model="draft.cantonId"
-                  name="cantonId"
-                  :disabled="!catalogs || !draft.provinceId || catalogsLoading"
-                  :aria-invalid="!!errors.cantonId"
-                  :aria-describedby="errors.cantonId ? `${id}-canton-error` : undefined"
-                  @change="changeCanton"
-                >
-                  <option :value="0">Selecciona un cantón</option>
-                  <option v-for="item in cantons" :key="item.id" :value="item.id">
-                    {{ item.label }}
-                  </option>
-                  <option v-if="!catalogs && user.address" :value="user.address.cantonId">
-                    {{ user.address.cantonName }}
-                  </option>
-                </select>
-                <p v-if="errors.cantonId" :id="`${id}-canton-error`" class="field-error">
-                  {{ errors.cantonId }}
-                </p>
-              </div>
-              <div class="edit-field">
-                <label :for="`${id}-district`">Distrito *</label>
-                <select
-                  :id="`${id}-district`"
-                  v-model="draft.districtId"
-                  name="districtId"
-                  :disabled="!catalogs || !draft.cantonId || catalogsLoading"
-                  :aria-invalid="!!errors.districtId"
-                  :aria-describedby="errors.districtId ? `${id}-district-error` : undefined"
-                >
-                  <option :value="0">Selecciona un distrito</option>
-                  <option v-for="item in districts" :key="item.id" :value="item.id">
-                    {{ item.label }}
-                  </option>
-                  <option v-if="!catalogs && user.address" :value="user.address.districtId">
-                    {{ user.address.districtName }}
-                  </option>
-                </select>
-                <p v-if="errors.districtId" :id="`${id}-district-error`" class="field-error">
-                  {{ errors.districtId }}
-                </p>
-              </div>
-              <div class="edit-field address-details">
-                <label :for="`${id}-details`">Detalle de dirección (opcional)</label>
-                <textarea
-                  :id="`${id}-details`"
-                  v-model="draft.details"
-                  name="details"
-                  rows="3"
-                  :disabled="!catalogs || catalogsLoading"
-                  :aria-invalid="!!errors.details"
-                  :aria-describedby="`${id}-details-hint${errors.details ? ` ${id}-details-error` : ''}`"
-                ></textarea>
-                <p :id="`${id}-details-hint`" class="field-hint">
-                  {{ characterCount(draft.details) }}/255
-                </p>
-                <p v-if="errors.details" :id="`${id}-details-error`" class="field-error">
-                  {{ errors.details }}
-                </p>
-              </div>
-            </div>
+            </DialogSection>
           </fieldset>
           <footer>
             <button type="button" class="secondary" @click="close">Cancelar</button>

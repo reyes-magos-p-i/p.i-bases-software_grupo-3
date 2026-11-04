@@ -42,12 +42,16 @@ describe('TicketDetailDialog', () => {
     wrapper.unmount()
   })
 
-  it('shows an error message when the ticket cannot be shown', () => {
+  it('shows an error message and allows closing when the ticket cannot be shown', async () => {
     const wrapper = mount(TicketDetailDialog, {
       props: { ticket: null, error: 'No se pudo mostrar el detalle del ticket.' },
     })
 
     expect(wrapper.get('[role="alert"]').text()).toBe('No se pudo mostrar el detalle del ticket.')
     expect(wrapper.text()).not.toContain('Asiento')
+    expect(wrapper.findAll('footer button').map((button) => button.text())).toEqual(['Cerrar'])
+    await wrapper.get('footer button').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
   })
 })

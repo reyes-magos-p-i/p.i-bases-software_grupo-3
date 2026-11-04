@@ -68,16 +68,21 @@ defineExpose({ open, close })
   top: 50%;
   left: 50%;
   width: min(calc(100% - 32px), 604px);
-  max-height: min(90dvh, 760px);
+  max-height: calc(100dvh - 32px);
   margin: 0;
   padding: 0;
-  border: 1px solid var(--border-color);
-  border-radius: 0;
+  border: 0;
+  border-radius: var(--radius-medium);
   color: var(--text-primary);
   background: var(--dialog-background);
   transform: translate(-50%, -50%);
+  overflow: hidden;
+}
+.ticket-dialog[open] {
+  display: flex;
+  flex-direction: column;
 }
 .ticket-dialog::backdrop {
-  background: color-mix(in srgb, var(--page-background) 55%, transparent);
+  background: var(--overlay-background);
 }
 </style>

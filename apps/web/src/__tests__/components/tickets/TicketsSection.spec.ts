@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 // import TicketDetailDialog from '@/components/tickets/TicketDetailDialog.vue'
 import TicketsSection from '@/components/tickets/TicketsSection.vue'
+import ModifyTicketDialog from '@/components/tickets/ModifyTicketDialog.vue'
 
 const { getTicket } = vi.hoisted(() => ({ getTicket: vi.fn() }))
 
@@ -29,6 +30,31 @@ async function search(wrapper: ReturnType<typeof mount>, value: string) {
 }
 
 describe('TicketsSection', () => {
+  it('keeps the numbered destination group and the existing ticket update contract', async () => {
+    const wrapper = mount(ModifyTicketDialog, {
+      props: {
+        showtimes: [
+          {
+            movieFunctionId: 9,
+            theaterId: 3,
+            seatRow: 1,
+            seatColumn: 2,
+            date: '2026-12-15',
+            time: '18:00',
+          },
+        ],
+      },
+    })
+    wrapper.vm.open()
+    expect(wrapper.get('.dialog-section-title').text()).toBe('1 Proyección de destino')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    await wrapper.get('#ticket-showtime').setValue('9')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toEqual([[{ movieFunctionId: 9 }]])
+    expect(wrapper.get('form').element.lastElementChild).toBe(wrapper.get('footer').element)
+    wrapper.unmount()
+  })
   beforeEach(() => {
     getTicket.mockReset()
     const prototype = HTMLDialogElement.prototype

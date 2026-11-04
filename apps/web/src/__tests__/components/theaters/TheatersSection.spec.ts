@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, shallowMount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
@@ -12,6 +12,8 @@ import {
 } from '@/services/theater.service'
 import CreateTheaterDialog from '@/components/theaters/CreateTheaterDialog.vue'
 import ModifyTheaterDialog from '@/components/theaters/ModifyTheaterDialog.vue'
+import TheaterForm from '@/components/theaters/TheaterForm.vue'
+import TheaterSeatEditor from '@/components/theaters/TheaterSeatEditor.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import type { Theater } from '@/types/theater'
 
@@ -90,6 +92,21 @@ afterEach(() => {
 })
 
 describe('TheatersSection loading presentation', () => {
+  it('keeps the numbered seat editor inside modification and before its final actions', () => {
+    wrapper = mount(ModifyTheaterDialog, {
+      props: { theater },
+      global: {
+        stubs: {
+          TheaterDialogShell: { template: '<div><slot /></div>' },
+          TheaterSeatEditor: true,
+        },
+      },
+    })
+    expect(wrapper.getComponent(TheaterForm).props('numbered')).toBe(true)
+    expect(wrapper.getComponent(TheaterSeatEditor).props('sectionNumber')).toBe(3)
+    expect(wrapper.getComponent(TheaterSeatEditor).props('theaterId')).toBe(42)
+    expect(wrapper.get('form').element.lastElementChild).toBe(wrapper.get('footer').element)
+  })
   it.each([true, false])(
     'replaces loading with the appropriate result when records exist: %s',
     async (hasRecords) => {

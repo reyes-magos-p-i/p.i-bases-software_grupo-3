@@ -530,7 +530,8 @@ describe('DashboardView', () => {
     await view.get('.theater-dialog form').trigger('submit')
 
     expect(createTheater).not.toHaveBeenCalled()
-    expect(view.get('.field-error').text()).toContain('entre 1 y 5000')
+    const errorId = view.get('[name="numberOfSeats"]').attributes('aria-describedby')
+    expect(view.get(`[id="${errorId}"]`).text()).toContain('entre 1 y 5000')
   })
 
   it('rejects theater seat counts that do not match the dimensions', async () => {
@@ -544,7 +545,8 @@ describe('DashboardView', () => {
     await view.get('.theater-dialog form').trigger('submit')
 
     expect(createTheater).not.toHaveBeenCalled()
-    expect(view.get('.field-error').text()).toContain('igual a Filas por Columnas')
+    const errorId = view.get('[name="numberOfSeats"]').attributes('aria-describedby')
+    expect(view.get(`[id="${errorId}"]`).text()).toContain('igual a Filas por Columnas')
   })
 
   it('shows projections to administrators only', async () => {

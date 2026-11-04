@@ -45,9 +45,12 @@ afterEach(() => {
 describe('TheaterSeatEditor', () => {
   it('loads the existing seats and allows selection of every administrative state', async () => {
     render()
+    expect(wrapper.get('.dialog-section-title').text()).toBe('Estado de los asientos')
     expect(wrapper.get('[role="status"]').text()).toBe('Cargando asientos…')
     expect(wrapper.findComponent(SeatSelector).exists()).toBe(false)
     await flushPromises()
+    await wrapper.setProps({ sectionNumber: 3 })
+    expect(wrapper.get('.dialog-section-title').text()).toBe('3 Estado de los asientos')
     expect(getTheaterSeats).toHaveBeenCalledExactlyOnceWith(7)
     expect(wrapper.getComponent(SeatSelector).props()).toMatchObject({
       theaterId: 7,
