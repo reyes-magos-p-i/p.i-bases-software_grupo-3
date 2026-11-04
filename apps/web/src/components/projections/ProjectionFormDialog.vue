@@ -495,11 +495,18 @@ defineExpose({ open, edit, complete })
 <template>
   <ProjectionDialogShell
     ref="shell"
+    class="projection-form-dialog"
     :title="isEditing ? 'Modificar proyección' : 'Agregar nueva proyección'"
     :close-disabled="submitting"
     @close="close"
   >
-    <form ref="form" novalidate :aria-busy="submitting" @submit.prevent="submit">
+    <form
+      ref="form"
+      class="projection-form"
+      novalidate
+      :aria-busy="submitting"
+      @submit.prevent="submit"
+    >
       <p class="required-note">
         Los campos con <span class="required-marker">*</span> son obligatorios.
       </p>
@@ -521,425 +528,431 @@ defineExpose({ open, edit, complete })
       </p>
 
       <div class="form-body">
-        <fieldset class="form-sections dialog-sections" :disabled="confirming">
-          <legend class="visually-hidden">Datos de la proyección</legend>
-          <DialogSection class="form-section" :number="1" title="Película y sala">
-            <div class="section-grid">
-              <div class="field">
-                <label :for="id + '-branch'">Sucursal <span class="required-marker">*</span></label>
-                <select
-                  :id="id + '-branch'"
-                  v-model="draft.branchId"
-                  name="branchId"
-                  :aria-invalid="!!visibleError('branchId')"
-                  :aria-describedby="describedBy('branchId')"
-                  @blur="touched.branchId = true"
-                >
-                  <option value="">Selecciona una sucursal</option>
-                  <option
-                    v-for="cinema in cinemas"
-                    :key="cinema.branchId"
-                    :value="String(cinema.branchId)"
+        <div class="fields-scroll">
+          <fieldset class="form-sections dialog-sections" :disabled="confirming">
+            <legend class="visually-hidden">Datos de la proyección</legend>
+            <DialogSection class="form-section" :number="1" title="Película y sala">
+              <div class="section-grid">
+                <div class="field">
+                  <label :for="id + '-branch'"
+                    >Sucursal <span class="required-marker">*</span></label
                   >
-                    {{ cinema.name }}
-                  </option>
-                </select>
-                <small :id="id + '-branchId-hint'" class="field-hint">
-                  Define las salas y películas disponibles.
-                </small>
-                <small
-                  v-if="visibleError('branchId')"
-                  :id="id + '-branchId-error'"
-                  class="field-error"
-                >
-                  {{ visibleError('branchId') }}
-                </small>
-              </div>
-
-              <div class="field">
-                <label :for="id + '-theater'">Sala <span class="required-marker">*</span></label>
-                <select
-                  :id="id + '-theater'"
-                  v-model="draft.theaterId"
-                  name="theaterId"
-                  :disabled="!draft.branchId"
-                  :aria-invalid="!!visibleError('theaterId')"
-                  :aria-describedby="describedBy('theaterId')"
-                  @blur="touched.theaterId = true"
-                >
-                  <option value="">
-                    {{ draft.branchId ? 'Selecciona una sala' : 'Elige primero la sucursal' }}
-                  </option>
-                  <option
-                    v-for="theater in branchTheaters"
-                    :key="theater.theaterId"
-                    :value="String(theater.theaterId)"
+                  <select
+                    :id="id + '-branch'"
+                    v-model="draft.branchId"
+                    name="branchId"
+                    :aria-invalid="!!visibleError('branchId')"
+                    :aria-describedby="describedBy('branchId')"
+                    @blur="touched.branchId = true"
                   >
-                    Sala {{ theater.theaterId }} ({{ theater.numberOfSeats }} asientos)
-                  </option>
-                </select>
-                <small :id="id + '-theaterId-hint'" class="field-hint">Solo salas activas.</small>
-                <small
-                  v-if="visibleError('theaterId')"
-                  :id="id + '-theaterId-error'"
-                  class="field-error"
-                >
-                  {{ visibleError('theaterId') }}
-                </small>
-              </div>
-
-              <div class="field">
-                <label :for="id + '-status'">Estado</label>
-                <select
-                  :id="id + '-status'"
-                  v-model="draft.status"
-                  name="status"
-                  :aria-describedby="id + '-status-hint'"
-                >
-                  <option value="ACTIVE">Activa</option>
-                  <option value="INACTIVE">Inactiva</option>
-                </select>
-                <small :id="id + '-status-hint'" class="field-hint">
-                  Activa: visible para la venta de boletos.
-                </small>
-              </div>
-
-              <div class="field field-wide movie-field">
-                <label :for="id + '-movie'">Película <span class="required-marker">*</span></label>
-                <div class="search-input">
-                  <i class="bi bi-search" aria-hidden="true"></i>
-                  <input
-                    :id="id + '-movie'"
-                    v-model="draft.movieQuery"
-                    name="movie"
-                    type="search"
-                    role="combobox"
-                    autocomplete="off"
-                    :placeholder="
-                      draft.branchId
-                        ? 'Escribe el título de la película'
-                        : 'Elige primero la sucursal'
-                    "
-                    :disabled="!draft.branchId"
-                    :aria-expanded="listOpen && results.length > 0"
-                    :aria-controls="id + '-movies'"
-                    :aria-activedescendant="
-                      activeResult >= 0 ? `${id}-movie-${activeResult}` : undefined
-                    "
-                    :aria-invalid="!!visibleError('movie')"
-                    :aria-describedby="describedBy('movie')"
-                    @input="movieInput"
-                    @keydown="movieKeydown"
-                    @blur="listOpen = false"
-                  />
+                    <option value="">Selecciona una sucursal</option>
+                    <option
+                      v-for="cinema in cinemas"
+                      :key="cinema.branchId"
+                      :value="String(cinema.branchId)"
+                    >
+                      {{ cinema.name }}
+                    </option>
+                  </select>
+                  <small :id="id + '-branchId-hint'" class="field-hint">
+                    Define las salas y películas disponibles.
+                  </small>
+                  <small
+                    v-if="visibleError('branchId')"
+                    :id="id + '-branchId-error'"
+                    class="field-error"
+                  >
+                    {{ visibleError('branchId') }}
+                  </small>
                 </div>
-                <ul
-                  v-show="listOpen && results.length"
-                  :id="id + '-movies'"
-                  class="movie-results"
-                  role="listbox"
-                >
-                  <li
-                    v-for="(result, index) in results"
-                    :id="`${id}-movie-${index}`"
-                    :key="result.movieId"
-                    role="option"
-                    :aria-selected="index === activeResult"
-                    :class="{ 'is-active': index === activeResult }"
-                    @mousedown.prevent="selectMovie(result)"
+
+                <div class="field">
+                  <label :for="id + '-theater'">Sala <span class="required-marker">*</span></label>
+                  <select
+                    :id="id + '-theater'"
+                    v-model="draft.theaterId"
+                    name="theaterId"
+                    :disabled="!draft.branchId"
+                    :aria-invalid="!!visibleError('theaterId')"
+                    :aria-describedby="describedBy('theaterId')"
+                    @blur="touched.theaterId = true"
                   >
-                    {{ result.title }} <span>{{ result.runningTime }} min</span>
-                  </li>
-                </ul>
-                <small :id="id + '-movie-hint'" class="field-hint">
-                  Escribe parte del título y elige una opción de la lista (flechas + Enter o clic).
-                </small>
-                <LoadingState
-                  v-if="searching"
-                  class="field-hint"
-                  message="Buscando películas…"
-                  compact
-                />
-                <p v-else-if="searchError" class="field-error" role="alert">{{ searchError }}</p>
-                <p
-                  v-else-if="listOpen && draft.movieQuery && !results.length && !movie"
-                  class="field-hint"
-                  role="status"
-                >
-                  No hay películas disponibles con ese nombre en esta sucursal.
+                    <option value="">
+                      {{ draft.branchId ? 'Selecciona una sala' : 'Elige primero la sucursal' }}
+                    </option>
+                    <option
+                      v-for="theater in branchTheaters"
+                      :key="theater.theaterId"
+                      :value="String(theater.theaterId)"
+                    >
+                      Sala {{ theater.theaterId }} ({{ theater.numberOfSeats }} asientos)
+                    </option>
+                  </select>
+                  <small :id="id + '-theaterId-hint'" class="field-hint">Solo salas activas.</small>
+                  <small
+                    v-if="visibleError('theaterId')"
+                    :id="id + '-theaterId-error'"
+                    class="field-error"
+                  >
+                    {{ visibleError('theaterId') }}
+                  </small>
+                </div>
+
+                <div class="field">
+                  <label :for="id + '-status'">Estado</label>
+                  <select
+                    :id="id + '-status'"
+                    v-model="draft.status"
+                    name="status"
+                    :aria-describedby="id + '-status-hint'"
+                  >
+                    <option value="ACTIVE">Activa</option>
+                    <option value="INACTIVE">Inactiva</option>
+                  </select>
+                  <small :id="id + '-status-hint'" class="field-hint">
+                    Activa: visible para la venta de boletos.
+                  </small>
+                </div>
+
+                <div class="field field-wide movie-field">
+                  <label :for="id + '-movie'"
+                    >Película <span class="required-marker">*</span></label
+                  >
+                  <div class="search-input">
+                    <i class="bi bi-search" aria-hidden="true"></i>
+                    <input
+                      :id="id + '-movie'"
+                      v-model="draft.movieQuery"
+                      name="movie"
+                      type="search"
+                      role="combobox"
+                      autocomplete="off"
+                      :placeholder="
+                        draft.branchId
+                          ? 'Escribe el título de la película'
+                          : 'Elige primero la sucursal'
+                      "
+                      :disabled="!draft.branchId"
+                      :aria-expanded="listOpen && results.length > 0"
+                      :aria-controls="id + '-movies'"
+                      :aria-activedescendant="
+                        activeResult >= 0 ? `${id}-movie-${activeResult}` : undefined
+                      "
+                      :aria-invalid="!!visibleError('movie')"
+                      :aria-describedby="describedBy('movie')"
+                      @input="movieInput"
+                      @keydown="movieKeydown"
+                      @blur="listOpen = false"
+                    />
+                  </div>
+                  <ul
+                    v-show="listOpen && results.length"
+                    :id="id + '-movies'"
+                    class="movie-results"
+                    role="listbox"
+                  >
+                    <li
+                      v-for="(result, index) in results"
+                      :id="`${id}-movie-${index}`"
+                      :key="result.movieId"
+                      role="option"
+                      :aria-selected="index === activeResult"
+                      :class="{ 'is-active': index === activeResult }"
+                      @mousedown.prevent="selectMovie(result)"
+                    >
+                      {{ result.title }} <span>{{ result.runningTime }} min</span>
+                    </li>
+                  </ul>
+                  <small :id="id + '-movie-hint'" class="field-hint">
+                    Escribe parte del título y elige una opción de la lista (flechas + Enter o
+                    clic).
+                  </small>
+                  <LoadingState
+                    v-if="searching"
+                    class="field-hint"
+                    message="Buscando películas…"
+                    compact
+                  />
+                  <p v-else-if="searchError" class="field-error" role="alert">{{ searchError }}</p>
+                  <p
+                    v-else-if="listOpen && draft.movieQuery && !results.length && !movie"
+                    class="field-hint"
+                    role="status"
+                  >
+                    No hay películas disponibles con ese nombre en esta sucursal.
+                  </p>
+                  <small v-if="visibleError('movie')" :id="id + '-movie-error'" class="field-error">
+                    {{ visibleError('movie') }}
+                  </small>
+                </div>
+
+                <p v-if="draft.status === 'INACTIVE'" class="form-warning field-wide" role="status">
+                  <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                  La proyección no será visible para los Clientes hasta activarla.
                 </p>
-                <small v-if="visibleError('movie')" :id="id + '-movie-error'" class="field-error">
-                  {{ visibleError('movie') }}
-                </small>
               </div>
+            </DialogSection>
 
-              <p v-if="draft.status === 'INACTIVE'" class="form-warning field-wide" role="status">
-                <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
-                La proyección no será visible para los Clientes hasta activarla.
+            <DialogSection class="form-section" :number="2" title="Fecha y horario">
+              <div class="section-grid two-columns">
+                <div class="field">
+                  <label :for="id + '-start-date'"
+                    >Fecha <span class="required-marker">*</span></label
+                  >
+                  <DatePicker
+                    :id="id + '-start-date'"
+                    v-model="draft.startDate"
+                    name="startDate"
+                    required
+                    :disabled="submitting || confirming"
+                    :min="localNow().slice(0, 10)"
+                    :aria-invalid="!!visibleError('startDate')"
+                    :aria-describedby="describedBy('startDate')"
+                    @blur="touched.startDate = shouldValidate($event) || !!touched.startDate"
+                  />
+                  <small :id="id + '-startDate-hint'" class="field-hint"
+                    >Primer día de la proyección.</small
+                  >
+                  <small
+                    v-if="visibleError('startDate')"
+                    :id="id + '-startDate-error'"
+                    class="field-error"
+                  >
+                    {{ visibleError('startDate') }}
+                  </small>
+                </div>
+                <div v-if="!isEditing" class="field">
+                  <label :for="id + '-end-date'">Repetir hasta (opcional)</label>
+                  <DatePicker
+                    :id="id + '-end-date'"
+                    v-model="draft.endDate"
+                    name="endDate"
+                    :disabled="submitting || confirming"
+                    :min="draft.startDate || localNow().slice(0, 10)"
+                    :aria-invalid="!!visibleError('endDate')"
+                    :aria-describedby="describedBy('endDate')"
+                    @blur="touched.endDate = shouldValidate($event) || !!touched.endDate"
+                  />
+                  <small :id="id + '-endDate-hint'" class="field-hint">
+                    Crea una proyección por día a la misma hora (máximo {{ MAX_DAYS }} días).
+                  </small>
+                  <small
+                    v-if="visibleError('endDate')"
+                    :id="id + '-endDate-error'"
+                    class="field-error"
+                  >
+                    {{ visibleError('endDate') }}
+                  </small>
+                </div>
+
+                <div class="field">
+                  <label :for="id + '-start-time'"
+                    >Hora inicio <span class="required-marker">*</span></label
+                  >
+                  <input
+                    :id="id + '-start-time'"
+                    v-model="draft.startTime"
+                    name="startTime"
+                    type="time"
+                    :aria-invalid="!!visibleError('startTime')"
+                    :aria-describedby="describedBy('startTime')"
+                    @blur="touched.startTime = true"
+                  />
+                  <small :id="id + '-startTime-hint'" class="field-hint"
+                    >Inicio de los anuncios.</small
+                  >
+                  <small
+                    v-if="visibleError('startTime')"
+                    :id="id + '-startTime-error'"
+                    class="field-error"
+                  >
+                    {{ visibleError('startTime') }}
+                  </small>
+                </div>
+                <div class="field">
+                  <label :for="id + '-end-time'"
+                    >Hora fin <span class="required-marker">*</span></label
+                  >
+                  <input
+                    :id="id + '-end-time'"
+                    v-model="draft.endTime"
+                    name="endTime"
+                    type="time"
+                    :aria-invalid="!!visibleError('endTime')"
+                    :aria-describedby="describedBy('endTime')"
+                    @change="editEndTime"
+                    @blur="touched.endTime = true"
+                  />
+                  <small :id="id + '-endTime-hint'" class="field-hint">
+                    Se calcula sola; puedes ampliarla, no reducirla.
+                  </small>
+                  <small
+                    v-if="visibleError('endTime')"
+                    :id="id + '-endTime-error'"
+                    class="field-error"
+                  >
+                    {{ visibleError('endTime') }}
+                  </small>
+                </div>
+              </div>
+            </DialogSection>
+
+            <DialogSection class="form-section" :number="3" title="Tiempos de la función">
+              <div class="minutes-grid">
+                <div class="field minutes-field">
+                  <label :for="id + '-advertisement'">Anuncios</label>
+                  <input
+                    :id="id + '-advertisement'"
+                    v-model="draft.advertisementMinutes"
+                    name="advertisementMinutes"
+                    type="number"
+                    min="0"
+                    max="240"
+                    step="1"
+                    :aria-invalid="!!visibleError('advertisementMinutes')"
+                    @blur="touched.advertisementMinutes = true"
+                  />
+                  <span>minutos</span>
+                </div>
+                <i class="bi bi-plus-lg timeline-operator" aria-hidden="true"></i>
+                <div class="field minutes-field">
+                  <label :for="id + '-duration'">Película</label>
+                  <input
+                    :id="id + '-duration'"
+                    :value="movie?.runningTime ?? '—'"
+                    type="text"
+                    readonly
+                  />
+                  <span>minutos</span>
+                </div>
+                <i class="bi bi-plus-lg timeline-operator" aria-hidden="true"></i>
+                <div class="field minutes-field">
+                  <label :for="id + '-cleaning'">Limpieza</label>
+                  <input
+                    :id="id + '-cleaning'"
+                    v-model="draft.cleaningMinutes"
+                    name="cleaningMinutes"
+                    type="number"
+                    min="0"
+                    max="240"
+                    step="1"
+                    :aria-invalid="!!visibleError('cleaningMinutes')"
+                    @blur="touched.cleaningMinutes = true"
+                  />
+                  <span>minutos</span>
+                </div>
+              </div>
+              <small
+                v-if="visibleError('cleaningMinutes') || visibleError('advertisementMinutes')"
+                class="field-error"
+              >
+                {{ visibleError('cleaningMinutes') || visibleError('advertisementMinutes') }}
+              </small>
+              <p class="schedule-summary" aria-live="polite">
+                <i class="bi bi-clock-history" aria-hidden="true"></i>
+                {{
+                  scheduleSummary ||
+                  'Selecciona una película para calcular el tiempo total de la función.'
+                }}
               </p>
-            </div>
-          </DialogSection>
+            </DialogSection>
 
-          <DialogSection class="form-section" :number="2" title="Fecha y horario">
-            <div class="section-grid two-columns">
-              <div class="field">
-                <label :for="id + '-start-date'"
-                  >Fecha <span class="required-marker">*</span></label
+            <DialogSection class="form-section" :number="4" title="Precio">
+              <div class="section-grid two-columns">
+                <label
+                  >Formato<select v-model="draft.format" name="format">
+                    <option value="2D">2D</option>
+                    <option value="3D" :disabled="draft.technology === '70MM'">3D</option>
+                  </select></label
                 >
-                <DatePicker
-                  :id="id + '-start-date'"
-                  v-model="draft.startDate"
-                  name="startDate"
-                  required
-                  :disabled="submitting || confirming"
-                  :min="localNow().slice(0, 10)"
-                  :aria-invalid="!!visibleError('startDate')"
-                  :aria-describedby="describedBy('startDate')"
-                  @blur="touched.startDate = shouldValidate($event) || !!touched.startDate"
-                />
-                <small :id="id + '-startDate-hint'" class="field-hint"
-                  >Primer día de la proyección.</small
+                <label
+                  >Tecnología<select v-model="draft.technology" name="technology">
+                    <option value="STANDARD">Estándar</option>
+                    <option value="IMAX">IMAX</option>
+                    <option value="70MM">70 mm</option>
+                  </select></label
                 >
-                <small
-                  v-if="visibleError('startDate')"
-                  :id="id + '-startDate-error'"
-                  class="field-error"
+                <label
+                  ><input v-model="draft.isPremiere" type="checkbox" name="isPremiere" />Función de
+                  estreno</label
                 >
-                  {{ visibleError('startDate') }}
-                </small>
               </div>
-              <div v-if="!isEditing" class="field">
-                <label :for="id + '-end-date'">Repetir hasta (opcional)</label>
-                <DatePicker
-                  :id="id + '-end-date'"
-                  v-model="draft.endDate"
-                  name="endDate"
-                  :disabled="submitting || confirming"
-                  :min="draft.startDate || localNow().slice(0, 10)"
-                  :aria-invalid="!!visibleError('endDate')"
-                  :aria-describedby="describedBy('endDate')"
-                  @blur="touched.endDate = shouldValidate($event) || !!touched.endDate"
-                />
-                <small :id="id + '-endDate-hint'" class="field-hint">
-                  Crea una proyección por día a la misma hora (máximo {{ MAX_DAYS }} días).
-                </small>
-                <small
-                  v-if="visibleError('endDate')"
-                  :id="id + '-endDate-error'"
-                  class="field-error"
-                >
-                  {{ visibleError('endDate') }}
-                </small>
-              </div>
-
-              <div class="field">
-                <label :for="id + '-start-time'"
-                  >Hora inicio <span class="required-marker">*</span></label
-                >
-                <input
-                  :id="id + '-start-time'"
-                  v-model="draft.startTime"
-                  name="startTime"
-                  type="time"
-                  :aria-invalid="!!visibleError('startTime')"
-                  :aria-describedby="describedBy('startTime')"
-                  @blur="touched.startTime = true"
-                />
-                <small :id="id + '-startTime-hint'" class="field-hint"
-                  >Inicio de los anuncios.</small
-                >
-                <small
-                  v-if="visibleError('startTime')"
-                  :id="id + '-startTime-error'"
-                  class="field-error"
-                >
-                  {{ visibleError('startTime') }}
-                </small>
-              </div>
-              <div class="field">
-                <label :for="id + '-end-time'"
-                  >Hora fin <span class="required-marker">*</span></label
-                >
-                <input
-                  :id="id + '-end-time'"
-                  v-model="draft.endTime"
-                  name="endTime"
-                  type="time"
-                  :aria-invalid="!!visibleError('endTime')"
-                  :aria-describedby="describedBy('endTime')"
-                  @change="editEndTime"
-                  @blur="touched.endTime = true"
-                />
-                <small :id="id + '-endTime-hint'" class="field-hint">
-                  Se calcula sola; puedes ampliarla, no reducirla.
-                </small>
-                <small
-                  v-if="visibleError('endTime')"
-                  :id="id + '-endTime-error'"
-                  class="field-error"
-                >
-                  {{ visibleError('endTime') }}
-                </small>
-              </div>
-            </div>
-          </DialogSection>
-
-          <DialogSection class="form-section" :number="3" title="Tiempos de la función">
-            <div class="minutes-grid">
-              <div class="field minutes-field">
-                <label :for="id + '-advertisement'">Anuncios</label>
-                <input
-                  :id="id + '-advertisement'"
-                  v-model="draft.advertisementMinutes"
-                  name="advertisementMinutes"
-                  type="number"
-                  min="0"
-                  max="240"
-                  step="1"
-                  :aria-invalid="!!visibleError('advertisementMinutes')"
-                  @blur="touched.advertisementMinutes = true"
-                />
-                <span>minutos</span>
-              </div>
-              <i class="bi bi-plus-lg timeline-operator" aria-hidden="true"></i>
-              <div class="field minutes-field">
-                <label :for="id + '-duration'">Película</label>
-                <input
-                  :id="id + '-duration'"
-                  :value="movie?.runningTime ?? '—'"
-                  type="text"
+              <div class="field price-field">
+                <label :for="id + '-price'">Precio general desde</label
+                ><input
+                  :id="id + '-price'"
+                  :value="draft.price"
+                  name="price"
                   readonly
+                  :aria-describedby="id + '-price-policy'"
                 />
-                <span>minutos</span>
+                <p :id="id + '-price-policy'" class="field-hint">
+                  Calculado con la política de boletos. La categoría de edad y el asiento VIP se
+                  determinan al comprar.
+                </p>
+                <LoadingState v-if="previewLoading" message="Calculando precio..." compact />
+                <template v-if="preview"
+                  ><small v-for="modifier in preview.modifiers" :key="modifier.label"
+                    >{{ modifier.label }}: +{{ formatPrice(modifier.amount) }}</small
+                  ><small v-for="category in preview.categories" :key="category.code"
+                    >{{ category.label }}: base {{ formatPrice(category.base) }}</small
+                  ></template
+                >
+                <p v-if="previewError" role="alert">
+                  {{ previewError }} <button type="button" @click="refreshPrice">Reintentar</button>
+                </p>
+                <small v-if="visibleError('price')" class="field-error">{{
+                  visibleError('price')
+                }}</small>
               </div>
-              <i class="bi bi-plus-lg timeline-operator" aria-hidden="true"></i>
-              <div class="field minutes-field">
-                <label :for="id + '-cleaning'">Limpieza</label>
-                <input
-                  :id="id + '-cleaning'"
-                  v-model="draft.cleaningMinutes"
-                  name="cleaningMinutes"
-                  type="number"
-                  min="0"
-                  max="240"
-                  step="1"
-                  :aria-invalid="!!visibleError('cleaningMinutes')"
-                  @blur="touched.cleaningMinutes = true"
-                />
-                <span>minutos</span>
-              </div>
+            </DialogSection>
+          </fieldset>
+          <section
+            v-if="confirming"
+            class="confirm-changes"
+            :aria-labelledby="id + '-confirm-title'"
+            aria-live="polite"
+          >
+            <h3 :id="id + '-confirm-title'" tabindex="-1">Confirma los cambios</h3>
+            <p>Revisa cada campo modificado antes de guardar.</p>
+            <ul>
+              <li v-for="change in changes" :key="change.field">
+                <strong>{{ change.field }}:</strong>
+                <span class="before">{{ change.before }}</span>
+                <i class="bi bi-arrow-right" aria-label="cambia a"></i>
+                <span class="after">{{ change.after }}</span>
+              </li>
+            </ul>
+            <div class="dialog-actions">
+              <button
+                type="button"
+                class="secondary-button"
+                :disabled="submitting"
+                @click="confirming = false"
+              >
+                Volver a editar
+              </button>
+              <button
+                type="button"
+                class="create-button"
+                :disabled="submitting"
+                @click="confirmChanges"
+              >
+                <i class="bi bi-check2-circle" aria-hidden="true"></i>
+                {{ submitting ? 'Guardando…' : 'Confirmar cambios' }}
+              </button>
             </div>
-            <small
-              v-if="visibleError('cleaningMinutes') || visibleError('advertisementMinutes')"
-              class="field-error"
-            >
-              {{ visibleError('cleaningMinutes') || visibleError('advertisementMinutes') }}
-            </small>
-            <p class="schedule-summary" aria-live="polite">
-              <i class="bi bi-clock-history" aria-hidden="true"></i>
-              {{
-                scheduleSummary ||
-                'Selecciona una película para calcular el tiempo total de la función.'
-              }}
-            </p>
-          </DialogSection>
-
-          <DialogSection class="form-section" :number="4" title="Precio">
-            <div class="section-grid two-columns">
-              <label
-                >Formato<select v-model="draft.format" name="format">
-                  <option value="2D">2D</option>
-                  <option value="3D" :disabled="draft.technology === '70MM'">3D</option>
-                </select></label
-              >
-              <label
-                >Tecnología<select v-model="draft.technology" name="technology">
-                  <option value="STANDARD">Estándar</option>
-                  <option value="IMAX">IMAX</option>
-                  <option value="70MM">70 mm</option>
-                </select></label
-              >
-              <label
-                ><input v-model="draft.isPremiere" type="checkbox" name="isPremiere" />Función de
-                estreno</label
-              >
-            </div>
-            <div class="field price-field">
-              <label :for="id + '-price'">Precio general desde</label
-              ><input
-                :id="id + '-price'"
-                :value="draft.price"
-                name="price"
-                readonly
-                :aria-describedby="id + '-price-policy'"
-              />
-              <p :id="id + '-price-policy'" class="field-hint">
-                Calculado con la política de boletos. La categoría de edad y el asiento VIP se
-                determinan al comprar.
-              </p>
-              <LoadingState v-if="previewLoading" message="Calculando precio..." compact />
-              <template v-if="preview"
-                ><small v-for="modifier in preview.modifiers" :key="modifier.label"
-                  >{{ modifier.label }}: +{{ formatPrice(modifier.amount) }}</small
-                ><small v-for="category in preview.categories" :key="category.code"
-                  >{{ category.label }}: base {{ formatPrice(category.base) }}</small
-                ></template
-              >
-              <p v-if="previewError" role="alert">
-                {{ previewError }} <button type="button" @click="refreshPrice">Reintentar</button>
-              </p>
-              <small v-if="visibleError('price')" class="field-error">{{
-                visibleError('price')
-              }}</small>
-            </div>
-          </DialogSection>
-        </fieldset>
-
+          </section>
+        </div>
         <ProjectionPoster
+          contained
           :poster-image="movie?.posterImage"
           :title="movie?.title"
           empty-text="El póster aparecerá al elegir una película."
         />
       </div>
 
-      <section
-        v-if="confirming"
-        class="confirm-changes"
-        :aria-labelledby="id + '-confirm-title'"
-        aria-live="polite"
-      >
-        <h3 :id="id + '-confirm-title'" tabindex="-1">Confirma los cambios</h3>
-        <p>Revisa cada campo modificado antes de guardar.</p>
-        <ul>
-          <li v-for="change in changes" :key="change.field">
-            <strong>{{ change.field }}:</strong>
-            <span class="before">{{ change.before }}</span>
-            <i class="bi bi-arrow-right" aria-label="cambia a"></i>
-            <span class="after">{{ change.after }}</span>
-          </li>
-        </ul>
-        <div class="dialog-actions">
-          <button
-            type="button"
-            class="secondary-button"
-            :disabled="submitting"
-            @click="confirming = false"
-          >
-            Volver a editar
-          </button>
-          <button
-            type="button"
-            class="create-button"
-            :disabled="submitting"
-            @click="confirmChanges"
-          >
-            <i class="bi bi-check2-circle" aria-hidden="true"></i>
-            {{ submitting ? 'Guardando…' : 'Confirmar cambios' }}
-          </button>
-        </div>
-      </section>
-
-      <footer v-else-if="isEditing" class="dialog-actions edit-actions">
+      <footer v-if="!confirming && isEditing" class="dialog-actions edit-actions">
         <button type="submit" class="create-button" :disabled="submitting || optionsLoading">
           <i class="bi bi-floppy" aria-hidden="true"></i>
           Guardar cambios
@@ -958,7 +971,7 @@ defineExpose({ open, edit, complete })
           Cancelar Proyección
         </button>
       </footer>
-      <footer v-else class="dialog-actions">
+      <footer v-else-if="!confirming" class="dialog-actions">
         <button type="button" class="secondary-button" :disabled="submitting" @click="close">
           Cancelar
         </button>
@@ -972,8 +985,16 @@ defineExpose({ open, edit, complete })
 </template>
 
 <style scoped>
+.projection-form-dialog {
+  height: min(860px, calc(100dvh - 32px));
+}
+.projection-form-dialog[open] > .projection-form {
+  overflow: hidden;
+}
 form {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   gap: 16px;
   min-height: 0;
   padding: 24px 32px;
@@ -990,9 +1011,17 @@ form {
 }
 .form-body {
   display: grid;
+  flex: 1;
+  min-height: 0;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: 32px;
-  align-items: start;
+  align-items: stretch;
+}
+.fields-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 12px;
 }
 .form-sections {
   display: grid;
@@ -1271,7 +1300,15 @@ select[aria-invalid='true'] {
   margin: 0 6px;
 }
 @media (max-width: 900px) {
+  .projection-form-dialog[open] > .projection-form {
+    overflow-y: auto;
+  }
+  .fields-scroll {
+    overflow: visible;
+    padding-right: 0;
+  }
   .form-body {
+    flex: none;
     grid-template-columns: 1fr;
   }
 }

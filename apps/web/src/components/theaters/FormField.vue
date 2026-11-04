@@ -17,7 +17,17 @@ const errorId = computed(() => (props.error ? `${id}-error` : undefined))
 </template>
 
 <style scoped>
-.form-field { display: grid; gap: 8px; }
-.required-marker { color: var(--color-error); font-weight: 700; }
-.field-error { margin-bottom: 4px; color: var(--color-error); }
+.form-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.required-marker {
+  color: var(--color-error);
+  font-weight: 700;
+}
+.field-error {
+  margin-bottom: 4px;
+  color: var(--color-error);
+}
 </style>

@@ -53,7 +53,7 @@ implementa.
   Rica. Si la de inicio es posterior a la de fin, se muestra «La fecha de inicio no puede
   ser posterior a la fecha de fin.» y no se consulta nada; la API responde `400` con el
   mismo texto.
-- La paginación muestra 10, 20 o 50 transacciones por página.
+- La interfaz muestra 10 transacciones por página, con flechas centradas y «Página X de Y», sin selector de cantidad.
 
 ## Mensajes
 

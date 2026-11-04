@@ -48,6 +48,20 @@ describe('Purchase catalog repository', () => {
       "AT TIME ZONE 'America/Costa_Rica'",
     );
     expect(db.query.mock.calls[0][0]).toContain("c.STATUS='ACTIVE'");
+    expect(db.query.mock.calls[0][0]).toContain('EXISTS(SELECT 1 FROM SEATS s');
+    expect(db.query.mock.calls[0][0]).toContain("s.SEAT_STATE='libre'");
+    expect(db.query.mock.calls[0][0]).toContain(
+      'NOT EXISTS(SELECT 1 FROM TICKETS tk',
+    );
+    expect(db.query.mock.calls[0][0]).toContain(
+      'tk.MOVIE_FUNCTION_ID=mf.MOVIE_FUNCTION_ID',
+    );
+    expect(db.query.mock.calls[0][0]).toContain(
+      's.ROW_NUMBER BETWEEN 1 AND t.DIMENSION_X',
+    );
+    expect(db.query.mock.calls[0][0]).toContain(
+      's.COLUMN_NUMBER BETWEEN 1 AND t.DIMENSION_Y',
+    );
   });
   it('handles empty results and reads through an existing transaction', async () => {
     db.query.mockResolvedValue({});
@@ -119,5 +133,12 @@ describe('Purchase catalog repository', () => {
     expect(seatQuery([1, 2])).toContain('IN (:p0,:p1)');
     expect(seatQuery([1])).toContain('FOR UPDATE');
     expect(seatQuery()).not.toContain('FOR UPDATE');
+    expect(seatQuery()).toContain(
+      'JOIN THEATERS t ON t.THEATER_ID=s.THEATER_ID',
+    );
+    expect(seatQuery()).toContain('s.ROW_NUMBER BETWEEN 1 AND t.DIMENSION_X');
+    expect(seatQuery([1])).toContain(
+      's.COLUMN_NUMBER BETWEEN 1 AND t.DIMENSION_Y',
+    );
   });
 });

@@ -267,6 +267,9 @@ form {
 }
 input,
 select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 42px;
   padding: 8px 10px;
   border: 1px solid var(--border-strong);
@@ -274,6 +277,11 @@ select {
   font: inherit;
   color: var(--text-primary);
   background: var(--input-background);
+}
+select {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 input[type='number'] {
   color-scheme: light;

@@ -393,6 +393,7 @@ async function returnToDashboard() {
       v-else
       embedded
       account-type="employee"
+      surface="dark"
       @submission-state="passwordChanging = $event"
       @return-to-dashboard="returnToDashboard"
     />
