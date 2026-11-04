@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, useId } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 import ProjectionDetailDialog from './ProjectionDetailDialog.vue'
 import ProjectionStatusBadge from './ProjectionStatusBadge.vue'
 import { getProjectionFilterOptions, getProjections } from '@/services/projection.service'
@@ -82,10 +83,14 @@ const selectedBranchName = computed(
 const selectedMovieTitle = computed(
   () => options.value?.movies.find((movie) => String(movie.movieId) === filters.movieId)?.title,
 )
+const dateError = computed(() =>
+  filters.dateFrom && filters.dateTo && filters.dateFrom > filters.dateTo
+    ? 'La fecha inicial no puede ser posterior a la fecha final.'
+    : '',
+)
 const validationError = computed(() => {
   if (searchDraft.value.trim().length > 100) return 'La búsqueda admite como máximo 100 caracteres.'
-  if (filters.dateFrom && filters.dateTo && filters.dateFrom > filters.dateTo)
-    return 'La fecha inicial no puede ser posterior a la fecha final.'
+  if (dateError.value) return dateError.value
   if (filters.timeFrom && filters.timeTo && filters.timeFrom > filters.timeTo)
     return 'La hora inicial no puede ser posterior a la hora final.'
   return ''
@@ -314,16 +319,17 @@ defineExpose({ refresh })
           </option>
         </select>
       </label>
-      <label v-for="date in dateFilters" :key="date.name">
-        <span>{{ date.label }}</span>
-        <input
+      <div v-for="date in dateFilters" :key="date.name" class="date-filter">
+        <label :for="id + '-' + date.name">{{ date.label }}</label>
+        <DatePicker
+          :id="id + '-' + date.name"
           v-model="filters[date.name]"
-          type="date"
           :name="date.name"
-          :title="`${date.label}: día/mes/año`"
+          :disabled="!options"
+          :aria-invalid="!!dateError"
           @change="filtersChanged"
         />
-      </label>
+      </div>
       <label v-for="time in timeFilters" :key="time.name">
         <span>{{ time.label }}</span>
         <select v-model="filters[time.name]" :name="time.name" @change="filtersChanged">
@@ -497,7 +503,8 @@ defineExpose({ refresh })
   border: 0;
   min-width: 0;
 }
-label {
+label,
+.date-filter {
   display: grid;
   gap: 6px;
   font-size: 0.875rem;

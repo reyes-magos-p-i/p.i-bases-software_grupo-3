@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DatePicker from '@/components/common/DatePicker.vue'
 import { computed, onBeforeUnmount, reactive, ref, useId } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
@@ -267,17 +268,16 @@ onBeforeUnmount(() => {
           </option>
         </select></label
       >
-      <label v-for="date in DATE_FILTERS" :key="date.name">
-        <span>{{ date.label }}</span>
-        <input
+      <div v-for="date in DATE_FILTERS" :key="date.name" class="date-filter">
+        <label :for="id + '-' + date.name">{{ date.label }}</label>
+        <DatePicker
+          :id="id + '-' + date.name"
           v-model="filters[date.name]"
-          type="date"
           :name="date.name"
-          :title="`${date.label}: día/mes/año`"
           :aria-invalid="!!dateError"
           @change="filtersChanged"
         />
-      </label>
+      </div>
       <p v-if="optionsError" class="filter-error" role="alert">
         No se pudieron cargar los filtros.
         <button type="button" class="link-button" @click="loadOptions">Reintentar</button>
@@ -396,7 +396,8 @@ onBeforeUnmount(() => {
   align-items: end;
   gap: 12px;
 }
-.filters label {
+.filters label,
+.date-filter {
   min-width: 0;
   max-width: 100%;
 }
@@ -429,7 +430,8 @@ onBeforeUnmount(() => {
   align-items: end;
   gap: 12px;
 }
-label {
+label,
+.date-filter {
   display: grid;
   gap: 6px;
   font-size: 0.875rem;

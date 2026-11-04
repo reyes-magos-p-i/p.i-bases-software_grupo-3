@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useId } from 'vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 import PurchaseDetailDialog from './PurchaseDetailDialog.vue'
 import { getMyPurchases } from '@/services/purchase.service'
 import { trackClientSession } from '@/services/client-session.service'
@@ -113,24 +114,24 @@ onBeforeUnmount(() => {
           placeholder="Número de orden"
       /></label>
       <button type="submit" class="primary">Buscar</button>
-      <label
-        >Desde
-        <input
+      <div class="date-filter">
+        <label :for="id + '-date-from'">Desde</label>
+        <DatePicker
+          :id="id + '-date-from'"
           v-model="draft.dateFrom"
-          type="date"
           name="dateFrom"
-          title="Desde: día/mes/año"
           :aria-invalid="!!dateError"
-      /></label>
-      <label
-        >Hasta
-        <input
+        />
+      </div>
+      <div class="date-filter">
+        <label :for="id + '-date-to'">Hasta</label>
+        <DatePicker
+          :id="id + '-date-to'"
           v-model="draft.dateTo"
-          type="date"
           name="dateTo"
-          title="Hasta: día/mes/año"
           :aria-invalid="!!dateError"
-      /></label>
+        />
+      </div>
       <button type="submit" class="primary">Filtrar</button>
       <button type="button" @click="clearFilters">
         <i class="bi bi-x-circle" aria-hidden="true" /> Limpiar
@@ -211,7 +212,8 @@ onBeforeUnmount(() => {
   gap: 12px;
   margin: 16px 0;
 }
-.history-filters label {
+.history-filters label,
+.date-filter {
   display: grid;
   gap: 6px;
   color: var(--text-primary);

@@ -33,6 +33,12 @@ Las barras de desplazamiento tienen una pista transparente y un indicador discre
 
 El cierre de sesión del portal se ofrece dentro del menú del perfil. El encabezado de cambio de contraseña utiliza texto claro cuando está sobre el fondo azul y oscuro cuando se integra en una superficie clara del perfil.
 
+Todas las selecciones de fecha utilizan `DatePicker`: nacimiento en el registro público; nacimiento y contratación en la creación de usuarios; fecha al crear o modificar proyecciones y repetición al crearlas; filtros de proyecciones, transacciones, historial de compras y selección de función durante la compra. El componente muestra día/mes/año y mantiene valores `YYYY-MM-DD` para las solicitudes. Las horas conservan sus controles existentes.
+
+El calendario comparte colores, navegación con teclado, límites de fecha, limpieza de campos opcionales y cierre con Escape o al salir. La validación al abandonar un campo se ejecuta al salir del calendario completo, sin interrumpir la selección ni la cancelación del formulario. Seleccionar otra vez la fecha vigente no emite un cambio. Los filtros de proyecciones y transacciones consultan una vez por cambio; el historial conserva su aplicación mediante Buscar o Filtrar.
+
+Cuando el navegador dispone de Popover API, el calendario se presenta en la capa superior para evitar recortes dentro de diálogos. Su posición se ajusta al espacio visible al abrir, desplazar o redimensionar la ventana y al cambiar de mes o año. En ventanas de poca altura permite desplazamiento interno; en navegadores sin esa API conserva el anclaje al campo. Los filtros utilizan etiquetas asociadas por identificador, sin anidar los controles del calendario dentro de otra etiqueta.
+
 ## Películas y compra
 
 `MoviePoster` centraliza la presentación de pósteres en el portal, proyecciones, detalle de película, selección inicial de compra y resumen. Intenta primero la ruta pública de imágenes, después la ruta heredada y finalmente la imagen de reemplazo existente. Los errores de imagen no interrumpen la vista.
@@ -100,3 +106,11 @@ La cobertura añadida corresponde al diff contra `3fc2d28`, antes de integrar `d
 La revisión en Edge con API e imágenes simuladas comprobó el plano, la selección de todos los asientos libres, la presentación de un límite inferior, el resumen y el historial. En tamaños de 320, 390, 768 y 1440 píxeles, el resumen conserva el póster alineado con el título y los avisos de cancelación no generan desbordamiento horizontal de la página. El historial conserva el desplazamiento interno de la tabla. El QR sigue disponible en el resumen y no se registraron excepciones de JavaScript de la aplicación. Esta emulación no sustituye una comprobación en un teléfono físico.
 
 Se importaron sin ejecutar las migraciones `20261102_global_settings.sql` y `20261102_ticket_limit_by_availability.sql`, junto con el esquema actualizado de `dev`. El despliegue requiere que la base tenga esos cambios aplicados en ese orden. No se realizaron operaciones contra Oracle, compras ni envíos de correo reales durante esta revisión.
+
+## Revisión final de calendarios
+
+El 4 de noviembre de 2026 se sustituyeron los ocho controles nativos pendientes en el formulario de proyecciones y en los filtros de proyecciones, transacciones e historial de compras. Se conservaron los contratos de las solicitudes, las restricciones existentes y los controles de hora. La validación de intervalos en proyecciones identifica los campos de fecha únicamente cuando el intervalo es inválido, sin marcarlos por errores de búsqueda u hora.
+
+Pasan las 1776 pruebas de los 120 archivos del frontend, incluidas las de registro, creación de usuarios y compra que ya utilizaban el calendario. La cobertura global de líneas es 95,90 %; las líneas ejecutables añadidas respecto a `370a259` alcanzan 100 % (46/46), y las ramas añadidas 97,67 % (42/43). También pasan lint, formato, tipos y compilación. Las pruebas verifican selección y limpieza sin consultas duplicadas, fechas ISO en solicitudes, aplicación explícita del historial, límites, cierre, foco y cancelación con un clic desde ambos calendarios de proyecciones.
+
+En Edge, con API simulada, se comprobaron los cuatro componentes a anchos de 320, 390, 768 y 1440 píxeles, incluyendo una ventana horizontal de 768 por 390. El calendario se mantuvo dentro del espacio visible, conservó el foco al abrir y se presentó sobre el contenido de los diálogos. No se observaron desbordamientos horizontales de la página ni excepciones de JavaScript. No se ejecutaron operaciones contra la base de datos real. La revisión utiliza emulación y no sustituye una prueba en un teléfono físico.

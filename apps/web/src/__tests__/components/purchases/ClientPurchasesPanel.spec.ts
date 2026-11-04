@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ClientPurchasesPanel from '@/components/purchases/ClientPurchasesPanel.vue'
 import PurchaseDetailDialog from '@/components/purchases/PurchaseDetailDialog.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 import { getMyPurchases } from '@/services/purchase.service'
 import { establishClientSession, clearClientSession } from '@/services/client-session.service'
 import type { PurchaseList } from '@/types/purchase'
@@ -43,7 +44,14 @@ async function render() {
 }
 async function fillFilters(values: Record<string, string>) {
   for (const [name, value] of Object.entries(values)) {
-    await wrapper.get(`input[name="${name}"]`).setValue(value)
+    if (name === 'search') await wrapper.get(`input[name="${name}"]`).setValue(value)
+    else {
+      const picker = wrapper
+        .findAllComponents(DatePicker)
+        .find((item) => item.get('input').attributes('name') === name)!
+      picker.vm.$emit('update:modelValue', value)
+      await flushPromises()
+    }
   }
   await wrapper.get('form').trigger('submit')
   await flushPromises()
@@ -63,6 +71,28 @@ afterEach(() => {
 })
 
 describe('ClientPurchasesPanel', () => {
+  it('keeps calendar dates as drafts until the filters are submitted', async () => {
+    await render()
+    const picker = wrapper.findAllComponents(DatePicker)[0]!
+    await picker.get('input').trigger('click')
+    const day = picker.get('[data-date]:not(:disabled)')
+    const value = day.attributes('data-date')
+    await day.trigger('click')
+    await flushPromises()
+    expect(getMyPurchases).toHaveBeenCalledTimes(1)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(getMyPurchases).toHaveBeenLastCalledWith(
+      { page: 1, dateFrom: value },
+      expect.any(AbortSignal),
+    )
+    await picker.get('input').trigger('click')
+    await picker.get('.calendar-footer button').trigger('click')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(getMyPurchases).toHaveBeenLastCalledWith({ page: 1 }, expect.any(AbortSignal))
+  })
+
   it('lists date, order, total and status in the order the API returns (UT-058, 059, 061)', async () => {
     await render()
     expect(getMyPurchases).toHaveBeenCalledExactlyOnceWith({ page: 1 }, expect.any(AbortSignal))

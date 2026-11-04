@@ -14,12 +14,17 @@ const props = withDefaults(
   }>(),
   { modelValue: '', min: '', max: '', required: false, disabled: false },
 )
-const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+const emit = defineEmits<{
+  'update:modelValue': [value: string]
+  blur: [event: FocusEvent]
+}>()
 const id = useId()
 const root = ref<HTMLElement>()
 const input = ref<HTMLInputElement>()
 const panel = ref<HTMLElement>()
 const open = ref(false)
+const floating = typeof HTMLElement.prototype.showPopover === 'function'
+const placement = ref({ left: '0px', top: '0px' })
 const choosingYear = ref(false)
 const focusedDate = ref('')
 const initial = todayInCostaRica()
@@ -56,6 +61,20 @@ const tabDate = computed(() =>
 function allowed(value: string) {
   return (!props.min || value >= props.min) && (!props.max || value <= props.max)
 }
+function positionPanel() {
+  if (!open.value || !panel.value || !input.value || !root.value) return
+  const anchor = input.value.getBoundingClientRect()
+  const width = document.documentElement.clientWidth || window.innerWidth
+  const height = document.documentElement.clientHeight || window.innerHeight
+  const left = Math.max(8, Math.min(anchor.left, width - panel.value.offsetWidth - 8))
+  const below = anchor.bottom + 8
+  const top =
+    below + panel.value.offsetHeight <= height - 8
+      ? below
+      : Math.max(8, anchor.top - panel.value.offsetHeight - 8)
+  const origin = floating ? { left: 0, top: 0 } : root.value.getBoundingClientRect()
+  placement.value = { left: `${left - origin.left}px`, top: `${top - origin.top}px` }
+}
 async function focusDay(value?: string) {
   await nextTick()
   const selected = value
@@ -67,17 +86,24 @@ async function focusDay(value?: string) {
 }
 async function toggle() {
   if (props.disabled) return
-  open.value = !open.value
-  if (!open.value) return
+  if (open.value) {
+    close()
+    return
+  }
+  open.value = true
   let value = validDate(props.modelValue) ? props.modelValue : todayInCostaRica()
   if (props.max && value > props.max) value = props.max
   if (props.min && value < props.min) value = props.min
   year.value = Number(value.slice(0, 4))
   month.value = Number(value.slice(5, 7))
   choosingYear.value = false
+  await nextTick()
+  panel.value?.showPopover?.()
+  positionPanel()
   await focusDay(value)
 }
 function close(restoreFocus = false) {
+  panel.value?.hidePopover?.()
   open.value = false
   if (restoreFocus) input.value?.focus()
 }
@@ -88,6 +114,10 @@ function escape(event: KeyboardEvent) {
   close(true)
 }
 async function select(value: string) {
+  if (value === props.modelValue) {
+    close(true)
+    return
+  }
   emit('update:modelValue', value)
   close(true)
   await nextTick()
@@ -133,16 +163,28 @@ function outside(event: PointerEvent) {
   if (event.target instanceof Node && !root.value?.contains(event.target)) close()
 }
 function leave(event: FocusEvent) {
-  if (event.relatedTarget instanceof Node && !root.value?.contains(event.relatedTarget)) close()
+  if (event.relatedTarget instanceof Node && root.value?.contains(event.relatedTarget)) return
+  close()
+  emit('blur', event)
 }
+watch([year, month, choosingYear], positionPanel, { flush: 'post' })
 watch(
   () => props.disabled,
   (value) => {
     if (value) close()
   },
 )
-onMounted(() => document.addEventListener('pointerdown', outside))
-onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
+onMounted(() => {
+  document.addEventListener('pointerdown', outside)
+  document.addEventListener('scroll', positionPanel, true)
+  window.addEventListener('resize', positionPanel)
+})
+onBeforeUnmount(() => {
+  close()
+  document.removeEventListener('pointerdown', outside)
+  document.removeEventListener('scroll', positionPanel, true)
+  window.removeEventListener('resize', positionPanel)
+})
 </script>
 
 <template>
@@ -173,6 +215,9 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
         :id="id"
         ref="panel"
         class="calendar-panel"
+        :class="{ 'calendar-panel--floating': floating }"
+        :popover="floating ? 'manual' : undefined"
+        :style="placement"
         role="dialog"
         aria-label="Seleccionar fecha"
       >
@@ -274,6 +319,11 @@ select:focus-visible {
 .date-control input[aria-invalid='true'] {
   border-color: var(--error-color);
 }
+.date-control input:disabled {
+  color: var(--text-disabled);
+  background: var(--input-disabled-background);
+  cursor: not-allowed;
+}
 .date-control i {
   position: absolute;
   right: 14px;
@@ -284,15 +334,22 @@ select:focus-visible {
 }
 .calendar-panel {
   position: absolute;
-  inset: calc(100% + 8px) auto auto 0;
+  inset: auto;
+  margin: 0;
   z-index: 10;
   width: min(300px, calc(100vw - 4rem));
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 12px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-medium);
   color: var(--text-primary);
   background: var(--content-background);
   box-shadow: 0 8px 24px var(--shadow-strong-color);
+}
+.calendar-panel--floating {
+  position: fixed;
 }
 .calendar-heading,
 .calendar-footer {

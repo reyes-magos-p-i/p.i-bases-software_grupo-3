@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { AxiosError, type AxiosResponse } from 'axios'
 import TransactionsSection from '@/components/transactions/TransactionsSection.vue'
 import TransactionDetailDialog from '@/components/transactions/TransactionDetailDialog.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 import type { TransactionListItem, TransactionListResult } from '@/types/transaction'
 
 const { getTransactions, getTransactionFilterOptions, sessionExpired, refreshPermissions } =
@@ -130,6 +131,15 @@ async function render(props: { disabled?: boolean } = {}) {
   return wrapper
 }
 const lastQuery = () => getTransactions.mock.calls[getTransactions.mock.calls.length - 1]?.[0]
+async function setDate(view: VueWrapper, name: string, value: string) {
+  const picker = view
+    .findAllComponents(DatePicker)
+    .find((item) => item.get('input').attributes('name') === name)!
+  picker.vm.$emit('update:modelValue', value)
+  await flushPromises()
+  await picker.get('input').trigger('change')
+  await flushPromises()
+}
 const button = (view: VueWrapper, text: string) =>
   view.findAll('button').find((item) => item.text().includes(text))!
 const cells = (view: VueWrapper) =>
@@ -364,8 +374,8 @@ describe('TransactionsSection', () => {
     await view.get('select[name="branchId"]').setValue('1')
     await view.get('select[name="movieId"]').setValue('62')
     await view.get('select[name="status"]').setValue('CANCELLED')
-    await view.get('input[name="dateFrom"]').setValue('2026-10-05')
-    await view.get('input[name="dateTo"]').setValue('2026-10-16')
+    await setDate(view, 'dateFrom', '2026-10-05')
+    await setDate(view, 'dateTo', '2026-10-16')
     await flushPromises()
     expect(lastQuery()).toEqual({
       page: 1,
@@ -385,10 +395,10 @@ describe('TransactionsSection', () => {
 
   it('rejects a start date after the end date without asking the API', async () => {
     const view = await render()
-    await view.get('input[name="dateTo"]').setValue('2026-10-05')
+    await setDate(view, 'dateTo', '2026-10-05')
     await flushPromises()
     const calls = getTransactions.mock.calls.length
-    await view.get('input[name="dateFrom"]').setValue('2026-10-16')
+    await setDate(view, 'dateFrom', '2026-10-16')
     await flushPromises()
     expect(getTransactions.mock.calls).toHaveLength(calls)
     expect(view.get('.feedback').text()).toBe(
@@ -396,6 +406,24 @@ describe('TransactionsSection', () => {
     )
     expect(view.find('tbody').exists()).toBe(false)
     expect(view.get('input[name="dateFrom"]').attributes('aria-invalid')).toBe('true')
+  })
+
+  it('filters once per calendar selection and clears the date without submitting a form', async () => {
+    const view = await render()
+    const picker = view.findAllComponents(DatePicker)[0]!
+    const before = getTransactions.mock.calls.length
+    await picker.get('input').trigger('click')
+    expect(getTransactions.mock.calls).toHaveLength(before)
+    const day = picker.get('[data-date]:not(:disabled)')
+    await day.trigger('click')
+    await flushPromises()
+    expect(lastQuery()).toMatchObject({ dateFrom: day.attributes('data-date') })
+    expect(getTransactions.mock.calls).toHaveLength(before + 1)
+    await picker.get('input').trigger('click')
+    await picker.get('.calendar-footer button').trigger('click')
+    await flushPromises()
+    expect(lastQuery()).not.toHaveProperty('dateFrom')
+    expect(getTransactions.mock.calls).toHaveLength(before + 2)
   })
 
   it('disables the branch and movie filters when the options fail and retries them', async () => {

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import DialogSection from '@/components/common/DialogSection.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
+import { useBlurValidation } from '@/composables/useBlurValidation'
 import {
   computed,
   nextTick,
@@ -64,6 +66,7 @@ const emit = defineEmits<{
 }>()
 
 const id = useId()
+const shouldValidate = useBlurValidation()
 const shell = useTemplateRef<InstanceType<typeof ProjectionDialogShell>>('shell')
 const form = useTemplateRef<HTMLFormElement>('form')
 
@@ -683,15 +686,16 @@ defineExpose({ open, edit, complete })
                 <label :for="id + '-start-date'"
                   >Fecha <span class="required-marker">*</span></label
                 >
-                <input
+                <DatePicker
                   :id="id + '-start-date'"
                   v-model="draft.startDate"
                   name="startDate"
-                  type="date"
+                  required
+                  :disabled="submitting || confirming"
                   :min="localNow().slice(0, 10)"
                   :aria-invalid="!!visibleError('startDate')"
                   :aria-describedby="describedBy('startDate')"
-                  @blur="touched.startDate = true"
+                  @blur="touched.startDate = shouldValidate($event) || !!touched.startDate"
                 />
                 <small :id="id + '-startDate-hint'" class="field-hint"
                   >Primer día de la proyección.</small
@@ -706,15 +710,15 @@ defineExpose({ open, edit, complete })
               </div>
               <div v-if="!isEditing" class="field">
                 <label :for="id + '-end-date'">Repetir hasta (opcional)</label>
-                <input
+                <DatePicker
                   :id="id + '-end-date'"
                   v-model="draft.endDate"
                   name="endDate"
-                  type="date"
+                  :disabled="submitting || confirming"
                   :min="draft.startDate || localNow().slice(0, 10)"
                   :aria-invalid="!!visibleError('endDate')"
                   :aria-describedby="describedBy('endDate')"
-                  @blur="touched.endDate = true"
+                  @blur="touched.endDate = shouldValidate($event) || !!touched.endDate"
                 />
                 <small :id="id + '-endDate-hint'" class="field-hint">
                   Crea una proyección por día a la misma hora (máximo {{ MAX_DAYS }} días).
