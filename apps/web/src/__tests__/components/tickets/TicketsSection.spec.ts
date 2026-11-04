@@ -30,6 +30,18 @@ async function search(wrapper: ReturnType<typeof mount>, value: string) {
 }
 
 describe('TicketsSection', () => {
+  beforeEach(() => {
+    getTicket.mockReset()
+    const prototype = HTMLDialogElement.prototype
+    Object.defineProperty(prototype, 'showModal', { configurable: true, value: vi.fn() })
+    Object.defineProperty(prototype, 'close', { configurable: true, value: vi.fn() })
+  })
+
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
+  })
+
   it('keeps the numbered destination group and the existing ticket update contract', async () => {
     const wrapper = mount(ModifyTicketDialog, {
       props: {
@@ -54,17 +66,6 @@ describe('TicketsSection', () => {
     expect(wrapper.emitted('submit')).toEqual([[{ movieFunctionId: 9 }]])
     expect(wrapper.get('form').element.lastElementChild).toBe(wrapper.get('footer').element)
     wrapper.unmount()
-  })
-  beforeEach(() => {
-    getTicket.mockReset()
-    const prototype = HTMLDialogElement.prototype
-    Object.defineProperty(prototype, 'showModal', { configurable: true, value: vi.fn() })
-    Object.defineProperty(prototype, 'close', { configurable: true, value: vi.fn() })
-  })
-
-  afterEach(() => {
-    Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
-    Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
   })
 
   it('shows the searched ticket in the results table', async () => {
