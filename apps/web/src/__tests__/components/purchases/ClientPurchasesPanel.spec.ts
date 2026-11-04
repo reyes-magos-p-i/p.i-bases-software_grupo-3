@@ -22,6 +22,7 @@ const purchase = (id: number, date: string, total: number, status: 'PAID' | 'CAN
   status,
   total,
   quantity: 2,
+  functionCancelled: false,
 })
 const history: PurchaseList = {
   items: [
@@ -74,6 +75,18 @@ describe('ClientPurchasesPanel', () => {
     expect(rows[2]).toContain('ORD-000121')
     expect(rows[2]).toContain('Pagada')
     expect(wrapper.text()).toContain('3 compras · de la más reciente a la más antigua')
+  })
+
+  it('marks purchases whose function was cancelled', async () => {
+    vi.mocked(getMyPurchases).mockResolvedValue({
+      ...history,
+      items: [{ ...history.items[0]!, functionCancelled: true }, history.items[1]!],
+      total: 2,
+    })
+    await render()
+    const rows = wrapper.findAll('tbody tr').map((row) => row.text())
+    expect(rows[0]).toContain('Función cancelada')
+    expect(rows[1]).not.toContain('Función cancelada')
   })
 
   it('uses the singular for one purchase', async () => {

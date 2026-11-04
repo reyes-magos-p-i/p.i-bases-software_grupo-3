@@ -80,6 +80,7 @@ export interface PurchaseReceipt {
   purchasedAt: string;
   status: string;
   buyerEmail: string;
+  functionCancelled: boolean;
   paymentMethod: 'CARD' | 'CASH' | 'SIMULATED';
   cardBrand: string | null;
   cardLast4: string | null;

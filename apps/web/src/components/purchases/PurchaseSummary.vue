@@ -85,7 +85,10 @@ const purchaseCode = computed(() => {
     </div>
     <p class="total">Total: {{ formatColones(purchase.total) }}</p>
     <template v-if="'reference' in purchase"
-      ><p>
+      ><p v-if="purchase.functionCancelled" class="function-cancelled" role="status">
+        Esta función fue cancelada.
+      </p>
+      <p>
         <strong>{{ purchase.reference }}</strong> · {{ formatDateTime(purchase.purchasedAt) }} ·
         {{ purchase.status === 'PAID' ? 'Pagada' : 'Cancelada' }}
       </p>
@@ -117,6 +120,12 @@ const purchaseCode = computed(() => {
   </section>
 </template>
 <style scoped>
+.function-cancelled {
+  padding: 12px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-small);
+  font-weight: 600;
+}
 .purchase-summary {
   background: var(--content-background);
   color: var(--text-primary);
