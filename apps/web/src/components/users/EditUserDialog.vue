@@ -501,7 +501,7 @@ onBeforeUnmount(() => {
 
 <template>
   <BaseModal :open="!!selection" :title="title" :close-disabled="saving" @close="close">
-    <div class="user-edit-content dialog-content" :aria-busy="loading || saving">
+    <div class="user-edit-content dialog-content dialog-sections" :aria-busy="loading || saving">
       <LoadingState v-if="loading" message="Cargando datos del usuario…" compact />
       <div v-if="error" ref="feedback" class="edit-feedback edit-error" tabindex="-1">
         <NotificationPopup type="error" :message="error" :duration="0" />
