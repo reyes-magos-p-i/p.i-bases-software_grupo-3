@@ -21,6 +21,10 @@ function openProfile() {
   menuOpen.value = false
   emit('profile')
 }
+function logout() {
+  menuOpen.value = false
+  emit('logout')
+}
 
 function closeOnOutsideClick(event: PointerEvent) {
   if (event.target instanceof Node && !root.value?.contains(event.target)) {
@@ -100,17 +104,12 @@ onBeforeUnmount(() => {
           <i class="bi bi-key" aria-hidden="true"></i>
           Cambiar contraseña
         </button>
+        <button type="button" class="account-logout" aria-label="Cerrar sesión" @click="logout">
+          <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+          Cerrar sesión
+        </button>
       </div>
     </section>
-    <button
-      class="account-logout"
-      type="button"
-      aria-label="Cerrar sesión"
-      title="Cerrar sesión"
-      @click="emit('logout')"
-    >
-      <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
-    </button>
   </div>
 </template>
 
@@ -162,7 +161,7 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 20;
   top: calc(100% - 2px);
-  right: 64px;
+  right: 0;
   width: min(280px, calc(100vw - 32px));
   padding: 16px;
   border: 1px solid var(--border-color);
@@ -215,31 +214,6 @@ onBeforeUnmount(() => {
   color: var(--text-primary);
   text-align: left;
   min-height: 44px;
-}
-
-.account-logout {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-on-dark);
-  cursor: pointer;
-  font-size: 1.25rem;
-}
-
-.account-logout:hover {
-  background: var(--surface-on-dark-hover);
-  color: var(--accent-color);
-}
-
-.account-logout:focus-visible {
-  outline: 2px solid var(--focus-on-dark);
-  outline-offset: 2px;
 }
 
 @media (max-width: 576px) {

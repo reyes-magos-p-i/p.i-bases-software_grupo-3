@@ -27,18 +27,25 @@ describe('AccountMenu.vue', () => {
     expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
       'Mi perfil',
       'Cambiar contraseña',
+      'Cerrar sesión',
     ])
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     await nextTick()
     expect(wrapper.find('.account-dropdown').exists()).toBe(false)
   })
 
-  it('emits logout from the clear exit icon', async () => {
+  it('offers logout only inside the profile menu and closes the menu when selected', async () => {
     const wrapper = mount(AccountMenu, { props: { user } })
-
+    expect(wrapper.find('[aria-label="Cerrar sesión"]').exists()).toBe(false)
+    await wrapper.get('.account-avatar').trigger('click')
+    expect(wrapper.get('.account-dropdown [aria-label="Cerrar sesión"]').text()).toBe(
+      'Cerrar sesión',
+    )
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
 
     expect(wrapper.emitted('logout')).toHaveLength(1)
+    expect(wrapper.find('.account-dropdown').exists()).toBe(false)
+    wrapper.unmount()
   })
   it('opens the profile through an event and closes the account menu', async () => {
     const wrapper = mount(AccountMenu, { props: { user } })
