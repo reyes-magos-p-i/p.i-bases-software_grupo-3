@@ -70,6 +70,15 @@ input,
 select,
 textarea {
   font: inherit;
+  min-width: 0;
+  max-width: 100%;
+}
+
+button {
+  overflow-wrap: anywhere;
+}
+select {
+  text-overflow: ellipsis;
 }
 
 :where(button, a[href], input, select, textarea, summary, [tabindex]):focus-visible {
