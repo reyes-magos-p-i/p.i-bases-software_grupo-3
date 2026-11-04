@@ -11,7 +11,7 @@ paths:
     get:
       security: []
       summary: Película y funciones disponibles sin sesión
-      description: Máximo 60 solicitudes por minuto y cliente de red. Cache-Control no-store.
+      description: Máximo 60 solicitudes por minuto y cliente de red. Cache-Control no-store. Solo incluye funciones con asientos registrados, dentro de las dimensiones de la sala y disponibles para esa función; omite las funciones agotadas. La disponibilidad se comprueba nuevamente al confirmar la compra.
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
@@ -146,6 +146,7 @@ paths:
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /purchases/movies/{id}/functions:
     get:
+      description: Devuelve únicamente funciones comprables con al menos un asiento registrado y libre dentro de las dimensiones de la sala, sin boleto asociado a esa posición y función. Las funciones agotadas se omiten. La disponibilidad se vuelve a comprobar al confirmar la compra.
       summary: Película y funciones disponibles para comprar
       parameters:
         - $ref: "#/components/parameters/Id"

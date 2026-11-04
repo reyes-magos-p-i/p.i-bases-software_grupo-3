@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaginationControls from '@/components/common/PaginationControls.vue'
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
@@ -537,28 +538,13 @@ defineExpose({ refresh })
           </p>
         </div>
         <footer class="pagination-bar">
-          <nav aria-label="Paginación de usuarios">
-            <button
-              type="button"
-              class="secondary-button"
-              aria-label="Página anterior"
-              title="Página anterior"
-              :disabled="result.page <= 1"
-              @click="changePage(result.page - 1)"
-            >
-              <i class="bi bi-chevron-left" aria-hidden="true"></i></button
-            ><span>Página {{ result.totalPages ? result.page : 0 }} de {{ result.totalPages }}</span
-            ><button
-              type="button"
-              class="secondary-button"
-              aria-label="Página siguiente"
-              title="Página siguiente"
-              :disabled="result.page >= result.totalPages"
-              @click="changePage(result.page + 1)"
-            >
-              <i class="bi bi-chevron-right" aria-hidden="true"></i>
-            </button>
-          </nav>
+          <PaginationControls
+            label="Paginación de usuarios"
+            :page="result.page"
+            :total-pages="result.totalPages"
+            :disabled="loading"
+            @change="changePage"
+          />
         </footer>
       </template>
     </div>
@@ -597,8 +583,7 @@ defineExpose({ refresh })
 }
 .search-bar,
 .filters,
-.pagination-bar,
-.pagination-bar nav {
+.pagination-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
@@ -833,10 +818,6 @@ button:focus-visible {
   align-items: center;
   margin-top: 16px;
   font-size: 0.875rem;
-}
-.pagination-bar nav {
-  align-items: center;
-  justify-content: center;
 }
 @media (max-width: 600px) {
   .search-bar .primary-button,

@@ -71,7 +71,7 @@ async function submitModify(data: UpdateTicketRequest) {
     await updateTicket(searchedNumber.value, data)
     modifyDialog.value?.complete()
     await search()
-    successNotice.value = 'Boleto modificado con ?xito.'
+    successNotice.value = 'Boleto modificado con éxito.'
   } catch (error) {
     const status = isAxiosError(error) ? error.response?.status : undefined
     if (status === 401) sessionExpired()

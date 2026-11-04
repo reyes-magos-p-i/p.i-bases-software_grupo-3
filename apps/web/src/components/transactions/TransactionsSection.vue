@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaginationControls from '@/components/common/PaginationControls.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
 import { computed, onBeforeUnmount, reactive, ref, useId } from 'vue'
 import { isAxiosError } from 'axios'
@@ -12,7 +13,6 @@ import type {
   TransactionListItem,
   TransactionListQuery,
   TransactionListResult,
-  TransactionPageSize,
   TransactionStatus,
 } from '@/types/transaction'
 import {
@@ -23,7 +23,6 @@ import {
   formatTransactionId,
 } from '@/utils/transaction-format'
 
-const PAGE_SIZES: readonly TransactionPageSize[] = [10, 20, 50]
 const NO_NAME = 'Sin nombre registrado'
 const DATE_FILTERS = [
   { name: 'dateFrom', label: 'Fecha inicio' },
@@ -43,7 +42,6 @@ const filters = reactive({
   dateFrom: '',
   dateTo: '',
 })
-const pageSize = ref<TransactionPageSize>(10)
 const page = ref(1)
 const result = ref<TransactionListResult | null>(null)
 const loading = ref(false)
@@ -107,7 +105,7 @@ async function load() {
   listError.value = ''
   const query: TransactionListQuery = {
     page: page.value,
-    pageSize: pageSize.value,
+    pageSize: 10,
     ...(appliedSearch.value ? { search: appliedSearch.value } : {}),
     ...(filters.branchId !== '' ? { branchId: filters.branchId } : {}),
     ...(filters.movieId !== '' ? { movieId: filters.movieId } : {}),
@@ -351,33 +349,13 @@ onBeforeUnmount(() => {
     </div>
 
     <footer v-if="result && !listError && !dateError" class="pagination-bar">
-      <label class="page-size"
-        >Mostrar<select v-model="pageSize" name="pageSize" @change="filtersChanged">
-          <option v-for="size in PAGE_SIZES" :key="size" :value="size">{{ size }}</option>
-        </select></label
-      >
-      <nav aria-label="Paginación de transacciones">
-        <button
-          type="button"
-          class="secondary-button"
-          :disabled="loading || result.page <= 1"
-          @click="changePage(result.page - 1)"
-        >
-          <i class="bi bi-arrow-left" aria-hidden="true"></i> Anterior
-        </button>
-        <span class="current-page" aria-current="page">
-          <span class="visually-hidden">Página </span>{{ result.totalPages ? result.page : 0 }}
-          <span class="visually-hidden">de {{ result.totalPages }}</span>
-        </span>
-        <button
-          type="button"
-          class="secondary-button"
-          :disabled="loading || result.page >= result.totalPages"
-          @click="changePage(result.page + 1)"
-        >
-          Siguiente <i class="bi bi-arrow-right" aria-hidden="true"></i>
-        </button>
-      </nav>
+      <PaginationControls
+        label="Paginación de transacciones"
+        :page="result.page"
+        :total-pages="result.totalPages"
+        :disabled="loading"
+        @change="changePage"
+      />
     </footer>
     <TransactionDetailDialog
       :transaction-id="selectedTransactionId"
@@ -423,8 +401,7 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 .search-bar,
-.pagination-bar,
-.pagination-bar nav {
+.pagination-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
@@ -598,27 +575,6 @@ button:focus-visible {
   justify-content: center;
   align-items: center;
   font-size: 0.875rem;
-}
-.page-size {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 400;
-  color: var(--text-on-dark-secondary);
-}
-.page-size select {
-  color: var(--text-primary);
-}
-.current-page {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-  border-radius: var(--radius-small);
-  background: var(--content-background);
-  color: var(--text-primary);
-  font-weight: 600;
 }
 @media (max-width: 600px) {
   .search-field {

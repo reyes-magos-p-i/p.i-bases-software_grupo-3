@@ -507,6 +507,13 @@ describe('Atomic purchase storage', () => {
     expect(
       locks.every(([sql]) => sql.includes('FOR UPDATE OF s.ROW_NUMBER WAIT 5')),
     ).toBe(true);
+    expect(
+      locks.every(
+        ([sql]) =>
+          sql.includes('s.ROW_NUMBER BETWEEN 1 AND t.DIMENSION_X') &&
+          sql.includes('s.COLUMN_NUMBER BETWEEN 1 AND t.DIMENSION_Y'),
+      ),
+    ).toBe(true);
     expect(executeMany.mock.calls[1][1]).toHaveLength(1001);
     expect(commit).toHaveBeenCalledTimes(1);
     expect(rollback).not.toHaveBeenCalled();

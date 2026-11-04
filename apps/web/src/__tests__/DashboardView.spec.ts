@@ -245,6 +245,7 @@ describe('DashboardView', () => {
     expect(view.findComponent(ChangePasswordView).props()).toMatchObject({
       embedded: true,
       accountType: 'employee',
+      surface: 'dark',
     })
     expect(view.findAllComponents(UserListPanel)).toHaveLength(0)
     await view.findComponent(ChangePasswordView).vm.$emit('return-to-dashboard')

@@ -419,6 +419,9 @@ describe('ProjectionFormDialog', () => {
     it('prefills the projection and offers save and undo', async () => {
       await renderEdit()
       expect(wrapper!.get('h2').text()).toBe('Modificar proyección')
+      expect(wrapper!.get('.fields-scroll').find('.poster').exists()).toBe(false)
+      expect(wrapper!.get('.form-body > .poster').classes()).toContain('poster--contained')
+      expect(wrapper!.get('.fields-scroll').find('[name="startDate"]').exists()).toBe(true)
       expect(wrapper!.find('[name="endDate"]').exists()).toBe(false)
       expect(field('branchId').element).toHaveProperty('value', '2')
       expect(field('theaterId').element).toHaveProperty('value', '7')
