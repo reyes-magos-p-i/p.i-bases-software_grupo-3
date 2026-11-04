@@ -62,13 +62,19 @@ describe('PurchaseDetailDialog', () => {
     const summary = dialog.getComponent(PurchaseSummary)
     expect(summary.props('purchase')).toEqual(ord121)
     expect(summary.props('showPayment')).toBe(true)
+    expect(dialog.get('.purchase-detail').element.lastElementChild).toBe(
+      dialog.get('footer').element,
+    )
+    await dialog.get('.detail-footer button').trigger('click')
+    expect(dialog.emitted('close')).toHaveLength(1)
   })
 
   it.each([403, 404])('denies a purchase of another account on %i (UT-073)', async (status) => {
     vi.mocked(getMyPurchase).mockRejectedValue(failure(status))
     const dialog = await render(123)
     expect(dialog.get('[role="alert"]').text()).toBe('No tienes acceso a esta compra')
-    expect(dialog.find('button').exists()).toBe(false)
+    expect(dialog.find('.detail-error button').exists()).toBe(false)
+    expect(dialog.get('.detail-footer button').text()).toBe('Cerrar')
     expect(dialog.findComponent(PurchaseSummary).exists()).toBe(false)
   })
 

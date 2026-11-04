@@ -22,38 +22,36 @@ const purchaseCode = computed(() => {
   <section class="purchase-summary" aria-label="Resumen de compra">
     <div class="summary-heading">
       <MoviePoster :poster-image="purchase.function.posterImage" :title="purchase.function.title" />
-      <div>
-        <h2>{{ purchase.function.title }}</h2>
-        <dl>
-          <div v-if="email">
-            <dt>Correo del comprador</dt>
-            <dd>{{ email }}</dd>
-          </div>
-          <div>
-            <dt>Sucursal</dt>
-            <dd>{{ purchase.function.branchName }}</dd>
-          </div>
-          <div>
-            <dt>Sala</dt>
-            <dd>{{ purchase.function.theaterId }}</dd>
-          </div>
-          <div>
-            <dt>Función</dt>
-            <dd>{{ formatDateTime(purchase.function.startsAt) }}</dd>
-          </div>
-          <div>
-            <dt>Formato</dt>
-            <dd>
-              {{ purchase.function.format }} ·
-              {{
-                purchase.function.technology === 'STANDARD'
-                  ? 'Estándar'
-                  : purchase.function.technology
-              }}{{ purchase.function.isPremiere ? ' · Estreno' : '' }}
-            </dd>
-          </div>
-        </dl>
-      </div>
+      <h2>{{ purchase.function.title }}</h2>
+      <dl>
+        <div v-if="email">
+          <dt>Correo del comprador</dt>
+          <dd>{{ email }}</dd>
+        </div>
+        <div>
+          <dt>Sucursal</dt>
+          <dd>{{ purchase.function.branchName }}</dd>
+        </div>
+        <div>
+          <dt>Sala</dt>
+          <dd>{{ purchase.function.theaterId }}</dd>
+        </div>
+        <div>
+          <dt>Función</dt>
+          <dd>{{ formatDateTime(purchase.function.startsAt) }}</dd>
+        </div>
+        <div>
+          <dt>Formato</dt>
+          <dd>
+            {{ purchase.function.format }} ·
+            {{
+              purchase.function.technology === 'STANDARD'
+                ? 'Estándar'
+                : purchase.function.technology
+            }}{{ purchase.function.isPremiere ? ' · Estreno' : '' }}
+          </dd>
+        </div>
+      </dl>
     </div>
     <p v-if="'seats' in purchase">
       Asientos:
@@ -136,7 +134,14 @@ const purchaseCode = computed(() => {
   display: grid;
   grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
   gap: 24px;
-  align-items: center;
+  align-items: start;
+  margin-bottom: 24px;
+}
+.summary-heading img {
+  grid-row: span 2;
+}
+.summary-heading h2 {
+  margin-top: 0;
 }
 .summary-heading img {
   border-radius: var(--radius-small);
@@ -145,7 +150,7 @@ dl {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-  margin: 24px 0;
+  margin: 0;
 }
 dt {
   color: var(--text-secondary);
@@ -195,12 +200,15 @@ td {
 }
 @media (max-width: 480px) {
   .summary-heading {
-    grid-template-columns: 1fr;
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 16px;
   }
   .summary-heading img {
-    max-width: 140px;
+    grid-row: auto;
+    max-width: 88px;
   }
   dl {
+    grid-column: 1 / -1;
     grid-template-columns: 1fr;
   }
 }
