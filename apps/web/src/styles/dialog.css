@@ -1,0 +1,156 @@
+.cinema-dialog {
+  color: var(--text-primary);
+  background: var(--dialog-background);
+  border-radius: var(--radius-medium);
+  box-shadow: 0 16px 48px var(--shadow-strong-color);
+  --scrollbar-color: var(--scrollbar-thumb);
+  --scrollbar-hover-color: var(--scrollbar-thumb-hover);
+}
+
+dialog.cinema-dialog::backdrop {
+  background: var(--overlay-background);
+}
+
+.cinema-dialog > .dialog-heading {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px var(--dialog-content-padding);
+  color: var(--dialog-heading-text);
+  background: var(--dialog-heading-background);
+}
+
+.cinema-dialog > .dialog-heading > :is(h2, .app-modal-title) {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  font-size: var(--dialog-heading-size);
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.cinema-dialog > .dialog-heading > :is(.app-modal-close, .close-button) {
+  position: static;
+  display: grid;
+  flex: 0 0 44px;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-small);
+  color: inherit;
+  background: transparent;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.cinema-dialog > .dialog-heading > :is(.app-modal-close, .close-button):hover {
+  background: var(--surface-on-dark-hover);
+}
+
+.cinema-dialog > .dialog-heading > :is(.app-modal-close, .close-button):focus-visible {
+  outline: 2px solid var(--focus-on-dark);
+  outline-offset: 2px;
+}
+
+.cinema-dialog .app-modal-body > .dialog-content {
+  padding: 0;
+  overflow: visible;
+}
+
+.cinema-dialog :is(.detail-group, .edit-group) > h3 {
+  margin: 0 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.cinema-dialog .detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 20px 24px;
+  margin: 0;
+}
+
+.cinema-dialog .detail-grid > :is(div, .detail-field) {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.cinema-dialog .detail-grid dt {
+  margin: 0 0 6px;
+  color: var(--text-secondary);
+  font-size: var(--dialog-label-size);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.cinema-dialog .detail-grid dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.cinema-dialog :is(footer, .confirmation-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.cinema-dialog :is(footer, .confirmation-actions) > button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: var(--radius-small);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cinema-dialog :is(footer, .confirmation-actions) > :is(.secondary-button, .detail-button) {
+  border: 1px solid var(--border-strong);
+  color: var(--button-secondary-text);
+  background: var(--button-secondary-background);
+}
+
+.cinema-dialog :is(label, legend) {
+  line-height: 1.5;
+}
+
+.cinema-dialog .notification-popup:not(.notification-popup--floating) {
+  max-width: 100%;
+}
+
+@media (max-width: 575px) {
+  .cinema-dialog {
+    --dialog-content-padding: 16px;
+  }
+  .cinema-dialog .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

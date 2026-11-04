@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+@import './dialog.css';
+@import './crud-modal.css';
 
 *,
 *::before,
@@ -21,6 +23,46 @@ body {
 
   color: var(--text-on-dark);
   background-color: var(--page-background);
+  --scrollbar-color: var(--scrollbar-thumb-on-dark);
+  --scrollbar-hover-color: var(--scrollbar-thumb-on-dark-hover);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-color, var(--scrollbar-thumb)) transparent;
+}
+
+:where(.seat-selector, .purchase-summary, .checkbox-options, .table-wrapper) {
+  --scrollbar-color: var(--scrollbar-thumb);
+  --scrollbar-hover-color: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--scrollbar-color, var(--scrollbar-thumb));
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-hover-color, var(--scrollbar-thumb-hover));
+}
+
+em,
+i {
+  font-style: normal;
+}
+
+@media (forced-colors: active) {
+  * {
+    scrollbar-color: auto;
+  }
 }
 
 button,

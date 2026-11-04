@@ -98,6 +98,13 @@
   --dialog-background: var(--content-background);
   --dialog-heading-background: var(--primary-color);
   --dialog-heading-text: var(--content-background);
+  --dialog-content-padding: 24px;
+  --dialog-heading-size: 1.25rem;
+  --dialog-label-size: 0.875rem;
+  --scrollbar-thumb: color-mix(in srgb, var(--surface-background) 35%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--surface-background) 60%, transparent);
+  --scrollbar-thumb-on-dark: color-mix(in srgb, var(--content-background) 40%, transparent);
+  --scrollbar-thumb-on-dark-hover: color-mix(in srgb, var(--content-background) 65%, transparent);
   --table-background: var(--content-background);
   --table-heading-background: var(--surface-background);
   --table-heading-text: var(--content-background);
