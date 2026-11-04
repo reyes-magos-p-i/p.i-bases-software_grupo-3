@@ -136,12 +136,11 @@ describe('BranchDetailDialog', () => {
     expect(field('Estado')).toBe('Inactiva')
   })
 
-  it('asks to modify the loaded branch (SCRUM-33)', async () => {
+  it('offers only closing from the detail footer', async () => {
     const view = await render()
-    const modify = page.findAll('button').find((button) => button.text().includes('Modificar'))
-    expect(modify?.attributes('disabled')).toBeUndefined()
-    await modify!.trigger('click')
-    expect(view.emitted('modify')).toEqual([[branch]])
+    expect(page.findAll('footer button').map((button) => button.text())).toEqual(['Cerrar'])
+    await page.get('footer button').trigger('click')
+    expect(view.emitted('close')).toHaveLength(1)
   })
 
   it('shows the loading state while the detail is requested', async () => {

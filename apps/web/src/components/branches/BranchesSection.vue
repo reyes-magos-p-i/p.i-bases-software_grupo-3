@@ -464,7 +464,6 @@ onBeforeUnmount(() => {
     <BranchDetailDialog
       :branch-id="selectedBranchId"
       @close="selectedBranchId = null"
-      @modify="openForm"
       @session-expired="sessionExpired"
       @forbidden="refreshPermissions"
     />

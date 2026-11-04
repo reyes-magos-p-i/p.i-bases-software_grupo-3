@@ -488,13 +488,17 @@ describe('BranchesSection · Crear sucursal', () => {
       expect(updateBranch).not.toHaveBeenCalled()
     })
 
-    it('modifies the branch opened in the detail', async () => {
+    it('opens modification from the row after closing its read-only detail', async () => {
       const view = await render()
-      view
-        .getComponent(BranchDetailDialog)
-        .vm.$emit('modify', { ...branches[1]!, status: 'ACTIVE' })
+      await view.findAll('[aria-label="Ver sucursal"]')[1]!.trigger('click')
+      expect(view.getComponent(BranchDetailDialog).props('branchId')).toBe(branches[1]!.id)
+      view.getComponent(BranchDetailDialog).vm.$emit('close')
       await flushPromises()
+      await modifyRow(view, 1)
       expect(view.get('.theater-dialog h2').text()).toBe('Modificar sucursal')
+      expect(dialog(view).get<HTMLInputElement>('input[name="name"]').element.value).toBe(
+        branches[1]!.name ?? '',
+      )
       expect(view.getComponent(BranchDetailDialog).props('branchId')).toBeNull()
     })
   })

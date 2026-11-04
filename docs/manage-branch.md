@@ -14,13 +14,13 @@ ocurre al pulsar «Guardar». Si hay errores, cada alerta aparece debajo de su c
 todas a la vez (UT-013), y no se envía nada. Una alerta se borra al cambiar su
 campo. La API aplica las mismas reglas y textos.
 
-| Campo | Regla | Alerta |
-|---|---|---|
-| Nombre | Obligatorio; un texto de solo espacios cuenta como vacío | El nombre es obligatorio |
-| Nombre | Solo letras (con tildes y ñ) y espacios | El nombre solo puede contener letras y espacios |
-| Nombre | De 1 a 50 caracteres | El nombre debe tener entre 1 y 50 caracteres |
-| Nombre | Ninguna otra sucursal activa lo usa (lo revisa la API al guardar) | Ya existe una sucursal activa con ese nombre |
-| Compañía | Obligatoria | Debe seleccionar una compañía |
+| Campo    | Regla                                                             | Alerta                                          |
+| -------- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| Nombre   | Obligatorio; un texto de solo espacios cuenta como vacío          | El nombre es obligatorio                        |
+| Nombre   | Solo letras (con tildes y ñ) y espacios                           | El nombre solo puede contener letras y espacios |
+| Nombre   | De 1 a 50 caracteres                                              | El nombre debe tener entre 1 y 50 caracteres    |
+| Nombre   | Ninguna otra sucursal activa lo usa (lo revisa la API al guardar) | Ya existe una sucursal activa con ese nombre    |
+| Compañía | Obligatoria                                                       | Debe seleccionar una compañía                   |
 
 - El nombre se guarda sin los espacios de los extremos. Las tildes escritas como
   marca aparte se unen a su letra (NFC), así «ó» cuenta como un carácter.
@@ -53,7 +53,7 @@ sucursal activa y responde `201` con su detalle.
 
 ## Modificar (SCRUM-33)
 
-El ícono Modificar de cada fila, o el botón Modificar del detalle, abre «Modificar
+El ícono Modificar de cada fila abre «Modificar
 sucursal» con el nombre y la compañía actuales. `PATCH /api/cinemas/:id` cambia
 ambos datos y responde `200` con el detalle.
 

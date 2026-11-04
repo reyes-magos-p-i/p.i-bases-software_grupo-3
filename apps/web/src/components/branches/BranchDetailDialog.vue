@@ -9,7 +9,6 @@ import type { BranchDetail } from '@/types/branch'
 const props = defineProps<{ branchId: number | null }>()
 const emit = defineEmits<{
   close: []
-  modify: [branch: BranchDetail]
   'session-expired': []
   forbidden: []
 }>()
@@ -140,15 +139,6 @@ onBeforeUnmount(() => request?.abort())
       </template>
       <footer class="detail-footer">
         <button type="button" class="detail-button" @click="close">Cerrar</button>
-        <button
-          v-if="branch"
-          type="button"
-          class="detail-button primary"
-          aria-haspopup="dialog"
-          @click="emit('modify', branch)"
-        >
-          <i class="bi bi-pencil-square" aria-hidden="true"></i> Modificar
-        </button>
       </footer>
     </div>
   </BaseModal>
@@ -221,12 +211,6 @@ onBeforeUnmount(() => request?.abort())
   background: var(--content-background);
   color: var(--button-secondary-text);
   font: inherit;
-}
-.detail-button.primary {
-  border-color: var(--primary-color);
-  background: var(--primary-color);
-  color: var(--content-background);
-  font-weight: 600;
 }
 .detail-button:not(:disabled):hover {
   background: var(--surface-hover);
