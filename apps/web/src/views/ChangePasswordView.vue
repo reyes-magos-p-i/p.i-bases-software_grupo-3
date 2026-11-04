@@ -570,11 +570,13 @@ function goHome() {
 .page-heading {
   margin-bottom: 30px;
   text-align: center;
+  color: var(--text-on-dark);
 }
 
 .is-embedded .page-heading {
   margin-bottom: 20px;
   text-align: left;
+  color: var(--text-primary);
 }
 
 .page-eyebrow,
@@ -588,14 +590,17 @@ function goHome() {
 
 .page-heading h1 {
   margin: 0;
-  color: var(--text-primary);
+  color: inherit;
   font-size: clamp(1.8rem, 4vw, 2.5rem);
   font-weight: 750;
 }
 
 .page-description {
   margin: 10px 0 0;
-  color: var(--text-secondary);
+  color: inherit;
+}
+.page-heading .page-eyebrow {
+  color: inherit;
 }
 
 .password-layout {
