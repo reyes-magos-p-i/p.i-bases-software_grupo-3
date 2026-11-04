@@ -32,7 +32,7 @@ defineExpose({ open, close, element: dialog })
 <template>
   <dialog
     ref="dialog"
-    class="projection-dialog"
+    class="projection-dialog cinema-dialog"
     :aria-labelledby="id + '-title'"
     @cancel.prevent="requestClose"
   >
@@ -74,40 +74,5 @@ defineExpose({ open, close, element: dialog })
 }
 .projection-dialog::backdrop {
   background: color-mix(in srgb, var(--page-background) 55%, transparent);
-}
-.dialog-heading {
-  display: flex;
-  flex-shrink: 0;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 20px 32px;
-  color: var(--text-on-dark);
-  background: var(--primary-color);
-}
-.dialog-heading h2 {
-  margin: 0;
-  font-size: 1.4rem;
-  font-weight: 700;
-}
-.close-button {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: var(--radius-small);
-  font-size: 1.5rem;
-  color: inherit;
-  background: transparent;
-}
-.close-button:focus-visible {
-  outline: 2px solid var(--focus-on-dark);
-  outline-offset: 2px;
-}
-@media (max-width: 640px) {
-  .dialog-heading {
-    padding: 16px;
-  }
 }
 </style>

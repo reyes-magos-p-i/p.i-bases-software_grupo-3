@@ -51,7 +51,7 @@ defineExpose({ open, close })
 <template>
   <dialog
     ref="dialog"
-    class="theater-dialog"
+    class="theater-dialog cinema-dialog"
     :style="{ '--dialog-width': props.width }"
     :aria-labelledby="id + '-title'"
     @cancel.prevent="requestClose"
@@ -89,40 +89,5 @@ defineExpose({ open, close })
 }
 .theater-dialog::backdrop {
   background: color-mix(in srgb, var(--page-background) 55%, transparent);
-}
-.dialog-heading {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 20px 24px;
-  color: var(--dialog-heading-text);
-  background: var(--dialog-heading-background);
-}
-.dialog-heading h2 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-.close-button {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  border: 0;
-  border-radius: var(--radius-small);
-  color: inherit;
-  background: transparent;
-}
-.close-button:focus-visible {
-  outline-color: var(--focus-on-dark);
-}
-@media (max-width: 520px) {
-  .dialog-heading {
-    padding: 16px;
-  }
 }
 </style>

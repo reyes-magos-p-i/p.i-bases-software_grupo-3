@@ -101,6 +101,12 @@ describe('ProjectionDetailDialog', () => {
       'Fecha de creación': '01/07/2099 9:30 am',
     })
     expect(wrapper!.get('.poster-title').text()).toBe(detail.movieTitle)
+    expect(wrapper!.get('.detail-content').element.lastElementChild).toBe(
+      wrapper!.get('footer').element,
+    )
+    await wrapper!.get('.detail-footer button').trigger('click')
+    expect(isOpen()).toBe(false)
+    expect(wrapper!.emitted('close')).toHaveLength(1)
   })
 
   it.each([

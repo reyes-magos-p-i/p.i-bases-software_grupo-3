@@ -559,7 +559,7 @@ defineExpose({ open, complete })
 <template>
   <dialog
     ref="dialog"
-    class="user-dialog"
+    class="user-dialog cinema-dialog"
     :aria-labelledby="id + '-title'"
     @cancel.prevent="close"
     @close="onClosed"
@@ -951,41 +951,6 @@ defineExpose({ open, complete })
   background: var(--overlay-background);
 }
 
-.dialog-heading {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 24px;
-  color: var(--dialog-heading-text);
-  background: var(--dialog-heading-background);
-}
-
-.dialog-heading h2 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-
-.close-button {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: var(--radius-small);
-  color: inherit;
-  background: transparent;
-}
-
-.close-button:hover {
-  background: var(--surface-on-dark-hover);
-}
-
-.close-button:focus-visible {
-  outline: 2px solid var(--focus-on-dark);
-  outline-offset: 2px;
-}
-
 form {
   min-height: 0;
   padding: 24px;
@@ -1139,10 +1104,6 @@ textarea {
 }
 
 @media (max-width: 575px) {
-  .dialog-heading {
-    padding: 12px 16px;
-  }
-
   form {
     padding: 20px 16px;
   }
