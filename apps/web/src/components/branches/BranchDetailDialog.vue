@@ -95,12 +95,10 @@ onBeforeUnmount(() => request?.abort())
           Hay datos incompletos en esta sucursal. Modifícala para completarlos.
         </p>
         <section class="detail-group" aria-labelledby="branch-detail-group">
-          <h3 id="branch-detail-group">
-            <span class="group-number" aria-hidden="true">1</span> Datos de la sucursal
-          </h3>
+          <h3 id="branch-detail-group">Datos de la sucursal</h3>
           <dl class="detail-grid">
             <div class="detail-field">
-              <dt>ID Sucursal</dt>
+              <dt>ID de sucursal</dt>
               <dd>
                 <span class="readonly-value">{{ formatBranchId(branch.id) }}</span>
               </dd>
@@ -163,8 +161,6 @@ onBeforeUnmount(() => request?.abort())
 }
 
 .branch-detail-content {
-  display: grid;
-  gap: 18px;
   min-height: 0;
   padding: 24px 32px 28px;
   overflow-y: auto;
@@ -180,48 +176,10 @@ onBeforeUnmount(() => request?.abort())
   background: var(--error-background);
   color: var(--error-text);
 }
-.detail-group {
-  display: grid;
-  gap: 18px;
-  padding: 22px 20px 24px;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-}
-.detail-group h3 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-size: 1.0625rem;
-  font-weight: 700;
-}
-.group-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--primary-color);
-  color: var(--content-background);
-  font-size: 0.8125rem;
-}
-
-.readonly-value {
-  display: flex;
-  align-items: center;
-  min-height: 46px;
-  padding: 10px 14px 10px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-small);
-  background: var(--input-disabled-background);
-  overflow-wrap: anywhere;
-}
 .readonly-value.status {
   font-weight: 600;
 }
 .readonly-value.missing {
-  border-color: var(--error-color);
   color: var(--text-secondary);
 }
 .field-alert {

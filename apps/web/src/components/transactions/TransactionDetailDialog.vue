@@ -93,12 +93,10 @@ onBeforeUnmount(() => request?.abort())
       </div>
       <template v-else-if="transaction">
         <section class="detail-group" aria-labelledby="transaction-summary">
-          <h3 id="transaction-summary">
-            <span class="group-number" aria-hidden="true">1</span> Resumen de la transacción
-          </h3>
+          <h3 id="transaction-summary">Resumen de la transacción</h3>
           <dl class="detail-grid">
             <div class="detail-field">
-              <dt>IdTransacción</dt>
+              <dt>ID de transacción</dt>
               <dd>{{ formatTransactionId(transaction.id) }}</dd>
             </div>
             <div class="detail-field">
@@ -121,9 +119,7 @@ onBeforeUnmount(() => request?.abort())
         </section>
 
         <section class="detail-group" aria-labelledby="transaction-client">
-          <h3 id="transaction-client">
-            <span class="group-number" aria-hidden="true">2</span> Cliente
-          </h3>
+          <h3 id="transaction-client">Cliente</h3>
           <dl class="detail-grid">
             <div class="detail-field">
               <dt>Cliente</dt>
@@ -137,9 +133,7 @@ onBeforeUnmount(() => request?.abort())
         </section>
 
         <section class="detail-group" aria-labelledby="transaction-function">
-          <h3 id="transaction-function">
-            <span class="group-number" aria-hidden="true">3</span> Función
-          </h3>
+          <h3 id="transaction-function">Función</h3>
           <dl class="detail-grid">
             <div class="detail-field wide">
               <dt>Película y función</dt>
@@ -157,9 +151,7 @@ onBeforeUnmount(() => request?.abort())
         </section>
 
         <section class="detail-group" aria-labelledby="transaction-products">
-          <h3 id="transaction-products">
-            <span class="group-number" aria-hidden="true">4</span> Productos y pago
-          </h3>
+          <h3 id="transaction-products">Productos y pago</h3>
           <div class="table-scroll">
             <table class="products-table">
               <caption class="visually-hidden">
@@ -218,55 +210,23 @@ onBeforeUnmount(() => request?.abort())
 }
 
 .transaction-detail-content {
-  display: grid;
-  gap: 18px;
   min-height: 0;
   padding: 24px 32px 28px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.detail-group {
-  display: grid;
-  gap: 16px;
-  padding: 22px 20px 24px;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-}
-.detail-group h3 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-size: 1.0625rem;
-  font-weight: 700;
-}
-.group-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--primary-color);
-  color: var(--content-background);
-  font-size: 0.8125rem;
-}
-
 .detail-field.wide {
   grid-column: 1 / -1;
 }
 
 .status-badge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-small);
+  font-weight: 600;
 }
 .status-badge.paid {
-  background: var(--success-background);
   color: var(--success-text);
 }
 .status-badge.cancelled {
-  background: var(--error-background);
   color: var(--error-text);
 }
 .table-scroll {

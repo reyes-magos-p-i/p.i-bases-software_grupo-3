@@ -128,7 +128,7 @@ defineExpose({ open, complete })
       />
 
       <fieldset class="form-card">
-        <legend><span class="group-number" aria-hidden="true">1</span> Datos de la sucursal</legend>
+        <legend>Datos de la sucursal</legend>
         <div class="field-grid">
           <FormField
             v-slot="{ id, invalid, describedby }"
@@ -214,31 +214,18 @@ defineExpose({ open, complete })
   display: grid;
   gap: 12px;
   margin: 0;
-  padding: 20px;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
+  background: transparent;
 }
 .form-card legend {
-  float: left;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  float: none;
+  display: block;
   width: 100%;
   margin: 0;
   padding: 0;
   font-size: 1rem;
   font-weight: 700;
-}
-.group-number {
-  display: inline-grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  color: var(--dialog-heading-text);
-  background: var(--dialog-heading-background);
-  font-size: 0.8rem;
 }
 .field-grid {
   display: grid;

@@ -69,6 +69,19 @@ dialog.cinema-dialog::backdrop {
   overflow: visible;
 }
 
+dialog.cinema-dialog[open] > :not(.dialog-heading) {
+  padding: var(--dialog-content-padding);
+}
+
+.cinema-dialog .detail-group {
+  margin: 0 0 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .cinema-dialog :is(.detail-group, .edit-group) > h3 {
   margin: 0 0 16px;
   padding-bottom: 10px;
@@ -132,7 +145,9 @@ dialog.cinema-dialog::backdrop {
   cursor: pointer;
 }
 
-.cinema-dialog :is(footer, .confirmation-actions) > :is(.secondary-button, .detail-button) {
+.cinema-dialog
+  :is(footer, .confirmation-actions)
+  > :is(.secondary-button, .detail-button):not(.primary) {
   border: 1px solid var(--border-strong);
   color: var(--button-secondary-text);
   background: var(--button-secondary-background);
