@@ -67,11 +67,11 @@ defineExpose({ open, complete })
     @close="emit('close')"
   >
     <form novalidate :aria-busy="submitting" @submit.prevent="submit">
-      <DialogSection as="fieldset" title="Proyección de destino" :number="1">
-        <label for="ticket-showtime" class="field-label">Proyecciones futuras</label>
+      <DialogSection as="fieldset" title="Proyección futura" :number="1">
         <select
           id="ticket-showtime"
           v-model="movieFunctionId"
+          aria-label="Proyección futura"
           :disabled="submitting || optionsLoading"
         >
           <option value="">Seleccione una proyección</option>
@@ -114,12 +114,9 @@ form {
   gap: 8px;
   padding: 15px 13px 24px;
 }
-.field-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
 select {
+  display: block;
+  width: 100%;
   appearance: none;
   min-height: 42px;
   padding: 8px 36px 8px 12px;
