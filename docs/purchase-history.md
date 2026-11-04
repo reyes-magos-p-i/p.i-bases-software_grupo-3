@@ -18,7 +18,7 @@ La API responde 404 tanto si la compra no existe como si es de otra cuenta, para
 
 ## Función cancelada
 
-Si se cancela la función de una compra, el detalle muestra «Esta función fue cancelada» y la lista agrega «Función cancelada» junto al estado, que sigue siendo el de la factura. Si todos los boletos se reprogramaron a otra función vigente, la compra no se marca como cancelada. El correo de boletos usa el mismo aviso.
+Si se cancela la función de una compra, el detalle muestra «Esta función fue cancelada» y la lista agrega «Función cancelada» junto al estado, que sigue siendo el de la factura. La compra se marca como cancelada mientras al menos uno de sus boletos siga en una función cancelada; si todos se reprogramaron a otra función vigente, deja de marcarse. Una compra sin boletos vinculados sigue el estado de su función original. El correo de boletos usa el mismo aviso.
 
 ## Mensajes
 
