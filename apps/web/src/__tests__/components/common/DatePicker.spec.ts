@@ -4,6 +4,12 @@ import { nextTick } from 'vue'
 import DatePicker from '@/components/common/DatePicker.vue'
 
 let wrapper: VueWrapper<InstanceType<typeof DatePicker>>
+const popoverDescriptors = new Map(
+  ['showPopover', 'hidePopover'].map((name) => [
+    name,
+    Object.getOwnPropertyDescriptor(HTMLElement.prototype, name),
+  ]),
+)
 function render(props: Partial<InstanceType<typeof DatePicker>['$props']> = {}) {
   wrapper = mount(DatePicker, {
     props,
@@ -16,10 +22,103 @@ beforeEach(() => vi.useFakeTimers().setSystemTime(new Date('2026-10-19T02:00:00Z
 afterEach(() => {
   wrapper?.unmount()
   document.body.innerHTML = ''
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  for (const [name, descriptor] of popoverDescriptors) {
+    if (descriptor) Object.defineProperty(HTMLElement.prototype, name, descriptor)
+    else Reflect.deleteProperty(HTMLElement.prototype, name)
+  }
   vi.useRealTimers()
 })
 
 describe('DatePicker', () => {
+  it('emits blur only when focus leaves the complete calendar', async () => {
+    const view = render({ modelValue: '2000-02-29' })
+    view.get<HTMLInputElement>('input').element.focus()
+    await view.get('input').trigger('click')
+    expect(view.emitted('blur')).toBeUndefined()
+    const outside = document.createElement('button')
+    document.body.append(outside)
+    outside.focus()
+    await nextTick()
+    expect(view.emitted('blur')).toHaveLength(1)
+    expect(view.find('.calendar-panel').exists()).toBe(false)
+  })
+
+  it('emits one change for a new date and no change when selecting the current date again', async () => {
+    const view = render({ modelValue: '2000-02-29' })
+    const changed = vi.fn()
+    view.get('input').element.addEventListener('change', changed)
+    await view.get('input').trigger('click')
+    await view.get('[data-date="2000-02-28"]').trigger('click')
+    await nextTick()
+    expect(changed).toHaveBeenCalledTimes(1)
+    await view.setProps({ modelValue: '2000-02-28' })
+    await view.get('input').trigger('click')
+    await view.get('[data-date="2000-02-28"]').trigger('click')
+    expect(changed).toHaveBeenCalledTimes(1)
+    expect(view.emitted('update:modelValue')).toEqual([['2000-02-28']])
+    expect(view.find('.calendar-panel').exists()).toBe(false)
+  })
+
+  it('keeps a floating calendar inside the viewport and repositions on scroll and resize', async () => {
+    const show = vi.fn()
+    const hide = vi.fn()
+    Object.defineProperties(HTMLElement.prototype, {
+      showPopover: { configurable: true, value: show },
+      hidePopover: { configurable: true, value: hide },
+    })
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(390)
+    vi.spyOn(document.documentElement, 'clientHeight', 'get').mockReturnValue(844)
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(300)
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(400)
+    const view = render()
+    const anchor = vi.spyOn(view.get('input').element, 'getBoundingClientRect')
+    anchor.mockReturnValue(new DOMRect(270, 600, 100, 44))
+    await view.get('input').trigger('click')
+    const calendar = view.get<HTMLElement>('.calendar-panel')
+    expect(calendar.attributes('popover')).toBe('manual')
+    expect(show).toHaveBeenCalledTimes(1)
+    expect(calendar.element.style.left).toBe('82px')
+    expect(calendar.element.style.top).toBe('192px')
+    anchor.mockReturnValue(new DOMRect(20, 20, 100, 44))
+    document.dispatchEvent(new Event('scroll'))
+    await nextTick()
+    expect(calendar.element.style.left).toBe('20px')
+    expect(calendar.element.style.top).toBe('72px')
+    anchor.mockReturnValue(new DOMRect(-20, 20, 100, 44))
+    window.dispatchEvent(new Event('resize'))
+    await nextTick()
+    expect(calendar.element.style.left).toBe('8px')
+    await calendar.get('.calendar-footer button:last-child').trigger('click')
+    expect(hide).toHaveBeenCalled()
+    expect(view.find('.calendar-panel').exists()).toBe(false)
+  })
+
+  it('positions the fallback relative to its field and removes listeners on unmount', async () => {
+    Reflect.deleteProperty(HTMLElement.prototype, 'showPopover')
+    Reflect.deleteProperty(HTMLElement.prototype, 'hidePopover')
+    vi.stubGlobal('innerWidth', 390)
+    vi.stubGlobal('innerHeight', 844)
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(300)
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(400)
+    const removed = vi.spyOn(document, 'removeEventListener')
+    const resized = vi.spyOn(window, 'removeEventListener')
+    const view = render()
+    vi.spyOn(view.element, 'getBoundingClientRect').mockReturnValue(new DOMRect(270, 600, 100, 44))
+    vi.spyOn(view.get('input').element, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(270, 600, 100, 44),
+    )
+    await view.get('input').trigger('click')
+    const calendar = view.get<HTMLElement>('.calendar-panel')
+    expect(calendar.attributes('popover')).toBeUndefined()
+    expect(calendar.element.style.left).toBe('-188px')
+    expect(calendar.element.style.top).toBe('-408px')
+    view.unmount()
+    expect(removed).toHaveBeenCalledWith('scroll', expect.any(Function), true)
+    expect(resized).toHaveBeenCalledWith('resize', expect.any(Function))
+  })
+
   it('shows a read-only date, forwards field attributes and emits an ISO date when selecting', async () => {
     const view = render({ modelValue: '2000-02-29' })
     expect(view.get<HTMLInputElement>('input').element.value).toBe('29/02/2000')
@@ -32,6 +131,7 @@ describe('DatePicker', () => {
     expect(view.get('[role="dialog"]').attributes('id')).toBe(
       view.get('input').attributes('aria-controls'),
     )
+    await nextTick()
     expect(document.activeElement).toBe(view.get('[data-date="2000-02-29"]').element)
     await view.get('[data-date="2000-02-28"]').trigger('click')
     expect(view.emitted('update:modelValue')).toEqual([['2000-02-28']])
@@ -73,6 +173,7 @@ describe('DatePicker', () => {
   it('clamps an empty selection to a maximum in the past', async () => {
     const view = render({ max: '2000-02-29' })
     await view.get('input').trigger('keydown', { key: 'ArrowDown' })
+    await nextTick()
     expect(document.activeElement).toBe(view.get('[data-date="2000-02-29"]').element)
   })
   it('supports clearing optional dates and keeps required dates without a clear action', async () => {
@@ -134,6 +235,7 @@ describe('DatePicker', () => {
     const view = render({ modelValue: '2000-02-29', min: '2000-02-29', max: '2000-03-08' })
     await view.get('input').trigger('click')
     await view.get('[data-date="2000-02-29"]').trigger('keydown', { key: 'ArrowLeft' })
+    await nextTick()
     expect(document.activeElement).toBe(view.get('[data-date="2000-02-29"]').element)
     await view.get('[data-date="2000-02-29"]').trigger('keydown', { key: 'ArrowRight' })
     await nextTick()

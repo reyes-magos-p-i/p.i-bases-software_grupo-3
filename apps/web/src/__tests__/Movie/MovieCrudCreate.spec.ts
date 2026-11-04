@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import MovieCrudCreate from '@/components/Movies/MovieCrudCreate.vue'
 import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
@@ -29,11 +30,11 @@ describe('MovieCrudCreate', () => {
       global: {
         stubs: {
           BaseModal: {
-            template: '<div><slot /></div>'
+            template: '<div><slot /></div>',
           },
           ImageUpload: true,
-        }
-      }
+        },
+      },
     })
   }
 
@@ -60,14 +61,22 @@ describe('MovieCrudCreate', () => {
     vi.clearAllMocks()
   })
 
-  it('disables submit when the form is incomplete', async () => {
+  it('identifies missing fields before sending an incomplete form', async () => {
     const wrapper = mountForm()
+    expect(wrapper.findAll('.dialog-section-title').map((heading) => heading.text())).toEqual([
+      'Información general',
+      'Idiomas y géneros',
+      'Sinopsis',
+      'Póster',
+    ])
 
-    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
 
     await wrapper.find('form').trigger('submit')
 
     expect(createMovie).not.toHaveBeenCalled()
+    expect(wrapper.findAll('[aria-invalid="true"]').length).toBeGreaterThan(0)
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
   })
 
   it('creates a movie and emits saved and close', async () => {
@@ -112,8 +121,9 @@ describe('MovieCrudCreate', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(wrapper.find('[role="alert"]').text())
-      .toBe('No se pudo crear la película. Vuelve a intentarlo.')
+    expect(wrapper.getComponent(NotificationPopup).props('message')).toBe(
+      'No se pudo crear la película. Vuelve a intentarlo.',
+    )
 
     expect(wrapper.emitted('saved')).toBeUndefined()
   })

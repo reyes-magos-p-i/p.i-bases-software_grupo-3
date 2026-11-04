@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ProjectionFormDialog from '@/components/projections/ProjectionFormDialog.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 import type { AvailableMovie, ProjectionDetail } from '@/types/projection'
 
 const { searchAvailableMovies, previewProjectionPrice } = vi.hoisted(() => ({
@@ -42,6 +43,14 @@ function render(extra: Record<string, unknown> = {}) {
 }
 
 const field = (name: string) => wrapper!.get(`[name="${name}"]`)
+const calendar = (name: string) =>
+  wrapper!
+    .findAllComponents(DatePicker)
+    .find((picker) => picker.get('input').attributes('name') === name)!
+async function setDate(name: string, value: string) {
+  calendar(name).vm.$emit('update:modelValue', value)
+  await flushPromises()
+}
 
 async function searchMovie(text: string) {
   await field('movie').setValue(text)
@@ -54,12 +63,13 @@ async function fillValidForm() {
   await field('theaterId').setValue('7')
   await searchMovie('spi')
   await field('movie').trigger('keydown', { key: 'Enter' })
-  await field('startDate').setValue('2099-07-21')
+  await setDate('startDate', '2099-07-21')
   await field('startTime').setValue('21:00')
   await flushPromises()
 }
 
 beforeEach(() => {
+  vi.stubEnv('VITE_API_BASE_URL', 'https://cinema.example/api')
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   searchAvailableMovies.mockReset().mockResolvedValue([spiderMan, odyssey])
   previewProjectionPrice.mockReset().mockImplementation((settings) =>
@@ -92,15 +102,51 @@ afterEach(() => {
   wrapper?.unmount()
   wrapper = undefined
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   Reflect.deleteProperty(dialogPrototype, 'showModal')
   Reflect.deleteProperty(dialogPrototype, 'close')
   document.body.innerHTML = ''
 })
 
 describe('ProjectionFormDialog', () => {
+  it('selects projection dates with the shared calendar without validating while picking', async () => {
+    render()
+    const picker = calendar('startDate')
+    const earliest = picker.props('min')!
+    expect(field('startDate').attributes('readonly')).toBeDefined()
+    await field('startDate').trigger('click')
+    expect(field('startDate').attributes('aria-invalid')).toBe('false')
+    expect(picker.get('.calendar-footer').text()).toBe('Cerrar')
+    await picker.get(`[data-date="${earliest}"]`).trigger('click')
+    expect(picker.props('modelValue')).toBe(earliest)
+    expect(calendar('endDate').props('min')).toBe(earliest)
+    expect(picker.find('.calendar-panel').exists()).toBe(false)
+    expect(wrapper!.emitted('submit')).toBeUndefined()
+  })
+
+  it.each(['startDate', 'endDate'])(
+    'cancels with one click after leaving an empty %s without showing an error',
+    async (name) => {
+      render()
+      await field(name).trigger('click')
+      const cancel = wrapper!.findAll('button').find((button) => button.text() === 'Cancelar')!
+      cancel.element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+      await field(name).trigger('focusout', { relatedTarget: cancel.element })
+      expect(field(name).attributes('aria-invalid')).toBe('false')
+      await cancel.trigger('click')
+      expect(wrapper!.get('dialog').attributes('open')).toBeUndefined()
+    },
+  )
+
   it('schedules a projection with the suggested end time', async () => {
     render()
     expect(wrapper!.get('h2').text()).toBe('Agregar nueva proyección')
+    expect(wrapper!.findAll('.dialog-section-title').map((heading) => heading.text())).toEqual([
+      '1 Película y sala',
+      '2 Fecha y horario',
+      '3 Tiempos de la función',
+      '4 Precio',
+    ])
     expect(field('movie').attributes('disabled')).toBeDefined()
 
     await field('branchId').setValue('2')
@@ -112,8 +158,8 @@ describe('ProjectionFormDialog', () => {
 
     expect(searchAvailableMovies).toHaveBeenCalledExactlyOnceWith(2, 'spi', expect.any(AbortSignal))
     expect(field('movie').element).toHaveProperty('value', spiderMan.title)
-    expect(wrapper!.get('img').attributes('src')).toContain('/image/spiderman.jpg')
-    expect(wrapper!.get<HTMLInputElement>('[readonly]').element.value).toBe('190')
+    expect(wrapper!.get('img').attributes('src')).toContain('/uploads/posters/spiderman.jpg')
+    expect(wrapper!.get<HTMLInputElement>('[id$="-duration"]').element.value).toBe('190')
     expect(field('endTime').element).toHaveProperty('value', '00:55')
     expect(wrapper!.get('.schedule-summary').text()).toBe(
       'Anuncios 15 min + película 190 min + limpieza 30 min = 235 min. La sala queda ocupada de 21:00 a 00:55 del día siguiente.',
@@ -177,7 +223,7 @@ describe('ProjectionFormDialog', () => {
   it('validates dates, activity minutes, price and the minimum end time', async () => {
     render()
     await fillValidForm()
-    await field('endDate').setValue('2099-07-20')
+    await setDate('endDate', '2099-07-20')
     await field('cleaningMinutes').setValue('241')
     await field('price').setValue('10.123')
     await field('endTime').setValue('00:54')
@@ -190,9 +236,9 @@ describe('ProjectionFormDialog', () => {
     expect(field('price').attributes('readonly')).toBeDefined()
     expect(text).toContain('La hora de fin debe ser igual o posterior a las')
 
-    await field('endDate').setValue('2099-08-25')
+    await setDate('endDate', '2099-08-25')
     expect(wrapper!.text()).toContain('El rango no puede superar 31 días.')
-    await field('startDate').setValue('2000-01-01')
+    await setDate('startDate', '2000-01-01')
     expect(wrapper!.text()).toContain('La fecha de la proyección no puede estar en el pasado.')
     expect(wrapper!.emitted('submit')).toBeUndefined()
   })
@@ -276,7 +322,7 @@ describe('ProjectionFormDialog', () => {
     await fillValidForm()
     await field('branchId').setValue('5')
     expect(field('theaterId').element).toHaveProperty('value', '')
-    expect(wrapper!.get<HTMLInputElement>('[readonly]').element.value).toBe('—')
+    expect(wrapper!.get<HTMLInputElement>('[id$="-duration"]').element.value).toBe('—')
     expect(wrapper!.get('.schedule-summary').text()).toContain('Selecciona una película')
     await vi.advanceTimersByTimeAsync(300)
     expect(searchAvailableMovies).toHaveBeenLastCalledWith(
@@ -322,6 +368,8 @@ describe('ProjectionFormDialog', () => {
   it('falls back to the placeholder poster and resets after completing', async () => {
     render()
     await fillValidForm()
+    await wrapper!.get('img').trigger('error')
+    expect(wrapper!.get('img').attributes('src')).toContain('/api/image/spiderman.jpg')
     await wrapper!.get('img').trigger('error')
     expect(wrapper!.get('img').attributes('src')).not.toContain('spiderman.jpg')
 
@@ -375,7 +423,7 @@ describe('ProjectionFormDialog', () => {
       expect(field('branchId').element).toHaveProperty('value', '2')
       expect(field('theaterId').element).toHaveProperty('value', '7')
       expect(field('movie').element).toHaveProperty('value', spiderMan.title)
-      expect(field('startDate').element).toHaveProperty('value', '2099-07-22')
+      expect(field('startDate').element).toHaveProperty('value', '22/07/2099')
       expect(field('startTime').element).toHaveProperty('value', '21:00')
       expect(field('endTime').element).toHaveProperty('value', '00:55')
       expect(field('price').element).toHaveProperty('value', '4000')

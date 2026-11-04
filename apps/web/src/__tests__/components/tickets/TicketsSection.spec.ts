@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 // import TicketDetailDialog from '@/components/tickets/TicketDetailDialog.vue'
 import TicketsSection from '@/components/tickets/TicketsSection.vue'
+import ModifyTicketDialog from '@/components/tickets/ModifyTicketDialog.vue'
 
 const { getTicket } = vi.hoisted(() => ({ getTicket: vi.fn() }))
 
@@ -41,6 +42,32 @@ describe('TicketsSection', () => {
     Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
   })
 
+  it('keeps the numbered destination group and the existing ticket update contract', async () => {
+    const wrapper = mount(ModifyTicketDialog, {
+      props: {
+        showtimes: [
+          {
+            movieFunctionId: 9,
+            theaterId: 3,
+            seatRow: 1,
+            seatColumn: 2,
+            date: '2026-12-15',
+            time: '18:00',
+          },
+        ],
+      },
+    })
+    wrapper.vm.open()
+    expect(wrapper.get('.dialog-section-title').text()).toBe('1 Proyección de destino')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    await wrapper.get('#ticket-showtime').setValue('9')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toEqual([[{ movieFunctionId: 9 }]])
+    expect(wrapper.get('form').element.lastElementChild).toBe(wrapper.get('footer').element)
+    wrapper.unmount()
+  })
+
   it('shows the searched ticket in the results table', async () => {
     getTicket.mockResolvedValue(ticket)
     const wrapper = mount(TicketsSection)
@@ -66,12 +93,12 @@ describe('TicketsSection', () => {
   // it('opens the ticket detail dialog from the "Ver detalle" button', async () => {
   //   getTicket.mockResolvedValue(ticket)
   //   const wrapper = mount(TicketsSection)
-//
+  //
   //   await search(wrapper, '1001')
   //   expect(wrapper.findComponent(TicketDetailDialog).props('ticket')).toBeNull()
-//
+  //
   //   await wrapper.get('button[aria-label="Ver detalle"]').trigger('click')
-//
+  //
   //   expect(wrapper.findComponent(TicketDetailDialog).props('ticket')).toMatchObject({
   //     id: 1001,
   //     title: 'Dune',
@@ -85,7 +112,7 @@ describe('TicketsSection', () => {
 
     await search(wrapper, '999')
 
-    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El ticket no existe')
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El boleto no existe')
     expect(wrapper.find('table').exists()).toBe(false)
   })
 
@@ -96,7 +123,7 @@ describe('TicketsSection', () => {
 
     expect(getTicket).not.toHaveBeenCalled()
     expect(wrapper.findComponent(NotificationPopup).props('message')).toBe(
-      'Ingresa un número de ticket válido.',
+      'Ingresa un número de boleto válido.',
     )
   })
 
@@ -105,13 +132,13 @@ describe('TicketsSection', () => {
     const wrapper = mount(TicketsSection)
 
     await search(wrapper, '999')
-    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El ticket no existe')
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El boleto no existe')
 
     await search(wrapper, '0')
 
     expect(getTicket).toHaveBeenCalledTimes(1)
     expect(wrapper.findComponent(NotificationPopup).props('message')).toBe(
-      'Ingresa un número de ticket válido.',
+      'Ingresa un número de boleto válido.',
     )
   })
 })

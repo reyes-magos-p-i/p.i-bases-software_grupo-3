@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
+import { useBlurValidation } from '@/composables/useBlurValidation'
 import {
   computed,
   nextTick,
@@ -62,6 +66,7 @@ const emit = defineEmits<{
 }>()
 
 const id = useId()
+const shouldValidate = useBlurValidation()
 const shell = useTemplateRef<InstanceType<typeof ProjectionDialogShell>>('shell')
 const form = useTemplateRef<HTMLFormElement>('form')
 
@@ -498,7 +503,12 @@ defineExpose({ open, edit, complete })
       <p class="required-note">
         Los campos con <span class="required-marker">*</span> son obligatorios.
       </p>
-      <p v-if="optionsLoading" class="form-status" role="status">Cargando sucursales y salas…</p>
+      <LoadingState
+        v-if="optionsLoading"
+        class="form-status"
+        message="Cargando sucursales y salas…"
+        compact
+      />
       <p v-if="optionsError" class="form-error" role="alert">
         {{ optionsError }}
         <button type="button" class="link-button" @click="emit('retryOptions')">Reintentar</button>
@@ -511,10 +521,9 @@ defineExpose({ open, edit, complete })
       </p>
 
       <div class="form-body">
-        <fieldset class="form-sections" :disabled="confirming">
+        <fieldset class="form-sections dialog-sections" :disabled="confirming">
           <legend class="visually-hidden">Datos de la proyección</legend>
-          <section class="form-section" :aria-labelledby="id + '-place-title'">
-            <h3 :id="id + '-place-title'"><span>1</span> Película y sala</h3>
+          <DialogSection class="form-section" :number="1" title="Película y sala">
             <div class="section-grid">
               <div class="field">
                 <label :for="id + '-branch'">Sucursal <span class="required-marker">*</span></label>
@@ -645,7 +654,12 @@ defineExpose({ open, edit, complete })
                 <small :id="id + '-movie-hint'" class="field-hint">
                   Escribe parte del título y elige una opción de la lista (flechas + Enter o clic).
                 </small>
-                <p v-if="searching" class="field-hint" role="status">Buscando películas…</p>
+                <LoadingState
+                  v-if="searching"
+                  class="field-hint"
+                  message="Buscando películas…"
+                  compact
+                />
                 <p v-else-if="searchError" class="field-error" role="alert">{{ searchError }}</p>
                 <p
                   v-else-if="listOpen && draft.movieQuery && !results.length && !movie"
@@ -664,24 +678,24 @@ defineExpose({ open, edit, complete })
                 La proyección no será visible para los Clientes hasta activarla.
               </p>
             </div>
-          </section>
+          </DialogSection>
 
-          <section class="form-section" :aria-labelledby="id + '-schedule-title'">
-            <h3 :id="id + '-schedule-title'"><span>2</span> Fecha y horario</h3>
+          <DialogSection class="form-section" :number="2" title="Fecha y horario">
             <div class="section-grid two-columns">
               <div class="field">
                 <label :for="id + '-start-date'"
                   >Fecha <span class="required-marker">*</span></label
                 >
-                <input
+                <DatePicker
                   :id="id + '-start-date'"
                   v-model="draft.startDate"
                   name="startDate"
-                  type="date"
+                  required
+                  :disabled="submitting || confirming"
                   :min="localNow().slice(0, 10)"
                   :aria-invalid="!!visibleError('startDate')"
                   :aria-describedby="describedBy('startDate')"
-                  @blur="touched.startDate = true"
+                  @blur="touched.startDate = shouldValidate($event) || !!touched.startDate"
                 />
                 <small :id="id + '-startDate-hint'" class="field-hint"
                   >Primer día de la proyección.</small
@@ -696,15 +710,15 @@ defineExpose({ open, edit, complete })
               </div>
               <div v-if="!isEditing" class="field">
                 <label :for="id + '-end-date'">Repetir hasta (opcional)</label>
-                <input
+                <DatePicker
                   :id="id + '-end-date'"
                   v-model="draft.endDate"
                   name="endDate"
-                  type="date"
+                  :disabled="submitting || confirming"
                   :min="draft.startDate || localNow().slice(0, 10)"
                   :aria-invalid="!!visibleError('endDate')"
                   :aria-describedby="describedBy('endDate')"
-                  @blur="touched.endDate = true"
+                  @blur="touched.endDate = shouldValidate($event) || !!touched.endDate"
                 />
                 <small :id="id + '-endDate-hint'" class="field-hint">
                   Crea una proyección por día a la misma hora (máximo {{ MAX_DAYS }} días).
@@ -768,10 +782,9 @@ defineExpose({ open, edit, complete })
                 </small>
               </div>
             </div>
-          </section>
+          </DialogSection>
 
-          <section class="form-section" :aria-labelledby="id + '-times-title'">
-            <h3 :id="id + '-times-title'"><span>3</span> Tiempos de la función</h3>
+          <DialogSection class="form-section" :number="3" title="Tiempos de la función">
             <div class="minutes-grid">
               <div class="field minutes-field">
                 <label :for="id + '-advertisement'">Anuncios</label>
@@ -829,10 +842,9 @@ defineExpose({ open, edit, complete })
                 'Selecciona una película para calcular el tiempo total de la función.'
               }}
             </p>
-          </section>
+          </DialogSection>
 
-          <section class="form-section" :aria-labelledby="id + '-price-title'">
-            <h3 :id="id + '-price-title'"><span>4</span> Precio</h3>
+          <DialogSection class="form-section" :number="4" title="Precio">
             <div class="section-grid two-columns">
               <label
                 >Formato<select v-model="draft.format" name="format">
@@ -865,7 +877,7 @@ defineExpose({ open, edit, complete })
                 Calculado con la política de boletos. La categoría de edad y el asiento VIP se
                 determinan al comprar.
               </p>
-              <p v-if="previewLoading" role="status">Calculando precio...</p>
+              <LoadingState v-if="previewLoading" message="Calculando precio..." compact />
               <template v-if="preview"
                 ><small v-for="modifier in preview.modifiers" :key="modifier.label"
                   >{{ modifier.label }}: +{{ formatPrice(modifier.amount) }}</small
@@ -880,7 +892,7 @@ defineExpose({ open, edit, complete })
                 visibleError('price')
               }}</small>
             </div>
-          </section>
+          </DialogSection>
         </fieldset>
 
         <ProjectionPoster
@@ -984,37 +996,10 @@ form {
 }
 .form-sections {
   display: grid;
-  gap: 16px;
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
-}
-.form-section {
-  display: grid;
-  gap: 12px;
-  padding: 18px 20px;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-  color: var(--text-primary);
-}
-.form-section h3 {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-}
-.form-section h3 span {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  color: var(--text-on-dark);
-  font-size: 0.85rem;
-  background: var(--primary-color);
 }
 .section-grid {
   display: grid;

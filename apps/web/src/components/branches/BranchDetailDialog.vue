@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import BaseModal from '@/components/common/BaseModal.vue'
@@ -8,7 +9,6 @@ import type { BranchDetail } from '@/types/branch'
 const props = defineProps<{ branchId: number | null }>()
 const emit = defineEmits<{
   close: []
-  modify: [branch: BranchDetail]
   'session-expired': []
   forbidden: []
 }>()
@@ -75,8 +75,13 @@ onBeforeUnmount(() => request?.abort())
 
 <template>
   <BaseModal :open="branchId !== null" title="Detalle de sucursal" @close="close">
-    <div class="branch-detail-content" :aria-busy="loading">
-      <p v-if="loading" class="detail-feedback" role="status">Cargando datos de la sucursal…</p>
+    <div class="branch-detail-content dialog-content" :aria-busy="loading">
+      <LoadingState
+        v-if="loading"
+        class="detail-feedback"
+        message="Cargando datos de la sucursal…"
+        compact
+      />
       <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         <p>{{ error }}</p>
         <button v-if="retryable" type="button" class="detail-button" @click="load">
@@ -89,12 +94,10 @@ onBeforeUnmount(() => request?.abort())
           Hay datos incompletos en esta sucursal. Modifícala para completarlos.
         </p>
         <section class="detail-group" aria-labelledby="branch-detail-group">
-          <h3 id="branch-detail-group">
-            <span class="group-number" aria-hidden="true">1</span> Datos de la sucursal
-          </h3>
+          <h3 id="branch-detail-group">Datos de la sucursal</h3>
           <dl class="detail-grid">
             <div class="detail-field">
-              <dt>ID Sucursal</dt>
+              <dt>ID de sucursal</dt>
               <dd>
                 <span class="readonly-value">{{ formatBranchId(branch.id) }}</span>
               </dd>
@@ -136,60 +139,18 @@ onBeforeUnmount(() => request?.abort())
       </template>
       <footer class="detail-footer">
         <button type="button" class="detail-button" @click="close">Cerrar</button>
-        <button
-          v-if="branch"
-          type="button"
-          class="detail-button primary"
-          aria-haspopup="dialog"
-          @click="emit('modify', branch)"
-        >
-          <i class="bi bi-pencil-square" aria-hidden="true"></i> Modificar
-        </button>
       </footer>
     </div>
   </BaseModal>
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.branch-detail-content)::backdrop) {
-  background: var(--overlay-background);
-}
 :global(.app-modal-card:has(.branch-detail-content)) {
   width: min(760px, 100%);
   max-width: 760px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--dialog-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
-:global(.app-modal-card:has(.branch-detail-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 32px;
-  background: var(--primary-color);
-  color: var(--content-background);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.375rem;
-}
-:global(.app-modal-card:has(.branch-detail-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--content-background);
-  border-radius: var(--radius-small);
-}
-:global(.app-modal-card:has(.branch-detail-content) .app-modal-close:hover) {
-  background: var(--surface-on-dark-hover);
-}
-:global(.app-modal-card:has(.branch-detail-content) .app-modal-close:focus-visible) {
-  outline-color: var(--focus-on-dark);
-}
+
 .branch-detail-content {
-  display: grid;
-  gap: 18px;
   min-height: 0;
   padding: 24px 32px 28px;
   overflow-y: auto;
@@ -205,67 +166,10 @@ onBeforeUnmount(() => request?.abort())
   background: var(--error-background);
   color: var(--error-text);
 }
-.detail-group {
-  display: grid;
-  gap: 18px;
-  padding: 22px 20px 24px;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-}
-.detail-group h3 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-size: 1.0625rem;
-  font-weight: 700;
-}
-.group-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--primary-color);
-  color: var(--content-background);
-  font-size: 0.8125rem;
-}
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin: 0;
-}
-.detail-field {
-  display: grid;
-  align-content: start;
-  gap: 7px;
-  min-width: 0;
-}
-dt {
-  font-weight: 500;
-}
-dd {
-  display: grid;
-  gap: 7px;
-  margin: 0;
-}
-.readonly-value {
-  display: flex;
-  align-items: center;
-  min-height: 46px;
-  padding: 10px 14px 10px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-small);
-  background: var(--input-disabled-background);
-  overflow-wrap: anywhere;
-}
 .readonly-value.status {
   font-weight: 600;
 }
 .readonly-value.missing {
-  border-color: var(--error-color);
   color: var(--text-secondary);
 }
 .field-alert {
@@ -308,12 +212,6 @@ dd {
   color: var(--button-secondary-text);
   font: inherit;
 }
-.detail-button.primary {
-  border-color: var(--primary-color);
-  background: var(--primary-color);
-  color: var(--content-background);
-  font-weight: 600;
-}
 .detail-button:not(:disabled):hover {
   background: var(--surface-hover);
 }
@@ -328,15 +226,6 @@ dd {
 @media (max-width: 575px) {
   .branch-detail-content {
     padding: 20px 16px;
-  }
-  .detail-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  :global(.app-modal-card:has(.branch-detail-content) .app-modal-title) {
-    padding-left: 16px;
-  }
-  :global(.app-modal-card:has(.branch-detail-content) .app-modal-close) {
-    right: 16px;
   }
 }
 </style>

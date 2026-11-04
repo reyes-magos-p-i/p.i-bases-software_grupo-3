@@ -69,6 +69,9 @@ onBeforeUnmount(() => request?.abort())
         <button v-if="retryable" type="button" @click="load">Reintentar</button>
       </div>
       <PurchaseSummary v-else-if="purchase" :purchase="purchase" show-payment />
+      <footer class="detail-footer">
+        <button type="button" class="detail-button" @click="emit('close')">Cerrar</button>
+      </footer>
     </div>
   </BaseModal>
 </template>

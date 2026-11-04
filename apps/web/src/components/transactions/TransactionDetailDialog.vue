@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import BaseModal from '@/components/common/BaseModal.vue'
@@ -82,8 +83,8 @@ onBeforeUnmount(() => request?.abort())
 
 <template>
   <BaseModal :open="transactionId !== null" title="Detalle de transacción" @close="close">
-    <div class="transaction-detail-content" :aria-busy="loading">
-      <p v-if="loading" class="detail-feedback" role="status">Cargando el detalle…</p>
+    <div class="transaction-detail-content dialog-content" :aria-busy="loading">
+      <LoadingState v-if="loading" class="detail-feedback" message="Cargando el detalle…" compact />
       <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         <p>{{ error }}</p>
         <button v-if="retryable" type="button" class="detail-button" @click="load">
@@ -92,12 +93,10 @@ onBeforeUnmount(() => request?.abort())
       </div>
       <template v-else-if="transaction">
         <section class="detail-group" aria-labelledby="transaction-summary">
-          <h3 id="transaction-summary">
-            <span class="group-number" aria-hidden="true">1</span> Resumen de la transacción
-          </h3>
+          <h3 id="transaction-summary">Resumen de la transacción</h3>
           <dl class="detail-grid">
             <div class="detail-field">
-              <dt>IdTransacción</dt>
+              <dt>ID de transacción</dt>
               <dd>{{ formatTransactionId(transaction.id) }}</dd>
             </div>
             <div class="detail-field">
@@ -120,9 +119,7 @@ onBeforeUnmount(() => request?.abort())
         </section>
 
         <section class="detail-group" aria-labelledby="transaction-client">
-          <h3 id="transaction-client">
-            <span class="group-number" aria-hidden="true">2</span> Cliente
-          </h3>
+          <h3 id="transaction-client">Cliente</h3>
           <dl class="detail-grid">
             <div class="detail-field">
               <dt>Cliente</dt>
@@ -136,9 +133,7 @@ onBeforeUnmount(() => request?.abort())
         </section>
 
         <section class="detail-group" aria-labelledby="transaction-function">
-          <h3 id="transaction-function">
-            <span class="group-number" aria-hidden="true">3</span> Función
-          </h3>
+          <h3 id="transaction-function">Función</h3>
           <dl class="detail-grid">
             <div class="detail-field wide">
               <dt>Película y función</dt>
@@ -156,9 +151,7 @@ onBeforeUnmount(() => request?.abort())
         </section>
 
         <section class="detail-group" aria-labelledby="transaction-products">
-          <h3 id="transaction-products">
-            <span class="group-number" aria-hidden="true">4</span> Productos y pago
-          </h3>
+          <h3 id="transaction-products">Productos y pago</h3>
           <div class="table-scroll">
             <table class="products-table">
               <caption class="visually-hidden">
@@ -211,110 +204,29 @@ onBeforeUnmount(() => request?.abort())
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.transaction-detail-content)::backdrop) {
-  background: var(--overlay-background);
-}
 :global(.app-modal-card:has(.transaction-detail-content)) {
   width: min(840px, 100%);
   max-width: 840px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--dialog-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
-:global(.app-modal-card:has(.transaction-detail-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 32px;
-  background: var(--primary-color);
-  color: var(--content-background);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.375rem;
-}
-:global(.app-modal-card:has(.transaction-detail-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--content-background);
-  border-radius: var(--radius-small);
-}
-:global(.app-modal-card:has(.transaction-detail-content) .app-modal-close:hover) {
-  background: var(--surface-on-dark-hover);
-}
-:global(.app-modal-card:has(.transaction-detail-content) .app-modal-close:focus-visible) {
-  outline-color: var(--focus-on-dark);
-}
+
 .transaction-detail-content {
-  display: grid;
-  gap: 18px;
   min-height: 0;
   padding: 24px 32px 28px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.detail-group {
-  display: grid;
-  gap: 16px;
-  padding: 22px 20px 24px;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-}
-.detail-group h3 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-size: 1.0625rem;
-  font-weight: 700;
-}
-.group-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--primary-color);
-  color: var(--content-background);
-  font-size: 0.8125rem;
-}
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin: 0;
-}
-.detail-field {
-  display: grid;
-  align-content: start;
-  gap: 6px;
-  min-width: 0;
-}
 .detail-field.wide {
   grid-column: 1 / -1;
 }
-dt {
-  font-weight: 500;
-}
-dd {
-  margin: 0;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
+
 .status-badge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-small);
+  font-weight: 600;
 }
 .status-badge.paid {
-  background: var(--success-background);
   color: var(--success-text);
 }
 .status-badge.cancelled {
-  background: var(--error-background);
   color: var(--error-text);
 }
 .table-scroll {
@@ -381,15 +293,6 @@ dd {
 @media (max-width: 575px) {
   .transaction-detail-content {
     padding: 20px 16px;
-  }
-  .detail-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  :global(.app-modal-card:has(.transaction-detail-content) .app-modal-title) {
-    padding-left: 16px;
-  }
-  :global(.app-modal-card:has(.transaction-detail-content) .app-modal-close) {
-    right: 16px;
   }
 }
 </style>

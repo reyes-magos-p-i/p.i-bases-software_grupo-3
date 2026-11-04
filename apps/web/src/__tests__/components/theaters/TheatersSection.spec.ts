@@ -1,9 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, shallowMount, type VueWrapper } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
 import TheatersSection from '@/components/theaters/TheatersSection.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
-import { getTheaterCreationOptions, getTheaters } from '@/services/theater.service'
+import {
+  createTheater,
+  updateTheater,
+  getTheaterCreationOptions,
+  getTheaters,
+} from '@/services/theater.service'
+import CreateTheaterDialog from '@/components/theaters/CreateTheaterDialog.vue'
+import ModifyTheaterDialog from '@/components/theaters/ModifyTheaterDialog.vue'
+import TheaterForm from '@/components/theaters/TheaterForm.vue'
+import TheaterSeatEditor from '@/components/theaters/TheaterSeatEditor.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import type { Theater } from '@/types/theater'
 
 vi.mock('@/services/theater.service', () => ({
@@ -52,10 +63,24 @@ function render() {
         TheaterSearchBar: false,
         TheaterFilters: false,
         TheaterFilterPicker: false,
+        CreateTheaterDialog: dialogStub('CreateTheaterDialog'),
+        ModifyTheaterDialog: dialogStub('ModifyTheaterDialog'),
       },
     },
   })
   return wrapper
+}
+
+function dialogStub(name: string) {
+  return defineComponent({
+    name,
+    props: ['theater', 'submissionErrors'],
+    emits: ['submit'],
+    setup(_props, { expose }) {
+      expose({ open: vi.fn(), complete: vi.fn() })
+      return () => h('div')
+    },
+  })
 }
 
 beforeEach(() => {
@@ -67,6 +92,21 @@ afterEach(() => {
 })
 
 describe('TheatersSection loading presentation', () => {
+  it('keeps the numbered seat editor inside modification and before its final actions', () => {
+    wrapper = mount(ModifyTheaterDialog, {
+      props: { theater },
+      global: {
+        stubs: {
+          TheaterDialogShell: { template: '<div><slot /></div>' },
+          TheaterSeatEditor: true,
+        },
+      },
+    })
+    expect(wrapper.getComponent(TheaterForm).props('numbered')).toBe(true)
+    expect(wrapper.getComponent(TheaterSeatEditor).props('sectionNumber')).toBe(3)
+    expect(wrapper.getComponent(TheaterSeatEditor).props('theaterId')).toBe(42)
+    expect(wrapper.get('form').element.lastElementChild).toBe(wrapper.get('footer').element)
+  })
   it.each([true, false])(
     'replaces loading with the appropriate result when records exist: %s',
     async (hasRecords) => {
@@ -161,5 +201,68 @@ describe('TheatersSection search', () => {
     await view.get('.filters .secondary-button').trigger('click')
     expect((view.get('#theater-search').element as HTMLInputElement).value).toBe('')
     expect(view.get('tbody').text()).toContain('Heredia')
+  })
+})
+
+describe('TheatersSection operation feedback', () => {
+  beforeEach(() => {
+    vi.mocked(getTheaters).mockResolvedValue([theater])
+    vi.mocked(getTheaterCreationOptions).mockResolvedValue({
+      projectors: [],
+      cinemas: [],
+      statuses: [],
+    })
+    vi.mocked(createTheater).mockReset()
+    vi.mocked(updateTheater).mockReset()
+  })
+
+  it('uses the shared floating notification after creating a theater', async () => {
+    vi.mocked(createTheater).mockResolvedValue(theater)
+    const view = render()
+    await flushPromises()
+    view.getComponent(CreateTheaterDialog).vm.$emit('submit', { numberOfSeats: 80 })
+    await flushPromises()
+    expect(view.getComponent(NotificationPopup).props()).toMatchObject({
+      type: 'success',
+      placement: 'bottom-right',
+      message: 'Sala 42 creada exitosamente.',
+    })
+    expect(view.findAllComponents(NotificationPopup)).toHaveLength(1)
+    expect(view.getComponent(CreateTheaterDialog).vm.complete).toHaveBeenCalledOnce()
+    expect(getTheaters).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the modification open and explains dimensions protected by associated functions', async () => {
+    vi.mocked(updateTheater).mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { status: 409 },
+    })
+    const view = render()
+    await flushPromises()
+    await view.get('[aria-label="Modificar sala"]').trigger('click')
+    view.getComponent(ModifyTheaterDialog).vm.$emit('submit', { dimensionX: 9 })
+    await flushPromises()
+    expect(updateTheater).toHaveBeenCalledWith(42, { dimensionX: 9 })
+    expect(view.getComponent(ModifyTheaterDialog).props('theater')).toEqual(theater)
+    expect(view.getComponent(ModifyTheaterDialog).props('submissionErrors')).toEqual([
+      'No puedes cambiar las dimensiones de una sala con funciones asociadas. Sus asientos e historial deben conservarse.',
+    ])
+    expect(view.findComponent(NotificationPopup).exists()).toBe(false)
+  })
+
+  it('reports an uncertain creation with a floating notification and preserves the form', async () => {
+    vi.mocked(createTheater).mockRejectedValueOnce(new Error('Network error'))
+    const view = render()
+    await flushPromises()
+    view.getComponent(CreateTheaterDialog).vm.$emit('submit', { numberOfSeats: 80 })
+    await flushPromises()
+    expect(view.getComponent(NotificationPopup).props()).toMatchObject({
+      type: 'error',
+      placement: 'bottom-right',
+      message:
+        'El resultado no pudo ser confirmado. Verifica si la sala fue creada antes de intentarlo de nuevo.',
+    })
+    expect(view.getComponent(CreateTheaterDialog).props('submissionErrors')).toEqual([])
+    expect(getTheaters).toHaveBeenCalledTimes(1)
   })
 })

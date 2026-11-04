@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
@@ -55,6 +56,7 @@ const isUserSection = computed(
   () => activeSection.value === 'employees' || activeSection.value === 'clients',
 )
 const submissionErrors = ref<string[]>([])
+const submissionValidation = ref(false)
 const submissionBlocked = ref(false)
 const creationResult = ref('')
 const operationNotice = ref('')
@@ -146,6 +148,7 @@ async function submitUser(data: CreateUserRequest) {
   const submittingDialog = userDialog.value
   submitting.value = true
   submissionErrors.value = []
+  submissionValidation.value = false
   operationNotice.value = ''
   creationResult.value = ''
   let completed = false
@@ -171,6 +174,7 @@ async function submitUser(data: CreateUserRequest) {
     } else if (status === 401) {
       sessionExpired()
     } else if (status === 400) {
+      submissionValidation.value = true
       const message: unknown = isAxiosError<UserApiError>(error)
         ? error.response?.data?.message
         : undefined
@@ -188,6 +192,7 @@ async function submitUser(data: CreateUserRequest) {
       ]
       void refreshPermissions()
     } else if (status === 409) {
+      submissionValidation.value = true
       submissionErrors.value = [
         'Ya existe una cuenta con ese correo. Revisa el correo introducido.',
       ]
@@ -204,7 +209,7 @@ async function submitUser(data: CreateUserRequest) {
         submittingDialog?.complete()
         userList.value?.refresh()
         await nextTick()
-        resultNotice.value?.focus()
+        resultNotice.value?.querySelector<HTMLButtonElement>('.notification-close')?.focus()
       }
     }
   }
@@ -318,7 +323,7 @@ async function returnToDashboard() {
     @navigate="navigate"
     @logout="logout"
   >
-    <p v-if="loggingOut" role="status">Cerrando sesión…</p>
+    <LoadingState v-if="loggingOut" message="Cerrando sesión…" compact surface="dark" />
     <p v-if="logoutError" role="alert">{{ logoutError }}</p>
     <div v-if="passwordStatusError" role="alert">
       {{ passwordStatusError }}
@@ -328,7 +333,6 @@ async function returnToDashboard() {
     <div
       v-if="(creationResult || operationNotice) && isUserSection"
       ref="result-notice"
-      class="creation-result"
       tabindex="-1"
     >
       <NotificationPopup
@@ -336,6 +340,7 @@ async function returnToDashboard() {
         :type="!operationNotice && resultIsWarning ? 'alert' : 'success'"
         :message="operationNotice || creationResult"
         :duration="!operationNotice && resultIsWarning ? 0 : 4000"
+        placement="bottom-right"
         @close="dismissUserNotification"
       />
     </div>
@@ -404,6 +409,7 @@ async function returnToDashboard() {
       :catalogs-error="catalogsError"
       :submitting="submitting"
       :submission-errors="submissionErrors"
+      :submission-validation="submissionValidation"
       :submission-blocked="submissionBlocked"
       @retry-catalogs="loadCatalogs"
       @submit="submitUser"

@@ -45,18 +45,19 @@ Requiere la migración `20261016_cinemas_status.sql` (columna `CINEMAS.STATUS`).
 
 ## Detalle
 
-El ícono Ver abre «Detalle de sucursal» con ID Sucursal, Estado, Nombre y
+El ícono Ver abre «Detalle de sucursal» con ID de sucursal, Estado, Nombre y
 Compañía, todos de solo lectura. Los nombres se muestran completos, sin recortar.
-El botón Modificar abre el formulario de SCRUM-33 con esa sucursal.
+Su única acción inferior es Cerrar; también puede cerrarse con la X del encabezado.
+La modificación se abre desde el ícono de la fila correspondiente en el listado.
 
 En la base de datos el nombre de la sucursal y el de su compañía son obligatorios
 (`NOT NULL`). Por eso un dato «vacío» es un texto de solo espacios. La API aplica
 `TRIM` y devuelve `null` en ese caso (Oracle guarda el texto vacío como `NULL`), y
 la interfaz muestra:
 
-| Caso | Alerta |
-|---|---|
-| Nombre vacío (UT-021, UT-023) | Esta sucursal no tiene nombre registrado |
+| Caso                            | Alerta                                   |
+| ------------------------------- | ---------------------------------------- |
+| Nombre vacío (UT-021, UT-023)   | Esta sucursal no tiene nombre registrado |
 | Compañía vacía (UT-022, UT-023) | Esta sucursal no tiene compañía asignada |
 
 Con cualquiera de las dos, también aparece «Hay datos incompletos en esta sucursal.

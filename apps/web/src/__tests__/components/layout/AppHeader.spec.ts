@@ -206,9 +206,12 @@ describe('AppHeader authentication navigation', () => {
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
     expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
       'Mi perfil',
-      'Cambiar Contraseña',
+      'Cambiar contraseña',
+      'Cerrar sesión',
     ])
 
+    if (!wrapper.find('.account-dropdown').exists())
+      await wrapper.get('.account-avatar').trigger('click')
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
     await flushPromises()
     expect(localStorage.getItem('accessToken')).toBeNull()
@@ -273,6 +276,8 @@ describe('AppHeader authentication navigation', () => {
     expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(3))
 
     // Logging out removes a warning that is still on screen.
+    if (!wrapper.find('.account-dropdown').exists())
+      await wrapper.get('.account-avatar').trigger('click')
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
     await flushPromises()
     expect(passwordExpiryNotice.message.value).toBe('')
@@ -306,6 +311,8 @@ describe('AppHeader authentication navigation', () => {
     await page.get('form').trigger('submit')
     await vi.waitFor(() => expect(getClientPasswordStatus).toHaveBeenCalled())
 
+    if (!wrapper.find('.account-dropdown').exists())
+      await wrapper.get('.account-avatar').trigger('click')
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
     await flushPromises()
     resolveStatus(expiry('expired'))
@@ -549,6 +556,8 @@ describe('AppHeader authentication navigation', () => {
     await page.get('[name="password"]').setValue('ValidPassword1!')
     await page.get('form').trigger('submit')
     await vi.waitFor(() => expect(getClientPasswordStatus).toHaveBeenCalled())
+    if (!wrapper.find('.account-dropdown').exists())
+      await wrapper.get('.account-avatar').trigger('click')
     await wrapper.get('[aria-label="Cerrar sesión"]').trigger('click')
     await flushPromises()
     reject(new Error('stale failure'))

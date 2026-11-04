@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { computed, nextTick, reactive, ref, useTemplateRef, watch } from 'vue'
 import TheaterDialogShell from '@/components/theaters/TheaterDialogShell.vue'
 import FormField from '@/components/theaters/FormField.vue'
@@ -117,10 +120,20 @@ defineExpose({ open, complete })
       <p class="required-note">
         Los campos con <span class="required-marker">*</span> son obligatorios.
       </p>
-      <p v-if="submissionError" class="form-error" role="alert">{{ submissionError }}</p>
+      <NotificationPopup
+        v-if="submissionError"
+        type="error"
+        :message="submissionError"
+        placement="bottom-right"
+        :duration="0"
+      />
 
-      <fieldset class="form-card">
-        <legend><span class="group-number" aria-hidden="true">1</span> Datos de la sucursal</legend>
+      <DialogSection
+        as="fieldset"
+        class="form-card"
+        title="Datos de la sucursal"
+        :number="editing ? 1 : undefined"
+      >
         <div class="field-grid">
           <FormField
             v-slot="{ id, invalid, describedby }"
@@ -161,14 +174,19 @@ defineExpose({ open, complete })
             </select>
           </FormField>
         </div>
-        <p v-if="companiesLoading" class="form-hint" role="status">Cargando compañías…</p>
+        <LoadingState
+          v-if="companiesLoading"
+          class="form-hint"
+          message="Cargando compañías…"
+          compact
+        />
         <p v-else-if="companiesError" class="form-error" role="alert">
           No se pudieron cargar las compañías.
           <button type="button" class="link-button" @click="emit('retryCompanies')">
             Reintentar
           </button>
         </p>
-      </fieldset>
+      </DialogSection>
 
       <footer class="dialog-actions">
         <button type="button" class="secondary-button" :disabled="submitting" @click="close">
@@ -196,36 +214,6 @@ defineExpose({ open, complete })
 .required-marker {
   color: var(--color-error);
   font-weight: 700;
-}
-.form-card {
-  display: grid;
-  gap: 12px;
-  margin: 0;
-  padding: 20px;
-  border: 0;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-}
-.form-card legend {
-  float: left;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  font-size: 1rem;
-  font-weight: 700;
-}
-.group-number {
-  display: inline-grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  color: var(--dialog-heading-text);
-  background: var(--dialog-heading-background);
-  font-size: 0.8rem;
 }
 .field-grid {
   display: grid;

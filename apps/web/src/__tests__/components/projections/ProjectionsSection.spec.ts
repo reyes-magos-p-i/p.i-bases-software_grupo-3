@@ -153,21 +153,27 @@ describe('ProjectionsSection', () => {
     expect(createProjections).toHaveBeenCalledExactlyOnceWith(payload)
     expect(getProjections).toHaveBeenCalledTimes(2)
     expect(wrapper!.find('.preview-placeholder').exists()).toBe(false)
-    expect(wrapper!.get('.creation-result').text()).toBe('Se creó 1 proyección.')
-    expect(document.activeElement).toBe(wrapper!.get('.creation-result').element)
+    expect(wrapper!.get('.notification-message').text()).toBe('Se creó 1 proyección.')
+    expect(document.activeElement).toBe(wrapper!.get('.notification-close').element)
     expect(form().get('dialog').attributes('open')).toBeUndefined()
     expect(wrapper!.emitted('busy')).toEqual([[true], [false]])
 
     createProjections.mockResolvedValueOnce({ status: 'INACTIVE', projections: [{}, {}, {}] })
     await submit()
-    expect(wrapper!.get('.creation-result').text()).toBe(
-      'Se crearon 3 proyecciones. Está en estado inactiva: no será visible para los Clientes hasta activarla.',
+    expect(wrapper!.get('.notification-message').text()).toBe(
+      'Se crearon 3 proyecciones. Está en estado inactiva: no será visible para los clientes hasta activarla.',
     )
   })
 
   it.each([
-    [httpError(409, 'La sala ya tiene una proyección asignada en ese horario.'), ['La sala ya tiene una proyección asignada en ese horario.']],
-    [httpError(400, ['Introduce una hora válida (HH:mm).', ' ']), ['Introduce una hora válida (HH:mm).']],
+    [
+      httpError(409, 'La sala ya tiene una proyección asignada en ese horario.'),
+      ['La sala ya tiene una proyección asignada en ese horario.'],
+    ],
+    [
+      httpError(400, ['Introduce una hora válida (HH:mm).', ' ']),
+      ['Introduce una hora válida (HH:mm).'],
+    ],
     [httpError(400), ['Revisa los datos de la proyección e inténtalo nuevamente.']],
     [httpError(403), ['No tienes permisos para realizar esta acción.']],
     [new Error('Network Error'), ['No se pudo crear la proyección, intenta de nuevo.']],
@@ -177,9 +183,12 @@ describe('ProjectionsSection', () => {
     await wrapper!.get('.add-user-button').trigger('click')
     await submit()
 
-    expect(form().props('submissionErrors')).toEqual(messages)
+    const status = 'response' in error ? error.response.status : undefined
+    const validation = status === 400 || status === 409
+    expect(form().props('submissionErrors')).toEqual(validation ? messages : [])
     expect(form().get('dialog').attributes('open')).toBeDefined()
-    expect(wrapper!.find('.creation-result').exists()).toBe(false)
+    expect(wrapper!.find('.notification-popup--floating').exists()).toBe(!validation)
+    if (!validation) expect(wrapper!.get('.notification-message').text()).toBe(messages.join(' '))
   })
 
   it('does nothing while disabled', async () => {
@@ -245,7 +254,7 @@ describe('ProjectionsSection', () => {
       await flushPromises()
       expect(updateProjection).toHaveBeenCalledExactlyOnceWith(100, changes)
       expect(createProjections).not.toHaveBeenCalled()
-      expect(wrapper!.get('.creation-result').text()).toBe(
+      expect(wrapper!.get('.notification-message').text()).toBe(
         'Se guardaron los cambios de la proyección MF-100.',
       )
       expect(form().get('dialog').attributes('open')).toBeUndefined()
@@ -254,14 +263,20 @@ describe('ProjectionsSection', () => {
 
     it.each([
       [httpError(404), ['Esta proyección ya no está disponible.']],
-      [httpError(409, 'El elemento seleccionado ya no está disponible.'), ['El elemento seleccionado ya no está disponible.']],
+      [
+        httpError(409, 'El elemento seleccionado ya no está disponible.'),
+        ['El elemento seleccionado ya no está disponible.'],
+      ],
       [new Error('Network Error'), ['No se pudieron guardar los cambios, intenta de nuevo.']],
     ])('keeps the entered data when saving fails %#', async (error, messages) => {
       updateProjection.mockRejectedValueOnce(error)
       await startEditing()
       form().vm.$emit('save', changes)
       await flushPromises()
-      expect(form().props('submissionErrors')).toEqual(messages)
+      const validation = 'response' in error && error.response.status === 409
+      expect(form().props('submissionErrors')).toEqual(validation ? messages : [])
+      expect(wrapper!.find('.notification-popup--floating').exists()).toBe(!validation)
+      if (!validation) expect(wrapper!.get('.notification-message').text()).toBe(messages.join(' '))
       expect(form().get('dialog').attributes('open')).toBeDefined()
     })
 
@@ -298,7 +313,6 @@ describe('ProjectionsSection', () => {
       expect(updateProjection).not.toHaveBeenCalled()
     })
   })
-
 })
 
 describe('cancellation', () => {
@@ -329,7 +343,7 @@ describe('cancellation', () => {
     cancelDialog.vm.$emit('cancelled', { ...projection, status: 'CANCELLED' })
     await flushPromises()
     expect(cancelDialog.props('projection')).toBeNull()
-    expect(wrapper!.get('.creation-result').text()).toBe(
+    expect(wrapper!.get('.notification-message').text()).toBe(
       'La proyección MF-021 fue cancelada. La sala queda disponible para programar en ese horario.',
     )
     expect(getProjections).toHaveBeenCalledTimes(2)

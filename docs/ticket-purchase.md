@@ -6,6 +6,10 @@ El cliente inicia la compra desde una película del catálogo, elige sucursal y 
 
 Los cuatro pasos siguen una barra de progreso que se llena al avanzar y respeta la preferencia de movimiento reducido. El flujo se sitúa junto al header y no incluye un enlace adicional al historial. El selector de fecha conserva la apariencia del calendario compartido con los formularios de usuarios.
 
+Cada cambio de paso lleva al inicio de la página una vez renderizado el nuevo contenido, tanto al avanzar como al retroceder, para clientes e invitados. El desplazamiento es inmediato. Cambiar asientos o categorías, validar datos y reintentar una operación sin salir del paso actual conserva la posición de lectura.
+
+La selección inicial y el resumen presentan el póster de la película mediante `MoviePoster`, compartido con el portal y las proyecciones. Si la imagen no está disponible, se intenta la ruta heredada y luego el reemplazo existente. El resumen alinea el póster con el título en escritorio y móvil. El plano mantiene todos los asientos registrados dentro de un contenedor desplazable, con la referencia de pantalla visible. Las filas sin asientos registrados se ocultan para clientes sin renumerar las demás, y los diagnósticos del plano se reservan para administración. Estos ajustes de presentación no cambian precios, disponibilidad, concurrencia ni confirmación de pago. Véase [Consistencia de interfaz](./interface-consistency.md).
+
 La selección de asientos avisa que no los reserva hasta pagar. Las pantallas del cliente presentan categorías, formato, asiento VIP, importes finales y total, sin explicar la fórmula interna ni mostrar bases y recargos por separado. El resumen y la confirmación no incluyen mensajes sobre la implementación del pago.
 
 Cada compra registrada tiene un QR generado localmente mediante `qrcode`, con margen de lectura y los colores de las variables existentes. El componente común recibe un texto y no conoce el dominio de compras. En este flujo codifica un objeto JSON con `type: "CINETADEL_PURCHASE"`, `version: 1` y la referencia de la compra en `reference`. No incluye enlaces, datos personales ni credenciales. El backend devuelve ese contenido canónico en `qrPayload`; la confirmación, el historial y el correo lo reutilizan. La imagen no se almacena en Oracle.
@@ -67,10 +71,10 @@ Las rutas requieren JWT de cliente y contraseña vigente. La cuenta se obtiene d
 
 Clientes e invitados pueden comprar los boletos que deseen según la disponibilidad de la sala, por decisión del PO. El límite efectivo es el menor entre el valor configurado y los asientos libres. Con los valores iniciales, ninguna regla adicional restringe la compra; si el negocio decide reducirlos, basta con cambiar `GLOBAL_SETTINGS`. No sustituyen un cobro real. Las confirmaciones de invitado mantienen el límite técnico de 10 solicitudes por minuto, igual que las de clientes; una sola compra puede incluir todos los asientos disponibles.
 
-| Límite | Valor inicial | Dónde vive | Dónde se valida |
-| --- | ---: | --- | --- |
-| Boletos por comprador y función | 10000 | `GLOBAL_SETTINGS` | Cotización y transacción de confirmación |
-| Compras de invitado por correo y hora | 10000 | `GLOBAL_SETTINGS` | Transacción de confirmación |
+| Límite                                | Valor inicial | Dónde vive        | Dónde se valida                          |
+| ------------------------------------- | ------------: | ----------------- | ---------------------------------------- |
+| Boletos por comprador y función       |         10000 | `GLOBAL_SETTINGS` | Cotización y transacción de confirmación |
+| Compras de invitado por correo y hora |         10000 | `GLOBAL_SETTINGS` | Transacción de confirmación              |
 
 Los boletos ya comprados para la función cuentan dentro del límite, con el mismo bloqueo de la función, por lo que no se evade con varias compras pequeñas. Superarlo responde 409 con `TICKET_LIMIT_REACHED` o `GUEST_EMAIL_LIMIT`. Las comprobaciones se ejecutan después de reconocer un reintento, de modo que repetir una compra registrada sigue devolviendo su comprobante. Los valores de `GLOBAL_SETTINGS` se cambian con un `UPDATE`, sin recompilar ni desplegar, y aplican desde la siguiente compra. La disponibilidad de asientos devuelve `maxTickets`; si es menor que los asientos libres, la web limita la selección, y si no, mantiene «Seleccionar todos». Una restricción admite enteros de 1 a 10000, el tamaño máximo de una sala. Si no se pueden leer los límites, la compra responde 503 y no se vende nada.
 

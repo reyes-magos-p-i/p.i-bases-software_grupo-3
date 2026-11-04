@@ -84,6 +84,32 @@ async function renderDialog(props: Partial<InstanceType<typeof CreateUserDialog>
 }
 
 describe('client form', () => {
+  it('shows a duplicate email beside its field without displaying a general notification', async () => {
+    const view = await renderDialog({ mode: 'client' })
+    await view.get('[name="email"]').setValue('ana@example.com')
+    await view.setProps({
+      submissionValidation: true,
+      submissionErrors: ['Ya existe una cuenta con ese correo.'],
+    })
+    await nextTick()
+    expect(view.get('[name="email"]').attributes('aria-invalid')).toBe('true')
+    expect(view.text()).toContain('Ya existe una cuenta con ese correo.')
+    expect(view.find('.notification-popup').exists()).toBe(false)
+    expect(document.activeElement).toBe(view.get('[name="email"]').element)
+  })
+
+  it('keeps unrecognized server validation readable and separate from general failures', async () => {
+    const view = await renderDialog({ mode: 'client' })
+    await view.setProps({
+      submissionValidation: true,
+      submissionErrors: ['property unexpected should not exist'],
+    })
+    expect(view.get('[role="alert"]').text()).toBe(
+      'Revisa los datos del formulario e inténtalo nuevamente.',
+    )
+    expect(view.text()).not.toContain('property unexpected')
+    expect(view.find('.notification-popup').exists()).toBe(false)
+  })
   it('shows a character counter while retaining the Oracle storage limit', async () => {
     const view = await renderDialog({ mode: 'client' })
     await view.get('.address-toggle input').setValue(true)

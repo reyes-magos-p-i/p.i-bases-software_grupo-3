@@ -30,6 +30,13 @@ export const seatStateLabels: Record<SeatState, string> = {
   reserved: 'Reservado',
 }
 
+export const seatStateIcons: Record<SeatState, string> = {
+  free: 'bi-check-circle',
+  unavailable: 'bi-slash-circle',
+  'in-use': 'bi-person-fill',
+  reserved: 'bi-clock',
+}
+
 export interface UpdateSeatStatusRequest {
   seats: {
     rowNumber: number

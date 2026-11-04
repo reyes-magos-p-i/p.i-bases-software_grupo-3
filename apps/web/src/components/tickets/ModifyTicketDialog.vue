@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import { ref, useTemplateRef } from 'vue'
 import TicketDialogShell from './TicketDialogShell.vue'
 import type { AlternativeShowtime, UpdateTicketRequest } from '@/types/ticket'
@@ -45,7 +47,12 @@ function complete() {
 }
 
 function submit() {
-  if (!movieFunctionId.value) return
+  if (
+    props.submitting ||
+    props.optionsLoading ||
+    !props.showtimes.some((showtime) => showtime.movieFunctionId === Number(movieFunctionId.value))
+  )
+    return
   emit('submit', { movieFunctionId: Number(movieFunctionId.value) })
 }
 
@@ -55,35 +62,36 @@ defineExpose({ open, complete })
 <template>
   <TicketDialogShell
     ref="shell"
-    title="Modificar tiquete"
+    title="Modificar boleto"
     :close-disabled="submitting"
     @close="emit('close')"
   >
     <form novalidate :aria-busy="submitting" @submit.prevent="submit">
-      <label for="ticket-showtime" class="field-label">Proyecciones futuras</label>
-      <select
-        id="ticket-showtime"
-        v-model="movieFunctionId"
-        :disabled="submitting || optionsLoading"
-      >
-        <option value="">Seleccione una proyección</option>
-        <option v-for="s in showtimes" :key="s.movieFunctionId" :value="s.movieFunctionId">
-          {{ s.date }}{{ '\t' }}{{ s.time }}
-        </option>
-      </select>
+      <DialogSection as="fieldset" title="Proyección de destino" :number="1">
+        <label for="ticket-showtime" class="field-label">Proyecciones futuras</label>
+        <select
+          id="ticket-showtime"
+          v-model="movieFunctionId"
+          :disabled="submitting || optionsLoading"
+        >
+          <option value="">Seleccione una proyección</option>
+          <option v-for="s in showtimes" :key="s.movieFunctionId" :value="s.movieFunctionId">
+            {{ s.date }}{{ '\t' }}{{ s.time }}
+          </option>
+        </select>
 
-      <p v-if="optionsLoading" role="status">Cargando proyecciones…</p>
-      <p v-else-if="optionsError" class="form-error" role="alert">
-        {{ optionsError }}
-        <button type="button" @click="emit('retryOptions')">Reintentar</button>
-      </p>
-      <p v-else-if="!showtimes.length" role="status">
-        No hay proyecciones alternativas disponibles.
-      </p>
-      <p v-if="submissionErrors.length" class="form-error" role="alert">
-        {{ submissionErrors.join(' ') }}
-      </p>
-
+        <LoadingState v-if="optionsLoading" message="Cargando proyecciones…" compact />
+        <p v-else-if="optionsError" class="form-error" role="alert">
+          {{ optionsError }}
+          <button type="button" @click="emit('retryOptions')">Reintentar</button>
+        </p>
+        <p v-else-if="!showtimes.length" role="status">
+          No hay proyecciones alternativas disponibles.
+        </p>
+        <p v-if="submissionErrors.length" class="form-error" role="alert">
+          {{ submissionErrors.join(' ') }}
+        </p>
+      </DialogSection>
       <footer class="dialog-actions">
         <button type="button" class="secondary-button" :disabled="submitting" @click="close">
           Cancelar
@@ -93,7 +101,7 @@ defineExpose({ open, complete })
           class="create-button"
           :disabled="submitting || optionsLoading || !movieFunctionId"
         >
-          {{ submitting ? 'Modificando…' : 'Modificar tiquete' }}
+          {{ submitting ? 'Modificando…' : 'Modificar boleto' }}
         </button>
       </footer>
     </form>
@@ -151,11 +159,11 @@ select:focus {
   border-radius: var(--radius-small);
   font: inherit;
   font-weight: 500;
-  box-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 4px var(--shadow-strong-color);
 }
 .secondary-button {
   min-width: 118px;
-  color: var(--primary-color);
+  color: var(--button-secondary-text);
   background: var(--button-secondary-background);
 }
 .create-button {

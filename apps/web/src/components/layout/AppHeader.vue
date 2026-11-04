@@ -363,6 +363,7 @@ function goToChangePassword() {
   display: flex;
   align-items: stretch;
   gap: 0;
+  min-width: 0;
 }
 
 .register-button,
@@ -405,6 +406,7 @@ function goToChangePassword() {
 @media (max-width: 576px) {
   .navbar-content {
     min-height: 64px;
+    gap: 8px;
   }
 
   .brand-logo {
@@ -418,7 +420,7 @@ function goToChangePassword() {
 
   .register-button,
   .login-button {
-    padding: 16px 10px;
+    padding: 16px 8px;
     font-size: 0.875rem;
   }
 }

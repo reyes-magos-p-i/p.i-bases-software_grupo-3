@@ -83,7 +83,7 @@ describe('ClientEmailChangeDialog', () => {
     expect(wrapper.get('[role="alert"]').text()).toBe('Correo reservado')
     wrapper.unmount()
   })
-  it.each(['.actions button[type="button"]', '.app-modal-close'])(
+  it.each(['footer button[type="button"]', '.app-modal-close'])(
     'closes on the first touch of %s without blur reflow',
     async (selector) => {
       native = mount(ClientEmailChangeDialog, {

@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
 
-const props = withDefaults(defineProps<{
-  label?: string
-  disabled?: boolean
-  existingImageUrl?: string | null
-}>(), {
-  label: 'Imagen',
-  disabled: false,
-  existingImageUrl: null,
-})
+const props = withDefaults(
+  defineProps<{
+    label?: string
+    disabled?: boolean
+    existingImageUrl?: string | null
+  }>(),
+  {
+    label: 'Imagen',
+    disabled: false,
+    existingImageUrl: null,
+  },
+)
 
 const file = defineModel<File | null>({
   default: null,
@@ -28,9 +31,7 @@ const error = ref('')
 const previewUrl = ref('')
 const dragging = ref(false)
 
-const displayedImage = computed(() =>
-  previewUrl.value || props.existingImageUrl,
-)
+const displayedImage = computed(() => previewUrl.value || props.existingImageUrl)
 
 // Release preview URLs when the selection changes or the component unmounts.
 watch(
@@ -149,20 +150,13 @@ function clearSelection() {
       <span>Arrastre una imagen aquí o haga clic para seleccionarla</span>
     </button>
 
-    <small :id="`${id}-help`">
-      JPEG, PNG o WebP. Máximo 5 MB.
-    </small>
+    <small :id="`${id}-help`"> JPEG, PNG o WebP. Máximo 5 MB. </small>
 
     <p v-if="file" class="filename">
       {{ file.name }}
     </p>
 
-    <button
-      v-if="file"
-      type="button"
-      :disabled="disabled"
-      @click="clearSelection"
-    >
+    <button v-if="file" type="button" :disabled="disabled" @click="clearSelection">
       Quitar selección
     </button>
 
@@ -193,10 +187,10 @@ function clearSelection() {
   padding: 12px;
   overflow: hidden;
 
-  border: 2px dashed #888;
+  border: 2px dashed var(--border-strong);
   border-radius: 8px;
-  background: #fafafa;
-  color: #222;
+  background: var(--input-background);
+  color: var(--text-primary);
   font: inherit;
   cursor: pointer;
 }
@@ -215,28 +209,22 @@ function clearSelection() {
   position: relative;
   padding: 8px;
   border-radius: 4px;
-  background: rgb(255 255 255 / 90%);
+  background: color-mix(in srgb, var(--content-background) 95%, transparent);
 }
 
 .drop-zone--dragging {
-  border-color: #2457c5;
-  background: #edf3ff;
+  border-color: var(--focus-color);
+  background: var(--surface-hover);
 }
 
 .drop-zone:focus-visible {
-  outline: 3px solid #2457c5;
+  outline: 3px solid var(--focus-color);
   outline-offset: 3px;
 }
 
 .drop-zone:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.image-preview {
-  max-width: 100%;
-  max-height: 280px;
-  object-fit: contain;
 }
 
 .filename {
@@ -246,6 +234,6 @@ function clearSelection() {
 
 .input-error {
   margin: 0;
-  color: #b42318;
+  color: var(--error-color);
 }
 </style>

@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, useId, useTemplateRef, watch } from 'vue'
 
-const props = defineProps<{ open: boolean; title: string; closeDisabled?: boolean }>()
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    closeDisabled?: boolean
+    appearance?: 'standard' | 'auth'
+  }>(),
+  { appearance: 'standard' },
+)
 const emit = defineEmits<{ (e: 'close'): void }>()
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
 const titleId = useId()
@@ -87,18 +95,24 @@ onBeforeUnmount(() => {
       @cancel.prevent="requestClose"
       @click.self="requestClose"
     >
-      <div v-if="open" class="app-modal-card">
-        <button
-          class="app-modal-close"
-          type="button"
-          aria-label="Cerrar"
-          :disabled="closeDisabled"
-          @click="requestClose"
-        >
-          <i class="bi bi-x-lg"></i>
-        </button>
-        <h2 :id="titleId" class="app-modal-title">{{ title }}</h2>
-        <slot />
+      <div
+        v-if="open"
+        class="app-modal-card"
+        :class="appearance === 'auth' ? 'app-modal-card--auth' : 'cinema-dialog'"
+      >
+        <header class="dialog-heading">
+          <h2 :id="titleId" class="app-modal-title">{{ title }}</h2>
+          <button
+            class="app-modal-close"
+            type="button"
+            aria-label="Cerrar"
+            :disabled="closeDisabled"
+            @click="requestClose"
+          >
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </header>
+        <div class="app-modal-body"><slot /></div>
       </div>
     </dialog>
   </Teleport>
@@ -132,33 +146,60 @@ onBeforeUnmount(() => {
   color: var(--text-primary);
   width: 100%;
   max-width: 480px;
-  padding: 2rem 1.75rem;
-  border-radius: 8px;
+  padding: 0;
+  border-radius: var(--radius-medium);
   max-height: calc(100dvh - 2rem);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   overscroll-behavior: contain;
 }
-.app-modal-close {
+.app-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--dialog-content-padding);
+}
+.app-modal-card--auth {
+  display: block;
+  padding: 2rem 1.75rem;
+  border-radius: 8px;
+  overflow-y: auto;
+  --scrollbar-color: var(--scrollbar-thumb);
+  --scrollbar-hover-color: var(--scrollbar-thumb-hover);
+}
+.app-modal-card--auth .dialog-heading {
+  position: static;
+  display: block;
+  padding: 0;
+  background: transparent;
+}
+.app-modal-card--auth .app-modal-title {
+  margin: 0 0 1.25rem;
+  padding-inline: 1rem;
+  color: var(--text-primary);
+  text-align: center;
+  font-size: 1.5rem;
+  font-style: normal;
+  font-weight: 700;
+}
+.app-modal-card--auth .app-modal-close {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
-  background: none;
-  border: 0;
-  font-size: 1.25rem;
   width: 44px;
   height: 44px;
+  border: 0;
+  background: transparent;
   color: var(--text-primary);
+  font-size: 1.25rem;
 }
-.app-modal-close:focus-visible {
-  outline: 2px solid var(--primary-color);
+.app-modal-card--auth .app-modal-close:focus-visible {
+  outline: 2px solid var(--focus-color);
   outline-offset: 2px;
 }
-.app-modal-title {
-  text-align: center;
-  font-style: italic;
-  font-weight: 700;
-  font-size: 1.5rem;
-  margin-bottom: 1.25rem;
-  color: var(--text-primary);
+.app-modal-card--auth .app-modal-body {
+  padding: 0;
+  overflow: visible;
 }
 </style>

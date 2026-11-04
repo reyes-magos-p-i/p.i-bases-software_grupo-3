@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import QrCode from '@/components/common/QrCode.vue'
+import MoviePoster from '@/components/common/MoviePoster.vue'
 import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
 import type { PurchaseQuote, PurchaseReceipt } from '@/types/purchase'
 const quote = {
   function: {
     id: 4,
     title: 'Película',
+    posterImage: 'poster.jpg',
     branchName: 'Central',
     theaterId: 3,
     startsAt: '2099-01-01T20:00:00-06:00',
@@ -36,6 +38,10 @@ describe('PurchaseSummary', () => {
       props: { purchase: quote, buyerEmail: 'guest@example.com' },
     })
     expect(wrapper.text()).toContain('Correo del comprador')
+    expect(wrapper.getComponent(MoviePoster).props()).toMatchObject({
+      title: 'Película',
+      posterImage: 'poster.jpg',
+    })
     expect(wrapper.text()).toContain('guest@example.com')
     expect(wrapper.findComponent(QrCode).exists()).toBe(false)
     wrapper.unmount()

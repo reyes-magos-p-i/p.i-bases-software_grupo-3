@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { nextTick, onBeforeUnmount, ref, useTemplateRef } from 'vue'
 import { isAxiosError } from 'axios'
 import ProjectionFormDialog from './ProjectionFormDialog.vue'
@@ -21,7 +23,6 @@ import type {
 } from '@/types/projection'
 import { projectionCode } from '@/utils/projection-format'
 
-
 const PERMISSION_DENIED = 'No tienes permisos para realizar esta acción.'
 const NOT_AVAILABLE = 'Esta proyección ya no está disponible.'
 
@@ -36,6 +37,7 @@ const optionsLoading = ref(false)
 const optionsError = ref('')
 const submissionErrors = ref<string[]>([])
 const creationResult = ref('')
+const operationError = ref('')
 const submitting = ref(false)
 /** Projection open in the form for modification; null while creating. */
 const editingId = ref<number | null>(null)
@@ -49,7 +51,9 @@ let editRequest: AbortController | undefined
 const statusOf = (error: unknown) => (isAxiosError(error) ? error.response?.status : undefined)
 
 function serverMessages(error: unknown) {
-  const message = isAxiosError<ProjectionApiError>(error) ? error.response?.data?.message : undefined
+  const message = isAxiosError<ProjectionApiError>(error)
+    ? error.response?.data?.message
+    : undefined
   const messages = Array.isArray(message) ? message : [message]
   return messages.filter((item): item is string => typeof item === 'string' && !!item.trim())
 }
@@ -81,6 +85,7 @@ async function loadOptions() {
 function open() {
   if (props.disabled) return
   editingId.value = null
+  operationError.value = ''
   submissionErrors.value = []
   dialog.value?.open()
   void loadOptions()
@@ -94,6 +99,7 @@ async function edit(id: number) {
   editLoading.value = true
   editError.value = ''
   creationResult.value = ''
+  operationError.value = ''
   void loadOptions()
   try {
     const detail = await getProjectionDetail(id, current.signal)
@@ -123,18 +129,23 @@ async function edit(id: number) {
 function describeCreation(count: number, status: string) {
   const subject = count === 1 ? 'Se creó 1 proyección.' : `Se crearon ${count} proyecciones.`
   return status === 'INACTIVE'
-    ? `${subject} Está en estado inactiva: no será visible para los Clientes hasta activarla.`
+    ? `${subject} Está en estado inactiva: no será visible para los clientes hasta activarla.`
     : subject
 }
 
 // Shared by creation and modification: on failure the form stays open with the
 // entered data and the reason; on success it closes and the list refreshes.
-async function persist<T>(action: () => Promise<T>, describe: (result: T) => string, failure: string) {
+async function persist<T>(
+  action: () => Promise<T>,
+  describe: (result: T) => string,
+  failure: string,
+) {
   if (submitting.value || props.disabled) return
   submitting.value = true
   emit('busy', true)
   submissionErrors.value = []
   creationResult.value = ''
+  operationError.value = ''
   try {
     const result = await action()
     if (state.disposed) return
@@ -142,16 +153,16 @@ async function persist<T>(action: () => Promise<T>, describe: (result: T) => str
     dialog.value?.complete()
     list.value?.refresh()
     await nextTick()
-    resultNotice.value?.focus()
+    resultNotice.value?.querySelector<HTMLButtonElement>('.notification-close')?.focus()
   } catch (error) {
     if (state.disposed) return
     const status = statusOf(error)
     if (status === 401) sessionExpired()
     else if (status === 403) {
-      submissionErrors.value = [PERMISSION_DENIED]
+      operationError.value = PERMISSION_DENIED
       void refreshPermissions()
     } else if (status === 404) {
-      submissionErrors.value = [NOT_AVAILABLE]
+      operationError.value = NOT_AVAILABLE
       list.value?.refresh()
     } else if (status === 400 || status === 409) {
       const messages = serverMessages(error)
@@ -159,7 +170,7 @@ async function persist<T>(action: () => Promise<T>, describe: (result: T) => str
         ? messages
         : ['Revisa los datos de la proyección e inténtalo nuevamente.']
     } else {
-      submissionErrors.value = [failure]
+      operationError.value = failure
     }
   } finally {
     submitting.value = false
@@ -196,7 +207,7 @@ async function cancelled(projection: ProjectionDetail) {
   creationResult.value = `La proyección ${projectionCode('MF', projection.movieFunctionId)} fue cancelada. La sala queda disponible para programar en ese horario.`
   list.value?.refresh()
   await nextTick()
-  resultNotice.value?.focus()
+  resultNotice.value?.querySelector<HTMLButtonElement>('.notification-close')?.focus()
 }
 
 onBeforeUnmount(() => {
@@ -217,19 +228,32 @@ onBeforeUnmount(() => {
         @click="open"
       >
         <i class="bi bi-plus-lg" aria-hidden="true"></i>
-        Agregar Proyección
+        Agregar proyección
       </button>
     </div>
-    <p
-      v-if="creationResult"
-      ref="result-notice"
-      class="creation-result"
-      role="status"
-      tabindex="-1"
-    >
-      {{ creationResult }}
-    </p>
-    <p v-if="editLoading" class="edit-feedback" role="status">Cargando la proyección…</p>
+    <div v-if="creationResult" ref="result-notice" tabindex="-1">
+      <NotificationPopup
+        type="success"
+        :message="creationResult"
+        placement="bottom-right"
+        @close="creationResult = ''"
+      />
+    </div>
+    <NotificationPopup
+      v-if="operationError"
+      type="error"
+      :message="operationError"
+      placement="bottom-right"
+      :duration="0"
+      @close="operationError = ''"
+    />
+    <LoadingState
+      v-if="editLoading"
+      class="edit-feedback"
+      message="Cargando la proyección…"
+      compact
+      surface="dark"
+    />
     <p v-else-if="editError" class="edit-feedback edit-error" role="alert">{{ editError }}</p>
     <ProjectionListPanel
       ref="list"

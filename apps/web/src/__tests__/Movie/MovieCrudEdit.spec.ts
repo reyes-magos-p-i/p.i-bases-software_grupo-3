@@ -36,7 +36,7 @@ const BaseModalStub = defineComponent({
 
 // LimitedTextInput stub
 const LimitedTextInputStub = defineComponent({
-  props: ['modelValue', 'label', 'multiline'],
+  props: ['modelValue', 'label', 'multiline', 'error'],
   emits: ['update:modelValue'],
   template: `
     <div>
@@ -62,7 +62,7 @@ const LimitedTextInputStub = defineComponent({
 
 // PositiveNumberInput stub
 const PositiveNumberInputStub = defineComponent({
-  props: ['modelValue', 'label'],
+  props: ['modelValue', 'label', 'error'],
   emits: ['update:modelValue', 'validity-change'],
   setup(_, { emit }) {
     // Numeric validation is covered by PositiveNumberInput's own tests.
@@ -235,6 +235,12 @@ describe('MovieCrudEdit', () => {
   it('loads existing movie values', async () => {
     const wrapper = mountModal()
     await flushPromises()
+    expect(wrapper.findAll('.dialog-section-title').map((heading) => heading.text())).toEqual([
+      '1 Información general',
+      '2 Idiomas y géneros',
+      '3 Sinopsis',
+      '4 Póster',
+    ])
 
     expect(getMovieMock).toHaveBeenCalledWith(24, expect.any(AbortSignal))
 
@@ -274,9 +280,7 @@ describe('MovieCrudEdit', () => {
     ).toBe(false)
 
     expect(
-      wrapper.get<HTMLInputElement>(
-        '[data-test="Géneros"] input[value="3"]',
-      ).element.checked,
+      wrapper.get<HTMLInputElement>('[data-test="Géneros"] input[value="3"]').element.checked,
     ).toBe(true)
 
     wrapper.unmount()
@@ -304,20 +308,25 @@ describe('MovieCrudEdit', () => {
     wrapper.unmount()
   })
 
-  it('disables Save for an empty title', async () => {
+  it('identifies an empty title on submission without sending a request', async () => {
     const wrapper = mountModal()
     await flushPromises()
 
     await wrapper.get('input[data-test="Título"]').setValue('   ')
 
-    expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(true)
+    expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(false)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.getComponent(LimitedTextInputStub).props('error')).toBe(
+      'Este campo es obligatorio.',
+    )
 
     expect(updateMovieMock).not.toHaveBeenCalled()
 
     wrapper.unmount()
   })
 
-  it.each([0, 1])('blocks saving when numeric input %i reports invalid', async (index) => {
+  it.each([0, 1])('blocks saving when numeric input %i has an invalid value', async (index) => {
     const wrapper = mountModal()
     await flushPromises()
 
@@ -330,10 +339,10 @@ describe('MovieCrudEdit', () => {
     expect(inputs).toHaveLength(2)
     const input = inputs[index]!
 
-    input.vm.$emit('validity-change', false)
+    input.vm.$emit('update:modelValue', index === 0 ? 0 : 1887)
     await flushPromises()
 
-    expect(saveButton.element.disabled).toBe(true)
+    expect(saveButton.element.disabled).toBe(false)
 
     // Submitting directly also checks the save handler's guard.
     await wrapper.get('form').trigger('submit')
@@ -343,7 +352,8 @@ describe('MovieCrudEdit', () => {
     expect(wrapper.emitted('saved')).toBeUndefined()
     expect(wrapper.emitted('close')).toBeUndefined()
 
-    input.vm.$emit('validity-change', true)
+    expect(input.props('error')).toBeTruthy()
+    input.vm.$emit('update:modelValue', index === 0 ? 169 : 2014)
     await flushPromises()
 
     expect(saveButton.element.disabled).toBe(false)
@@ -387,9 +397,7 @@ describe('MovieCrudEdit', () => {
     await wrapper.get('[data-test="Géneros"] input[value="3"]').setValue(false)
     await wrapper.get('[data-test="Géneros"] input[value="4"]').setValue(true)
 
-    expect(
-      wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled,
-    ).toBe(false)
+    expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(false)
 
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -410,15 +418,11 @@ describe('MovieCrudEdit', () => {
 
     const genre = wrapper.get('[data-test="Géneros"] input[value="4"]')
     await genre.setValue(true)
-    expect(
-      wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled,
-    ).toBe(false)
+    expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(false)
 
     await genre.setValue(false)
 
-    expect(
-      wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled,
-    ).toBe(true)
+    expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(true)
     expect(updateMovieMock).not.toHaveBeenCalled()
 
     wrapper.unmount()
@@ -463,6 +467,10 @@ describe('MovieCrudEdit', () => {
     expect(updateMovieMock).toHaveBeenCalledTimes(1)
 
     expect(wrapper.get<HTMLButtonElement>('button[type="submit"]').element.disabled).toBe(true)
+
+    expect(wrapper.get<HTMLButtonElement>('[data-test="modal-close"]').element.disabled).toBe(true)
+    await wrapper.get('[data-test="modal-close"]').trigger('click')
+    expect(wrapper.emitted('close')).toBeUndefined()
 
     pending.resolve(undefined)
     await flushPromises()
@@ -529,7 +537,10 @@ describe('MovieCrudEdit', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text()).toContain('Invalid movie data')
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'Revisa los datos y la imagen seleccionada',
+    )
+    expect(wrapper.text()).not.toContain('Invalid movie data')
 
     expect(wrapper.emitted('saved')).toBeUndefined()
 

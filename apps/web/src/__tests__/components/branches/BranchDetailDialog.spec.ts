@@ -94,7 +94,9 @@ describe('BranchDetailDialog', () => {
     expect(getBranch).toHaveBeenCalledWith(2, expect.any(AbortSignal))
     expect(page.get<HTMLDialogElement>('dialog').element.open).toBe(true)
     expect(page.get('.app-modal-title').text()).toBe('Detalle de sucursal')
-    expect(field('ID Sucursal')).toBe('SU-002')
+    expect(field('ID de sucursal')).toBe('SU-002')
+    expect(page.get('.detail-group h3').text()).toBe('Datos de la sucursal')
+    expect(page.find('.group-number').exists()).toBe(false)
     expect(field('Estado')).toBe('Activa')
     expect(field('Nombre')).toBe('Sucursal Heredia Centro')
     expect(field('Compañía')).toBe('Cinetadel S.A')
@@ -134,12 +136,11 @@ describe('BranchDetailDialog', () => {
     expect(field('Estado')).toBe('Inactiva')
   })
 
-  it('asks to modify the loaded branch (SCRUM-33)', async () => {
+  it('offers only closing from the detail footer', async () => {
     const view = await render()
-    const modify = page.findAll('button').find((button) => button.text().includes('Modificar'))
-    expect(modify?.attributes('disabled')).toBeUndefined()
-    await modify!.trigger('click')
-    expect(view.emitted('modify')).toEqual([[branch]])
+    expect(page.findAll('footer button').map((button) => button.text())).toEqual(['Cerrar'])
+    await page.get('footer button').trigger('click')
+    expect(view.emitted('close')).toHaveLength(1)
   })
 
   it('shows the loading state while the detail is requested', async () => {
@@ -200,7 +201,7 @@ describe('BranchDetailDialog', () => {
     getBranch.mockResolvedValueOnce({ ...branch, id: 7, name: 'Sucursal Sin Compania' })
     await view.setProps({ branchId: 7 })
     await flushPromises()
-    expect(field('ID Sucursal')).toBe('SU-007')
+    expect(field('ID de sucursal')).toBe('SU-007')
     await view.setProps({ branchId: null })
     await flushPromises()
     expect(page.find('.detail-field').exists()).toBe(false)

@@ -22,16 +22,16 @@ más antigua. Solo incluye las facturas **pagadas** (`PAID`) y **canceladas**
 (`CANCELLED`); las pendientes (`PENDING`) y fallidas (`FAILED`) todavía no son
 transacciones.
 
-| Columna            | Valor                                                            | Ejemplo                                    |
-| ------------------ | ---------------------------------------------------------------- | ------------------------------------------ |
-| IdTransacción      | `FAC-` y el ID de la factura con 6 dígitos                       | FAC-000123                                 |
-| Fecha              | Fecha de compra, hora de Costa Rica                              | 12/10/2026                                 |
+| Columna            | Valor                                                             | Ejemplo                                    |
+| ------------------ | ----------------------------------------------------------------- | ------------------------------------------ |
+| IdTransacción      | `FAC-` y el ID de la factura con 6 dígitos                        | FAC-000123                                 |
+| Fecha              | Fecha de compra, hora de Costa Rica                               | 12/10/2026                                 |
 | Cliente            | Nombre completo y, debajo, el correo; «Invitado» si no hay cuenta | Carlos Mora                                |
-| Película y función | Película, sala y fecha y hora de la función; debajo, la sucursal | Ecos del Volcán – Sala 1, 12/10/2026 17:00 |
-| Boletos            | Suma de las cantidades de las líneas de tipo `TICKET`            | 1                                          |
-| Total              | Total cobrado, en colones                                        | ₡3500                                      |
-| Estado             | «Pagada» o «Cancelada»                                           | Pagada                                     |
-| Acciones           | «Ver detalle»                                                    |                                            |
+| Película y función | Película, sala y fecha y hora de la función; debajo, la sucursal  | Ecos del Volcán – Sala 1, 12/10/2026 17:00 |
+| Boletos            | Suma de las cantidades de las líneas de tipo `TICKET`             | 1                                          |
+| Total              | Total cobrado, en colones                                         | ₡3500                                      |
+| Estado             | «Pagada» o «Cancelada»                                            | Pagada                                     |
+| Acciones           | «Ver detalle»                                                     |                                            |
 
 - El cliente ve la misma factura en su historial como `ORD-000123`.
 - Los montos se muestran como en el plan de pruebas, sin separador de miles (`₡11500`).

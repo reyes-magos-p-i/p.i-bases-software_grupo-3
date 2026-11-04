@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { AxiosError, type AxiosResponse } from 'axios'
 import TransactionsSection from '@/components/transactions/TransactionsSection.vue'
 import TransactionDetailDialog from '@/components/transactions/TransactionDetailDialog.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 import type { TransactionListItem, TransactionListResult } from '@/types/transaction'
 
 const { getTransactions, getTransactionFilterOptions, sessionExpired, refreshPermissions } =
@@ -51,11 +52,61 @@ const transaction = (
 })
 // The five invoices of the test plan, newest first.
 const transactions: TransactionListItem[] = [
-  transaction(125, '2026-10-16', 'Ana Solís', 'La Última Frontera', 2, '2026-10-16T21:00', 1, 3500, 'CANCELLED'),
-  transaction(124, '2026-10-14', 'María Rodríguez', 'La Última Frontera', 2, '2026-10-14T21:00', 1, 4500, 'PAID'),
-  transaction(123, '2026-10-12', 'Carlos Mora', 'Ecos del Volcán', 1, '2026-10-12T17:00', 1, 3500, 'PAID'),
-  transaction(122, '2026-10-10', 'María Rodríguez', 'Ecos del Volcán', 1, '2026-10-10T17:00', 2, 11500, 'CANCELLED'),
-  transaction(121, '2026-10-05', 'María Rodríguez', 'La Última Frontera', 2, '2026-10-05T19:30', 2, 7000, 'PAID'),
+  transaction(
+    125,
+    '2026-10-16',
+    'Ana Solís',
+    'La Última Frontera',
+    2,
+    '2026-10-16T21:00',
+    1,
+    3500,
+    'CANCELLED',
+  ),
+  transaction(
+    124,
+    '2026-10-14',
+    'María Rodríguez',
+    'La Última Frontera',
+    2,
+    '2026-10-14T21:00',
+    1,
+    4500,
+    'PAID',
+  ),
+  transaction(
+    123,
+    '2026-10-12',
+    'Carlos Mora',
+    'Ecos del Volcán',
+    1,
+    '2026-10-12T17:00',
+    1,
+    3500,
+    'PAID',
+  ),
+  transaction(
+    122,
+    '2026-10-10',
+    'María Rodríguez',
+    'Ecos del Volcán',
+    1,
+    '2026-10-10T17:00',
+    2,
+    11500,
+    'CANCELLED',
+  ),
+  transaction(
+    121,
+    '2026-10-05',
+    'María Rodríguez',
+    'La Última Frontera',
+    2,
+    '2026-10-05T19:30',
+    2,
+    7000,
+    'PAID',
+  ),
 ]
 function result(overrides: Partial<TransactionListResult> = {}): TransactionListResult {
   return { items: transactions, total: 5, page: 1, pageSize: 10, totalPages: 1, ...overrides }
@@ -80,6 +131,15 @@ async function render(props: { disabled?: boolean } = {}) {
   return wrapper
 }
 const lastQuery = () => getTransactions.mock.calls[getTransactions.mock.calls.length - 1]?.[0]
+async function setDate(view: VueWrapper, name: string, value: string) {
+  const picker = view
+    .findAllComponents(DatePicker)
+    .find((item) => item.get('input').attributes('name') === name)!
+  picker.vm.$emit('update:modelValue', value)
+  await flushPromises()
+  await picker.get('input').trigger('change')
+  await flushPromises()
+}
 const button = (view: VueWrapper, text: string) =>
   view.findAll('button').find((item) => item.text().includes(text))!
 const cells = (view: VueWrapper) =>
@@ -215,7 +275,7 @@ describe('TransactionsSection', () => {
     expect(view.get('.result-count').text()).toBe('1 transacción')
     expect(view.get('tbody').text()).toContain('Sin nombre registrado')
     expect(view.findAll('select[name="branchId"] option').map((o) => o.text())).toEqual([
-      'Todas',
+      'Todas las sucursales',
       BRANCH,
       'Sin nombre registrado',
     ])
@@ -314,8 +374,8 @@ describe('TransactionsSection', () => {
     await view.get('select[name="branchId"]').setValue('1')
     await view.get('select[name="movieId"]').setValue('62')
     await view.get('select[name="status"]').setValue('CANCELLED')
-    await view.get('input[name="dateFrom"]').setValue('2026-10-05')
-    await view.get('input[name="dateTo"]').setValue('2026-10-16')
+    await setDate(view, 'dateFrom', '2026-10-05')
+    await setDate(view, 'dateTo', '2026-10-16')
     await flushPromises()
     expect(lastQuery()).toEqual({
       page: 1,
@@ -327,7 +387,7 @@ describe('TransactionsSection', () => {
       dateTo: '2026-10-16',
     })
     expect(view.findAll('select[name="status"] option').map((o) => o.text())).toEqual([
-      'Todos',
+      'Todos los estados',
       'Pagada',
       'Cancelada',
     ])
@@ -335,10 +395,10 @@ describe('TransactionsSection', () => {
 
   it('rejects a start date after the end date without asking the API', async () => {
     const view = await render()
-    await view.get('input[name="dateTo"]').setValue('2026-10-05')
+    await setDate(view, 'dateTo', '2026-10-05')
     await flushPromises()
     const calls = getTransactions.mock.calls.length
-    await view.get('input[name="dateFrom"]').setValue('2026-10-16')
+    await setDate(view, 'dateFrom', '2026-10-16')
     await flushPromises()
     expect(getTransactions.mock.calls).toHaveLength(calls)
     expect(view.get('.feedback').text()).toBe(
@@ -346,6 +406,24 @@ describe('TransactionsSection', () => {
     )
     expect(view.find('tbody').exists()).toBe(false)
     expect(view.get('input[name="dateFrom"]').attributes('aria-invalid')).toBe('true')
+  })
+
+  it('filters once per calendar selection and clears the date without submitting a form', async () => {
+    const view = await render()
+    const picker = view.findAllComponents(DatePicker)[0]!
+    const before = getTransactions.mock.calls.length
+    await picker.get('input').trigger('click')
+    expect(getTransactions.mock.calls).toHaveLength(before)
+    const day = picker.get('[data-date]:not(:disabled)')
+    await day.trigger('click')
+    await flushPromises()
+    expect(lastQuery()).toMatchObject({ dateFrom: day.attributes('data-date') })
+    expect(getTransactions.mock.calls).toHaveLength(before + 1)
+    await picker.get('input').trigger('click')
+    await picker.get('.calendar-footer button').trigger('click')
+    await flushPromises()
+    expect(lastQuery()).not.toHaveProperty('dateFrom')
+    expect(getTransactions.mock.calls).toHaveLength(before + 2)
   })
 
   it('disables the branch and movie filters when the options fail and retries them', async () => {

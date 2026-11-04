@@ -180,6 +180,7 @@ onBeforeUnmount(() => clearInterval(recoveryTimer))
 
 <template>
   <BaseModal
+    appearance="auth"
     :open="open"
     :title="
       recoveryMode

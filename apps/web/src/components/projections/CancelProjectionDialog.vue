@@ -24,7 +24,9 @@ const error = ref('')
 const feedback = useTemplateRef<HTMLElement>('feedback')
 let disposed = false
 
-const code = computed(() => (props.projection ? projectionCode('MF', props.projection.movieFunctionId) : ''))
+const code = computed(() =>
+  props.projection ? projectionCode('MF', props.projection.movieFunctionId) : '',
+)
 /** In progress, or starting within the next 24 hours (Costa Rica local time). */
 const urgency = computed(() => {
   const projection = props.projection
@@ -68,7 +70,9 @@ async function confirm() {
     } else if (status === 409 && isAxiosError<ProjectionApiError>(failure)) {
       const message = failure.response?.data?.message
       error.value =
-        typeof message === 'string' ? message : 'No se pudo cancelar la proyección, intenta de nuevo.'
+        typeof message === 'string'
+          ? message
+          : 'No se pudo cancelar la proyección, intenta de nuevo.'
     } else {
       error.value = 'No se pudo cancelar la proyección, intenta de nuevo.'
     }
@@ -91,11 +95,12 @@ onBeforeUnmount(() => {
     :close-disabled="saving"
     @close="close"
   >
-    <div class="projection-cancel-content" :aria-busy="saving">
+    <div class="projection-cancel-content dialog-content" :aria-busy="saving">
       <template v-if="projection">
         <p>
           ¿Deseas cancelar la proyección <strong>{{ code }}</strong> de
-          <strong>{{ projection.movieTitle }}</strong>?
+          <strong>{{ projection.movieTitle }}</strong
+          >?
         </p>
         <p class="cancel-summary">
           {{ projection.branchName }} · Sala {{ projection.theaterId }} ·
@@ -129,32 +134,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.projection-cancel-content)::backdrop) {
-  background: color-mix(in srgb, var(--page-background) 55%, transparent);
-}
 :global(.app-modal-card:has(.projection-cancel-content)) {
   width: min(640px, 100%);
   max-width: 640px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-  color: var(--text-primary);
-  overflow: hidden;
 }
-:global(.app-modal-card:has(.projection-cancel-content) .app-modal-title) {
-  margin: 0;
-  padding: 24px 80px 24px 24px;
-  color: var(--text-on-dark);
-  font-size: 1.25rem;
-  font-style: normal;
-  text-align: left;
-  background: var(--primary-color);
-}
-:global(.app-modal-card:has(.projection-cancel-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--text-on-dark);
-}
+
 .projection-cancel-content {
   display: grid;
   gap: 12px;

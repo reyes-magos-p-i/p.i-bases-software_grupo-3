@@ -31,7 +31,9 @@ export class TheatersService {
       dimensionY < 1 ||
       numberOfSeats !== dimensionX * dimensionY
     ) {
-      throw new BadRequestException('Invalid theater seat dimensions');
+      throw new BadRequestException(
+        'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
+      );
     }
   }
 
@@ -83,7 +85,7 @@ export class TheatersService {
     const theater = await this.theatersRepository.getTheaterById(theaterId);
 
     if (!theater) {
-      throw new NotFoundException(`Theater not found: ${theaterId}`);
+      throw new NotFoundException('La sala seleccionada ya no existe.');
     }
 
     return this.chairsRepository.findByTheater(theaterId);
@@ -92,7 +94,7 @@ export class TheatersService {
   async updateSelected(theaterId: number, dto: UpdateSeatsDto) {
     const theater = await this.theatersRepository.getTheaterById(theaterId);
     if (!theater) {
-      throw new NotFoundException(`Theater not found: ${theaterId}`);
+      throw new NotFoundException('La sala seleccionada ya no existe.');
     }
     return this.chairsRepository.updateSelected(theaterId, dto);
   }

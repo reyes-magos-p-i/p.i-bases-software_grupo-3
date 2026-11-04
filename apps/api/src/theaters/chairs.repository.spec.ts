@@ -25,6 +25,54 @@ describe('ChairsRepository', () => {
     } as unknown as DatabaseService);
   });
 
+  it('synchronizes a layout on the supplied transaction without overwriting existing seat properties', async () => {
+    const connection = { execute } as unknown as oracledb.Connection;
+    await repository.synchronizeLayout(7, 3, 4, connection);
+    expect(transaction).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('DELETE FROM SEATS'),
+      { theaterId: 7, rows: 3, columns: 4 },
+      { autoCommit: false },
+    );
+    expect(execute).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('WHEN NOT MATCHED THEN INSERT'),
+      { theaterId: 7, columns: 4, quantity: 12 },
+      { autoCommit: false },
+    );
+    expect(execute.mock.calls[1][0]).not.toContain('WHEN MATCHED');
+  });
+
+  it.each([
+    [0, 2, 3],
+    [7, 0, 3],
+    [7, 2, -1],
+    [7, 1.5, 3],
+    [7, 100, 51],
+  ])(
+    'rejects invalid resize arguments %s, %s, %s before changing seats',
+    async (theaterId, rows, columns) => {
+      await expect(
+        repository.synchronizeLayout(theaterId, rows, columns, {
+          execute,
+        } as unknown as oracledb.Connection),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(execute).not.toHaveBeenCalled();
+    },
+  );
+
+  it('propagates a resize failure to the enclosing transaction', async () => {
+    const failure = new Error('Constraint failure');
+    execute.mockRejectedValueOnce(failure);
+    await expect(
+      repository.synchronizeLayout(7, 2, 3, {
+        execute,
+      } as unknown as oracledb.Connection),
+    ).rejects.toBe(failure);
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it('creates every position in a rectangular 2 by 3 theater', async () => {
     await expect(repository.createForTheater(7, 2, 3)).resolves.toEqual({
       theaterId: 7,
@@ -343,7 +391,9 @@ describe('ChairsRepository', () => {
             type: 'vip',
           }),
         ).rejects.toThrow(
-          new BadRequestException('theaterId must be a positive safe integer'),
+          new BadRequestException(
+            'El número de sala debe ser un entero positivo.',
+          ),
         );
 
         expect(transaction).not.toHaveBeenCalled();
@@ -362,7 +412,9 @@ describe('ChairsRepository', () => {
             state: 'indisponible',
           }),
         ).rejects.toThrow(
-          new NotFoundException('One or more seats do not exist'),
+          new NotFoundException(
+            'Uno o más asientos seleccionados ya no existen.',
+          ),
         );
       },
     );

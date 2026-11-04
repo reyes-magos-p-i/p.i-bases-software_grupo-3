@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { onMounted, ref, useTemplateRef, watch } from 'vue'
 import TheaterDialogShell from './TheaterDialogShell.vue'
 import SeatSelector from '../Seats/SeatSelector.vue'
@@ -81,45 +82,43 @@ watch(
   >
     <div v-if="theater || error" class="theater-detail-content">
       <p v-if="!theater" class="detail-error" role="alert">{{ error }}</p>
-      <div v-else class="detail-grid">
-        <div class="readonly-field">
-          <label>ID</label>
-          <div class="readonly-input">{{ theater.theaterId }}</div>
-        </div>
-        <div class="readonly-field">
-          <label>Sucursal</label>
-          <div class="readonly-input">{{ theater.cinema }}</div>
-        </div>
-        <div class="readonly-field">
-          <label>Número de asientos</label>
-          <div class="readonly-input">{{ theater.numberOfSeats }}</div>
-        </div>
-        <div class="dimension-grid">
-          <div class="readonly-field">
-            <label>Filas</label>
-            <div class="readonly-input">{{ theater.dimensionX }}</div>
+      <section v-else class="detail-group">
+        <h3>Información de la sala</h3>
+        <dl class="detail-grid">
+          <div>
+            <dt>ID</dt>
+            <dd>{{ theater.theaterId }}</dd>
           </div>
-          <div class="readonly-field">
-            <label>Columnas</label>
-            <div class="readonly-input">{{ theater.dimensionY }}</div>
+          <div>
+            <dt>Sucursal</dt>
+            <dd>{{ theater.cinema }}</dd>
           </div>
-        </div>
-        <div class="readonly-field">
-          <label>Proyector</label>
-          <div class="readonly-input">{{ theater.projectorName }}</div>
-        </div>
-        <div class="readonly-field">
-          <label>Estado</label>
-          <div class="readonly-input">{{ theater.isActive ? theater.status : 'Inactiva' }}</div>
-        </div>
-      </div>
-      <footer class="dialog-actions">
-        <button type="button" class="secondary-button" @click="closeDialog">Cerrar</button>
-      </footer>
-      <section v-if="theater" class="theater-seats">
+          <div>
+            <dt>Número de asientos</dt>
+            <dd>{{ theater.numberOfSeats }}</dd>
+          </div>
+          <div>
+            <dt>Filas</dt>
+            <dd>{{ theater.dimensionX }}</dd>
+          </div>
+          <div>
+            <dt>Columnas</dt>
+            <dd>{{ theater.dimensionY }}</dd>
+          </div>
+          <div>
+            <dt>Proyector</dt>
+            <dd>{{ theater.projectorName }}</dd>
+          </div>
+          <div>
+            <dt>Estado</dt>
+            <dd>{{ theater.isActive ? theater.status : 'Inactiva' }}</dd>
+          </div>
+        </dl>
+      </section>
+      <section v-if="theater" class="theater-seats detail-group">
         <h3>Asientos de la sala</h3>
 
-        <p v-if="loadingSeats" role="status">Cargando asientos...</p>
+        <LoadingState v-if="loadingSeats" message="Cargando asientos..." compact />
 
         <p v-else-if="seatsError" class="detail-error" role="alert">
           {{ seatsError }}
@@ -134,6 +133,8 @@ watch(
             :seats="seats"
             max-selections="all"
             disabled
+            readonly
+            show-layout-diagnostics
             :selectable-states="['free', 'unavailable', 'in-use', 'reserved']"
             @selection-change="handleSelection"
           />
@@ -144,6 +145,9 @@ watch(
           </p>
         </template>
       </section>
+      <footer class="dialog-actions">
+        <button type="button" class="secondary-button" @click="closeDialog">Cerrar</button>
+      </footer>
     </div>
   </TheaterDialogShell>
 </template>
@@ -161,36 +165,13 @@ watch(
 .theater-detail-content {
   display: grid;
   gap: 8px;
-  padding: 24px;
+  padding: var(--dialog-content-padding);
   overflow-y: auto;
   font: inherit;
 }
 .detail-error {
   margin: 0;
   color: var(--color-error);
-}
-.detail-grid {
-  display: grid;
-  gap: 8px;
-}
-.dimension-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 8px;
-}
-.readonly-field {
-  display: grid;
-  gap: 8px;
-}
-.readonly-input {
-  min-height: 42px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-small);
-  font: inherit;
-  background: var(--content-background);
-  color: var(--text-primary);
 }
 .dialog-actions {
   display: flex;
@@ -206,10 +187,5 @@ watch(
   color: var(--text-primary);
   background: var(--content-background);
   font: inherit;
-}
-@media (max-width: 520px) {
-  .dimension-grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

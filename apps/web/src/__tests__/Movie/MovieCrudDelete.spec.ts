@@ -1,18 +1,18 @@
-
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import MovieCrudDelete from '@/components/Movies/MovieCrudDelete.vue'
 import { deleteMovie } from '@/services/movie.service'
 
 vi.mock('@/services/movie.service', () => ({
-  deleteMovie: vi.fn()
+  deleteMovie: vi.fn(),
 }))
 
 describe('MovieCrudDelete', () => {
   const movie = {
     id: 24,
-    title: 'Interstellar'
+    title: 'Interstellar',
   }
 
   function mountModal() {
@@ -21,10 +21,10 @@ describe('MovieCrudDelete', () => {
       global: {
         stubs: {
           BaseModal: {
-            template: '<div><slot /></div>'
-          }
-        }
-      }
+            template: '<div><slot /></div>',
+          },
+        },
+      },
     })
   }
 
@@ -62,17 +62,16 @@ describe('MovieCrudDelete', () => {
   })
 
   it('shows an error when deletion fails', async () => {
-    vi.mocked(deleteMovie).mockRejectedValue(
-      new Error('Server error')
-    )
+    vi.mocked(deleteMovie).mockRejectedValue(new Error('Server error'))
 
     const wrapper = mountModal()
 
     await wrapper.find('button.danger').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('[role="alert"]').text())
-      .toBe('No se pudo eliminar la película.')
+    expect(wrapper.getComponent(NotificationPopup).props('message')).toBe(
+      'No se pudo eliminar la película.',
+    )
 
     expect(wrapper.emitted('deleted')).toBeUndefined()
   })
@@ -80,13 +79,13 @@ describe('MovieCrudDelete', () => {
   it.each([
     [401, 'La sesión ha expirado.'],
     [403, 'No tienes permiso para eliminar esta película.'],
-    [404, 'La película ya no existe.']
+    [404, 'La película ya no existe.'],
   ])('shows the correct error for HTTP %s', async (status, message) => {
     vi.mocked(deleteMovie).mockRejectedValue(
       Object.assign(new Error('Request failed'), {
         isAxiosError: true,
-        response: { status }
-      })
+        response: { status },
+      }),
     )
 
     const wrapper = mountModal()
@@ -94,7 +93,7 @@ describe('MovieCrudDelete', () => {
     await wrapper.find('button.danger').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('[role="alert"]').text()).toBe(message)
+    expect(wrapper.getComponent(NotificationPopup).props('message')).toBe(message)
     expect(wrapper.emitted('deleted')).toBeUndefined()
   })
 })

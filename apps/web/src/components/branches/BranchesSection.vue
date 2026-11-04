@@ -320,13 +320,14 @@ onBeforeUnmount(() => {
 
     <div class="filters">
       <label
-        >Compañía<select
+        ><span class="visually-hidden">Compañía</span
+        ><select
           v-model="companyId"
           name="companyId"
           :disabled="companiesLoading || companiesError"
           @change="filtersChanged"
         >
-          <option value="">Todas</option>
+          <option value="">Todas las compañías</option>
           <option v-for="company in companies" :key="company.id" :value="company.id">
             {{ company.name ?? NO_NAME }}
           </option>
@@ -453,12 +454,16 @@ onBeforeUnmount(() => {
       @submit="submitForm"
     />
     <div v-if="notice" class="branch-notification">
-      <NotificationPopup type="success" :message="notice" @close="notice = ''" />
+      <NotificationPopup
+        type="success"
+        :message="notice"
+        placement="bottom-right"
+        @close="notice = ''"
+      />
     </div>
     <BranchDetailDialog
       :branch-id="selectedBranchId"
       @close="selectedBranchId = null"
-      @modify="openForm"
       @session-expired="sessionExpired"
       @forbidden="refreshPermissions"
     />
@@ -538,6 +543,18 @@ input[aria-invalid='true'] {
 .filters label {
   min-width: min(100%, 220px);
 }
+.filters select {
+  box-sizing: border-box;
+  height: var(--filter-control-height);
+  min-height: var(--filter-control-height);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .filter-error {
   margin: 0;
   align-self: center;
@@ -613,7 +630,7 @@ button:focus-visible {
 }
 .missing {
   color: var(--text-secondary);
-  font-style: italic;
+  font-style: normal;
 }
 .feedback {
   margin: 0;

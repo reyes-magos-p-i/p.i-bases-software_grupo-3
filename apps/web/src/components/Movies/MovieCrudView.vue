@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 
 import BaseModal from '@/components/common/BaseModal.vue'
 import { getMovie } from '@/services/movie.service'
 import type { MovieDetail, MovieOption } from '@/types/movie'
-import { getPosterUrl } from '@/services/image-handler.service'
+import MoviePoster from '@/components/common/MoviePoster.vue'
+import { displayText } from '@/utils/display-text'
 
 const props = defineProps<{
   movieId: number | null
@@ -21,10 +23,6 @@ const movie = ref<MovieDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
 const retryable = ref(false)
-
-const posterUrl = computed(() =>
-  getPosterUrl(movie.value?.posterImage),
-)
 
 let request: AbortController | undefined
 
@@ -45,7 +43,7 @@ function text(value: unknown) {
 }
 
 function optionName(value: MovieOption | null | undefined) {
-  return value?.name?.trim() ? value.name : 'Sin registrar'
+  return value?.name?.trim() ? displayText(value.name) : 'Sin registrar'
 }
 
 function optionList(values: MovieOption[] | null | undefined) {
@@ -53,7 +51,7 @@ function optionList(values: MovieOption[] | null | undefined) {
     return 'Sin registrar'
   }
 
-  const names = values.map((value) => value.name).filter((name) => name?.trim())
+  const names = values.map((value) => displayText(value.name)).filter(Boolean)
 
   return names.length > 0 ? names.join(', ') : 'Sin registrar'
 }
@@ -156,10 +154,6 @@ async function load() {
 
   try {
     const detail = await getMovie(movieId, current.signal)
-    //debug stuff
-    console.log('MOVIE DETAIL:', detail)
-    console.log('MOVIE DETAIL:', detail)
-    console.log('CLASSIFICATION:', detail.classification)
     if (!current.signal.aborted) {
       movie.value = detail
     }
@@ -211,8 +205,13 @@ onBeforeUnmount(() => request?.abort())
 
 <template>
   <BaseModal :open="movieId !== null" :title="title" @close="close">
-    <div class="movie-detail-content" :aria-busy="loading">
-      <p v-if="loading" class="detail-feedback" role="status">Cargando datos de la película…</p>
+    <div class="movie-detail-content dialog-content" :aria-busy="loading">
+      <LoadingState
+        v-if="loading"
+        class="detail-feedback"
+        message="Cargando datos de la película…"
+        compact
+      />
 
       <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         <p>{{ error }}</p>
@@ -222,9 +221,7 @@ onBeforeUnmount(() => request?.abort())
         </button>
       </div>
 
-
-
-     <div v-else-if="movie" class="movie-layout">
+      <div v-else-if="movie" class="movie-layout">
         <div class="movie-information">
           <section
             v-for="group in groups"
@@ -249,16 +246,9 @@ onBeforeUnmount(() => request?.abort())
         </div>
 
         <div class="movie-poster">
-          <img
-            v-if="posterUrl"
-            :src="posterUrl"
-            :alt="`Póster de ${movie.title}`"
-          />
-
-          <span v-else>Sin póster</span>
+          <MoviePoster :poster-image="movie.posterImage" :title="movie.title" />
         </div>
       </div>
-
 
       <footer class="detail-footer">
         <button type="button" class="detail-button" @click="close">Cerrar</button>
@@ -268,38 +258,9 @@ onBeforeUnmount(() => request?.abort())
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.movie-detail-content)::backdrop) {
-  background: color-mix(in srgb, var(--page-background) 55%, transparent);
-}
-
 :global(.app-modal-card:has(.movie-detail-content)) {
   width: min(880px, 100%);
   max-width: 880px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-:global(.app-modal-card:has(.movie-detail-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 24px;
-  background: var(--primary-color);
-  color: var(--text-on-dark);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.25rem;
-}
-
-:global(.app-modal-card:has(.movie-detail-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--text-on-dark);
-  border-radius: var(--radius-small);
 }
 
 .movie-detail-content {
@@ -317,28 +278,6 @@ onBeforeUnmount(() => request?.abort())
   margin: 0 0 16px;
   font-size: 1rem;
   font-weight: 700;
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px 20px;
-  margin: 0;
-}
-
-.detail-field {
-  min-width: 0;
-}
-
-dt {
-  margin-bottom: 6px;
-  font-weight: 500;
-}
-
-dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 .detail-feedback {
@@ -377,10 +316,6 @@ dd {
   .movie-detail-content {
     padding: 20px 16px;
   }
-
-  .detail-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .detail-field-wide {
@@ -405,7 +340,7 @@ dd {
   place-items: center;
   overflow: hidden;
   border-radius: 8px;
-  background: #f2f2f2;
+  background: var(--content-background);
 }
 
 .movie-poster img {
@@ -424,5 +359,4 @@ dd {
     justify-self: center;
   }
 }
-
 </style>

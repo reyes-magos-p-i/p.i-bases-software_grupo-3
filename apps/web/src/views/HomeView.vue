@@ -18,6 +18,7 @@ const { movies, loading, error, warning, reload, dismissWarning } = usePortalMov
       type="alert"
       :message="warning"
       :duration="0"
+      placement="bottom-right"
       @close="dismissWarning"
     />
     <MovieCatalog :movies="movies" :loading="loading" :error="error" @retry="reload" />

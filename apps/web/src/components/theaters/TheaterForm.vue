@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { nextTick, useTemplateRef, watch } from 'vue'
+import DialogSection from '@/components/common/DialogSection.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
+import { nextTick, ref, useTemplateRef, watch } from 'vue'
+import { displayText } from '@/utils/display-text'
 import FormField from './FormField.vue'
 import { MAX_SEATS, useTheaterForm } from '@/composables/useTheaterForm'
 import type {
   CreateTheaterRequest,
+  Theater,
   TheaterCinema,
   TheaterProjector,
   TheaterStatusOption,
@@ -11,6 +15,7 @@ import type {
 
 const props = withDefaults(
   defineProps<{
+    numbered?: boolean
     submitLabel: string
     submittingLabel: string
     projectors?: readonly TheaterProjector[]
@@ -22,6 +27,7 @@ const props = withDefaults(
     submissionErrors?: readonly string[]
   }>(),
   {
+    numbered: false,
     projectors: () => [],
     cinemas: () => [],
     statuses: () => [],
@@ -39,7 +45,8 @@ const emit = defineEmits<{
 
 const form = useTheaterForm()
 const { draft, errors } = form
-const element = useTemplateRef<HTMLFormElement>('form')
+const layoutLocked = ref(false)
+const element = useTemplateRef<HTMLFormElement>('form-element')
 
 function submit() {
   if (props.submitting || props.optionsLoading) return
@@ -56,80 +63,280 @@ function applyDefaultStatus() {
 }
 
 function reset() {
+  layoutLocked.value = false
   form.reset()
   applyDefaultStatus()
 }
 
+function fill(theater: Theater) {
+  form.fill(theater)
+  layoutLocked.value = theater.canResize === false
+}
+
 watch(() => props.statuses, applyDefaultStatus, { immediate: true })
 
-defineExpose({ reset, fill: form.fill })
+defineExpose({ reset, fill })
 </script>
 
 <template>
-  <form ref="form" novalidate :aria-busy="submitting" @submit.prevent="submit">
-    <p class="required-note">Los campos con <span class="required-marker">*</span> son obligatorios.</p>
-    <p v-if="optionsLoading" role="status">Cargando proyectores, sucursales y estados…</p>
-    <p v-if="optionsError" class="form-error" role="alert">{{ optionsError }} <button type="button" @click="emit('retryOptions')">Reintentar</button></p>
-    <p v-if="submissionErrors.length" class="form-error" role="alert" tabindex="-1">{{ submissionErrors.join(' ') }}</p>
+  <form ref="form-element" novalidate :aria-busy="submitting" @submit.prevent="submit">
+    <p class="required-note">
+      Los campos con <span class="required-marker">*</span> son obligatorios.
+    </p>
+    <p v-if="layoutLocked" class="required-note" role="note">
+      Esta sala tiene funciones asociadas. Sus dimensiones y cantidad de asientos se conservan para
+      proteger los boletos y el historial.
+    </p>
+    <LoadingState
+      v-if="optionsLoading"
+      message="Cargando proyectores, sucursales y estados…"
+      compact
+    />
+    <p v-if="optionsError" class="form-error" role="alert">
+      {{ optionsError }} <button type="button" @click="emit('retryOptions')">Reintentar</button>
+    </p>
+    <p v-if="submissionErrors.length" class="form-error" role="alert" tabindex="-1">
+      {{ submissionErrors.join(' ') }}
+    </p>
 
-    <FormField v-slot="{ id, invalid, describedby }" label="Número de asientos" required :error="errors.numberOfSeats">
-      <input :id="id" v-model="draft.numberOfSeats" name="numberOfSeats" type="number" min="1" :max="MAX_SEATS" step="1" required :aria-invalid="invalid" :aria-describedby="describedby" />
-    </FormField>
+    <div class="dialog-sections">
+      <DialogSection as="fieldset" title="Datos de la sala" :number="numbered ? 1 : undefined">
+        <div class="room-data-grid">
+          <FormField
+            v-slot="{ id, invalid, describedby }"
+            label="Sucursal"
+            required
+            :error="errors.cinema"
+          >
+            <select
+              :id="id"
+              v-model="draft.cinema"
+              name="cinema"
+              required
+              :aria-invalid="invalid"
+              :aria-describedby="describedby"
+            >
+              <option value="">Selecciona una sucursal</option>
+              <option v-if="!cinemas.length && !optionsLoading" value="" disabled>
+                No hay sucursales
+              </option>
+              <option v-for="cinema in cinemas" :key="cinema.branchId" :value="cinema.name">
+                {{ cinema.name }}
+              </option>
+            </select>
+          </FormField>
+          <FormField
+            v-slot="{ id, invalid, describedby }"
+            label="Tipo de proyector"
+            required
+            :error="errors.projectorName"
+          >
+            <select
+              :id="id"
+              v-model="draft.projectorName"
+              name="projectorName"
+              required
+              :aria-invalid="invalid"
+              :aria-describedby="describedby"
+            >
+              <option value="">Selecciona un proyector</option>
+              <option v-if="!projectors.length && !optionsLoading" value="" disabled>
+                No hay proyectores
+              </option>
+              <option
+                v-for="projector in projectors"
+                :key="projector.projectorId"
+                :value="projector.name"
+              >
+                {{ displayText(projector.name) }}
+              </option>
+            </select>
+          </FormField>
+          <FormField v-slot="{ id, invalid, describedby }" label="Estado" :error="errors.status">
+            <select
+              :id="id"
+              v-model="draft.status"
+              name="status"
+              :aria-invalid="invalid"
+              :aria-describedby="describedby"
+            >
+              <option v-if="!statuses.length && !optionsLoading" value="" disabled>
+                No hay estados
+              </option>
+              <option v-for="status in statuses" :key="status.theaterStatusId" :value="status.name">
+                {{ displayText(status.name) }}
+              </option>
+            </select>
+          </FormField>
+        </div>
+      </DialogSection>
+      <DialogSection
+        as="fieldset"
+        title="Capacidad y distribución"
+        :number="numbered ? 2 : undefined"
+      >
+        <FormField
+          v-slot="{ id, invalid, describedby }"
+          label="Número de asientos"
+          required
+          :error="errors.numberOfSeats"
+        >
+          <input
+            :id="id"
+            v-model="draft.numberOfSeats"
+            name="numberOfSeats"
+            type="number"
+            min="1"
+            :max="MAX_SEATS"
+            step="1"
+            required
+            :readonly="layoutLocked"
+            :aria-invalid="invalid"
+            :aria-describedby="describedby"
+          />
+        </FormField>
+        <div class="dimension-grid">
+          <FormField
+            v-slot="{ id, invalid, describedby }"
+            label="Filas"
+            required
+            :error="errors.dimensionX"
+          >
+            <input
+              :id="id"
+              v-model="draft.dimensionX"
+              name="dimensionX"
+              type="number"
+              min="1"
+              step="1"
+              required
+              :readonly="layoutLocked"
+              :aria-invalid="invalid"
+              :aria-describedby="describedby"
+            />
+          </FormField>
+          <FormField
+            v-slot="{ id, invalid, describedby }"
+            label="Columnas"
+            required
+            :error="errors.dimensionY"
+          >
+            <input
+              :id="id"
+              v-model="draft.dimensionY"
+              name="dimensionY"
+              type="number"
+              min="1"
+              step="1"
+              required
+              :readonly="layoutLocked"
+              :aria-invalid="invalid"
+              :aria-describedby="describedby"
+            />
+          </FormField>
+        </div>
+      </DialogSection>
 
-    <FormField v-slot="{ id, invalid, describedby }" label="Tipo de proyector" required :error="errors.projectorName">
-      <select :id="id" v-model="draft.projectorName" name="projectorName" required :aria-invalid="invalid" :aria-describedby="describedby">
-        <option value="">Selecciona un proyector</option>
-        <option v-if="!projectors.length && !optionsLoading" value="" disabled>No hay proyectores</option>
-        <option v-for="projector in projectors" :key="projector.projectorId" :value="projector.name">{{ projector.name }}</option>
-      </select>
-    </FormField>
-
-    <FormField v-slot="{ id, invalid, describedby }" label="Sucursal" required :error="errors.cinema">
-      <select :id="id" v-model="draft.cinema" name="cinema" required :aria-invalid="invalid" :aria-describedby="describedby">
-        <option value="">Selecciona una sucursal</option>
-        <option v-if="!cinemas.length && !optionsLoading" value="" disabled>No hay sucursales</option>
-        <option v-for="cinema in cinemas" :key="cinema.branchId" :value="cinema.name">{{ cinema.name }}</option>
-      </select>
-    </FormField>
-
-    <div class="dimension-grid">
-      <FormField v-slot="{ id, invalid, describedby }" label="Filas" required :error="errors.dimensionX">
-        <input :id="id" v-model="draft.dimensionX" name="dimensionX" type="number" min="1" step="1" required :aria-invalid="invalid" :aria-describedby="describedby" />
-      </FormField>
-      <FormField v-slot="{ id, invalid, describedby }" label="Columnas" required :error="errors.dimensionY">
-        <input :id="id" v-model="draft.dimensionY" name="dimensionY" type="number" min="1" step="1" required :aria-invalid="invalid" :aria-describedby="describedby" />
-      </FormField>
+      <slot name="before-actions" />
     </div>
-
-    <FormField v-slot="{ id, invalid, describedby }" label="Estado" :error="errors.status">
-      <select :id="id" v-model="draft.status" name="status" :aria-invalid="invalid" :aria-describedby="describedby">
-        <option v-if="!statuses.length && !optionsLoading" value="" disabled>No hay estados</option>
-        <option v-for="status in statuses" :key="status.theaterStatusId" :value="status.name">{{ status.name }}</option>
-      </select>
-    </FormField>
-
     <footer class="dialog-actions">
-      <button type="button" class="secondary-button" :disabled="submitting" @click="emit('cancel')">Cancelar</button>
-      <button type="submit" class="create-button" :disabled="submitting || optionsLoading">{{ submitting ? submittingLabel : submitLabel }}</button>
+      <button type="button" class="secondary-button" :disabled="submitting" @click="emit('cancel')">
+        Cancelar
+      </button>
+      <button type="submit" class="create-button" :disabled="submitting || optionsLoading">
+        {{ submitting ? submittingLabel : submitLabel }}
+      </button>
     </footer>
   </form>
 </template>
 
 <style scoped>
-form { display: grid; gap: 8px; padding: 24px; overflow-y: auto; }
-.required-note { margin: 0 0 4px; font-size: .9rem; }
-.required-marker { color: var(--color-error); font-weight: 700; }
-input, select { min-height: 42px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-small); font: inherit; color: var(--text-primary); background: var(--input-background); }
-input[type='number'] { color-scheme: light; }
+form {
+  display: grid;
+  gap: 8px;
+  padding: 24px;
+  overflow-y: auto;
+}
+.required-note {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+}
+.required-marker {
+  color: var(--color-error);
+  font-weight: 700;
+}
+input,
+select {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-small);
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--input-background);
+}
+input[type='number'] {
+  color-scheme: light;
+}
 input[type='number']::-webkit-inner-spin-button,
-input[type='number']::-webkit-outer-spin-button { filter: invert(0.55); }
-input:focus, select:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
-.form-error { margin: 0; color: var(--color-error); }
-.form-error button { border: 0; color: var(--color-primary); background: transparent; text-decoration: underline; }
-.dimension-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
-.secondary-button, .create-button { min-height: 42px; padding: 9px 16px; border: 1px solid var(--color-primary); border-radius: var(--radius-small); font: inherit; }
-.secondary-button { color: var(--primary-color); background: var(--button-secondary-background); }
-.create-button { color: var(--dialog-heading-text); background: var(--dialog-heading-background); }
-@media (max-width: 520px) { .dimension-grid { grid-template-columns: 1fr; } form { padding: 20px 16px; } }
+input[type='number']::-webkit-outer-spin-button {
+  filter: invert(0.55);
+}
+input:focus,
+select:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+.form-error {
+  margin: 0;
+  color: var(--color-error);
+}
+.form-error button {
+  border: 0;
+  color: var(--color-primary);
+  background: transparent;
+  text-decoration: underline;
+}
+.room-data-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.dimension-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.secondary-button,
+.create-button {
+  min-height: 42px;
+  padding: 9px 16px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-small);
+  font: inherit;
+}
+.secondary-button {
+  color: var(--button-secondary-text);
+  background: var(--button-secondary-background);
+}
+.create-button {
+  color: var(--dialog-heading-text);
+  background: var(--dialog-heading-background);
+}
+@media (max-width: 520px) {
+  .room-data-grid,
+  .dimension-grid {
+    grid-template-columns: 1fr;
+  }
+  form {
+    padding: 20px 16px;
+  }
+}
 </style>

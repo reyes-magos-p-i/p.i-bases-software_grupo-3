@@ -72,6 +72,7 @@ defineExpose({ open, complete })
   >
     <TheaterForm
       ref="form"
+      numbered
       submit-label="Guardar cambios"
       submitting-label="Guardando…"
       :projectors="projectors"
@@ -84,14 +85,18 @@ defineExpose({ open, complete })
       @retry-options="emit('retryOptions')"
       @cancel="close"
       @submit="emit('submit', $event)"
-    />
-    <TheaterSeatEditor
-      v-if="theater"
-      :key="theater.theaterId"
-      :theater-id="theater.theaterId"
-      :rows="theater.dimensionX"
-      :columns="theater.dimensionY"
-      :disabled="submitting"
-    />
+    >
+      <template #before-actions>
+        <TheaterSeatEditor
+          v-if="theater"
+          :key="theater.theaterId"
+          :theater-id="theater.theaterId"
+          :section-number="3"
+          :rows="theater.dimensionX"
+          :columns="theater.dimensionY"
+          :disabled="submitting"
+        />
+      </template>
+    </TheaterForm>
   </TheaterDialogShell>
 </template>

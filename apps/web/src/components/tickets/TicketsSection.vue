@@ -44,7 +44,7 @@ async function loadShowtimes() {
     const status = isAxiosError(error) ? error.response?.status : undefined
     if (status === 401) sessionExpired()
     else if (status === 403) {
-      optionsError.value = 'No tienes permiso para modificar tickets.'
+      optionsError.value = 'No tienes permiso para modificar boletos.'
       void refreshPermissions()
     } else optionsError.value = 'No se pudieron cargar las funciones. Inténtalo nuevamente.'
   } finally {
@@ -71,19 +71,19 @@ async function submitModify(data: UpdateTicketRequest) {
     await updateTicket(searchedNumber.value, data)
     modifyDialog.value?.complete()
     await search()
-    successNotice.value = 'Ticket modificado exitosamente.'
+    successNotice.value = 'Boleto modificado con ?xito.'
   } catch (error) {
     const status = isAxiosError(error) ? error.response?.status : undefined
     if (status === 401) sessionExpired()
     else if (status === 403) {
-      submissionErrors.value = ['No tienes permiso para modificar tickets.']
+      submissionErrors.value = ['No tienes permiso para modificar boletos.']
       void refreshPermissions()
     } else if (status === 400 || status === 409) {
       const message = isAxiosError(error) ? error.response?.data?.message : undefined
       submissionErrors.value = [
-        typeof message === 'string' ? message : 'No se pudo modificar el ticket.',
+        typeof message === 'string' ? message : 'No se pudo modificar el boleto.',
       ]
-    } else submissionErrors.value = ['No se pudo modificar el ticket. Inténtalo nuevamente.']
+    } else submissionErrors.value = ['No se pudo modificar el boleto. Inténtalo nuevamente.']
   } finally {
     submitting.value = false
     emit('busy', false)
@@ -103,7 +103,7 @@ const columns = [
 // function viewTicket() {
 //   if (!ticket.value || searchedNumber.value === null) {
 //     selectedTicket.value = null
-//     detailError.value = 'No se pudo mostrar el detalle del ticket.'
+//     detailError.value = 'No se pudo mostrar el detalle del boleto.'
 //     return
 //   }
 //   selectedTicket.value = { ...ticket.value, id: searchedNumber.value }
@@ -134,7 +134,7 @@ async function search() {
   notification.value = ''
   const number = ticketNumber.value.trim()
   if (!/^\d+$/.test(number) || Number(number) < 1) {
-    notification.value = 'Ingresa un número de ticket válido.'
+    notification.value = 'Ingresa un número de boleto válido.'
     return
   }
 
@@ -151,15 +151,15 @@ async function search() {
     if (current.signal.aborted) return
     searchedNumber.value = Number(number)
     if (result) ticket.value = result
-    else notification.value = 'El ticket no existe'
+    else notification.value = 'El boleto no existe'
   } catch (error) {
     if (current.signal.aborted) return
     const status = isAxiosError(error) ? error.response?.status : undefined
     if (status === 401) sessionExpired()
     else if (status === 403) {
-      searchError.value = 'No tienes permiso para consultar tickets.'
+      searchError.value = 'No tienes permiso para consultar boletos.'
       void refreshPermissions()
-    } else searchError.value = 'No se pudo consultar el ticket. Inténtalo nuevamente.'
+    } else searchError.value = 'No se pudo consultar el boleto. Inténtalo nuevamente.'
   } finally {
     if (request === current) {
       searching.value = false
@@ -186,13 +186,13 @@ onBeforeUnmount(() => {
   <section class="preview-content" aria-live="polite" aria-atomic="true">
     <div class="section-heading">
       <div>
-        <h1>Consulta de ticket</h1>
-        <p class="section-subtitle">Ingresa el número de ticket para ver sus datos</p>
+        <h1>Consulta de boleto</h1>
+        <p class="section-subtitle">Ingresa el número de boleto para ver sus datos</p>
       </div>
     </div>
 
     <form class="ticket-search" role="search" @submit.prevent="search">
-      <label for="ticket-number" class="ticket-search-label">Número de ticket</label>
+      <label for="ticket-number" class="ticket-search-label">Número de boleto</label>
       <div class="ticket-search-row">
         <input
           id="ticket-number"
@@ -215,7 +215,7 @@ onBeforeUnmount(() => {
       <span v-if="searchError" class="ticket-error" role="alert">{{ searchError }}</span>
     </p>
 
-    <LoadingState v-if="searching" message="Consultando el ticket…" />
+    <LoadingState v-if="searching" message="Consultando el boleto…" />
 
     <div v-if="notification" class="ticket-notification">
       <NotificationPopup
@@ -232,7 +232,7 @@ onBeforeUnmount(() => {
 
     <CrudTable
       v-if="ticket && !notification"
-      caption="Tickets"
+      caption="Boletos"
       :columns="columns"
       :rows="rows"
       class="ticket-table"

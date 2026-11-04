@@ -31,7 +31,7 @@ describe('SeatSelectionStep', () => {
     expect(wrapper.getComponent(SeatSelector).props('theaterId')).toBe(3)
     expect(wrapper.getComponent(SeatSelector).props('maxSelections')).toBe('all')
     expect(wrapper.text()).not.toContain('Puedes comprar hasta')
-    expect(wrapper.text()).toContain('1 asientos disponibles')
+    expect(wrapper.text()).toContain('1 asiento disponible')
     expect(wrapper.text()).toContain('VIP')
     expect(wrapper.text()).toContain('2 a 12 años')
     expect(wrapper.text()).not.toContain('₡2500')

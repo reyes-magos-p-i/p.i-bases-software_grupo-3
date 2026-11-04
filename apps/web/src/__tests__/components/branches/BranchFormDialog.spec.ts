@@ -53,6 +53,7 @@ describe('BranchFormDialog', () => {
   it('shows an empty Nombre and the named companies (UT-001)', () => {
     const view = render()
     expect(view.get('h2').text()).toBe('Crear sucursal')
+    expect(view.find('.dialog-section-number').exists()).toBe(false)
     expect((view.get('input[name="name"]').element as HTMLInputElement).value).toBe('')
     expect(view.findAll('select[name="companyId"] option').map((option) => option.text())).toEqual([
       'Selecciona una compañía',
@@ -119,7 +120,9 @@ describe('BranchFormDialog', () => {
     const view = render()
     await fill(view, 'Sucursal Liberia', 23)
     await view.setProps({ submissionError: 'No se pudo crear la sucursal, intenta de nuevo' })
-    expect(view.get('.form-error').text()).toBe('No se pudo crear la sucursal, intenta de nuevo')
+    expect(view.get('.notification-popup--floating .notification-message').text()).toBe(
+      'No se pudo crear la sucursal, intenta de nuevo',
+    )
     expect((view.get('input[name="name"]').element as HTMLInputElement).value).toBe(
       'Sucursal Liberia',
     )
@@ -182,6 +185,7 @@ describe('BranchFormDialog', () => {
       wrapper.vm.open(current)
       await wrapper.vm.$nextTick()
       expect(wrapper.get('h2').text()).toBe('Modificar sucursal')
+      expect(wrapper.get('.dialog-section-title').text()).toBe('1 Datos de la sucursal')
       const name = wrapper.get('input[name="name"]')
       expect((name.element as HTMLInputElement).value).toBe('Sucursal Heredia Centro')
       expect(name.attributes('disabled')).toBeUndefined()

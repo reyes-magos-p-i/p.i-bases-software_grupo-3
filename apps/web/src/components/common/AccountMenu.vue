@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import defaultProfileImage from '@/assets/profile/profile-circle-svgrepo-com.svg'
 import type { ClientIdentity } from '@/types/client-auth'
 
@@ -11,6 +11,7 @@ const emit = defineEmits<{
 }>()
 const menuOpen = ref(false)
 const root = ref<HTMLElement | null>(null)
+const opener = ref<HTMLButtonElement | null>(null)
 const dropdownId = useId()
 const fullName = computed(() =>
   [props.user.firstName, props.user.lastName].filter(Boolean).join(' '),
@@ -19,6 +20,10 @@ const fullName = computed(() =>
 function openProfile() {
   menuOpen.value = false
   emit('profile')
+}
+function logout() {
+  menuOpen.value = false
+  emit('logout')
 }
 
 function closeOnOutsideClick(event: PointerEvent) {
@@ -29,6 +34,21 @@ function closeOnOutsideClick(event: PointerEvent) {
 
 function closeOnEscape(event: KeyboardEvent) {
   if (event.key === 'Escape' && menuOpen.value) {
+    menuOpen.value = false
+    opener.value?.focus()
+  }
+}
+
+async function openWithKeyboard(event: KeyboardEvent) {
+  if (event.key !== 'ArrowDown') return
+  event.preventDefault()
+  menuOpen.value = true
+  await nextTick()
+  root.value?.querySelector<HTMLButtonElement>('.account-actions button')?.focus()
+}
+
+function leave(event: FocusEvent) {
+  if (event.relatedTarget instanceof Node && !root.value?.contains(event.relatedTarget)) {
     menuOpen.value = false
   }
 }
@@ -45,15 +65,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root" class="account-menu">
+  <div ref="root" class="account-menu" @focusout="leave">
     <span class="account-name">{{ fullName }}</span>
     <button
       class="account-avatar"
+      ref="opener"
       type="button"
       :aria-label="`Abrir menú de perfil de ${fullName}`"
       :aria-controls="dropdownId"
       :aria-expanded="menuOpen"
       @click="menuOpen = !menuOpen"
+      @keydown="openWithKeyboard"
     >
       <img :src="defaultProfileImage" alt="" aria-hidden="true" />
     </button>
@@ -80,19 +102,14 @@ onBeforeUnmount(() => {
         </button>
         <button type="button" @click="emit('change-password')">
           <i class="bi bi-key" aria-hidden="true"></i>
-          Cambiar Contraseña
+          Cambiar contraseña
+        </button>
+        <button type="button" class="account-logout" aria-label="Cerrar sesión" @click="logout">
+          <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+          Cerrar sesión
         </button>
       </div>
     </section>
-    <button
-      class="account-logout"
-      type="button"
-      aria-label="Cerrar sesión"
-      title="Cerrar sesión"
-      @click="emit('logout')"
-    >
-      <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
-    </button>
   </div>
 </template>
 
@@ -103,11 +120,15 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 18px;
   padding-inline: 20px;
+  min-width: 0;
 }
 
 .account-name {
   font-weight: 700;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .account-avatar {
@@ -140,7 +161,7 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 20;
   top: calc(100% - 2px);
-  right: 64px;
+  right: 0;
   width: min(280px, calc(100vw - 32px));
   padding: 16px;
   border: 1px solid var(--border-color);
@@ -192,31 +213,7 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--text-primary);
   text-align: left;
-}
-
-.account-logout {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-on-dark);
-  cursor: pointer;
-  font-size: 1.25rem;
-}
-
-.account-logout:hover {
-  background: var(--surface-on-dark-hover);
-  color: var(--accent-color);
-}
-
-.account-logout:focus-visible {
-  outline: 2px solid var(--focus-on-dark);
-  outline-offset: 2px;
+  min-height: 44px;
 }
 
 @media (max-width: 576px) {
@@ -238,7 +235,8 @@ onBeforeUnmount(() => {
   }
 
   .account-dropdown {
-    right: 48px;
+    right: 0;
+    max-width: calc(100vw - 32px);
   }
 }
 </style>

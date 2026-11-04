@@ -64,6 +64,49 @@ describe('NotificationPopup', () => {
     wrapper.unmount()
   })
 
+  it('offers a keyboard accessible close action and pauses expiry while it has focus', async () => {
+    const wrapper = mount(NotificationPopup, {
+      attachTo: document.body,
+      props: { message: 'Guardado.', duration: 1000, placement: 'bottom-right' },
+    })
+    const close = wrapper.get<HTMLButtonElement>('[aria-label="Cerrar notificación"]')
+    close.element.focus()
+    vi.advanceTimersByTime(5000)
+    expect(wrapper.emitted('close')).toBeUndefined()
+    await wrapper.trigger('mouseenter')
+    close.element.blur()
+    vi.advanceTimersByTime(1000)
+    expect(wrapper.emitted('close')).toBeUndefined()
+    await wrapper.trigger('mouseleave')
+    vi.advanceTimersByTime(1000)
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    await wrapper.setProps({ message: 'Actualizado.' })
+    await wrapper.get('[aria-label="Cerrar notificación"]').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(2)
+    expect(wrapper.find('.notification-popup').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('opens floating notifications above native dialogs when supported', async () => {
+    const show = vi.fn()
+    const previous = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'showPopover')
+    Object.defineProperty(HTMLElement.prototype, 'showPopover', { configurable: true, value: show })
+    const wrapper = mount(NotificationPopup, {
+      attachTo: document.body,
+      props: { message: 'Listo.', placement: 'bottom-right' },
+    })
+    try {
+      expect(wrapper.attributes('popover')).toBe('manual')
+      expect(show).toHaveBeenCalledOnce()
+      await wrapper.setProps({ placement: 'inline' })
+      expect(wrapper.attributes('popover')).toBeUndefined()
+    } finally {
+      wrapper.unmount()
+      if (previous) Object.defineProperty(HTMLElement.prototype, 'showPopover', previous)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'showPopover')
+    }
+  })
+
   it('pauses auto-dismiss while hovered', async () => {
     const wrapper = mount(NotificationPopup, { props: { message: 'x', duration: 1000 } })
     await wrapper.trigger('mouseenter')

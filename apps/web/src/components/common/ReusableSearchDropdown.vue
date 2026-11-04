@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, useId, watch } from 'vue'
+import { displayText } from '@/utils/display-text'
+import { useBlurValidation } from '@/composables/useBlurValidation'
 
 interface DropdownOption {
   value: number
@@ -15,13 +17,17 @@ const props = withDefaults(
     compact?: boolean
     maxSelections?: number
     name?: string
+    required?: boolean
+    error?: string
   }>(),
   {
-    placeholder: 'Seach...',
+    placeholder: 'Buscar…',
     disabled: false,
     minSearchLength: 2,
     compact: false,
     maxSelections: Number.POSITIVE_INFINITY,
+    required: false,
+    error: '',
   },
 )
 const selected = defineModel<number[]>({ default: () => [] })
@@ -29,6 +35,15 @@ const id = useId()
 const search = ref('')
 const isOpen = ref(false)
 const root = ref<HTMLElement | null>(null)
+const touched = ref(false)
+const shouldValidate = useBlurValidation()
+const feedback = computed(
+  () =>
+    props.error ||
+    (touched.value && props.required && !selected.value.length
+      ? 'Selecciona al menos una opción.'
+      : ''),
+)
 const filteredOptions = computed(() => {
   const query = search.value.trim().toLocaleLowerCase('es')
   if (query.length < props.minSearchLength) return []
@@ -68,7 +83,16 @@ function handleClickOutside(event: Event) {
   if (root.value && !root.value.contains(event.target as Node)) close()
 }
 function handleFocusOut(event: FocusEvent) {
-  if (!root.value?.contains(event.relatedTarget as Node | null)) close()
+  if (!root.value?.contains(event.relatedTarget as Node | null)) {
+    close()
+    if (shouldValidate(event)) touched.value = true
+  }
+}
+function escape(event: KeyboardEvent) {
+  if (!isOpen.value) return
+  event.stopPropagation()
+  event.preventDefault()
+  close(true)
 }
 watch(
   () => props.disabled,
@@ -86,9 +110,11 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleClickOutside
     class="search-dropdown"
     :class="{ compact }"
     @focusout="handleFocusOut"
-    @keydown.esc.stop.prevent="close(true)"
+    @keydown.esc="escape"
   >
-    <label :for="`${id}-search`">{{ label }}</label>
+    <label :for="`${id}-search`"
+      >{{ label }}<span v-if="required" aria-hidden="true"> *</span></label
+    >
     <div class="selected-options">
       <div class="search-control">
         <input
@@ -99,6 +125,8 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleClickOutside
           autocomplete="off"
           :placeholder="placeholder"
           :disabled="disabled"
+          :aria-invalid="!!feedback"
+          :aria-describedby="feedback ? `${id}-error` : undefined"
           :aria-controls="expanded ? `${id}-options` : undefined"
           @focus="open"
           @click="open"
@@ -118,7 +146,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleClickOutside
         </button>
       </div>
       <span v-for="option in visibleSelection" :key="option.value" class="selected-option">
-        {{ option.label }}
+        {{ displayText(option.label) }}
         <button
           class="remove-option"
           type="button"
@@ -135,6 +163,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleClickOutside
         >y {{ selectedOptions.length - visibleSelection.length }} más</span
       >
     </div>
+    <p v-if="feedback" :id="`${id}-error`" class="input-error" role="alert">{{ feedback }}</p>
     <ul v-if="expanded" :id="`${id}-options`" class="dropdown-options" :aria-label="label">
       <li v-for="option in filteredOptions" :key="option.value" class="dropdown-option">
         <label :for="`${id}-option-${option.value}`">
@@ -147,7 +176,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleClickOutside
             :disabled="selected.length >= maxSelections && !selected.includes(option.value)"
             @change="toggleOption(option.value)"
           />
-          <span>{{ option.label }}</span>
+          <span>{{ displayText(option.label) }}</span>
         </label>
       </li>
       <li v-if="filteredOptions.length === 0" class="dropdown-empty">
@@ -234,11 +263,18 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleClickOutside
 
 .remove-option {
   border: none;
-  padding: 0;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 4px;
   background: transparent;
   color: inherit;
   font: inherit;
   cursor: pointer;
+}
+.input-error {
+  margin: 6px 0;
+  color: var(--error-color);
+  font-size: 0.875rem;
 }
 
 .toggle-options:focus-visible,

@@ -140,30 +140,27 @@ describe('ChangePasswordView.vue', () => {
   it.each([
     { embedded: false, accountType: 'client' as const },
     { embedded: true, accountType: 'employee' as const },
-  ])(
-    'preserves the existing loading presentation outside the client profile: %p',
-    async (props) => {
-      let finish!: (value: PasswordExpiry) => void
-      const loadStatus =
-        props.accountType === 'employee' ? getEmployeePasswordStatus : getClientPasswordStatus
-      vi.mocked(loadStatus).mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            finish = resolve
-          }),
-      )
-      const wrapper = mountView(props)
-      expect(wrapper.findComponent(LoadingState).exists()).toBe(false)
-      expect(wrapper.find('.loading-spinner').exists()).toBe(true)
-      expect(wrapper.get('[role="status"]').text()).toContain(
-        'Comprobando el estado de tu contraseña',
-      )
-      finish(expiry('valid'))
-      await flushPromises()
-      expect(wrapper.find('form').exists()).toBe(true)
-      wrapper.unmount()
-    },
-  )
+  ])('uses the shared loading indicator outside the client profile: %p', async (props) => {
+    let finish!: (value: PasswordExpiry) => void
+    const loadStatus =
+      props.accountType === 'employee' ? getEmployeePasswordStatus : getClientPasswordStatus
+    vi.mocked(loadStatus).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const wrapper = mountView(props)
+    expect(wrapper.findComponent(LoadingState).exists()).toBe(true)
+    expect(wrapper.find('.loading-spinner').exists()).toBe(false)
+    expect(wrapper.getComponent(LoadingState).props('message')).toBe(
+      props.embedded ? 'Cargando seguridad…' : 'Comprobando el estado de tu contraseña…',
+    )
+    finish(expiry('valid'))
+    await flushPromises()
+    expect(wrapper.find('form').exists()).toBe(true)
+    wrapper.unmount()
+  })
 
   it.each(['client', 'employee'] as const)(
     'recovers %s through the shared form and returns to the matching login',

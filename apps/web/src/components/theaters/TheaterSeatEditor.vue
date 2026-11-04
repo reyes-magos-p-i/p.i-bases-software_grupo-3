@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import DialogSection from '@/components/common/DialogSection.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { ref, watch } from 'vue'
 import SeatSelector from '../Seats/SeatSelector.vue'
 import { getTheaterSeats, updateSeatStatuses } from '@/services/theater.service'
@@ -14,6 +17,7 @@ import { isAxiosError } from 'axios'
 
 const props = withDefaults(
   defineProps<{
+    sectionNumber?: number
     theaterId: number
     rows: number
     columns: number
@@ -121,9 +125,11 @@ async function saveStatus() {
   } catch (err) {
     if (theaterId !== props.theaterId) return
 
-    console.error('Seat update failed:', isAxiosError(err) ? err.response?.data : err)
-
-    const backendMessage = isAxiosError(err) ? err.response?.data?.message : undefined
+    const status = isAxiosError(err) ? err.response?.status : undefined
+    const backendMessage =
+      status && [400, 404, 409].includes(status) && isAxiosError(err)
+        ? err.response?.data?.message
+        : undefined
 
     error.value = Array.isArray(backendMessage)
       ? backendMessage.join(', ')
@@ -153,20 +159,28 @@ watch(
 </script>
 
 <template>
-  <section class="seat-editor" aria-label="Modificar estado de asientos">
-    <h2>Estado de los asientos</h2>
+  <DialogSection class="seat-editor" title="Estado de los asientos" :number="sectionNumber">
+    <LoadingState v-if="loading" message="Cargando asientos…" compact />
 
-    <p v-if="loading" role="status">Cargando asientos…</p>
-
-    <p v-if="error" role="alert">
-      {{ error }}
-    </p>
-
-    <p v-if="message" role="status">
-      {{ message }}
-    </p>
+    <NotificationPopup
+      v-if="error"
+      type="error"
+      :message="error"
+      :duration="0"
+      placement="bottom-right"
+      @close="error = ''"
+    />
+    <NotificationPopup
+      v-if="message"
+      type="success"
+      :message="message"
+      placement="bottom-right"
+      @close="message = ''"
+    />
 
     <SeatSelector
+      show-layout-diagnostics
+      v-if="!loading && (!error || seats.length)"
       :key="selectorVersion"
       :theater-id="theaterId"
       :rows="rows"
@@ -175,6 +189,7 @@ watch(
       :max-selections="readonly ? 0 : 'all'"
       :selectable-states="selectableStates"
       :disabled="readonly || disabled || loading || saving"
+      :readonly="readonly"
       @selection-change="selectedSeats = $event"
     />
 
@@ -217,22 +232,13 @@ watch(
         </button>
       </div>
     </div>
-  </section>
+  </DialogSection>
 </template>
 
 <style scoped>
-.seat-editor {
-  margin-top: 24px;
-  padding-top: 20px;
-  padding-bottom: 24px;
-  padding-left: 24px;
-  padding-right: 24px;
-  border-top: 1px solid var(--border-color);
-}
-
 button {
   cursor: pointer;
-  min-height: 42px;
+  min-height: var(--dialog-control-height);
   padding: 9px 16px;
   border: 1px solid var(--color-primary);
   border-radius: var(--radius-small);

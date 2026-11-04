@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ProjectionListPanel from '@/components/projections/ProjectionListPanel.vue'
 import ProjectionDetailDialog from '@/components/projections/ProjectionDetailDialog.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 import type { ListedProjection, ProjectionList } from '@/types/projection'
 import { formatPrice } from '@/utils/projection-format'
 
@@ -57,6 +58,14 @@ async function render() {
 }
 
 const field = (name: string) => wrapper!.get(`[name="${name}"]`)
+async function setDate(name: string, value: string) {
+  const picker = wrapper!
+    .findAllComponents(DatePicker)
+    .find((item) => item.get('input').attributes('name') === name)!
+  picker.vm.$emit('update:modelValue', value)
+  await flushPromises()
+  await field(name).trigger('change')
+}
 const lastQuery = () => getProjections.mock.lastCall![0]
 
 beforeEach(() => {
@@ -81,6 +90,25 @@ afterEach(() => {
 })
 
 describe('ProjectionListPanel', () => {
+  it('loads exactly once when selecting or clearing a date in the shared calendar', async () => {
+    const view = await render()
+    const picker = view.findAllComponents(DatePicker)[0]!
+    const before = getProjections.mock.calls.length
+    await picker.get('input').trigger('click')
+    expect(getProjections.mock.calls).toHaveLength(before)
+    const day = picker.get('[data-date]:not(:disabled)')
+    const value = day.attributes('data-date')
+    await day.trigger('click')
+    await flushPromises()
+    expect(lastQuery()).toMatchObject({ dateFrom: value })
+    expect(getProjections.mock.calls).toHaveLength(before + 1)
+    await picker.get('input').trigger('click')
+    await picker.get('.calendar-footer button').trigger('click')
+    await flushPromises()
+    expect(lastQuery()).not.toHaveProperty('dateFrom')
+    expect(getProjections.mock.calls).toHaveLength(before + 2)
+  })
+
   it.each(['success', 'failure'])(
     'replaces the shared loading state after a request ends in %s',
     async (outcome) => {
@@ -145,7 +173,7 @@ describe('ProjectionListPanel', () => {
     await field('status').setValue('ACTIVE')
     await field('branchId').setValue('5')
     expect(wrapper!.findAll('[name="theaterId"] option').map((option) => option.text())).toEqual([
-      'Todas',
+      'Todas las salas',
       'Sala 9',
     ])
     await field('theaterId').setValue('9')
@@ -156,16 +184,9 @@ describe('ProjectionListPanel', () => {
     expect(times).toHaveLength(49)
     expect(times.slice(0, 3)).toEqual(['Cualquiera', '12:00 am', '12:30 am'])
     expect(times[27]).toBe('1:00 pm')
-    expect(wrapper!.findAll('.format-hint').map((hint) => hint.text())).toEqual([
-      '(dd/mm/aaaa)',
-      '(dd/mm/aaaa)',
-      '(12 h, hh:mm am/pm)',
-      '(12 h, hh:mm am/pm)',
-    ])
-    await field('dateFrom').setValue('2099-09-01')
-    await field('dateFrom').trigger('change')
-    await field('dateTo').setValue('2099-09-30')
-    await field('dateTo').trigger('change')
+    expect(wrapper!.find('.format-hint').exists()).toBe(false)
+    await setDate('dateFrom', '2099-09-01')
+    await setDate('dateTo', '2099-09-30')
     await field('timeFrom').setValue('12:00')
     await field('timeFrom').trigger('change')
     await field('timeTo').setValue('18:00')
@@ -211,14 +232,18 @@ describe('ProjectionListPanel', () => {
     ['timeTo', '00:00', 'La hora inicial no puede ser posterior a la hora final.'],
   ])('blocks invalid %s values', async (name, value, message) => {
     await render()
-    await field('dateFrom').setValue('2099-01-01')
+    await setDate('dateFrom', '2099-01-01')
     await field('timeFrom').setValue('10:00')
     getProjections.mockClear()
-    await field(name).setValue(value)
-    await field(name).trigger('change')
+    if (name === 'dateTo') await setDate(name, value)
+    else {
+      await field(name).setValue(value)
+      await field(name).trigger('change')
+    }
     await wrapper!.get('form').trigger('submit')
     await flushPromises()
     expect(wrapper!.get('.error').text()).toBe(message)
+    expect(field('dateFrom').attributes('aria-invalid')).toBe(String(name === 'dateTo'))
     expect(getProjections).not.toHaveBeenCalled()
   })
 

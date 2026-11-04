@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { seatStateLabels, seatTypeLabels, type Seat } from '@/types/seats'
+import { seatStateIcons, seatStateLabels, seatTypeLabels, type Seat } from '@/types/seats'
 
 const props = withDefaults(
   defineProps<{
@@ -80,6 +80,11 @@ function handleClick() {
     </svg>
 
     <span class="seat-number" aria-hidden="true">{{ seatNumber }}</span>
+    <i
+      v-if="!selected"
+      :class="['bi', seatStateIcons[seat.state], 'state-mark']"
+      aria-hidden="true"
+    />
     <span v-if="selected" class="selection-mark" aria-hidden="true">✓</span>
   </button>
 </template>
@@ -155,6 +160,19 @@ function handleClick() {
   font-size: 12px;
   line-height: 19px;
   text-align: center;
+}
+.state-mark {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: inherit;
+  font-size: 15px;
+  line-height: 1;
 }
 .seat:not(:disabled):hover {
   filter: brightness(0.94);

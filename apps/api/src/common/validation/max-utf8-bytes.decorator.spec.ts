@@ -40,7 +40,7 @@ describe('MaxUtf8Bytes', () => {
         property: 'text',
         constraints: {
           maxUtf8Bytes:
-            'El texto debe ser Unicode válido y no superar 4 bytes en UTF-8.',
+            'El texto es demasiado largo o contiene caracteres no admitidos. Revisa el campo.',
         },
       }),
     ]);

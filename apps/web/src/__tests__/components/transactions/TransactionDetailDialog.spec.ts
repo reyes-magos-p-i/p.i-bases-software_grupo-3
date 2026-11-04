@@ -130,7 +130,14 @@ describe('TransactionDetailDialog', () => {
     expect(getTransaction).toHaveBeenCalledWith(123, expect.any(AbortSignal))
     expect(page.get<HTMLDialogElement>('dialog').element.open).toBe(true)
     expect(page.get('.app-modal-title').text()).toBe('Detalle de transacción')
-    expect(field('IdTransacción')).toBe('FAC-000123')
+    expect(field('ID de transacción')).toBe('FAC-000123')
+    expect(page.findAll('.detail-group h3').map((heading) => heading.text())).toEqual([
+      'Resumen de la transacción',
+      'Cliente',
+      'Función',
+      'Productos y pago',
+    ])
+    expect(page.find('.group-number').exists()).toBe(false)
     expect(field('Fecha')).toBe('12/10/2026')
     expect(field('Hora de compra')).toBe('10:42')
     expect(field('Cliente')).toBe('Carlos Mora')
@@ -173,7 +180,7 @@ describe('TransactionDetailDialog', () => {
     expect(page.text()).not.toContain('FAC-000123')
     resolve(fac124)
     await flushPromises()
-    expect(field('IdTransacción')).toBe('FAC-000124')
+    expect(field('ID de transacción')).toBe('FAC-000124')
     expect(field('Cliente')).toBe('María Rodríguez')
     expect(field('Total')).toBe('₡4500')
     expect(page.text()).not.toContain('Carlos Mora')
@@ -189,7 +196,7 @@ describe('TransactionDetailDialog', () => {
     await flushPromises()
     first(fac123)
     await flushPromises()
-    expect(field('IdTransacción')).toBe('FAC-000124')
+    expect(field('ID de transacción')).toBe('FAC-000124')
   })
 
   it.each([undefined, 500])(
@@ -204,7 +211,7 @@ describe('TransactionDetailDialog', () => {
       getTransaction.mockResolvedValueOnce(fac124)
       await page.get('[role="alert"] button').trigger('click')
       await flushPromises()
-      expect(field('IdTransacción')).toBe('FAC-000124')
+      expect(field('ID de transacción')).toBe('FAC-000124')
       expect(view.emitted('missing')).toBeUndefined()
     },
   )
@@ -239,7 +246,10 @@ describe('TransactionDetailDialog', () => {
     getTransaction.mockReturnValueOnce(new Promise(() => {}))
     const view = await render()
     expect(page.get('[role="status"]').text()).toBe('Cargando el detalle…')
-    await page.findAll('button').find((button) => button.text() === 'Cerrar')!.trigger('click')
+    await page
+      .findAll('button')
+      .find((button) => button.text() === 'Cerrar')!
+      .trigger('click')
     expect(view.emitted('close')).toHaveLength(1)
   })
 

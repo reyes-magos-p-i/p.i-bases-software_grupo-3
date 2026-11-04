@@ -41,7 +41,7 @@ function close() {
     :close-disabled="saving"
     @close="close"
   >
-    <div v-if="branch" class="branch-deactivation-content" :aria-busy="saving">
+    <div v-if="branch" class="branch-deactivation-content dialog-content" :aria-busy="saving">
       <p class="question">¿Está seguro de que desea desactivar la sucursal {{ label }}?</p>
       <p v-if="branch.companyName" class="company">Compañía: {{ branch.companyName }}</p>
       <p class="deactivation-warning">

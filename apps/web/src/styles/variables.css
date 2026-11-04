@@ -1,4 +1,5 @@
 :root {
+  --font-family: Helvetica, Arial, sans-serif;
   /* Palette */
   --primary-color: #8a2be2;
   --accent-color: #ffd700;
@@ -97,6 +98,17 @@
   --dialog-background: var(--content-background);
   --dialog-heading-background: var(--primary-color);
   --dialog-heading-text: var(--content-background);
+  --dialog-content-padding: 24px;
+  --dialog-heading-size: 1.25rem;
+  --dialog-label-size: 0.875rem;
+  --dialog-control-height: 44px;
+  --dialog-section-gap: 32px;
+  --dialog-section-number-size: 26px;
+  --filter-control-height: 44px;
+  --scrollbar-thumb: color-mix(in srgb, var(--surface-background) 35%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--surface-background) 60%, transparent);
+  --scrollbar-thumb-on-dark: color-mix(in srgb, var(--content-background) 40%, transparent);
+  --scrollbar-thumb-on-dark-hover: color-mix(in srgb, var(--content-background) 65%, transparent);
   --table-background: var(--content-background);
   --table-heading-background: var(--surface-background);
   --table-heading-text: var(--content-background);
@@ -113,6 +125,7 @@
 
   /* Bootstrap and DaisyUI use their own token names. */
   --bs-primary: var(--primary-color);
+  --bs-body-font-family: var(--font-family);
   --bs-secondary: var(--surface-background);
   --bs-body-color: var(--text-primary);
   --bs-body-bg: var(--content-background);

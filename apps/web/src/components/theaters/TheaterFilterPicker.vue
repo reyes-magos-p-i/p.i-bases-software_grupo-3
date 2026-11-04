@@ -33,7 +33,12 @@ const selected = defineModel<string[]>({ required: true })
 }
 .filter-picker summary {
   box-sizing: border-box;
-  height: 44px;
+  height: var(--filter-control-height);
+  min-height: var(--filter-control-height);
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   line-height: 20px;
   padding: 11px 12px;
   border: 1px solid var(--border-color);

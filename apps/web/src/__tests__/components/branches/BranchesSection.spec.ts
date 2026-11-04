@@ -161,7 +161,7 @@ describe('BranchesSection', () => {
     const options = view
       .findAll('.filters select[name="companyId"] option')
       .map((option) => option.text())
-    expect(options).toEqual(['Todas', 'Cinetadel S.A', 'Sin nombre registrado'])
+    expect(options).toEqual(['Todas las compañías', 'Cinetadel S.A', 'Sin nombre registrado'])
     await view.get('select[name="companyId"]').setValue('2')
     await flushPromises()
     expect(lastQuery()).toEqual({ page: 1, pageSize: 10, companyId: 2 })
@@ -312,6 +312,9 @@ describe('BranchesSection · Crear sucursal', () => {
     await flushPromises()
     expect(view.emitted('busy')).toEqual([[true], [false]])
     expect(view.get('.branch-notification').text()).toContain('Sucursal creada con éxito')
+    expect(view.get('.branch-notification .notification-popup').classes()).toContain(
+      'notification-popup--floating',
+    )
     expect(getBranches.mock.calls).toHaveLength(loads + 1)
     expect((dialog(view).get('input[name="name"]').element as HTMLInputElement).value).toBe('')
 
@@ -323,7 +326,7 @@ describe('BranchesSection · Crear sucursal', () => {
     createBranch.mockRejectedValueOnce(new Error('Network Error'))
     const view = await render()
     await openAndFill(view, 'Sucursal Liberia')
-    expect(dialog(view).get('.form-error').text()).toBe(
+    expect(dialog(view).get('.notification-message').text()).toBe(
       'No se pudo crear la sucursal, intenta de nuevo',
     )
     expect((dialog(view).get('input[name="name"]').element as HTMLInputElement).value).toBe(
@@ -340,7 +343,7 @@ describe('BranchesSection · Crear sucursal', () => {
     await openAndFill(view)
     const select = dialog(view).get('select[name="companyId"]')
     expect(select.attributes('aria-invalid')).toBe('true')
-    expect(dialog(view).find('.form-error').exists()).toBe(false)
+    expect(dialog(view).find('.notification-popup--error').exists()).toBe(false)
   })
 
   it('shows a name already used by an active branch under the name field', async () => {
@@ -355,7 +358,7 @@ describe('BranchesSection · Crear sucursal', () => {
       'Ya existe una sucursal activa con ese nombre',
     )
     expect((name.element as HTMLInputElement).value).toBe('Sucursal Heredia Oeste')
-    expect(dialog(view).find('.form-error').exists()).toBe(false)
+    expect(dialog(view).find('.notification-popup--error').exists()).toBe(false)
   })
 
   it.each([
@@ -365,7 +368,7 @@ describe('BranchesSection · Crear sucursal', () => {
     createBranch.mockRejectedValueOnce(failure(status))
     const view = await render()
     await openAndFill(view)
-    expect(dialog(view).get('.form-error').text()).toBe(message)
+    expect(dialog(view).get('.notification-message').text()).toBe(message)
     if (status === 403) expect(refreshPermissions).toHaveBeenCalled()
   })
 
@@ -440,7 +443,7 @@ describe('BranchesSection · Crear sucursal', () => {
       const view = await render()
       await modifyRow(view)
       await save(view, 'Sucursal Heredia Oeste')
-      expect(dialog(view).get('.form-error').text()).toBe(
+      expect(dialog(view).get('.notification-message').text()).toBe(
         'No se pudo modificar la sucursal, intenta de nuevo',
       )
       expect((dialog(view).get('input[name="name"]').element as HTMLInputElement).value).toBe(
@@ -454,7 +457,7 @@ describe('BranchesSection · Crear sucursal', () => {
       const loads = getBranches.mock.calls.length
       await modifyRow(view)
       await save(view, 'Sucursal Heredia Oeste')
-      expect(dialog(view).get('.form-error').text()).toBe(
+      expect(dialog(view).get('.notification-message').text()).toBe(
         'La sucursal no existe o ya fue desactivada',
       )
       expect(getBranches.mock.calls).toHaveLength(loads + 1)
@@ -471,7 +474,7 @@ describe('BranchesSection · Crear sucursal', () => {
       expect(dialog(view).get('.field-error').text()).toBe(
         'Ya existe una sucursal activa con ese nombre',
       )
-      expect(dialog(view).find('.form-error').exists()).toBe(false)
+      expect(dialog(view).find('.notification-popup--error').exists()).toBe(false)
       expect(getBranches.mock.calls).toHaveLength(loads)
     })
 
@@ -485,13 +488,17 @@ describe('BranchesSection · Crear sucursal', () => {
       expect(updateBranch).not.toHaveBeenCalled()
     })
 
-    it('modifies the branch opened in the detail', async () => {
+    it('opens modification from the row after closing its read-only detail', async () => {
       const view = await render()
-      view
-        .getComponent(BranchDetailDialog)
-        .vm.$emit('modify', { ...branches[1]!, status: 'ACTIVE' })
+      await view.findAll('[aria-label="Ver sucursal"]')[1]!.trigger('click')
+      expect(view.getComponent(BranchDetailDialog).props('branchId')).toBe(branches[1]!.id)
+      view.getComponent(BranchDetailDialog).vm.$emit('close')
       await flushPromises()
+      await modifyRow(view, 1)
       expect(view.get('.theater-dialog h2').text()).toBe('Modificar sucursal')
+      expect(dialog(view).get<HTMLInputElement>('input[name="name"]').element.value).toBe(
+        branches[1]!.name ?? '',
+      )
       expect(view.getComponent(BranchDetailDialog).props('branchId')).toBeNull()
     })
   })

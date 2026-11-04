@@ -12,6 +12,7 @@ import {
 } from 'vue'
 import DatePicker from '@/components/common/DatePicker.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
 import { todayInCostaRica, validDate } from '@/utils/date-only'
 import type { BranchOption, CreateEmployeeRequest, CreateUserRequest } from '@/types/user'
 import {
@@ -37,6 +38,7 @@ const props = withDefaults(
     catalogsError?: string
     submitting?: boolean
     submissionErrors?: readonly string[]
+    submissionValidation?: boolean
     submissionBlocked?: boolean
   }>(),
   {
@@ -49,6 +51,7 @@ const props = withDefaults(
     catalogsError: '',
     submitting: false,
     submissionErrors: () => [],
+    submissionValidation: false,
     submissionBlocked: false,
   },
 )
@@ -81,12 +84,19 @@ const catalogPlaceholder = computed(() =>
 const id = useId()
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
 const submissionFeedback = useTemplateRef<HTMLElement>('submission-feedback')
+const validationNotice = ref('')
+const generalSubmissionErrors = computed(() =>
+  props.submissionValidation ? [] : props.submissionErrors,
+)
 watch(
-  () => props.submissionErrors,
-  async (messages) => {
+  () => [props.submissionErrors, props.submissionValidation] as const,
+  async ([messages, validation]) => {
+    validationNotice.value = ''
     if (messages.length) {
+      if (validation) applyServerValidation(messages)
       await nextTick()
-      submissionFeedback.value?.focus()
+      if (validation) dialog.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+      else submissionFeedback.value?.focus()
     }
   },
 )
@@ -188,6 +198,37 @@ const textFields = computed<TextFieldDefinition[]>(() => [
 const dirty = reactive<Partial<Record<FieldName, boolean>>>({})
 const touched = reactive<Partial<Record<FieldName, boolean>>>({})
 const errors = reactive<Partial<Record<FieldName, string>>>({})
+function applyServerValidation(messages: readonly string[]) {
+  const additional: [RegExp, FieldName][] = [
+    [/correo|email/iu, 'email'],
+    [/celular|teléfono|phone/iu, 'phoneNumber'],
+    [/sucursal|branch/iu, 'branchId'],
+    [/distrito|district/iu, 'districtId'],
+    [/detalle|details/iu, 'details'],
+    [/rol|role/iu, 'role'],
+  ]
+  for (const message of messages) {
+    const lower = message.toLocaleLowerCase('es')
+    const field =
+      textFields.value.find(
+        (item) =>
+          lower.includes(item.name.toLowerCase()) || lower.includes(item.label.toLowerCase()),
+      )?.name ?? additional.find(([pattern]) => pattern.test(message))?.[1]
+    if (!field) {
+      validationNotice.value = 'Revisa los datos del formulario e inténtalo nuevamente.'
+      continue
+    }
+    const control = dialog.value?.querySelector<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >(`[name="${field}"]`)
+    const localError = control ? validateField(field, control, true) : ''
+    errors[field] =
+      field === 'email' && /existe|registrad/iu.test(message)
+        ? 'Ya existe una cuenta con ese correo.'
+        : localError || 'Revisa este campo e inténtalo nuevamente.'
+    touched[field] = true
+  }
+}
 const title = computed(() =>
   isClient.value
     ? 'Crear cliente'
@@ -518,7 +559,7 @@ defineExpose({ open, complete })
 <template>
   <dialog
     ref="dialog"
-    class="user-dialog"
+    class="user-dialog cinema-dialog"
     :aria-labelledby="id + '-title'"
     @cancel.prevent="close"
     @close="onClosed"
@@ -550,33 +591,34 @@ defineExpose({ open, complete })
         Los campos con <span class="required-marker">*</span> son obligatorios.
       </p>
 
-      <p v-if="needsAddress && catalogsLoading" class="catalog-notice" role="status">
-        {{
+      <LoadingState
+        v-if="needsAddress && catalogsLoading"
+        compact
+        :message="
           isClient
-            ? 'Cargando opciones de dirección…'
-            : 'Cargando sucursales y opciones de dirección…'
-        }}
-        Puedes completar los demás campos.
-      </p>
+            ? 'Cargando opciones de dirección… Puedes completar los demás campos.'
+            : 'Cargando sucursales y opciones de dirección… Puedes completar los demás campos.'
+        "
+      />
       <div v-else-if="needsAddress && catalogsError" class="catalog-notice">
         <NotificationPopup type="error" :message="catalogsError" :duration="0" />
         <button type="button" class="cancel-button" @click="retryCatalogs">Reintentar</button>
       </div>
 
       <div
-        v-if="submissionErrors.length"
+        v-if="generalSubmissionErrors.length"
         ref="submission-feedback"
         class="catalog-notice"
         tabindex="-1"
       >
         <NotificationPopup
-          v-for="message in submissionErrors"
-          :key="message"
           type="error"
-          :message="message"
+          :message="generalSubmissionErrors.join(' ')"
           :duration="0"
+          placement="bottom-right"
         />
       </div>
+      <p v-if="validationNotice" class="field-error" role="alert">{{ validationNotice }}</p>
 
       <fieldset v-for="group in groups" :key="group.label" :disabled="sending">
         <legend>{{ group.label }}</legend>
@@ -909,41 +951,6 @@ defineExpose({ open, complete })
   background: var(--overlay-background);
 }
 
-.dialog-heading {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 24px;
-  color: var(--dialog-heading-text);
-  background: var(--dialog-heading-background);
-}
-
-.dialog-heading h2 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-
-.close-button {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: var(--radius-small);
-  color: inherit;
-  background: transparent;
-}
-
-.close-button:hover {
-  background: var(--surface-on-dark-hover);
-}
-
-.close-button:focus-visible {
-  outline: 2px solid var(--focus-on-dark);
-  outline-offset: 2px;
-}
-
 form {
   min-height: 0;
   padding: 24px;
@@ -1097,10 +1104,6 @@ textarea {
 }
 
 @media (max-width: 575px) {
-  .dialog-heading {
-    padding: 12px 16px;
-  }
-
   form {
     padding: 20px 16px;
   }
