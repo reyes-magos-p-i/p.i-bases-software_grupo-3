@@ -2,13 +2,17 @@
 import { computed, ref, watch } from 'vue'
 import placeholderPoster from '@/assets/images/placeholder.svg'
 import { stripTrailingSlashes } from '@/services/movieFunctions'
+import { getPosterUrl } from '@/services/image-handler.service'
 
 const props = defineProps<{ posterImage?: string; title?: string; emptyText?: string }>()
 const imagesBaseUrl = `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image`
 const failed = ref(false)
-const source = computed(() =>
-  props.posterImage && !failed.value ? `${imagesBaseUrl}/${props.posterImage}` : placeholderPoster,
-)
+// Uploaded posters store their path; older ones store only the file name.
+const source = computed(() => {
+  if (!props.posterImage || failed.value) return placeholderPoster
+  if (props.posterImage.includes('/')) return getPosterUrl(props.posterImage) ?? placeholderPoster
+  return `${imagesBaseUrl}/${props.posterImage}`
+})
 watch(
   () => props.posterImage,
   () => {
