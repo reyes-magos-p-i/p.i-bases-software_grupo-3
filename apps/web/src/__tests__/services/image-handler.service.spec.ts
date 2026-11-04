@@ -51,26 +51,35 @@ describe('getPosterUrl', () => {
     },
   )
 
-  it.each(['poster.jpg', '/uploads/posters/poster.jpg'])(
-    'builds a URL from %s',
-    (value) => {
-      expect(getPosterUrl(value)).toBe(
-        'https://cinema.example.com/uploads/posters/poster.jpg',
-      )
-    },
-  )
+  it('builds the uploads URL for an uploaded poster path', () => {
+    expect(getPosterUrl('/uploads/posters/poster.jpg')).toBe(
+      'https://cinema.example.com/uploads/posters/poster.jpg',
+    )
+  })
+
+  it('serves a poster stored as a file name from the image route', () => {
+    expect(getPosterUrl('poster.jpg')).toBe(
+      'https://cinema.example.com/api/image/poster.jpg',
+    )
+  })
 
   it('encodes special characters in the filename', () => {
-    expect(getPosterUrl('my poster #1.jpg')).toBe(
+    expect(getPosterUrl('/uploads/posters/my poster #1.jpg')).toBe(
       'https://cinema.example.com/uploads/posters/my%20poster%20%231.jpg',
+    )
+    expect(getPosterUrl('my poster #1.jpg')).toBe(
+      'https://cinema.example.com/api/image/my%20poster%20%231.jpg',
     )
   })
 
   it('trims whitespace from the configured API URL', () => {
-    vi.stubEnv('VITE_API_BASE_URL', '  https://cinema.example.com/api  ')
+    vi.stubEnv('VITE_API_BASE_URL', '  https://cinema.example.com/api/  ')
 
-    expect(getPosterUrl('poster.jpg')).toBe(
+    expect(getPosterUrl('/uploads/posters/poster.jpg')).toBe(
       'https://cinema.example.com/uploads/posters/poster.jpg',
+    )
+    expect(getPosterUrl('poster.jpg')).toBe(
+      'https://cinema.example.com/api/image/poster.jpg',
     )
   })
 
@@ -92,8 +101,9 @@ describe('getPosterUrl', () => {
   it('uses the frontend origin when the API base URL is relative', () => {
     vi.stubEnv('VITE_API_BASE_URL', '/api')
 
-    expect(getPosterUrl('poster.jpg')).toBe(
+    expect(getPosterUrl('/uploads/posters/poster.jpg')).toBe(
       `${window.location.origin}/uploads/posters/poster.jpg`,
     )
+    expect(getPosterUrl('poster.jpg')).toBe('/api/image/poster.jpg')
   })
 })

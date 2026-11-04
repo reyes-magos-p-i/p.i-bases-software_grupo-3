@@ -1,9 +1,12 @@
 import placeholderImage from '@/assets/images/placeholder.svg'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, RouterLinkStub } from '@vue/test-utils'
 import MovieCatalog from '@/components/landing/MovieCatalog.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import type { PortalMovie } from '@/types/movie'
+
+beforeEach(() => vi.stubEnv('VITE_API_BASE_URL', '/api'))
+afterEach(() => vi.unstubAllEnvs())
 
 describe('MovieCatalog', () => {
   const movies: PortalMovie[] = Array.from({ length: 6 }, (_item, index) => ({
@@ -51,5 +54,16 @@ describe('MovieCatalog', () => {
     await image.trigger('error')
     expect(image.attributes('src')).toBe(placeholder)
     wrapper.unmount()
+  })
+  it('shows uploaded posters from their path and the placeholder when a movie has none', () => {
+    const wrapper = render({
+      movies: [
+        { id: 1, title: 'Subida', posterImage: '/uploads/posters/a1b2.webp' },
+        { id: 2, title: 'Sin póster', posterImage: '' },
+      ],
+    })
+    const [uploaded, missing] = wrapper.findAll('img')
+    expect(uploaded!.attributes('src')).toBe(`${window.location.origin}/uploads/posters/a1b2.webp`)
+    expect(missing!.attributes('src')).toBe(placeholderImage)
   })
 })

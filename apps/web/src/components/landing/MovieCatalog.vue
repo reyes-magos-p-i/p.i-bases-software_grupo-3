@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import type { PortalMovie } from '@/types/movie'
-import { stripTrailingSlashes } from '@/services/movieFunctions'
+import { getPosterUrl } from '@/services/image-handler.service'
 import LoadingState from '@/components/common/LoadingState.vue'
 import placeholderImage from '../../assets/images/placeholder.svg'
 
 defineProps<{ movies: readonly PortalMovie[]; loading?: boolean; error?: string }>()
 const emit = defineEmits<{ retry: [] }>()
-const imagesBaseUrl = `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image`
 function handleImageError(event: Event) {
   const img = event.target as HTMLImageElement
   if (img.getAttribute('src') !== placeholderImage) img.src = placeholderImage
@@ -26,7 +25,7 @@ function handleImageError(event: Event) {
       <div v-else-if="movies.length" class="movie-grid">
         <article v-for="movie in movies" :key="movie.id" class="movie-card">
           <img
-            :src="`${imagesBaseUrl}/${movie.posterImage}`"
+            :src="getPosterUrl(movie.posterImage) ?? placeholderImage"
             :alt="movie.title"
             class="movie-poster"
             @error="handleImageError"

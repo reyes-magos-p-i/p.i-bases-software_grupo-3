@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { stripTrailingSlashes } from '@/services/movieFunctions'
+import { getPosterUrl } from '@/services/image-handler.service'
 import type { PortalMovie } from '@/types/movie'
 import placeholderImage from '../../assets/images/placeholder.svg'
 
@@ -12,13 +12,12 @@ interface CarouselSlide {
 const props = defineProps<{ movies: readonly PortalMovie[] }>()
 const slides = ref<CarouselSlide[]>([])
 const currentIndex = ref(0)
-const imagesBaseUrl = `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image`
 watch(
   () => props.movies,
   (movies) => {
     slides.value = movies.length
       ? movies.slice(0, 4).map((movie) => ({
-          image: `${imagesBaseUrl}/${movie.posterImage}`,
+          image: getPosterUrl(movie.posterImage) ?? placeholderImage,
           alt: movie.title,
           title: movie.title,
         }))

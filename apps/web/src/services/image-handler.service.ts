@@ -1,5 +1,6 @@
 // src/services/image-handler.service.ts
 import { getApi } from '@/services/api' // Adjust to its actual location.
+import { stripTrailingSlashes } from '@/services/movieFunctions'
 
 export interface PosterUploadResponse {
   filename: string
@@ -32,6 +33,11 @@ export function getPosterUrl(
 
   if (!apiBaseUrl) {
     throw new Error('Falta configurar VITE_API_BASE_URL.')
+  }
+
+  // Posters saved before uploads existed store only a file name and are served by the image route.
+  if (!storedValue.includes('/')) {
+    return `${stripTrailingSlashes(apiBaseUrl)}/image/${encodeURIComponent(filename)}`
   }
 
   const imageOrigin = apiBaseUrl.startsWith('/')

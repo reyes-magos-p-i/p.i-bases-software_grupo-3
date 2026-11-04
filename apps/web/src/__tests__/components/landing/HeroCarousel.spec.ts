@@ -1,8 +1,11 @@
 import placeholderImage from '@/assets/images/placeholder.svg'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import HeroCarousel from '@/components/landing/HeroCarousel.vue'
 import type { PortalMovie } from '@/types/movie'
+
+beforeEach(() => vi.stubEnv('VITE_API_BASE_URL', '/api'))
+afterEach(() => vi.unstubAllEnvs())
 
 describe('HeroCarousel', () => {
   let wrapper: VueWrapper | undefined
@@ -48,5 +51,13 @@ describe('HeroCarousel', () => {
     expect(wrapper.get('img').attributes('alt')).toBe('Película 5')
     await wrapper.get('img').trigger('error')
     expect(wrapper.get('img').attributes('src')).toBe(placeholderImage)
+  })
+  it('shows an uploaded poster from its path', () => {
+    wrapper = mount(HeroCarousel, {
+      props: { movies: [{ id: 1, title: 'Subida', posterImage: '/uploads/posters/a1b2.webp' }] },
+    })
+    expect(wrapper.get('img').attributes('src')).toBe(
+      `${window.location.origin}/uploads/posters/a1b2.webp`,
+    )
   })
 })

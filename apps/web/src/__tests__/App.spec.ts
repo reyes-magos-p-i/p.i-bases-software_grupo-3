@@ -3,7 +3,7 @@ import {
   clearClientSession,
   establishClientSession,
 } from '@/services/client-session.service'
-import { afterEach, describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import App from '../App.vue'
 import router from '../router'
@@ -31,6 +31,7 @@ vi.mock('@/services/employee-session.service', async () => {
 })
 
 describe('App', () => {
+  beforeEach(() => vi.stubEnv('VITE_API_BASE_URL', '/api'))
   afterEach(() => {
     clearClientSession()
     vi.clearAllMocks()
