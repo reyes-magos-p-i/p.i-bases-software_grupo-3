@@ -540,7 +540,7 @@ describe('Atomic purchase storage', () => {
       expect(close).toHaveBeenCalledTimes(1);
     },
   );
-  it('reports a cancelled function unless its tickets were rescheduled', async () => {
+  it('reports a cancelled function while any ticket remains on it', async () => {
     overrides['AS "contextJson"'] = {
       rows: [
         { id: 12, functionId: 4, contextJson: null, functionCancelled: 1 },
@@ -555,8 +555,11 @@ describe('Atomic purchase storage', () => {
     const headerSql = query.mock.calls
       .map(([sql]) => sql)
       .find((sql) => sql.includes('AS "contextJson"'));
-    expect(headerSql).toContain("mf.STATUS='CANCELLED' AND NOT EXISTS");
-    expect(headerSql).toContain("cur.STATUS<>'CANCELLED'");
+    expect(headerSql).toContain("mf.STATUS='CANCELLED' AND (EXISTS");
+    expect(headerSql).toContain("cur.STATUS='CANCELLED'");
+    expect(headerSql).toContain(
+      'OR NOT EXISTS (SELECT 1 FROM TICKETS rt WHERE rt.INVOICE_ID=i.INVOICE_ID)',
+    );
     query.mockRestore();
     overrides['AS "contextJson"'] = {
       rows: [

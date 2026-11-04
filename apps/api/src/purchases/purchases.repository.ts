@@ -56,8 +56,9 @@ function buyerScope(buyer: Buyer): { condition: string; binds: Binds } {
 type Binds = Exclude<oracle.BindParameters, unknown[]>;
 const OPTIONS = { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false };
 const ZONE = 'America/Costa_Rica';
-// A rescheduled ticket keeps the purchase valid even if its original function was cancelled.
-const FUNCTION_CANCELLED = `CASE WHEN mf.STATUS='CANCELLED' AND NOT EXISTS (SELECT 1 FROM TICKETS rt JOIN MOVIE_FUNCTIONS cur ON cur.MOVIE_FUNCTION_ID=rt.MOVIE_FUNCTION_ID WHERE rt.INVOICE_ID=i.INVOICE_ID AND cur.STATUS<>'CANCELLED') THEN 1 ELSE 0 END`;
+// Cancelled while any ticket is still on a cancelled function; invoices without
+// linked tickets follow their original function.
+const FUNCTION_CANCELLED = `CASE WHEN mf.STATUS='CANCELLED' AND (EXISTS (SELECT 1 FROM TICKETS rt JOIN MOVIE_FUNCTIONS cur ON cur.MOVIE_FUNCTION_ID=rt.MOVIE_FUNCTION_ID WHERE rt.INVOICE_ID=i.INVOICE_ID AND cur.STATUS='CANCELLED') OR NOT EXISTS (SELECT 1 FROM TICKETS rt WHERE rt.INVOICE_ID=i.INVOICE_ID)) THEN 1 ELSE 0 END`;
 @Injectable()
 export class PurchasesRepository {
   constructor(
