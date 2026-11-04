@@ -47,4 +47,6 @@ falla el guardado, el formulario conserva lo ingresado y muestra el motivo.
 
 ## Actualización de tarifas
 
+Una función con boletos vendidos no puede cambiar de sala: responde 409 con un mensaje claro, porque los boletos apuntan a esa función y sala. Los demás cambios siguen permitidos.
+
 Modificar formato, tecnología o estreno recalcula el precio general con la política central de boletos. Omitir esas opciones conserva la configuración actual. El campo heredado `price` no sustituye la fórmula. Las facturas previas conservan los importes originales. Véase [Compra de boletos](./ticket-purchase.md).

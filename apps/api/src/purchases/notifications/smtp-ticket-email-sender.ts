@@ -11,6 +11,29 @@ import {
 } from './ticket-email-sender';
 import { ticketEmailTemplate } from './ticket-email-template';
 
+interface SmtpFailure {
+  code?: unknown;
+  responseCode?: unknown;
+  syscall?: unknown;
+}
+
+// nodemailer reports a socket lost before and after the message data the same
+// way, so only a server rejection or a failed connection proves nothing was sent.
+function notSent(failure: SmtpFailure): boolean {
+  return (
+    (typeof failure.responseCode === 'number' && failure.responseCode >= 400) ||
+    failure.syscall === 'connect' ||
+    failure.code === 'EDNS'
+  );
+}
+
+// nodemailer codes are fixed values such as ESOCKET; anything else stays out of the logs.
+function smtpCode(failure: SmtpFailure): string | undefined {
+  return typeof failure.code === 'string' && /^E[A-Z]+$/u.test(failure.code)
+    ? failure.code
+    : undefined;
+}
+
 @Injectable()
 export class SmtpTicketEmailSender extends TicketEmailSender {
   private readonly transport: Mail<SMTPSentMessageInfo>;
@@ -55,8 +78,12 @@ export class SmtpTicketEmailSender extends TicketEmailSender {
       submitted = false;
       if (result.rejected.length || !result.accepted.includes(message.email))
         throw new TicketEmailDeliveryError(false);
-    } catch {
-      throw new TicketEmailDeliveryError(submitted);
+    } catch (error) {
+      const failure = (error ?? {}) as SmtpFailure;
+      throw new TicketEmailDeliveryError(
+        submitted && !notSent(failure),
+        smtpCode(failure),
+      );
     }
   }
 }
