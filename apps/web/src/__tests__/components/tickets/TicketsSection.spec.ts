@@ -58,7 +58,7 @@ describe('TicketsSection', () => {
       },
     })
     wrapper.vm.open()
-    expect(wrapper.get('.dialog-section-title').text()).toBe('1 Proyección de destino')
+    expect(wrapper.get('.dialog-section-title').text()).toBe('1 Proyección futura')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.emitted('submit')).toBeUndefined()
     await wrapper.get('#ticket-showtime').setValue('9')
