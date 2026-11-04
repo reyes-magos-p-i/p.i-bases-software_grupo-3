@@ -24,6 +24,30 @@ const data = {
   maxTickets: 6,
 } as SeatAvailability
 describe('SeatSelectionStep', () => {
+  it('counts the same registered positions as the map without counting holes or duplicates', () => {
+    const free = data.seats[0]!
+    const wrapper = mount(SeatSelectionStep, {
+      props: {
+        availability: {
+          ...data,
+          seats: [
+            free,
+            { ...free },
+            { ...free, rowNumber: 0 },
+            { ...free, columnNumber: 3 },
+            { ...free, theaterId: 99 },
+          ],
+        },
+        selected: [],
+        categories: {},
+      },
+    })
+    expect(wrapper.text()).toContain('1 asiento disponible')
+    expect(wrapper.findAll('.seat')).toHaveLength(1)
+    expect(wrapper.getComponent(SeatSelector).props('maxSelections')).toBe('all')
+    wrapper.unmount()
+  })
+
   it('reuses the seat map and emits per-seat ticket categories without pricing locally', async () => {
     const wrapper = mount(SeatSelectionStep, {
       props: { availability: data, selected: [data.seats[0]!], categories: {} },
@@ -49,8 +73,13 @@ describe('SeatSelectionStep', () => {
     await wrapper.setProps({
       availability: {
         ...data,
+        function: { ...data.function, columns: 3 },
         maxTickets: 2,
-        seats: [free, { ...free, positionId: 2 }, { ...free, positionId: 3 }],
+        seats: [
+          free,
+          { ...free, positionId: 2, columnNumber: 2 },
+          { ...free, positionId: 3, columnNumber: 3 },
+        ],
       },
     })
     expect(wrapper.getComponent(SeatSelector).props('maxSelections')).toBe(2)
