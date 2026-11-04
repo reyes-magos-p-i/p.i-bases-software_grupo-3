@@ -259,21 +259,19 @@ describe('ProjectionListPanel', () => {
     )
   })
 
-  it('pages with the shared arrows and keeps the existing page-size filter', async () => {
+  it('pages with the shared arrows, ten results and no page-size selector', async () => {
     getProjections.mockResolvedValue(list({ page: 5, totalPages: 10, total: 100 }))
     await render()
+    expect(wrapper!.find('[name="pageSize"]').exists()).toBe(false)
     expect(wrapper!.get('[aria-current="page"]').text()).toBe('Página 5 de 10')
     getProjections.mockResolvedValueOnce(list({ page: 6, totalPages: 10, total: 100 }))
     await wrapper!.get('[aria-label="Página siguiente"]').trigger('click')
     await flushPromises()
-    expect(lastQuery().page).toBe(6)
+    expect(lastQuery()).toEqual({ page: 6, pageSize: 10 })
     expect(wrapper!.get('[aria-current="page"]').text()).toBe('Página 6 de 10')
     await wrapper!.get('[aria-label="Página anterior"]').trigger('click')
     await flushPromises()
-    expect(lastQuery().page).toBe(5)
-    await field('pageSize').setValue(25)
-    await flushPromises()
-    expect(lastQuery()).toEqual({ page: 1, pageSize: 25 })
+    expect(lastQuery()).toEqual({ page: 5, pageSize: 10 })
   })
 
   it.each([

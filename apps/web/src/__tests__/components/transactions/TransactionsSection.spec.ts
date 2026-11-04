@@ -438,21 +438,18 @@ describe('TransactionsSection', () => {
     expect(view.findAll('select[name="movieId"] option')).toHaveLength(3)
   })
 
-  it('pages forward and back and changes the page size', async () => {
+  it('pages forward and back with ten results and no page-size selector', async () => {
     getTransactions.mockResolvedValue(result({ total: 25, totalPages: 3 }))
     const view = await render()
+    expect(view.find('[name="pageSize"]').exists()).toBe(false)
+    getTransactions.mockResolvedValueOnce(result({ page: 2, total: 25, totalPages: 3 }))
     await view.get('[aria-label="Página siguiente"]').trigger('click')
     await flushPromises()
-    expect(lastQuery()).toMatchObject({ page: 2 })
-    getTransactions.mockResolvedValue(result({ page: 2, total: 25, totalPages: 3 }))
-    await view.get('[aria-label="Página siguiente"]').trigger('click')
-    await flushPromises()
+    expect(lastQuery()).toEqual({ page: 2, pageSize: 10 })
+    expect(view.get('[aria-current="page"]').text()).toBe('Página 2 de 3')
     await view.get('[aria-label="Página anterior"]').trigger('click')
     await flushPromises()
-    expect(lastQuery()).toMatchObject({ page: 1 })
-    await view.get('select[name="pageSize"]').setValue('50')
-    await flushPromises()
-    expect(lastQuery()).toEqual({ page: 1, pageSize: 50 })
+    expect(lastQuery()).toEqual({ page: 1, pageSize: 10 })
   })
 
   it('does not page past the last page', async () => {

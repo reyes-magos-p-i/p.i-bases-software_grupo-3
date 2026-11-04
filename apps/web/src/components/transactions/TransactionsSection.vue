@@ -13,7 +13,6 @@ import type {
   TransactionListItem,
   TransactionListQuery,
   TransactionListResult,
-  TransactionPageSize,
   TransactionStatus,
 } from '@/types/transaction'
 import {
@@ -24,7 +23,6 @@ import {
   formatTransactionId,
 } from '@/utils/transaction-format'
 
-const PAGE_SIZES: readonly TransactionPageSize[] = [10, 20, 50]
 const NO_NAME = 'Sin nombre registrado'
 const DATE_FILTERS = [
   { name: 'dateFrom', label: 'Fecha inicio' },
@@ -44,7 +42,6 @@ const filters = reactive({
   dateFrom: '',
   dateTo: '',
 })
-const pageSize = ref<TransactionPageSize>(10)
 const page = ref(1)
 const result = ref<TransactionListResult | null>(null)
 const loading = ref(false)
@@ -108,7 +105,7 @@ async function load() {
   listError.value = ''
   const query: TransactionListQuery = {
     page: page.value,
-    pageSize: pageSize.value,
+    pageSize: 10,
     ...(appliedSearch.value ? { search: appliedSearch.value } : {}),
     ...(filters.branchId !== '' ? { branchId: filters.branchId } : {}),
     ...(filters.movieId !== '' ? { movieId: filters.movieId } : {}),
@@ -352,11 +349,6 @@ onBeforeUnmount(() => {
     </div>
 
     <footer v-if="result && !listError && !dateError" class="pagination-bar">
-      <label class="page-size"
-        >Mostrar<select v-model="pageSize" name="pageSize" @change="filtersChanged">
-          <option v-for="size in PAGE_SIZES" :key="size" :value="size">{{ size }}</option>
-        </select></label
-      >
       <PaginationControls
         label="Paginación de transacciones"
         :page="result.page"
@@ -583,16 +575,6 @@ button:focus-visible {
   justify-content: center;
   align-items: center;
   font-size: 0.875rem;
-}
-.page-size {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 400;
-  color: var(--text-on-dark-secondary);
-}
-.page-size select {
-  color: var(--text-primary);
 }
 @media (max-width: 600px) {
   .search-field {

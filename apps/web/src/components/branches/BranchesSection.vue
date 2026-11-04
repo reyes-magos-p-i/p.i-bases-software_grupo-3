@@ -23,11 +23,9 @@ import type {
   BranchListQuery,
   BranchRequest,
   BranchListResult,
-  BranchPageSize,
   CompanyOption,
 } from '@/types/branch'
 
-const PAGE_SIZES: readonly BranchPageSize[] = [10, 20, 50]
 const NO_NAME = 'Sin nombre registrado'
 const NO_COMPANY = 'Sin compañía asignada'
 const NO_PERMISSION = 'No tiene permisos para acceder a esta sección'
@@ -41,7 +39,6 @@ const searchDraft = ref('')
 const appliedSearch = ref('')
 const validationError = ref('')
 const companyId = ref<number | ''>('')
-const pageSize = ref<BranchPageSize>(10)
 const page = ref(1)
 const result = ref<BranchListResult | null>(null)
 const loading = ref(false)
@@ -99,7 +96,7 @@ async function load() {
   listError.value = ''
   const query: BranchListQuery = {
     page: page.value,
-    pageSize: pageSize.value,
+    pageSize: 10,
     ...(appliedSearch.value ? { search: appliedSearch.value } : {}),
     ...(companyId.value !== '' ? { companyId: companyId.value } : {}),
   }
@@ -414,11 +411,6 @@ onBeforeUnmount(() => {
     </div>
 
     <footer v-if="result && !listError" class="pagination-bar">
-      <label class="page-size"
-        >Mostrar<select v-model="pageSize" name="pageSize" @change="filtersChanged">
-          <option v-for="size in PAGE_SIZES" :key="size" :value="size">{{ size }}</option>
-        </select></label
-      >
       <PaginationControls
         label="Paginación de sucursales"
         :page="result.page"
@@ -662,16 +654,6 @@ button:focus-visible {
   justify-content: center;
   align-items: center;
   font-size: 0.875rem;
-}
-.page-size {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 400;
-  color: var(--text-on-dark-secondary);
-}
-.page-size select {
-  color: var(--text-primary);
 }
 @media (max-width: 600px) {
   .search-field {

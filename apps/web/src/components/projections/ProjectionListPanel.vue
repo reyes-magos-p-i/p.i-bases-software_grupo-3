@@ -26,7 +26,6 @@ import {
   projectionCode,
 } from '@/utils/projection-format'
 
-const PAGE_SIZES = [10, 25, 50, 100]
 // Time filters are a predefined list every 30 minutes, always shown in 12-hour format.
 const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   const value = `${String(Math.floor(index / 2)).padStart(2, '0')}:${index % 2 ? '30' : '00'}`
@@ -61,7 +60,6 @@ const filters = reactive(emptyFilters())
 const searchDraft = ref('')
 const appliedSearch = ref('')
 const page = ref(1)
-const pageSize = ref(10)
 const options = ref<ProjectionFilterOptions | null>(null)
 const optionsError = ref('')
 const result = ref<ProjectionList | null>(null)
@@ -124,7 +122,7 @@ const rows = computed(() =>
 )
 
 function buildQuery(): ProjectionListQuery {
-  const query: ProjectionListQuery = { page: page.value, pageSize: pageSize.value }
+  const query: ProjectionListQuery = { page: page.value, pageSize: 10 }
   if (appliedSearch.value) query.search = appliedSearch.value
   if (filters.status) query.status = filters.status
   for (const key of ['branchId', 'theaterId', 'movieId'] as const)
@@ -418,12 +416,6 @@ defineExpose({ refresh })
           </p>
         </div>
         <footer class="pagination-bar">
-          <label class="page-size">
-            Mostrar
-            <select v-model.number="pageSize" name="pageSize" @change="filtersChanged">
-              <option v-for="size in PAGE_SIZES" :key="size" :value="size">{{ size }}</option>
-            </select>
-          </label>
           <PaginationControls
             label="Paginación de proyecciones"
             :page="result.page"
@@ -616,10 +608,5 @@ button:focus-visible {
   align-items: center;
   margin-top: 16px;
   font-size: 0.875rem;
-}
-.page-size {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 </style>
