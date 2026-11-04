@@ -66,6 +66,7 @@ export interface PurchaseReceipt extends Omit<PurchaseQuote, 'seats' | 'quantity
   qrPayload: string
   status: string
   buyerEmail: string
+  functionCancelled: boolean
   paymentMethod: 'CARD' | 'CASH' | 'SIMULATED'
   cardBrand: string | null
   cardLast4: string | null
@@ -101,6 +102,7 @@ export interface SeatAvailability {
   function: PurchaseFunction
   seats: PurchaseSeat[]
   categories: PurchaseCategory[]
+  maxTickets: number
 }
 export interface PurchaseMovie extends PortalMovie {
   synopsis: string
@@ -121,6 +123,7 @@ export interface PurchaseList {
     title: string
     startsAt: string
     quantity: number
+    functionCancelled: boolean
   }[]
   page: number
   total: number

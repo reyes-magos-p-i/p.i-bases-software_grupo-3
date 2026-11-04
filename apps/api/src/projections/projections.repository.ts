@@ -283,6 +283,8 @@ export class ProjectionsRepository {
       const status = current.STATUS;
       if (status !== 'ACTIVE' && status !== 'INACTIVE')
         throw new ConflictException(PROJECTION_MESSAGES.notEditable);
+      if (data.theaterId !== current.THEATER_ID)
+        await this.requireNoSoldTickets(connection, id);
       await this.lockAvailableTheater(
         connection,
         data.theaterId,
@@ -340,6 +342,20 @@ export class ProjectionsRepository {
     });
   }
 
+  // Sold tickets point to this function and theater, so Oracle would reject the change.
+  private async requireNoSoldTickets(
+    connection: oracle.Connection,
+    id: number,
+  ) {
+    const sold = await connection.execute(
+      'SELECT 1 FROM TICKETS WHERE MOVIE_FUNCTION_ID = :id FETCH FIRST 1 ROW ONLY',
+      { id: { val: id, type: oracle.NUMBER } },
+      TRANSACTION,
+    );
+    if (sold.rows?.length)
+      throw new ConflictException(PROJECTION_MESSAGES.theaterHasTickets);
+  }
+
   // Locks the projection row so concurrent changes to it wait; missing means deleted.
   private async lockProjectionStatus(
     connection: oracle.Connection,
@@ -347,11 +363,12 @@ export class ProjectionsRepository {
   ) {
     const current = await connection.execute<{
       STATUS: ProjectionStatus;
+      THEATER_ID: number;
       PROJECTION_FORMAT?: '2D' | '3D';
       TECHNOLOGY?: 'STANDARD' | 'IMAX' | '70MM';
       IS_PREMIERE?: number;
     }>(
-      'SELECT STATUS,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS WHERE MOVIE_FUNCTION_ID = :id FOR UPDATE',
+      'SELECT STATUS,THEATER_ID,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS WHERE MOVIE_FUNCTION_ID = :id FOR UPDATE',
       { id: { val: id, type: oracle.NUMBER } },
       TRANSACTION,
     );

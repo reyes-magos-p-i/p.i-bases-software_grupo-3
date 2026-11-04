@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import oracle from 'oracledb';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -6,7 +6,11 @@ import {
   ticketPrice,
   TICKET_POLICY,
 } from '../common/pricing/ticket-pricing';
-import type { PurchaseFunction, PurchaseSeat } from './purchase.types';
+import type {
+  PurchaseFunction,
+  PurchaseLimits,
+  PurchaseSeat,
+} from './purchase.types';
 export const FUNCTION_SOURCE = `FROM MOVIE_FUNCTIONS mf JOIN MOVIES m ON m.MOVIE_ID=mf.MOVIE_ID JOIN THEATERS t ON t.THEATER_ID=mf.THEATER_ID JOIN CINEMAS c ON c.BRANCH_ID=t.BRANCH_ID`;
 export const FUNCTION_COLUMNS = `mf.MOVIE_FUNCTION_ID AS "id", m.MOVIE_ID AS "movieId", m.TITLE AS "title", m.SYNOPSIS AS "synopsis", NVL(m.POSTER_IMAGE, '') AS "posterImage", c.BRANCH_ID AS "branchId", TRIM(c.NAME) AS "branchName", t.THEATER_ID AS "theaterId", t.DIMENSION_X AS "rows", t.DIMENSION_Y AS "columns", TO_CHAR(mf.START_TIME, 'YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "startsAt", TO_CHAR(mf.END_TIME, 'YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "endsAt", mf.STATUS AS "status", mf.PROJECTION_FORMAT AS "format", mf.TECHNOLOGY AS "technology", mf.IS_PREMIERE AS "isPremiere", CASE WHEN mf.STATUS='ACTIVE' AND mf.START_TIME>CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP) AND t.IS_ACTIVE=1 AND c.STATUS='ACTIVE' AND EXISTS(SELECT 1 FROM CINEMA_MOVIES cm WHERE cm.MOVIE_ID=mf.MOVIE_ID AND cm.BRANCH_ID=t.BRANCH_ID AND cm.IS_AVAILABLE=1) THEN 1 ELSE 0 END AS "available"`;
 export type FunctionRow = Omit<
@@ -62,6 +66,28 @@ export class PurchaseCatalogRepository {
       : await this.db.query<FunctionRow>(sql, { id });
     return result.rows?.[0] ? toPurchaseFunction(result.rows[0]) : null;
   }
+  // Without the configured limits nothing can be sold safely, so this fails closed.
+  async getLimits(connection?: oracle.Connection): Promise<PurchaseLimits> {
+    const sql = `SELECT SETTING_KEY AS "key", SETTING_VALUE AS "value" FROM GLOBAL_SETTINGS WHERE SETTING_KEY IN ('MAX_TICKETS_PER_FUNCTION','MAX_GUEST_PURCHASES_PER_HOUR')`;
+    type Setting = { key: string; value: number };
+    const result = connection
+      ? await connection.execute<Setting>(
+          sql,
+          {},
+          { outFormat: oracle.OUT_FORMAT_OBJECT, autoCommit: false },
+        )
+      : await this.db.query<Setting>(sql);
+    const values = new Map(
+      (result.rows ?? []).map((setting) => [setting.key, setting.value]),
+    );
+    const maxTickets = values.get('MAX_TICKETS_PER_FUNCTION');
+    const maxGuestPurchases = values.get('MAX_GUEST_PURCHASES_PER_HOUR');
+    if (maxTickets === undefined || maxGuestPurchases === undefined)
+      throw new ServiceUnavailableException(
+        'No se pudieron preparar los boletos. Intenta nuevamente.',
+      );
+    return { maxTickets, maxGuestPurchases };
+  }
   async getSeats(context: PurchaseFunction) {
     const result = await this.db.query<PurchaseSeat>(seatQuery(), {
       columns: context.columns,
@@ -72,6 +98,7 @@ export class PurchaseCatalogRepository {
       function: context,
       seats: result.rows ?? [],
       categories: TICKET_POLICY.categories,
+      maxTickets: (await this.getLimits()).maxTickets,
     };
   }
 }

@@ -41,6 +41,7 @@ const rows = computed(() =>
     total: formatColones(purchase.total),
     status: TRANSACTION_STATUS_LABELS[purchase.status],
     statusClass: purchase.status.toLowerCase(),
+    functionCancelled: purchase.functionCancelled,
   })),
 )
 const hasFilters = computed(() => Object.keys(applied.value).length > 0)
@@ -156,6 +157,9 @@ onBeforeUnmount(() => {
           <CrudTable :columns="columns" :rows="rows" caption="Historial de compras">
             <template #cell-status="{ row, value }">
               <span :class="['status-badge', row.statusClass]">{{ value }}</span>
+              <small v-if="row.functionCancelled" class="function-cancelled">
+                Función cancelada
+              </small>
             </template>
             <template #actions="{ row }">
               <button
@@ -255,6 +259,11 @@ button:disabled {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   font-size: 0.875rem;
+}
+.function-cancelled {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
 }
 .status-badge.cancelled {
   font-weight: 600;

@@ -81,3 +81,22 @@ En el ajuste final de filtros y diálogos pasan las 1755 pruebas de los 119 arch
 La revisión de secciones numeradas y contenedores de diálogo pasa 1762 pruebas en 120 archivos del frontend. La cobertura global de líneas es 95,83 %; las líneas ejecutables añadidas respecto al `HEAD` de esta revisión alcanzan 93,81 % (91/97), incluyendo `DialogSection`, y las ramas añadidas 96,02 % (217/226). También pasan lint, formato, tipos y compilación. Las pruebas conservan los contratos de guardado, validaciones locales, protección de dimensiones, confirmaciones y cierre durante solicitudes; las comprobaciones de errores identifican su campo, sin depender de cuál se muestre primero.
 
 En Edge, con respuestas e imágenes simuladas, se verificaron los formularios numerados a 320, 390 y 1440 píxeles: no presentaron desbordamiento horizontal, los títulos conservaron su jerarquía y el desplazamiento permitió llegar a las acciones sin perder el encabezado. Se comprobaron también la altura de los botones, el color de las confirmaciones destructivas y la excepción visual de registro. No se registraron excepciones de JavaScript en ese recorrido ni se enviaron operaciones de guardado a la API real.
+
+## Integración final con dev
+
+Se integró `dev` en `c1e43d5` sobre el estado `3fc2d28` de esta rama. El único conflicto estaba en la prueba de selección de asientos: se conservaron las comprobaciones del límite de compra de `dev` y el texto singular «1 asiento disponible» de esta historia.
+
+Se mantienen las reglas de compra, límites configurables, cancelación de funciones, protección de proyecciones con boletos vendidos y consultas de transacciones incorporadas desde `dev`. La selección de todos los asientos continúa disponible cuando el límite configurado permite comprar todos los libres; un límite inferior conserva su aviso y su restricción. Los avisos nuevos de función cancelada utilizan las variables de color existentes. Se conservan los pósteres, la alineación del resumen, el QR, la jerarquía de los diálogos y los indicadores compartidos de esta rama.
+
+Resultados de la integración, verificados con consultas y solicitudes simuladas:
+
+| Aplicación | Archivos de pruebas | Pruebas aprobadas | Cobertura global de líneas | Cobertura de líneas ejecutables añadidas |
+| ---------- | ------------------: | ----------------: | -------------------------: | ---------------------------------------: |
+| API        |                 122 |              2673 |                    98,24 % |                            100 % (39/39) |
+| Web        |                 120 |              1766 |                    95,83 % |                              100 % (2/2) |
+
+La cobertura añadida corresponde al diff contra `3fc2d28`, antes de integrar `dev`; no incluye estilos, tipos ni documentación. También pasan lint, tipos, compilación y las comprobaciones de formato de los archivos afectados. En dos documentos importados se ajustó únicamente el formato de tablas para cumplir Prettier. No se modificaron CI/CD ni SonarQube.
+
+La revisión en Edge con API e imágenes simuladas comprobó el plano, la selección de todos los asientos libres, la presentación de un límite inferior, el resumen y el historial. En tamaños de 320, 390, 768 y 1440 píxeles, el resumen conserva el póster alineado con el título y los avisos de cancelación no generan desbordamiento horizontal de la página. El historial conserva el desplazamiento interno de la tabla. El QR sigue disponible en el resumen y no se registraron excepciones de JavaScript de la aplicación. Esta emulación no sustituye una comprobación en un teléfono físico.
+
+Se importaron sin ejecutar las migraciones `20261102_global_settings.sql` y `20261102_ticket_limit_by_availability.sql`, junto con el esquema actualizado de `dev`. El despliegue requiere que la base tenga esos cambios aplicados en ese orden. No se realizaron operaciones contra Oracle, compras ni envíos de correo reales durante esta revisión.

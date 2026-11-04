@@ -22,16 +22,16 @@ más antigua. Solo incluye las facturas **pagadas** (`PAID`) y **canceladas**
 (`CANCELLED`); las pendientes (`PENDING`) y fallidas (`FAILED`) todavía no son
 transacciones.
 
-| Columna            | Valor                                                            | Ejemplo                                    |
-| ------------------ | ---------------------------------------------------------------- | ------------------------------------------ |
-| IdTransacción      | `FAC-` y el ID de la factura con 6 dígitos                       | FAC-000123                                 |
-| Fecha              | Fecha de compra, hora de Costa Rica                              | 12/10/2026                                 |
-| Cliente            | Nombre completo y, debajo, el correo                             | Carlos Mora                                |
-| Película y función | Película, sala y fecha y hora de la función; debajo, la sucursal | Ecos del Volcán – Sala 1, 12/10/2026 17:00 |
-| Boletos            | Suma de las cantidades de las líneas de tipo `TICKET`            | 1                                          |
-| Total              | Total cobrado, en colones                                        | ₡3500                                      |
-| Estado             | «Pagada» o «Cancelada»                                           | Pagada                                     |
-| Acciones           | «Ver detalle»                                                    |                                            |
+| Columna            | Valor                                                             | Ejemplo                                    |
+| ------------------ | ----------------------------------------------------------------- | ------------------------------------------ |
+| IdTransacción      | `FAC-` y el ID de la factura con 6 dígitos                        | FAC-000123                                 |
+| Fecha              | Fecha de compra, hora de Costa Rica                               | 12/10/2026                                 |
+| Cliente            | Nombre completo y, debajo, el correo; «Invitado» si no hay cuenta | Carlos Mora                                |
+| Película y función | Película, sala y fecha y hora de la función; debajo, la sucursal  | Ecos del Volcán – Sala 1, 12/10/2026 17:00 |
+| Boletos            | Suma de las cantidades de las líneas de tipo `TICKET`             | 1                                          |
+| Total              | Total cobrado, en colones                                         | ₡3500                                      |
+| Estado             | «Pagada» o «Cancelada»                                            | Pagada                                     |
+| Acciones           | «Ver detalle»                                                     |                                            |
 
 - El cliente ve la misma factura en su historial como `ORD-000123`.
 - Los montos se muestran como en el plan de pruebas, sin separador de miles (`₡11500`).
@@ -118,5 +118,7 @@ En `apps/api`: `npm test -- src/transactions`. En `apps/web`:
 `npx vitest run src/__tests__/components/transactions src/__tests__/utils/transaction-format.spec.ts src/__tests__/services/transaction.service.spec.ts`.
 
 ## Compras simuladas e instantáneas
+
+La búsqueda usa los mismos datos que muestra cada fila: las compras de invitado aparecen como «Invitado» y se encuentran por su correo, y una película renombrada se encuentra por el título que tenía al comprar.
 
 El método `SIMULATED` se muestra como «Pago simulado», sin tarjeta ni Stripe. Las nuevas compras guardan una instantánea de la función y del correo al comprar; las transacciones consultan esos datos cuando están presentes y conservan el comportamiento histórico en las demás. Véase [Compra de boletos](./ticket-purchase.md).

@@ -16,6 +16,10 @@ El ícono de ojo abre un modal con productos, cantidades, precios, método de pa
 
 La API responde 404 tanto si la compra no existe como si es de otra cuenta, para no revelar qué números de orden existen. La web muestra en ambos casos «No tienes acceso a esta compra». Las facturas sin instantánea muestran todas sus líneas, incluida la comida, para que los productos sumen el total.
 
+## Función cancelada
+
+Si se cancela la función de una compra, el detalle muestra «Esta función fue cancelada» y la lista agrega «Función cancelada» junto al estado, que sigue siendo el de la factura. La compra se marca como cancelada mientras al menos uno de sus boletos siga en una función cancelada; si todos se reprogramaron a otra función vigente, deja de marcarse. Una compra sin boletos vinculados sigue el estado de su función original. El correo de boletos usa el mismo aviso.
+
 ## Mensajes
 
 | Situación                  | Texto                                                       |

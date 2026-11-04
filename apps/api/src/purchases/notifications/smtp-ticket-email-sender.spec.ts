@@ -9,6 +9,8 @@ import { SmtpTicketEmailSender } from './smtp-ticket-email-sender';
 import type { TicketEmailMessage } from './ticket-email-sender';
 import { purchaseQrPayload } from '../purchase-rules';
 
+const renderQr = QRCode.toBuffer;
+
 describe('SMTP ticket delivery', () => {
   const sendMail = jest.fn();
   let sender: SmtpTicketEmailSender;
@@ -53,11 +55,26 @@ describe('SMTP ticket delivery', () => {
       get: (key: string) => settings[key],
     } as ConfigService);
   });
+  // Inside Jest, pngjs takes seconds to pick a filter for each row, so only
+  // the PNG test renders a real QR, and with a fixed filter.
+  const generate = () => jest.mocked(QRCode.toBuffer);
+  beforeEach(() => {
+    jest
+      .spyOn(QRCode, 'toBuffer')
+      .mockImplementation(() => Promise.resolve(Buffer.from('qr')));
+  });
   afterEach(() => jest.restoreAllMocks());
   it('sends only the readable QR PNG as an in-memory inline attachment with the canonical payload', async () => {
-    const generate = jest.spyOn(QRCode, 'toBuffer');
+    generate().mockImplementation((text, options) =>
+      renderQr(text, {
+        ...options,
+        rendererOpts: Object.assign({}, options.rendererOpts, {
+          filterType: 0,
+        }),
+      }),
+    );
     await sender.send(message);
-    expect(generate).toHaveBeenCalledWith(
+    expect(generate()).toHaveBeenCalledWith(
       message.receipt.qrPayload,
       expect.objectContaining({
         width: 512,
