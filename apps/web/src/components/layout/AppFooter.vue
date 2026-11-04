@@ -11,7 +11,7 @@
 
         <p>
           <i class="bi bi-envelope"></i>
-          contact@cinetadel.com
+          cinetadel2026@gmail.com
         </p>
 
         <p>
