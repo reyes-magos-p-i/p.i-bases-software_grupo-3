@@ -69,6 +69,7 @@ async function fillValidForm() {
 }
 
 beforeEach(() => {
+  vi.stubEnv('VITE_API_BASE_URL', 'https://cinema.example/api')
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   searchAvailableMovies.mockReset().mockResolvedValue([spiderMan, odyssey])
   previewProjectionPrice.mockReset().mockImplementation((settings) =>
@@ -101,6 +102,7 @@ afterEach(() => {
   wrapper?.unmount()
   wrapper = undefined
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   Reflect.deleteProperty(dialogPrototype, 'showModal')
   Reflect.deleteProperty(dialogPrototype, 'close')
   document.body.innerHTML = ''

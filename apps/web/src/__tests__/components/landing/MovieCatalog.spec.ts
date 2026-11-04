@@ -1,11 +1,14 @@
 import placeholderImage from '@/assets/images/placeholder.svg'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, RouterLinkStub } from '@vue/test-utils'
 import MovieCatalog from '@/components/landing/MovieCatalog.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import type { PortalMovie } from '@/types/movie'
 
 describe('MovieCatalog', () => {
+  beforeEach(() => vi.stubEnv('VITE_API_BASE_URL', 'https://cinema.example/api'))
+  afterEach(() => vi.unstubAllEnvs())
+
   const movies: PortalMovie[] = Array.from({ length: 6 }, (_item, index) => ({
     id: index + 1,
     title: 'Mismo título',
