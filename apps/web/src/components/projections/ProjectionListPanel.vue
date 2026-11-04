@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaginationControls from '@/components/common/PaginationControls.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useId } from 'vue'
 import { isAxiosError } from 'axios'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
@@ -121,17 +122,6 @@ const rows = computed(() =>
     status: item.status,
   })),
 )
-/** Page numbers around the current one, with gaps ("…") between distant pages. */
-const pages = computed(() => {
-  const total = result.value?.totalPages ?? 0
-  const current = result.value?.page ?? 1
-  const visible = [...new Set([1, current - 1, current, current + 1, total])]
-    .filter((number) => number >= 1 && number <= total)
-    .sort((a, b) => a - b)
-  return visible.flatMap((number, index) =>
-    index && number - visible[index - 1]! > 1 ? ['…', number] : [number],
-  )
-})
 
 function buildQuery(): ProjectionListQuery {
   const query: ProjectionListQuery = { page: page.value, pageSize: pageSize.value }
@@ -434,38 +424,13 @@ defineExpose({ refresh })
               <option v-for="size in PAGE_SIZES" :key="size" :value="size">{{ size }}</option>
             </select>
           </label>
-          <nav aria-label="Paginación de proyecciones">
-            <button
-              type="button"
-              class="secondary-button"
-              :disabled="result.page <= 1"
-              @click="changePage(result.page - 1)"
-            >
-              <i class="bi bi-arrow-left" aria-hidden="true"></i> Anterior
-            </button>
-            <template v-for="(item, index) in pages" :key="`${item}-${index}`">
-              <span v-if="item === '…'" class="page-gap" aria-hidden="true">…</span>
-              <button
-                v-else
-                type="button"
-                class="page-button"
-                :class="{ 'is-current': item === result.page }"
-                :aria-current="item === result.page ? 'page' : undefined"
-                :aria-label="`Página ${item}`"
-                @click="changePage(item as number)"
-              >
-                {{ item }}
-              </button>
-            </template>
-            <button
-              type="button"
-              class="secondary-button"
-              :disabled="result.page >= result.totalPages"
-              @click="changePage(result.page + 1)"
-            >
-              Siguiente <i class="bi bi-arrow-right" aria-hidden="true"></i>
-            </button>
-          </nav>
+          <PaginationControls
+            label="Paginación de proyecciones"
+            :page="result.page"
+            :total-pages="result.totalPages"
+            :disabled="loading"
+            @change="changePage"
+          />
         </footer>
       </template>
     </div>
@@ -482,11 +447,15 @@ defineExpose({ refresh })
 <style scoped>
 .projection-list-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 16px;
 }
+.list-content {
+  min-width: 0;
+}
 .search-bar,
-.pagination-bar,
-.pagination-bar nav {
+.pagination-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
@@ -652,23 +621,5 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.pagination-bar nav {
-  align-items: center;
-  gap: 6px;
-}
-.page-button {
-  min-width: 40px;
-  padding: 8px 12px;
-  border-color: transparent;
-  color: var(--text-primary);
-  background: transparent;
-}
-.page-button.is-current {
-  color: var(--text-on-dark);
-  background: var(--surface-background);
-}
-.page-gap {
-  padding: 0 4px;
 }
 </style>

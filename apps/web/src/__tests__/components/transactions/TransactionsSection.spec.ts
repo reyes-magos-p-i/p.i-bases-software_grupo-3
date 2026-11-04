@@ -441,13 +441,13 @@ describe('TransactionsSection', () => {
   it('pages forward and back and changes the page size', async () => {
     getTransactions.mockResolvedValue(result({ total: 25, totalPages: 3 }))
     const view = await render()
-    await button(view, 'Siguiente').trigger('click')
+    await view.get('[aria-label="Página siguiente"]').trigger('click')
     await flushPromises()
     expect(lastQuery()).toMatchObject({ page: 2 })
     getTransactions.mockResolvedValue(result({ page: 2, total: 25, totalPages: 3 }))
-    await button(view, 'Siguiente').trigger('click')
+    await view.get('[aria-label="Página siguiente"]').trigger('click')
     await flushPromises()
-    await button(view, 'Anterior').trigger('click')
+    await view.get('[aria-label="Página anterior"]').trigger('click')
     await flushPromises()
     expect(lastQuery()).toMatchObject({ page: 1 })
     await view.get('select[name="pageSize"]').setValue('50')
@@ -458,10 +458,10 @@ describe('TransactionsSection', () => {
   it('does not page past the last page', async () => {
     const view = await render()
     const calls = getTransactions.mock.calls.length
-    expect(button(view, 'Siguiente').attributes('disabled')).toBeDefined()
-    expect(button(view, 'Anterior').attributes('disabled')).toBeDefined()
-    await button(view, 'Siguiente').trigger('click')
-    await button(view, 'Anterior').trigger('click')
+    expect(view.get('[aria-label="Página siguiente"]').attributes('disabled')).toBeDefined()
+    expect(view.get('[aria-label="Página anterior"]').attributes('disabled')).toBeDefined()
+    await view.get('[aria-label="Página siguiente"]').trigger('click')
+    await view.get('[aria-label="Página anterior"]').trigger('click')
     expect(getTransactions.mock.calls).toHaveLength(calls)
   })
 
