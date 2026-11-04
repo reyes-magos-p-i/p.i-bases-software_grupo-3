@@ -145,7 +145,7 @@ describe('ProjectionListPanel', () => {
     await field('status').setValue('ACTIVE')
     await field('branchId').setValue('5')
     expect(wrapper!.findAll('[name="theaterId"] option').map((option) => option.text())).toEqual([
-      'Todas',
+      'Todas las salas',
       'Sala 9',
     ])
     await field('theaterId').setValue('9')
@@ -156,12 +156,7 @@ describe('ProjectionListPanel', () => {
     expect(times).toHaveLength(49)
     expect(times.slice(0, 3)).toEqual(['Cualquiera', '12:00 am', '12:30 am'])
     expect(times[27]).toBe('1:00 pm')
-    expect(wrapper!.findAll('.format-hint').map((hint) => hint.text())).toEqual([
-      '(dd/mm/aaaa)',
-      '(dd/mm/aaaa)',
-      '(12 h, hh:mm am/pm)',
-      '(12 h, hh:mm am/pm)',
-    ])
+    expect(wrapper!.find('.format-hint').exists()).toBe(false)
     await field('dateFrom').setValue('2099-09-01')
     await field('dateFrom').trigger('change')
     await field('dateTo').setValue('2099-09-30')

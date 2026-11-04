@@ -320,13 +320,14 @@ onBeforeUnmount(() => {
 
     <div class="filters">
       <label
-        >Compañía<select
+        ><span class="visually-hidden">Compañía</span
+        ><select
           v-model="companyId"
           name="companyId"
           :disabled="companiesLoading || companiesError"
           @change="filtersChanged"
         >
-          <option value="">Todas</option>
+          <option value="">Todas las compañías</option>
           <option v-for="company in companies" :key="company.id" :value="company.id">
             {{ company.name ?? NO_NAME }}
           </option>
@@ -618,7 +619,7 @@ button:focus-visible {
 }
 .missing {
   color: var(--text-secondary);
-  font-style: italic;
+  font-style: normal;
 }
 .feedback {
   margin: 0;

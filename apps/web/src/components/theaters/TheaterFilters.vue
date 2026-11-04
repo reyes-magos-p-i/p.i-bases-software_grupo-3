@@ -67,22 +67,22 @@ onBeforeUnmount(() => {
       name="status"
       :options="statusOptions"
     />
-    <label>
-      Ordenar por
+    <label
+      ><span class="visually-hidden">Ordenar por</span>
       <select v-model="sortBy" name="sortBy">
-        <option value="theaterId">ID</option>
-        <option value="cinema">Sucursal</option>
-        <option value="numberOfSeats">Asientos</option>
-        <option value="dimensions">Dimensiones</option>
-        <option value="projectorName">Proyector</option>
-        <option value="status">Estado</option>
+        <option value="theaterId">Ordenar por: ID</option>
+        <option value="cinema">Ordenar por: Sucursal</option>
+        <option value="numberOfSeats">Ordenar por: Asientos</option>
+        <option value="dimensions">Ordenar por: Dimensiones</option>
+        <option value="projectorName">Ordenar por: Proyector</option>
+        <option value="status">Ordenar por: Estado</option>
       </select>
     </label>
-    <label>
-      Orden
+    <label
+      ><span class="visually-hidden">Orden</span>
       <select v-model="sortDirection" name="sortDirection">
-        <option value="asc">Ascendente</option>
-        <option value="desc">Descendente</option>
+        <option value="asc">Orden: Ascendente</option>
+        <option value="desc">Orden: Descendente</option>
       </select>
     </label>
     <button type="button" class="secondary-button" :disabled="!hasFilters" @click="$emit('clear')">

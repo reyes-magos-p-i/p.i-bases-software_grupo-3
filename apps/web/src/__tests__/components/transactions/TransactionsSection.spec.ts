@@ -51,11 +51,61 @@ const transaction = (
 })
 // The five invoices of the test plan, newest first.
 const transactions: TransactionListItem[] = [
-  transaction(125, '2026-10-16', 'Ana Solís', 'La Última Frontera', 2, '2026-10-16T21:00', 1, 3500, 'CANCELLED'),
-  transaction(124, '2026-10-14', 'María Rodríguez', 'La Última Frontera', 2, '2026-10-14T21:00', 1, 4500, 'PAID'),
-  transaction(123, '2026-10-12', 'Carlos Mora', 'Ecos del Volcán', 1, '2026-10-12T17:00', 1, 3500, 'PAID'),
-  transaction(122, '2026-10-10', 'María Rodríguez', 'Ecos del Volcán', 1, '2026-10-10T17:00', 2, 11500, 'CANCELLED'),
-  transaction(121, '2026-10-05', 'María Rodríguez', 'La Última Frontera', 2, '2026-10-05T19:30', 2, 7000, 'PAID'),
+  transaction(
+    125,
+    '2026-10-16',
+    'Ana Solís',
+    'La Última Frontera',
+    2,
+    '2026-10-16T21:00',
+    1,
+    3500,
+    'CANCELLED',
+  ),
+  transaction(
+    124,
+    '2026-10-14',
+    'María Rodríguez',
+    'La Última Frontera',
+    2,
+    '2026-10-14T21:00',
+    1,
+    4500,
+    'PAID',
+  ),
+  transaction(
+    123,
+    '2026-10-12',
+    'Carlos Mora',
+    'Ecos del Volcán',
+    1,
+    '2026-10-12T17:00',
+    1,
+    3500,
+    'PAID',
+  ),
+  transaction(
+    122,
+    '2026-10-10',
+    'María Rodríguez',
+    'Ecos del Volcán',
+    1,
+    '2026-10-10T17:00',
+    2,
+    11500,
+    'CANCELLED',
+  ),
+  transaction(
+    121,
+    '2026-10-05',
+    'María Rodríguez',
+    'La Última Frontera',
+    2,
+    '2026-10-05T19:30',
+    2,
+    7000,
+    'PAID',
+  ),
 ]
 function result(overrides: Partial<TransactionListResult> = {}): TransactionListResult {
   return { items: transactions, total: 5, page: 1, pageSize: 10, totalPages: 1, ...overrides }
@@ -215,7 +265,7 @@ describe('TransactionsSection', () => {
     expect(view.get('.result-count').text()).toBe('1 transacción')
     expect(view.get('tbody').text()).toContain('Sin nombre registrado')
     expect(view.findAll('select[name="branchId"] option').map((o) => o.text())).toEqual([
-      'Todas',
+      'Todas las sucursales',
       BRANCH,
       'Sin nombre registrado',
     ])
@@ -327,7 +377,7 @@ describe('TransactionsSection', () => {
       dateTo: '2026-10-16',
     })
     expect(view.findAll('select[name="status"] option').map((o) => o.text())).toEqual([
-      'Todos',
+      'Todos los estados',
       'Pagada',
       'Cancelada',
     ])

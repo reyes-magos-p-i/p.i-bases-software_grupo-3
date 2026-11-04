@@ -231,41 +231,44 @@ onBeforeUnmount(() => {
 
     <div class="filters">
       <label
-        >Sucursal<select
+        ><span class="visually-hidden">Sucursal</span
+        ><select
           v-model="filters.branchId"
           name="branchId"
           :disabled="optionsLoading || optionsError"
           @change="filtersChanged"
         >
-          <option value="">Todas</option>
+          <option value="">Todas las sucursales</option>
           <option v-for="branch in options.branches" :key="branch.id" :value="branch.id">
             {{ branch.name ?? NO_NAME }}
           </option>
         </select></label
       >
       <label
-        >Película<select
+        ><span class="visually-hidden">Película</span
+        ><select
           v-model="filters.movieId"
           name="movieId"
           :disabled="optionsLoading || optionsError"
           @change="filtersChanged"
         >
-          <option value="">Todas</option>
+          <option value="">Todas las películas</option>
           <option v-for="movie in options.movies" :key="movie.id" :value="movie.id">
             {{ movie.title }}
           </option>
         </select></label
       >
       <label
-        >Estado<select v-model="filters.status" name="status" @change="filtersChanged">
-          <option value="">Todos</option>
+        ><span class="visually-hidden">Estado</span
+        ><select v-model="filters.status" name="status" @change="filtersChanged">
+          <option value="">Todos los estados</option>
           <option v-for="(label, value) in TRANSACTION_STATUS_LABELS" :key="value" :value="value">
             {{ label }}
           </option>
         </select></label
       >
       <label v-for="date in DATE_FILTERS" :key="date.name">
-        <span>{{ date.label }} <small class="format-hint">(dd/mm/aaaa)</small></span>
+        <span>{{ date.label }}</span>
         <input
           v-model="filters[date.name]"
           type="date"
@@ -338,7 +341,9 @@ onBeforeUnmount(() => {
         <div v-else class="state-card">
           <i :class="['bi', hasFilters ? 'bi-search' : 'bi-receipt']" aria-hidden="true"></i>
           <h2>
-            {{ hasFilters ? 'No se encontraron transacciones' : 'No hay transacciones disponibles' }}
+            {{
+              hasFilters ? 'No se encontraron transacciones' : 'No hay transacciones disponibles'
+            }}
           </h2>
           <p v-if="hasFilters">Prueba con otra búsqueda o limpia los filtros.</p>
         </div>
@@ -385,6 +390,21 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 12px;
+}
+.filters label {
+  min-width: 0;
+  max-width: 100%;
+}
+.filters :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .transactions-section {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -398,7 +418,6 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 .search-bar,
-.filters,
 .pagination-bar,
 .pagination-bar nav {
   display: flex;
@@ -411,9 +430,6 @@ label {
   gap: 6px;
   font-size: 0.875rem;
   font-weight: 600;
-}
-.format-hint {
-  font-weight: 400;
 }
 .search-field {
   flex: 1;
@@ -451,7 +467,7 @@ input[aria-invalid='true'] {
 }
 .filters label {
   flex: 1;
-  min-width: min(100%, 180px);
+  min-width: 0;
 }
 .filter-error {
   margin: 0;

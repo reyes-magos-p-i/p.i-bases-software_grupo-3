@@ -422,23 +422,25 @@ defineExpose({ refresh })
         </fieldset>
       </details>
       <label
-        >Ordenar por<select v-model="sortBy" name="sortBy" @change="filtersChanged">
-          <option value="id">ID</option>
-          <option value="name">Nombre completo</option>
-          <option value="email">Correo electrónico</option>
-          <option value="createdAt">Fecha de registro</option>
-          <option value="status">Estado</option>
+        ><span class="visually-hidden">Ordenar por</span
+        ><select v-model="sortBy" name="sortBy" @change="filtersChanged">
+          <option value="id">Ordenar por: ID</option>
+          <option value="name">Ordenar por: Nombre completo</option>
+          <option value="email">Ordenar por: Correo electrónico</option>
+          <option value="createdAt">Ordenar por: Fecha de registro</option>
+          <option value="status">Ordenar por: Estado</option>
           <template v-if="isEmployeeList"
-            ><option value="role">Rol</option>
-            <option value="branch">Sucursal</option>
-            <option value="hireDate">Fecha de contratación</option></template
+            ><option value="role">Ordenar por: Rol</option>
+            <option value="branch">Ordenar por: Sucursal</option>
+            <option value="hireDate">Ordenar por: Fecha de contratación</option></template
           >
         </select></label
       >
       <label
-        >Orden<select v-model="sortDirection" name="sortDirection" @change="filtersChanged">
-          <option value="asc">Ascendente</option>
-          <option value="desc">Descendente</option>
+        ><span class="visually-hidden">Orden</span
+        ><select v-model="sortDirection" name="sortDirection" @change="filtersChanged">
+          <option value="asc">Orden: Ascendente</option>
+          <option value="desc">Orden: Descendente</option>
         </select></label
       >
     </div>

@@ -161,7 +161,7 @@ describe('BranchesSection', () => {
     const options = view
       .findAll('.filters select[name="companyId"] option')
       .map((option) => option.text())
-    expect(options).toEqual(['Todas', 'Cinetadel S.A', 'Sin nombre registrado'])
+    expect(options).toEqual(['Todas las compañías', 'Cinetadel S.A', 'Sin nombre registrado'])
     await view.get('select[name="companyId"]').setValue('2')
     await flushPromises()
     expect(lastQuery()).toEqual({ page: 1, pageSize: 10, companyId: 2 })

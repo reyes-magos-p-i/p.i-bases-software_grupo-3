@@ -256,24 +256,24 @@ defineExpose({ refresh })
 
     <fieldset class="filters" :disabled="!options">
       <legend class="visually-hidden">Filtros de proyecciones</legend>
-      <label>
-        Estado
+      <label
+        ><span class="visually-hidden">Estado</span>
         <select v-model="filters.status" name="status" @change="filtersChanged">
-          <option value="">Todos</option>
+          <option value="">Todos los estados</option>
           <option v-for="[value, label] in statuses" :key="value" :value="value">
             {{ label }}
           </option>
         </select>
       </label>
-      <label>
-        Sucursal
+      <label
+        ><span class="visually-hidden">Sucursal</span>
         <select
           v-model="filters.branchId"
           name="branchId"
           :title="selectedBranchName"
           @change="filtersChanged"
         >
-          <option value="">Todas</option>
+          <option value="">Todas las sucursales</option>
           <option
             v-for="cinema in options?.cinemas"
             :key="cinema.branchId"
@@ -283,10 +283,10 @@ defineExpose({ refresh })
           </option>
         </select>
       </label>
-      <label>
-        Sala
+      <label
+        ><span class="visually-hidden">Sala</span>
         <select v-model="filters.theaterId" name="theaterId" @change="filtersChanged">
-          <option value="">Todas</option>
+          <option value="">Todas las salas</option>
           <option
             v-for="theater in theaters"
             :key="theater.theaterId"
@@ -296,15 +296,15 @@ defineExpose({ refresh })
           </option>
         </select>
       </label>
-      <label>
-        Película
+      <label
+        ><span class="visually-hidden">Película</span>
         <select
           v-model="filters.movieId"
           name="movieId"
           :title="selectedMovieTitle"
           @change="filtersChanged"
         >
-          <option value="">Todas</option>
+          <option value="">Todas las películas</option>
           <option
             v-for="movie in options?.movies"
             :key="movie.movieId"
@@ -315,7 +315,7 @@ defineExpose({ refresh })
         </select>
       </label>
       <label v-for="date in dateFilters" :key="date.name">
-        <span>{{ date.label }} <small class="format-hint">(dd/mm/aaaa)</small></span>
+        <span>{{ date.label }}</span>
         <input
           v-model="filters[date.name]"
           type="date"
@@ -325,7 +325,7 @@ defineExpose({ refresh })
         />
       </label>
       <label v-for="time in timeFilters" :key="time.name">
-        <span>{{ time.label }} <small class="format-hint">(12 h, hh:mm am/pm)</small></span>
+        <span>{{ time.label }}</span>
         <select v-model="filters[time.name]" :name="time.name" @change="filtersChanged">
           <option value="">Cualquiera</option>
           <option v-for="option in TIME_OPTIONS" :key="option.value" :value="option.value">
@@ -538,11 +538,6 @@ input[aria-invalid='true'] {
 }
 .filters label {
   min-width: 0;
-}
-.format-hint {
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  font-weight: 400;
 }
 .filters input,
 .filters select {
