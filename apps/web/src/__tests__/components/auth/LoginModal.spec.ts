@@ -29,7 +29,8 @@ describe('LoginModal', () => {
       global: {
         stubs: {
           BaseModal: {
-            props: ['open', 'title'],
+            name: 'BaseModal',
+            props: ['open', 'title', 'appearance'],
             emits: ['close'],
             template:
               '<section v-if="open"><h2>{{ title }}</h2><button class="close" @click="$emit(\'close\')">Cerrar</button><slot /></section>',
@@ -45,6 +46,7 @@ describe('LoginModal', () => {
     'requests %s recovery through the existing modal',
     async (mode) => {
       const wrapper = render({ mode, enabled: true })
+      expect(wrapper.getComponent({ name: 'BaseModal' }).props('appearance')).toBe('auth')
       await wrapper.get('.recovery-option button').trigger('click')
       expect(wrapper.get('h2').text()).toBe('Recuperar contraseña')
       expect(wrapper.find('[name="password"]').exists()).toBe(false)

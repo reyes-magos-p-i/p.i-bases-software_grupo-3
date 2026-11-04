@@ -201,7 +201,7 @@ async function resendVerificationEmail() {
 </script>
 
 <template>
-  <BaseModal :open="open" title="Crear cuenta" @close="emit('close')">
+  <BaseModal :open="open" title="Crear cuenta" appearance="auth" @close="emit('close')">
     <template v-if="verificationState === 'idle'">
       <SocialAuthButtons @authenticated="handleAuthenticated" @error="handleSocialAuthError" />
 

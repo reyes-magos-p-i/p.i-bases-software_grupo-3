@@ -58,6 +58,8 @@ describe('RegisterModal.vue', () => {
     const page = new DOMWrapper(document.body)
     await nextTick()
     expect(page.get('dialog').element.open).toBe(true)
+    expect(page.get('.app-modal-card').classes()).toContain('app-modal-card--auth')
+    expect(page.get('.app-modal-card').classes()).not.toContain('cinema-dialog')
     expect(document.activeElement).toBe(page.get('#email').element)
     await page.get('form').trigger('submit')
     expect(page.text()).toContain('Ingresa un correo válido')
