@@ -10,6 +10,10 @@ Aplicar una sola vez, conectado como `PRODUCTION`:
    `MOVIE_FUNCTION_STATUS_JOB`.
 2. Solo en pruebas: [`database/seeds/20261007_movie_functions_stub_data.sql`](../database/seeds/20261007_movie_functions_stub_data.sql)
    (películas de ejemplo disponibles en todas las sucursales).
+3. [`database/migrations/20261104_cinema_movies_every_branch.sql`](../database/migrations/20261104_cinema_movies_every_branch.sql):
+   vincula cada película con cada sucursal en `CINEMA_MOVIES`. Desde entonces, la API
+   vincula una película nueva con todas las sucursales y una sucursal nueva con todas
+   las películas, en la misma transacción que la crea.
 
 ## Reglas
 

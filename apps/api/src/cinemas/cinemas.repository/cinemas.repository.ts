@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import oracle from 'oracledb';
 import { DatabaseService } from '../../database/database.service';
+import { linkAllMoviesToBranch } from '../../common/cinema-movies';
 import { Cinema } from '../entities/cinema.entity';
 import { likePattern } from '../../users/user-search.util';
 import type { CinemaDetailDto, CinemaStatus } from '../dto/cinema-detail.dto';
@@ -189,6 +190,7 @@ export class CinemasRepository {
       const id: unknown = Array.isArray(ids) ? ids[0] : undefined;
       if (result.rowsAffected !== 1 || typeof id !== 'number')
         throw new Error('Oracle did not return a single created branch.');
+      await linkAllMoviesToBranch(connection, id);
       return id;
     });
   }

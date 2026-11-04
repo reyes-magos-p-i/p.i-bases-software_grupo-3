@@ -3,6 +3,7 @@ import { DatabaseService } from '../database/database.service';
 import { CreateMovieDto } from './dto/createMovie.dto/createMovie.dto';
 import { UpdateMovieDto } from './dto/createMovie.dto/updateMovie.dto';
 import * as oracledb from 'oracledb';
+import { linkMovieToAllBranches } from '../common/cinema-movies';
 
 @Injectable()
   export class MoviesRepository {
@@ -173,6 +174,7 @@ import * as oracledb from 'oracledb';
     };
 
     const movieId = outBinds.movieId[0];
+    await linkMovieToAllBranches(conn, movieId);
 
     if (dto.languageIds.length > 0) {
       const languageBinds = dto.languageIds.map((languageId) => ({
@@ -235,6 +237,14 @@ import * as oracledb from 'oracledb';
     await conn.execute(
       `
       DELETE FROM MOVIE_LANGUAGES
+      WHERE MOVIE_ID = :id
+      `,
+      { id },
+    );
+
+    await conn.execute(
+      `
+      DELETE FROM CINEMA_MOVIES
       WHERE MOVIE_ID = :id
       `,
       { id },

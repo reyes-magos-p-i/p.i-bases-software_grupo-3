@@ -132,7 +132,7 @@ describe('MoviesRepository', () => {
   });
 
   describe('create', () => {
-    it('creates a movie with languages and genres', async () => {
+    it('creates a movie with languages and genres, linked to every branch', async () => {
       execute.mockResolvedValue({
         outBinds: { movieId: [24] }
       });
@@ -148,6 +148,12 @@ describe('MoviesRepository', () => {
           title: 'Interstellar',
           classificationId: 1
         })
+      );
+
+      expect(execute).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT BRANCH_ID, :movieId, 1 FROM CINEMAS'),
+        { movieId: 24 },
+        { autoCommit: false }
       );
 
       expect(executeMany).toHaveBeenNthCalledWith(
@@ -183,13 +189,13 @@ describe('MoviesRepository', () => {
   });
 
   describe('remove', () => {
-    it('deletes relationships before deleting the movie', async () => {
+    it('deletes relationships and branch links before deleting the movie', async () => {
       execute.mockResolvedValue({ rowsAffected: 1 });
 
       await repository.remove(24);
 
       expect(transaction).toHaveBeenCalledTimes(1);
-      expect(execute).toHaveBeenCalledTimes(4);
+      expect(execute).toHaveBeenCalledTimes(5);
 
       expect(execute).toHaveBeenNthCalledWith(
         1,
@@ -210,6 +216,12 @@ describe('MoviesRepository', () => {
 
       expect(execute).toHaveBeenNthCalledWith(
         4,
+        expect.stringContaining('DELETE FROM CINEMA_MOVIES'),
+        { id: 24 }
+      );
+
+      expect(execute).toHaveBeenNthCalledWith(
+        5,
         expect.stringContaining('FROM MOVIES'),
         { id: 24 }
       );

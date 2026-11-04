@@ -273,7 +273,7 @@ describe('CinemasRepository', () => {
       );
     });
 
-    it('checks the company and the name, then inserts an active branch in one transaction', async () => {
+    it('checks the company and the name, then inserts an active branch linked to every movie in one transaction', async () => {
       connection.execute
         .mockResolvedValueOnce({ rows: [{ 1: 1 }] })
         .mockResolvedValueOnce({ rows: [] })
@@ -307,6 +307,11 @@ describe('CinemasRepository', () => {
         id: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
       });
       expect(insertOptions).toEqual({ autoCommit: false });
+      expect(connection.execute).toHaveBeenLastCalledWith(
+        expect.stringContaining('SELECT :branchId, MOVIE_ID, 1 FROM MOVIES'),
+        { branchId: 30 },
+        { autoCommit: false },
+      );
     });
 
     it.each([undefined, []])(

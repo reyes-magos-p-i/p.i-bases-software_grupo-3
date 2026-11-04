@@ -48,6 +48,9 @@ sucursal activa y responde `201` con su detalle.
   del campo Nombre con los datos escritos. El índice único de
   [`20261027_cinemas_active_name.sql`](../database/migrations/20261027_cinemas_active_name.sql)
   da la misma respuesta si dos administradores guardan el mismo nombre a la vez.
+- En la misma transacción, la sucursal queda vinculada con todas las películas
+  (`CINEMA_MOVIES`), para que se puedan programar sus proyecciones y aparezcan en la
+  cartelera.
 - `403`: «No tiene permisos para acceder a esta sección» y se vuelve a comprobar la
   sesión. `401`: vuelve al inicio de sesión.
 
