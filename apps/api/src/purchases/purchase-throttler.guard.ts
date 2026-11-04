@@ -5,7 +5,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 export class PurchaseThrottlerGuard extends ThrottlerGuard {
   protected override getErrorMessage(): Promise<string> {
     return Promise.resolve(
-      'Has realizado demasiadas solicitudes de compra. Espera un minuto e intenta nuevamente.',
+      'Has realizado demasiadas solicitudes de compra. Intenta nuevamente más tarde.',
     );
   }
 }

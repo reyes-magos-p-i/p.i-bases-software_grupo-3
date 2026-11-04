@@ -292,7 +292,7 @@ describe('Purchase HTTP with mocked persistence', () => {
     });
     expect(blocked.status).toBe(429);
     expect(blocked.body.message).toBe(
-      'Has realizado demasiadas solicitudes de compra. Espera un minuto e intenta nuevamente.',
+      'Has realizado demasiadas solicitudes de compra. Intenta nuevamente más tarde.',
     );
     expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0);
     expect(Number(blocked.headers['retry-after'])).toBeLessThanOrEqual(60);

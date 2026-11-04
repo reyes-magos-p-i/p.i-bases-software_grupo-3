@@ -120,14 +120,24 @@ beforeEach(() => {
     movie: { id: 2, title: 'Película', synopsis: 'Historia', posterImage: '' },
     functions: [context],
   })
-  vi.mocked(getPurchaseSeats).mockResolvedValue({ function: context, seats, categories: [] })
+  vi.mocked(getPurchaseSeats).mockResolvedValue({
+    function: context,
+    seats,
+    categories: [],
+    maxTickets: 10,
+  })
   vi.mocked(quotePurchase).mockImplementation((data) => Promise.resolve(quoted(data)))
   vi.mocked(confirmPurchase).mockResolvedValue({ id: 12, reference: 'ORD-000012' } as never)
   vi.mocked(getGuestPurchaseFunctions).mockResolvedValue({
     movie: { id: 2, title: 'Película', synopsis: 'Historia', posterImage: '' },
     functions: [context],
   })
-  vi.mocked(getGuestPurchaseSeats).mockResolvedValue({ function: context, seats, categories: [] })
+  vi.mocked(getGuestPurchaseSeats).mockResolvedValue({
+    function: context,
+    seats,
+    categories: [],
+    maxTickets: 10,
+  })
   vi.mocked(quoteGuestPurchase).mockImplementation((data) => Promise.resolve(quoted(data)))
   vi.mocked(identifyGuestBuyer).mockResolvedValue({ email: 'guest@example.com' })
   vi.mocked(confirmGuestPurchase).mockResolvedValue({
@@ -396,6 +406,7 @@ describe('Ticket purchase coordination', () => {
       function: context,
       seats: [{ ...seats[0]!, state: 'in-use' }, seats[1]!],
       categories: [],
+      maxTickets: 10,
     })
     await flow.refresh()
     expect(flow.selected.value).toHaveLength(0)
@@ -587,22 +598,25 @@ describe('Ticket purchase coordination', () => {
     expect(flow.canRestart.value).toBe(false)
     expect(confirmPurchase).not.toHaveBeenCalled()
   })
-  it.each(['QUOTE_CHANGED', 'SEATS_UNAVAILABLE', 'FUNCTION_UNAVAILABLE'])(
-    'releases a previously uncertain attempt after a definitive %s rejection',
-    async (code) => {
-      await ready()
-      vi.mocked(confirmPurchase)
-        .mockRejectedValueOnce(new Error('timeout'))
-        .mockRejectedValueOnce(conflict(code))
-      await flow.pay()
-      await flow.pay()
-      expect(flow.uncertain.value).toBe(false)
-      expect(flow.quote.value).toBeNull()
-      expect(flow.step.value).toBe(2)
-      expect(loadPurchaseAttempt()).toBeNull()
-      expect(getPurchaseSeats).toHaveBeenCalledTimes(2)
-    },
-  )
+  it.each([
+    'QUOTE_CHANGED',
+    'SEATS_UNAVAILABLE',
+    'FUNCTION_UNAVAILABLE',
+    'TICKET_LIMIT_REACHED',
+    'GUEST_EMAIL_LIMIT',
+  ])('releases a previously uncertain attempt after a definitive %s rejection', async (code) => {
+    await ready()
+    vi.mocked(confirmPurchase)
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce(conflict(code))
+    await flow.pay()
+    await flow.pay()
+    expect(flow.uncertain.value).toBe(false)
+    expect(flow.quote.value).toBeNull()
+    expect(flow.step.value).toBe(2)
+    expect(loadPurchaseAttempt()).toBeNull()
+    expect(getPurchaseSeats).toHaveBeenCalledTimes(2)
+  })
   it('preserves the request on a temporary lock conflict even on the first attempt', async () => {
     await ready()
     vi.mocked(confirmPurchase).mockRejectedValueOnce(conflict('PURCHASE_BUSY'))

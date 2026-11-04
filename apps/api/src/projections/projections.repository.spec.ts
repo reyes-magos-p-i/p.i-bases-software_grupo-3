@@ -49,7 +49,7 @@ describe('ProjectionsRepository', () => {
       if (override) return Promise.resolve(overrides[override]);
       if (
         sql.includes(
-          'SELECT STATUS,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS',
+          'SELECT STATUS,THEATER_ID,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS',
         )
       )
         return Promise.resolve({ rows: [{ STATUS: 'INACTIVE' }] });
@@ -444,7 +444,7 @@ describe('ProjectionsRepository', () => {
       const statements = connection.execute.mock.calls.map(([sql]) => sql);
       expect(statements[0]).toBe('ALTER SESSION DISABLE PARALLEL DML');
       expect(statements[1]).toContain(
-        'SELECT STATUS,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS',
+        'SELECT STATUS,THEATER_ID,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS',
       );
       expect(statements[1]).toContain('FOR UPDATE');
       expect(sqlOf('FROM MOVIE_FUNCTIONS mf')[1]).toMatchObject({
@@ -471,6 +471,48 @@ describe('ProjectionsRepository', () => {
       ).toHaveLength(2);
     });
 
+    it('refuses to move a function with sold tickets to another theater', async () => {
+      respond({
+        'SELECT STATUS,THEATER_ID,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS':
+          { rows: [{ STATUS: 'ACTIVE', THEATER_ID: changes.theaterId + 1 }] },
+        'FROM TICKETS': { rows: [{ 1: 1 }] },
+      });
+      await expect(
+        repository.updateProjection(100, changes, 21),
+      ).rejects.toThrow('ya tiene boletos vendidos');
+      expect(
+        connection.execute.mock.calls.some(([sql]) =>
+          sql.includes('UPDATE MOVIE_FUNCTIONS'),
+        ),
+      ).toBe(false);
+    });
+    it('moves a function without sold tickets to another theater', async () => {
+      respond({
+        'SELECT STATUS,THEATER_ID,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS':
+          { rows: [{ STATUS: 'ACTIVE', THEATER_ID: changes.theaterId + 1 }] },
+        'FROM TICKETS': { rows: [] },
+      });
+      await repository.updateProjection(100, changes, 21);
+      expect(sqlOf('UPDATE MOVIE_FUNCTIONS')[1]).toMatchObject({
+        theaterId: changes.theaterId,
+      });
+    });
+    it('keeps other changes available when the theater stays the same', async () => {
+      respond({
+        'SELECT STATUS,THEATER_ID,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS':
+          { rows: [{ STATUS: 'ACTIVE', THEATER_ID: changes.theaterId }] },
+        'FROM TICKETS': { rows: [{ 1: 1 }] },
+      });
+      await repository.updateProjection(100, changes, 21);
+      expect(
+        connection.execute.mock.calls.some(([sql]) =>
+          sql.includes('FROM TICKETS'),
+        ),
+      ).toBe(false);
+      expect(sqlOf('UPDATE MOVIE_FUNCTIONS')[1]).toMatchObject({
+        theaterId: changes.theaterId,
+      });
+    });
     it('keeps the current price and status when they are omitted', async () => {
       await repository.updateProjection(100, changes, 21);
       expect(sqlOf('UPDATE MOVIE_FUNCTIONS')[1]).toMatchObject({
@@ -501,7 +543,7 @@ describe('ProjectionsRepository', () => {
       'rejects a missing or non editable projection %#',
       async (current, error) => {
         respond({
-          'SELECT STATUS,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS':
+          'SELECT STATUS,THEATER_ID,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS':
             current,
         });
         await expect(
@@ -555,7 +597,7 @@ describe('ProjectionsRepository', () => {
       'rejects a projection that cannot be cancelled %#',
       async (current, error) => {
         respond({
-          'SELECT STATUS,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS':
+          'SELECT STATUS,THEATER_ID,PROJECTION_FORMAT,TECHNOLOGY,IS_PREMIERE FROM MOVIE_FUNCTIONS':
             current,
         });
         await expect(repository.cancelProjection(100)).rejects.toThrow(error);

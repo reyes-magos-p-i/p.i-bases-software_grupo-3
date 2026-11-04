@@ -19,6 +19,11 @@ export interface PurchaseFunction extends PricingSettings {
   available: boolean;
   price: number;
 }
+// Stored in GLOBAL_SETTINGS, so they change without a deploy.
+export interface PurchaseLimits {
+  maxTickets: number;
+  maxGuestPurchases: number;
+}
 export interface PurchaseSeat {
   positionId: number;
   theaterId: number;
