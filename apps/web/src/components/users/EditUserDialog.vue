@@ -500,7 +500,7 @@ onBeforeUnmount(() => {
 
 <template>
   <BaseModal :open="!!selection" :title="title" :close-disabled="saving" @close="close">
-    <div class="user-edit-content" :aria-busy="loading || saving">
+    <div class="user-edit-content dialog-content" :aria-busy="loading || saving">
       <LoadingState v-if="loading" message="Cargando datos del usuario…" compact />
       <div v-if="error" ref="feedback" class="edit-feedback edit-error" tabindex="-1">
         <NotificationPopup type="error" :message="error" :duration="0" />
@@ -786,39 +786,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.user-edit-content)::backdrop) {
-  background: var(--overlay-background);
-}
 :global(.app-modal-card:has(.user-edit-content)) {
   width: min(880px, 100%);
   max-width: 880px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--dialog-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
-:global(.app-modal-card:has(.user-edit-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 24px;
-  background: var(--primary-color);
-  color: var(--content-background);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.25rem;
-}
-:global(.app-modal-card:has(.user-edit-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--content-background);
-  border-radius: var(--radius-small);
-}
-:global(.app-modal-card:has(.user-edit-content) .app-modal-close:focus-visible) {
-  outline-color: var(--focus-on-dark);
-}
+
 .user-edit-content {
   min-height: 0;
   padding: 24px;

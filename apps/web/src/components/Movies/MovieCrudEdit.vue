@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
 
 <template>
   <BaseModal :open="movieId !== null" :title="title" @close="close">
-    <div class="movie-detail-content" :aria-busy="loading || saving">
+    <div class="movie-detail-content dialog-content" :aria-busy="loading || saving">
       <LoadingState
         v-if="loading"
         class="detail-feedback"
@@ -446,42 +446,16 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* Modal background */
-:global(.app-modal-backdrop:has(.movie-detail-content)::backdrop) {
-  background: var(--overlay-background);
-}
 
 /* Modal container */
 :global(.app-modal-card:has(.movie-detail-content)) {
   width: min(880px, 100%);
   max-width: 880px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--dialog-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
 /* Modal title */
-:global(.app-modal-card:has(.movie-detail-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 24px;
-  background: var(--primary-color);
-  color: var(--content-background);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.25rem;
-}
 
 /* Modal close button */
-:global(.app-modal-card:has(.movie-detail-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--content-background);
-  border-radius: var(--radius-small);
-}
 
 /* Main content */
 .movie-detail-content {

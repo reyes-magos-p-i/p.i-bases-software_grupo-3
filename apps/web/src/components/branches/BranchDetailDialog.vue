@@ -76,7 +76,7 @@ onBeforeUnmount(() => request?.abort())
 
 <template>
   <BaseModal :open="branchId !== null" title="Detalle de sucursal" @close="close">
-    <div class="branch-detail-content" :aria-busy="loading">
+    <div class="branch-detail-content dialog-content" :aria-busy="loading">
       <LoadingState
         v-if="loading"
         class="detail-feedback"
@@ -157,42 +157,11 @@ onBeforeUnmount(() => request?.abort())
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.branch-detail-content)::backdrop) {
-  background: var(--overlay-background);
-}
 :global(.app-modal-card:has(.branch-detail-content)) {
   width: min(760px, 100%);
   max-width: 760px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--dialog-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
-:global(.app-modal-card:has(.branch-detail-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 32px;
-  background: var(--primary-color);
-  color: var(--content-background);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.375rem;
-}
-:global(.app-modal-card:has(.branch-detail-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--content-background);
-  border-radius: var(--radius-small);
-}
-:global(.app-modal-card:has(.branch-detail-content) .app-modal-close:hover) {
-  background: var(--surface-on-dark-hover);
-}
-:global(.app-modal-card:has(.branch-detail-content) .app-modal-close:focus-visible) {
-  outline-color: var(--focus-on-dark);
-}
+
 .branch-detail-content {
   display: grid;
   gap: 18px;
@@ -237,26 +206,7 @@ onBeforeUnmount(() => request?.abort())
   color: var(--content-background);
   font-size: 0.8125rem;
 }
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin: 0;
-}
-.detail-field {
-  display: grid;
-  align-content: start;
-  gap: 7px;
-  min-width: 0;
-}
-dt {
-  font-weight: 500;
-}
-dd {
-  display: grid;
-  gap: 7px;
-  margin: 0;
-}
+
 .readonly-value {
   display: flex;
   align-items: center;
@@ -334,15 +284,6 @@ dd {
 @media (max-width: 575px) {
   .branch-detail-content {
     padding: 20px 16px;
-  }
-  .detail-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  :global(.app-modal-card:has(.branch-detail-content) .app-modal-title) {
-    padding-left: 16px;
-  }
-  :global(.app-modal-card:has(.branch-detail-content) .app-modal-close) {
-    right: 16px;
   }
 }
 </style>

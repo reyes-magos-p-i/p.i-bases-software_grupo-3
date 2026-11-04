@@ -135,7 +135,7 @@ async function save() {
 
 <template>
   <BaseModal :open="true" title="Crear película" :close-disabled="saving" @close="emit('close')">
-    <div class="movie-create-content">
+    <div class="movie-create-content dialog-content">
       <form
         ref="form-element"
         novalidate
@@ -265,47 +265,17 @@ async function save() {
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.movie-create-content)::backdrop) {
-  background: var(--overlay-background);
-}
-
 /* Modal size and appearance */
 :global(.app-modal-card:has(.movie-create-content)) {
   width: min(880px, 100%);
   max-width: 880px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--dialog-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
 /* Purple heading */
-:global(.app-modal-card:has(.movie-create-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 24px;
-  background: var(--primary-color);
-  color: var(--content-background);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.25rem;
-}
 
 /* Close button in heading */
-:global(.app-modal-card:has(.movie-create-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--content-background);
-  border-radius: var(--radius-small);
-}
 
 /* Keyboard focus on close button */
-:global(.app-modal-card:has(.movie-create-content) .app-modal-close:focus-visible) {
-  outline-color: var(--focus-on-dark);
-}
 
 .movie-create-content {
   padding: 24px;

@@ -69,7 +69,7 @@ async function confirmDelete() {
     :close-disabled="deleting"
     @close="close"
   >
-    <div class="movie-delete-content movie-form-modal">
+    <div class="movie-delete-content movie-form-modal dialog-content">
       <p>
         ¿Estás seguro de que deseas eliminar la película
         <strong>{{ movie?.title }}</strong

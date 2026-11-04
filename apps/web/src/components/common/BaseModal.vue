@@ -87,18 +87,20 @@ onBeforeUnmount(() => {
       @cancel.prevent="requestClose"
       @click.self="requestClose"
     >
-      <div v-if="open" class="app-modal-card">
-        <button
-          class="app-modal-close"
-          type="button"
-          aria-label="Cerrar"
-          :disabled="closeDisabled"
-          @click="requestClose"
-        >
-          <i class="bi bi-x-lg"></i>
-        </button>
-        <h2 :id="titleId" class="app-modal-title">{{ title }}</h2>
-        <slot />
+      <div v-if="open" class="app-modal-card cinema-dialog">
+        <header class="dialog-heading">
+          <h2 :id="titleId" class="app-modal-title">{{ title }}</h2>
+          <button
+            class="app-modal-close"
+            type="button"
+            aria-label="Cerrar"
+            :disabled="closeDisabled"
+            @click="requestClose"
+          >
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </header>
+        <div class="app-modal-body"><slot /></div>
       </div>
     </dialog>
   </Teleport>
@@ -132,33 +134,18 @@ onBeforeUnmount(() => {
   color: var(--text-primary);
   width: 100%;
   max-width: 480px;
-  padding: 2rem 1.75rem;
-  border-radius: 8px;
+  padding: 0;
+  border-radius: var(--radius-medium);
   max-height: calc(100dvh - 2rem);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   overscroll-behavior: contain;
 }
-.app-modal-close {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  background: none;
-  border: 0;
-  font-size: 1.25rem;
-  width: 44px;
-  height: 44px;
-  color: var(--text-primary);
-}
-.app-modal-close:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-.app-modal-title {
-  text-align: center;
-  font-style: italic;
-  font-weight: 700;
-  font-size: 1.5rem;
-  margin-bottom: 1.25rem;
-  color: var(--text-primary);
+.app-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--dialog-content-padding);
 }
 </style>

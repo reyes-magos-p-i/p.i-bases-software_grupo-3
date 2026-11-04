@@ -205,7 +205,7 @@ onBeforeUnmount(() => request?.abort())
 
 <template>
   <BaseModal :open="movieId !== null" :title="title" @close="close">
-    <div class="movie-detail-content" :aria-busy="loading">
+    <div class="movie-detail-content dialog-content" :aria-busy="loading">
       <LoadingState
         v-if="loading"
         class="detail-feedback"
@@ -258,38 +258,9 @@ onBeforeUnmount(() => request?.abort())
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.movie-detail-content)::backdrop) {
-  background: color-mix(in srgb, var(--page-background) 55%, transparent);
-}
-
 :global(.app-modal-card:has(.movie-detail-content)) {
   width: min(880px, 100%);
   max-width: 880px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-:global(.app-modal-card:has(.movie-detail-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 24px;
-  background: var(--primary-color);
-  color: var(--text-on-dark);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.25rem;
-}
-
-:global(.app-modal-card:has(.movie-detail-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--text-on-dark);
-  border-radius: var(--radius-small);
 }
 
 .movie-detail-content {
@@ -307,28 +278,6 @@ onBeforeUnmount(() => request?.abort())
   margin: 0 0 16px;
   font-size: 1rem;
   font-weight: 700;
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px 20px;
-  margin: 0;
-}
-
-.detail-field {
-  min-width: 0;
-}
-
-dt {
-  margin-bottom: 6px;
-  font-weight: 500;
-}
-
-dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 .detail-feedback {
@@ -366,10 +315,6 @@ dd {
 @media (max-width: 575px) {
   .movie-detail-content {
     padding: 20px 16px;
-  }
-
-  .detail-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 

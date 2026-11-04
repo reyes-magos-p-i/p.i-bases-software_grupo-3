@@ -107,7 +107,7 @@ onBeforeUnmount(() => {
     :close-disabled="saving"
     @close="close"
   >
-    <div class="user-status-content" :aria-busy="saving">
+    <div class="user-status-content dialog-content" :aria-busy="saving">
       <template v-if="selection">
         <p>
           ¿Deseas {{ action.verb }} a <strong>{{ selection.name }}</strong> ({{
@@ -143,32 +143,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.user-status-content)::backdrop) {
-  background: var(--overlay-background);
-}
 :global(.app-modal-card:has(.user-status-content)) {
   width: min(640px, 100%);
   max-width: 640px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--dialog-background);
-  color: var(--text-primary);
-  overflow: hidden;
 }
-:global(.app-modal-card:has(.user-status-content) .app-modal-title) {
-  margin: 0;
-  padding: 24px 80px 24px 24px;
-  background: var(--primary-color);
-  color: var(--content-background);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.25rem;
-}
-:global(.app-modal-card:has(.user-status-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--content-background);
-}
+
 .user-status-content {
   padding: 24px;
   overflow-wrap: anywhere;
