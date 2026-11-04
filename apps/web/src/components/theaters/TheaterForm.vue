@@ -225,6 +225,7 @@ defineExpose({ reset, fill })
       </select>
     </FormField>
 
+    <slot name="before-actions" />
     <footer class="dialog-actions">
       <button type="button" class="secondary-button" :disabled="submitting" @click="emit('cancel')">
         Cancelar

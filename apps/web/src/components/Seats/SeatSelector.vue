@@ -20,12 +20,14 @@ const props = withDefaults(
     selectableStates?: SeatState[]
     disabled?: boolean
     readonly?: boolean
+    showLayoutDiagnostics?: boolean
   }>(),
   {
     maxSelections: 'all',
     selectableStates: () => ['free'],
     disabled: false,
     readonly: false,
+    showLayoutDiagnostics: false,
   },
 )
 
@@ -94,6 +96,11 @@ const gridRows = computed(() => {
     }),
   }))
 })
+const visibleRows = computed(() =>
+  props.showLayoutDiagnostics
+    ? gridRows.value
+    : gridRows.value.filter((row) => row.cells.some((cell) => cell.seat)),
+)
 
 const verticalAisles = computed(
   () =>
@@ -182,18 +189,16 @@ defineExpose({ clearSelection })
       Las dimensiones deben ser enteros positivos con un máximo de 10000 asientos.
     </p>
 
-    <p v-else-if="seatMap.size === 0" class="message" role="status">No hay asientos registrados.</p>
+    <p v-else-if="seatMap.size === 0" class="message" role="status">
+      {{ showLayoutDiagnostics ? 'No hay asientos registrados.' : 'No hay asientos disponibles.' }}
+    </p>
     <template v-else>
       <div class="screen">PANTALLA</div>
-      <div
-        class="seat-scroll"
-        tabindex="0"
-        aria-label="Plano de asientos. Desplázate horizontalmente para ver todas las columnas."
-      >
+      <div class="seat-scroll" tabindex="0" aria-label="Plano de asientos">
         <div class="theater">
           <div class="seat-matrix">
             <div
-              v-for="row in gridRows"
+              v-for="row in visibleRows"
               :key="row.number"
               class="seat-row"
               :class="{ 'horizontal-aisle': row.number === horizontalAisle && row.number < rows }"
@@ -217,7 +222,9 @@ defineExpose({ clearSelection })
                 />
                 <span v-else class="missing-seat" aria-hidden="true" />
               </div>
-              <span v-if="!row.cells.some((cell) => cell.seat)" class="empty-row"
+              <span
+                v-if="showLayoutDiagnostics && !row.cells.some((cell) => cell.seat)"
+                class="empty-row"
                 >Sin asientos registrados</span
               >
             </div>
@@ -243,15 +250,14 @@ defineExpose({ clearSelection })
     </p>
 
     <p
-      v-if="validDimensions && seatMap.size && seatMap.size !== rows * columns"
+      v-if="
+        showLayoutDiagnostics && validDimensions && seatMap.size && seatMap.size !== rows * columns
+      "
       class="message"
       role="status"
     >
       El plano contiene posiciones sin asientos registrados. Solo se muestran los asientos
       existentes.
-    </p>
-    <p v-if="seatMap.size" class="scroll-hint">
-      Desplázate por el plano para ver todas las columnas.
     </p>
     <div v-if="!readonly" class="selection-summary">
       <span role="status" aria-live="polite">
@@ -390,8 +396,7 @@ defineExpose({ clearSelection })
   display: inline-grid;
   place-items: center;
 }
-.empty-row,
-.scroll-hint {
+.empty-row {
   font-size: 0.875rem;
   color: var(--text-secondary);
 }

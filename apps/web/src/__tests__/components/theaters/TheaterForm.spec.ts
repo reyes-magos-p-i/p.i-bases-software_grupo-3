@@ -5,6 +5,17 @@ import TheaterForm from '@/components/theaters/TheaterForm.vue'
 const props = { submitLabel: 'Guardar', submittingLabel: 'Guardando…' }
 
 describe('TheaterForm layout protection', () => {
+  it('keeps embedded content before the final form actions', () => {
+    const wrapper = mount(TheaterForm, {
+      props,
+      slots: { 'before-actions': '<section data-seat-editor>Editor de asientos</section>' },
+    })
+    expect(wrapper.get('footer').element.previousElementSibling).toBe(
+      wrapper.get('[data-seat-editor]').element,
+    )
+    expect(wrapper.get('form').element.lastElementChild).toBe(wrapper.get('footer').element)
+    wrapper.unmount()
+  })
   it('keeps protected dimensions read-only while allowing the other fields to be edited', async () => {
     const view = mount(TheaterForm, { props })
     view.vm.fill({

@@ -82,7 +82,14 @@ describe('TheaterDetailDialog', () => {
       columns: 10,
       seats,
       maxSelections: 'all',
+      showLayoutDiagnostics: true,
     })
+    expect(wrapper.find('input, .readonly-input').exists()).toBe(false)
+    expect(wrapper.get('dl').text()).toContain('Número de asientos')
+    expect(wrapper.get('.theater-detail-content').element.lastElementChild).toBe(
+      wrapper.get('footer').element,
+    )
+    wrapper.unmount()
   })
 
   it('shows an error message when the theater cannot be shown', () => {

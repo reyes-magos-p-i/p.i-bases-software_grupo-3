@@ -179,6 +179,7 @@ watch(
     />
 
     <SeatSelector
+      show-layout-diagnostics
       v-if="!loading && (!error || seats.length)"
       :key="selectorVersion"
       :theater-id="theaterId"

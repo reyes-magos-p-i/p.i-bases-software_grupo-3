@@ -35,6 +35,7 @@ function makeSeat(rowNumber: number, columnNumber: number, overrides: Partial<Se
 }
 
 interface SelectorProps {
+  showLayoutDiagnostics: boolean
   readonly: boolean
   theaterId: number
   rows: number
@@ -93,17 +94,31 @@ describe('SeatSelector', () => {
   it('does not draw misleading empty rows when the theater has no registered seats', () => {
     const wrapper = mountSelector({ seats: [] })
     expect(wrapper.findAll('.seat-row')).toHaveLength(0)
-    expect(wrapper.get('[role="status"]').text()).toBe('No hay asientos registrados.')
+    expect(wrapper.get('[role="status"]').text()).toBe('No hay asientos disponibles.')
     wrapper.unmount()
   })
 
   it('preserves real coordinates and explicitly identifies incomplete rows', () => {
-    const wrapper = mountSelector({ seats: [makeSeat(2, 3)] })
+    const wrapper = mountSelector({ seats: [makeSeat(2, 3)], showLayoutDiagnostics: true })
     expect(wrapper.findAll('.seat-row')).toHaveLength(2)
     expect(wrapper.get('.seat-row').text()).toContain('Sin asientos registrados')
     expect(wrapper.findAll('[data-seat]')).toHaveLength(1)
     expect(wrapper.get('[data-seat]').attributes('data-seat')).toBe('2-3')
     expect(wrapper.text()).toContain('Solo se muestran los asientos existentes')
+    wrapper.unmount()
+  })
+
+  it('hides unregistered customer rows without renumbering or changing seat selection', async () => {
+    const wrapper = mountSelector({ rows: 4, seats: [makeSeat(2, 3), makeSeat(4, 1)] })
+    expect(wrapper.findAll('.seat-row').map((row) => row.attributes('aria-label'))).toEqual([
+      'Fila 2',
+      'Fila 4',
+    ])
+    expect(wrapper.findAll('.row-label').map((row) => row.text())).toEqual(['2', '4'])
+    expect(wrapper.text()).not.toContain('registrados')
+    expect(wrapper.find('.scroll-hint').exists()).toBe(false)
+    await wrapper.get('[data-seat="4-1"]').trigger('click')
+    expect(lastSelection(wrapper)).toEqual([makeSeat(4, 1)])
     wrapper.unmount()
   })
 
@@ -129,6 +144,7 @@ describe('SeatSelector', () => {
     const wrapper = mountSelector({
       rows: 4,
       columns: 9,
+      showLayoutDiagnostics: true,
       seats: [makeSeat(1, 1)],
     })
 
@@ -148,6 +164,7 @@ describe('SeatSelector', () => {
 
   it('ignores seats from other theaters or outside the dimensions', () => {
     const wrapper = mountSelector({
+      showLayoutDiagnostics: true,
       seats: [makeSeat(1, 1), makeSeat(1, 2, { theaterId: 9 }), makeSeat(3, 1), makeSeat(1, 4)],
     })
 
@@ -298,7 +315,7 @@ describe('SeatSelector', () => {
   })
 
   it('shows a message when no seats are registered', () => {
-    const wrapper = mountSelector({ seats: [] })
+    const wrapper = mountSelector({ seats: [], showLayoutDiagnostics: true })
 
     expect(wrapper.text()).toContain('No hay asientos registrados.')
     expect(wrapper.findAll('[data-seat]')).toHaveLength(0)
