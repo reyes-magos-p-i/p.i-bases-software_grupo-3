@@ -1,13 +1,26 @@
-import { BadRequestException, Injectable} from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateTheaterDto } from './dto/create-theater.dto';
 import { UpdateTheaterDto } from './dto/update-theater.dto';
 import { TheaterRepository } from './theater.repository/theater.repository';
+import { ChairsRepository } from './chairs.repository';
+import { UpdateSeatsDto } from './dto/update-seats.dto';
 
 @Injectable()
 export class TheatersService {
-  constructor(private readonly theatersRepository: TheaterRepository) {}
+  constructor(
+    private readonly theatersRepository: TheaterRepository,
+    private readonly chairsRepository: ChairsRepository,
+  ) {}
 
-  private validateSeatDimensions(numberOfSeats: number, dimensionX: number, dimensionY: number) {
+  private validateSeatDimensions(
+    numberOfSeats: number,
+    dimensionX: number,
+    dimensionY: number,
+  ) {
     if (
       !Number.isInteger(numberOfSeats) ||
       numberOfSeats < 1 ||
@@ -18,7 +31,9 @@ export class TheatersService {
       dimensionY < 1 ||
       numberOfSeats !== dimensionX * dimensionY
     ) {
-      throw new BadRequestException('Invalid theater seat dimensions');
+      throw new BadRequestException(
+        'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
+      );
     }
   }
 
@@ -64,5 +79,23 @@ export class TheatersService {
 
   remove(id: number) {
     return this.theatersRepository.deleteTheater(id);
+  }
+
+  async getSeats(theaterId: number) {
+    const theater = await this.theatersRepository.getTheaterById(theaterId);
+
+    if (!theater) {
+      throw new NotFoundException('La sala seleccionada ya no existe.');
+    }
+
+    return this.chairsRepository.findByTheater(theaterId);
+  }
+
+  async updateSelected(theaterId: number, dto: UpdateSeatsDto) {
+    const theater = await this.theatersRepository.getTheaterById(theaterId);
+    if (!theater) {
+      throw new NotFoundException('La sala seleccionada ya no existe.');
+    }
+    return this.chairsRepository.updateSelected(theaterId, dto);
   }
 }

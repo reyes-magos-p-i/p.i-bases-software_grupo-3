@@ -378,7 +378,7 @@ defineExpose({ refresh })
           :disabled="optionsLoading || !!optionsError"
         >
           <legend class="visually-hidden">Filtrar por sucursales</legend>
-          <p v-if="optionsLoading" role="status">Cargando sucursales…</p>
+          <LoadingState v-if="optionsLoading" message="Cargando sucursales…" compact />
           <p v-else-if="optionsError">Sucursales no disponibles.</p>
           <p v-else-if="!branches.length">No hay sucursales registradas.</p>
           <label v-for="branch in branches" :key="branch.id"
@@ -422,23 +422,25 @@ defineExpose({ refresh })
         </fieldset>
       </details>
       <label
-        >Ordenar por<select v-model="sortBy" name="sortBy" @change="filtersChanged">
-          <option value="id">ID</option>
-          <option value="name">Nombre completo</option>
-          <option value="email">Correo electrónico</option>
-          <option value="createdAt">Fecha de registro</option>
-          <option value="status">Estado</option>
+        ><span class="visually-hidden">Ordenar por</span
+        ><select v-model="sortBy" name="sortBy" @change="filtersChanged">
+          <option value="id">Ordenar por: ID</option>
+          <option value="name">Ordenar por: Nombre completo</option>
+          <option value="email">Ordenar por: Correo electrónico</option>
+          <option value="createdAt">Ordenar por: Fecha de registro</option>
+          <option value="status">Ordenar por: Estado</option>
           <template v-if="isEmployeeList"
-            ><option value="role">Rol</option>
-            <option value="branch">Sucursal</option>
-            <option value="hireDate">Fecha de contratación</option></template
+            ><option value="role">Ordenar por: Rol</option>
+            <option value="branch">Ordenar por: Sucursal</option>
+            <option value="hireDate">Ordenar por: Fecha de contratación</option></template
           >
         </select></label
       >
       <label
-        >Orden<select v-model="sortDirection" name="sortDirection" @change="filtersChanged">
-          <option value="asc">Ascendente</option>
-          <option value="desc">Descendente</option>
+        ><span class="visually-hidden">Orden</span
+        ><select v-model="sortDirection" name="sortDirection" @change="filtersChanged">
+          <option value="asc">Orden: Ascendente</option>
+          <option value="desc">Orden: Descendente</option>
         </select></label
       >
     </div>
@@ -649,7 +651,14 @@ input[aria-invalid='true'] {
 .filters select,
 .filter-picker summary {
   box-sizing: border-box;
-  height: 44px;
+  height: var(--filter-control-height);
+  min-height: var(--filter-control-height);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 20px;
   padding: 11px 12px;
 }
@@ -660,7 +669,6 @@ input[aria-invalid='true'] {
   align-self: end;
 }
 .filter-picker summary {
-  min-height: 44px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
   background: var(--content-background);

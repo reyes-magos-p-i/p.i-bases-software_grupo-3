@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 
 import BaseModal from '@/components/common/BaseModal.vue'
 import { getMovie } from '@/services/movie.service'
 import type { MovieDetail, MovieOption } from '@/types/movie'
+import MoviePoster from '@/components/common/MoviePoster.vue'
+import { displayText } from '@/utils/display-text'
 
 const props = defineProps<{
   movieId: number | null
@@ -17,7 +20,6 @@ const emit = defineEmits<{
 }>()
 
 const movie = ref<MovieDetail | null>(null)
-
 const loading = ref(false)
 const error = ref('')
 const retryable = ref(false)
@@ -25,9 +27,7 @@ const retryable = ref(false)
 let request: AbortController | undefined
 
 const title = computed(() =>
-  movie.value
-    ? `Detalle de ${movie.value.title}`
-    : 'Detalle de película',
+  movie.value ? `Detalle de ${movie.value.title}` : 'Detalle de película',
 )
 
 function text(value: unknown) {
@@ -43,9 +43,7 @@ function text(value: unknown) {
 }
 
 function optionName(value: MovieOption | null | undefined) {
-  return value?.name?.trim()
-    ? value.name
-    : 'Sin registrar'
+  return value?.name?.trim() ? displayText(value.name) : 'Sin registrar'
 }
 
 function optionList(values: MovieOption[] | null | undefined) {
@@ -53,13 +51,9 @@ function optionList(values: MovieOption[] | null | undefined) {
     return 'Sin registrar'
   }
 
-  const names = values
-    .map((value) => value.name)
-    .filter((name) => name?.trim())
+  const names = values.map((value) => displayText(value.name)).filter(Boolean)
 
-  return names.length > 0
-    ? names.join(', ')
-    : 'Sin registrar'
+  return names.length > 0 ? names.join(', ') : 'Sin registrar'
 }
 
 function duration(minutes: number | null | undefined) {
@@ -97,14 +91,14 @@ const groups = computed(() => {
           value: duration(detail.runningTime),
         },
         {
-            label: 'Año de estreno',
-            value: detail.releaseYear ?? 'Sin registrar',
+          label: 'Año de estreno',
+          value: detail.releaseYear ?? 'Sin registrar',
         },
       ],
     },
 
     {
-      label: 'Clasificación',
+      label: '',
       fields: [
         {
           label: 'Clasificación',
@@ -118,7 +112,7 @@ const groups = computed(() => {
     },
 
     {
-      label: 'Géneros',
+      label: '',
       fields: [
         {
           label: 'Géneros',
@@ -128,7 +122,7 @@ const groups = computed(() => {
     },
 
     {
-      label: 'Descripción',
+      label: '',
       fields: [
         {
           label: 'Sinopsis',
@@ -159,40 +153,27 @@ async function load() {
   loading.value = true
 
   try {
-    const detail = await getMovie(
-      movieId,
-      current.signal,
-    )
-    //debug stuff
-    console.log('MOVIE DETAIL:', detail)
-    console.log('MOVIE DETAIL:', detail)
-    console.log('CLASSIFICATION:', detail.classification)
+    const detail = await getMovie(movieId, current.signal)
     if (!current.signal.aborted) {
       movie.value = detail
     }
   } catch (failure) {
     if (current.signal.aborted) return
 
-    const status = isAxiosError(failure)
-      ? failure.response?.status
-      : undefined
+    const status = isAxiosError(failure) ? failure.response?.status : undefined
 
     if (status === 401) {
-      error.value =
-        'La sesión ha expirado. Inicia sesión nuevamente.'
+      error.value = 'La sesión ha expirado. Inicia sesión nuevamente.'
 
       emit('session-expired')
     } else if (status === 403) {
-      error.value =
-        'No tienes permiso para ver esta película.'
+      error.value = 'No tienes permiso para ver esta película.'
 
       emit('forbidden')
     } else if (status === 404) {
-      error.value =
-        'La película seleccionada ya no existe.'
+      error.value = 'La película seleccionada ya no existe.'
     } else {
-      error.value =
-        'No se pudo mostrar la película. Comprueba la conexión y vuelve a intentarlo.'
+      error.value = 'No se pudo mostrar la película. Comprueba la conexión y vuelve a intentarlo.'
 
       retryable.value = true
     }
@@ -223,108 +204,63 @@ onBeforeUnmount(() => request?.abort())
 </script>
 
 <template>
-  <BaseModal
-    :open="movieId !== null"
-    :title="title"
-    @close="close"
-  >
-    <div
-      class="movie-detail-content"
-      :aria-busy="loading"
-    >
-      <p
+  <BaseModal :open="movieId !== null" :title="title" @close="close">
+    <div class="movie-detail-content dialog-content" :aria-busy="loading">
+      <LoadingState
         v-if="loading"
         class="detail-feedback"
-        role="status"
-      >
-        Cargando datos de la película…
-      </p>
+        message="Cargando datos de la película…"
+        compact
+      />
 
-      <div
-        v-else-if="error"
-        class="detail-feedback detail-error"
-        role="alert"
-      >
+      <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         <p>{{ error }}</p>
 
-        <button
-          v-if="retryable"
-          type="button"
-          class="detail-button"
-          @click="load"
-        >
+        <button v-if="retryable" type="button" class="detail-button" @click="load">
           Reintentar
         </button>
       </div>
 
-      <template v-else-if="movie">
-        <section
-          v-for="group in groups"
-          :key="group.label"
-          class="detail-group"
-          :aria-label="group.label"
-        >
-          <h3>{{ group.label }}</h3>
+      <div v-else-if="movie" class="movie-layout">
+        <div class="movie-information">
+          <section
+            v-for="group in groups"
+            :key="group.label"
+            class="detail-group"
+            :aria-label="group.label"
+          >
+            <h3>{{ group.label }}</h3>
 
-          <dl class="detail-grid">
-            <div
-              v-for="field in group.fields"
-              :key="field.label"
-              class="detail-field"
-            >
-              <dt>{{ field.label }}</dt>
-              <dd>{{ field.value }}</dd>
-            </div>
-          </dl>
-        </section>
-      </template>
+            <dl class="detail-grid">
+              <div
+                v-for="field in group.fields"
+                :key="field.label"
+                class="detail-field"
+                :class="{ 'detail-field-wide': field.label === 'Sinopsis' }"
+              >
+                <dt>{{ field.label }}</dt>
+                <dd>{{ field.value }}</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+
+        <div class="movie-poster">
+          <MoviePoster :poster-image="movie.posterImage" :title="movie.title" />
+        </div>
+      </div>
 
       <footer class="detail-footer">
-        <button
-          type="button"
-          class="detail-button"
-          @click="close"
-        >
-          Cerrar
-        </button>
+        <button type="button" class="detail-button" @click="close">Cerrar</button>
       </footer>
     </div>
   </BaseModal>
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.movie-detail-content)::backdrop) {
-  background: color-mix(in srgb, var(--page-background) 55%, transparent);
-}
-
 :global(.app-modal-card:has(.movie-detail-content)) {
   width: min(880px, 100%);
   max-width: 880px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--content-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-:global(.app-modal-card:has(.movie-detail-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 24px;
-  background: var(--primary-color);
-  color: var(--text-on-dark);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.25rem;
-}
-
-:global(.app-modal-card:has(.movie-detail-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--text-on-dark);
-  border-radius: var(--radius-small);
 }
 
 .movie-detail-content {
@@ -342,28 +278,6 @@ onBeforeUnmount(() => request?.abort())
   margin: 0 0 16px;
   font-size: 1rem;
   font-weight: 700;
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px 20px;
-  margin: 0;
-}
-
-.detail-field {
-  min-width: 0;
-}
-
-dt {
-  margin-bottom: 6px;
-  font-weight: 500;
-}
-
-dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 .detail-feedback {
@@ -402,10 +316,47 @@ dd {
   .movie-detail-content {
     padding: 20px 16px;
   }
+}
 
-  .detail-grid {
-    grid-template-columns: minmax(0, 1fr);
+.detail-field-wide {
+  grid-column: 1 / -1;
+}
+
+.movie-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 24px;
+  align-items: start;
+}
+
+.movie-information {
+  min-width: 0;
+}
+
+.movie-poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--content-background);
+}
+
+.movie-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+@media (max-width: 700px) {
+  .movie-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .movie-poster {
+    max-width: 240px;
+    justify-self: center;
   }
 }
 </style>
-

@@ -1,6 +1,9 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TheatersService } from './theaters.service';
 import { TheaterRepository } from './theater.repository/theater.repository';
+import { ChairsRepository } from './chairs.repository';
+import { UpdateSeatsDto } from './dto/update-seats.dto';
 
 describe('TheatersService', () => {
   let service: TheatersService;
@@ -11,6 +14,10 @@ describe('TheatersService', () => {
     updateTheater: jest.Mock;
     deleteTheater: jest.Mock;
   };
+  let chairsRepository: {
+    findByTheater: jest.Mock;
+    updateSelected: jest.Mock;
+  };
 
   beforeEach(async () => {
     repository = {
@@ -20,11 +27,16 @@ describe('TheatersService', () => {
       updateTheater: jest.fn(),
       deleteTheater: jest.fn(),
     };
+    chairsRepository = {
+      findByTheater: jest.fn(),
+      updateSelected: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TheatersService,
         { provide: TheaterRepository, useValue: repository },
+        { provide: ChairsRepository, useValue: chairsRepository },
       ],
     }).compile();
 
@@ -63,7 +75,9 @@ describe('TheatersService', () => {
       projectorName: 'IMAX',
     };
 
-    await expect(service.create(theaterDto)).rejects.toThrow('Invalid theater seat dimensions');
+    await expect(service.create(theaterDto)).rejects.toThrow(
+      'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
+    );
     expect(repository.createTheater).not.toHaveBeenCalled();
   });
 
@@ -82,7 +96,9 @@ describe('TheatersService', () => {
           ...dimensions,
           projectorName: 'IMAX',
         }),
-      ).rejects.toThrow('Invalid theater seat dimensions');
+      ).rejects.toThrow(
+        'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
+      );
     }
 
     expect(repository.createTheater).not.toHaveBeenCalled();
@@ -98,7 +114,9 @@ describe('TheatersService', () => {
     };
     repository.createTheater.mockResolvedValue({ theaterId: 8, ...theaterDto });
 
-    await expect(service.create(theaterDto)).resolves.toMatchObject({ theaterId: 8 });
+    await expect(service.create(theaterDto)).resolves.toMatchObject({
+      theaterId: 8,
+    });
   });
 
   it('returns all theaters from the repository', async () => {
@@ -141,7 +159,7 @@ describe('TheatersService', () => {
     });
 
     await expect(service.update(4, { dimensionX: 11 })).rejects.toThrow(
-      'Invalid theater seat dimensions',
+      'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
     );
     expect(repository.updateTheater).not.toHaveBeenCalled();
   });
@@ -155,7 +173,7 @@ describe('TheatersService', () => {
     });
 
     await expect(service.update(4, { numberOfSeats: 0 })).rejects.toThrow(
-      'Invalid theater seat dimensions',
+      'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
     );
     expect(repository.updateTheater).not.toHaveBeenCalled();
   });
@@ -188,14 +206,133 @@ describe('TheatersService', () => {
   ];
 
   it.each(validCases)('service accepts %i x %i = %i', async (x, y, seats) => {
-    const dto = { cinema: 'Cinema Test', dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' };
+    const dto = {
+      cinema: 'Cinema Test',
+      dimensionX: x,
+      dimensionY: y,
+      numberOfSeats: seats,
+      projectorName: 'IMAX',
+    };
     repository.createTheater.mockResolvedValue({ theaterId: 1, ...dto });
     await expect(service.create(dto)).resolves.toMatchObject({ theaterId: 1 });
   });
 
-  it.each(invalidCases)('service rejects %i x %i, seats %i', async (x, y, seats) => {
-    await expect(
-      service.create({ cinema: 'Cinema Test', dimensionX: x, dimensionY: y, numberOfSeats: seats, projectorName: 'IMAX' }),
-    ).rejects.toThrow('Invalid theater seat dimensions');
+  it.each(invalidCases)(
+    'service rejects %i x %i, seats %i',
+    async (x, y, seats) => {
+      await expect(
+        service.create({
+          cinema: 'Cinema Test',
+          dimensionX: x,
+          dimensionY: y,
+          numberOfSeats: seats,
+          projectorName: 'IMAX',
+        }),
+      ).rejects.toThrow(
+        'Las filas y columnas deben ser números enteros positivos. Su producto debe coincidir con la cantidad de asientos, con un máximo de 5000.',
+      );
+    },
+  );
+
+  describe('getSeats', () => {
+    const seats = [
+      {
+        theaterId: 7,
+        rowNumber: 1,
+        columnNumber: 2,
+        type: 'vip',
+        state: 'free',
+      },
+    ];
+
+    it('returns the seats for an existing theater', async () => {
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.findByTheater.mockResolvedValueOnce(seats);
+
+      await expect(service.getSeats(7)).resolves.toEqual(seats);
+
+      expect(repository.getTheaterById).toHaveBeenCalledWith(7);
+      expect(chairsRepository.findByTheater).toHaveBeenCalledWith(7);
+    });
+
+    it('throws when the theater does not exist', async () => {
+      repository.getTheaterById.mockResolvedValueOnce(null);
+
+      await expect(service.getSeats(999)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+
+      expect(chairsRepository.findByTheater).not.toHaveBeenCalled();
+    });
+
+    it('returns an empty array when the theater has no seats', async () => {
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.findByTheater.mockResolvedValueOnce([]);
+
+      await expect(service.getSeats(7)).resolves.toEqual([]);
+    });
+
+    it('propagates seat retrieval errors', async () => {
+      const error = new Error('Seat retrieval failed');
+
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.findByTheater.mockRejectedValueOnce(error);
+
+      await expect(service.getSeats(7)).rejects.toBe(error);
+    });
+  });
+
+  describe('updateSelected', () => {
+    const dto: UpdateSeatsDto = {
+      seats: [{ rowNumber: 1, columnNumber: 2 }],
+      type: 'vip',
+    };
+
+    it('passes the request to the repository and returns its result', async () => {
+      const result = {
+        theaterId: 7,
+        seatsUpdated: 1,
+      };
+
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.updateSelected.mockResolvedValueOnce(result);
+
+      await expect(service.updateSelected(7, dto)).resolves.toEqual(result);
+
+      expect(repository.getTheaterById).toHaveBeenCalledWith(7);
+      expect(chairsRepository.updateSelected).toHaveBeenCalledWith(7, dto);
+    });
+
+    it('throws when the theater does not exist', async () => {
+      repository.getTheaterById.mockResolvedValueOnce(null);
+
+      await expect(service.updateSelected(999, dto)).rejects.toThrow(
+        new NotFoundException('La sala seleccionada ya no existe.'),
+      );
+
+      expect(repository.getTheaterById).toHaveBeenCalledWith(999);
+      expect(chairsRepository.updateSelected).not.toHaveBeenCalled();
+    });
+
+    it('propagates repository errors', async () => {
+      const error = new NotFoundException('Seat not found');
+
+      repository.getTheaterById.mockResolvedValueOnce({
+        theaterId: 7,
+      });
+      chairsRepository.updateSelected.mockRejectedValueOnce(error);
+
+      await expect(service.updateSelected(7, dto)).rejects.toBe(error);
+
+      expect(chairsRepository.updateSelected).toHaveBeenCalledWith(7, dto);
+    });
   });
 });

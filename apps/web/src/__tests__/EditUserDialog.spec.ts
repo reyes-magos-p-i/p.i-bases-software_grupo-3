@@ -167,6 +167,11 @@ describe('EditUserDialog', () => {
   })
   it('shows immutable information and prefilled editable data without gender or password controls', async () => {
     await render()
+    expect(
+      page
+        .findAll('.dialog-section-title:has(.dialog-section-number)')
+        .map((heading) => heading.text()),
+    ).toEqual(['1 Datos personales', '2 Contacto', '3 Dirección (opcional)'])
     expect(getUserDetail).toHaveBeenCalledWith(
       { section: 'clients', id: 42 },
       expect.any(AbortSignal),
@@ -299,6 +304,11 @@ describe('EditUserDialog', () => {
   it('allows staff role changes and displays immutable hiring information', async () => {
     getUserDetail.mockResolvedValue(employee)
     await render({ section: 'employees', id: 42 })
+    expect(
+      page
+        .findAll('.dialog-section-title:has(.dialog-section-number)')
+        .map((heading) => heading.text()),
+    ).toEqual(['1 Datos personales', '2 Contacto', '3 Rol y sucursal', '4 Dirección *'])
     expect(page.text()).toContain('ADM42')
     expect(page.text()).toContain('01/10/2026')
     await page.get('select[name="role"]').setValue('EMPLOYEE')
@@ -469,6 +479,7 @@ describe('EditUserDialog', () => {
     await confirm()
     expect(page.get('input[name="email"]').attributes('aria-invalid')).toBe('true')
     expect(page.text()).toContain('El correo electrónico ya está registrado para otro usuario.')
+    expect(page.find('.notification-popup').exists()).toBe(false)
     expect(updateUser).toHaveBeenCalledTimes(1)
   })
   it('explains the last-administrator conflict without marking the email', async () => {
@@ -577,5 +588,40 @@ describe('EditUserDialog', () => {
     await prepareEmail()
     expect(page.text()).toContain('Cambiar el correo afectará el acceso')
     expect(page.text()).not.toContain('Cambiar el rol')
+  })
+
+  it.each(['clients', 'employees'] as const)(
+    'keeps closing and cancelling %s independent of invalid edits',
+    async (section) => {
+      getUserDetail.mockResolvedValue(section === 'clients' ? client : employee)
+      const view = await render({ section, id: 42 })
+      const input = page.get<HTMLInputElement>('[name="email"]')
+      await input.setValue('invalid')
+      input.element.focus()
+      const cancel = button('Cancelar')
+      cancel.element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+      cancel.element.focus()
+      await flushPromises()
+      expect(input.attributes('aria-invalid')).toBe('false')
+      expect(page.find('.field-error').exists()).toBe(false)
+      await cancel.trigger('pointerup')
+      await cancel.trigger('click')
+      expect(view.emitted('close')).toHaveLength(1)
+      expect(updateUser).not.toHaveBeenCalled()
+    },
+  )
+
+  it('honors keyboard focus on the close icon without triggering field validation', async () => {
+    const view = await render()
+    const input = page.get<HTMLInputElement>('[name="email"]')
+    await input.setValue('invalid')
+    input.element.focus()
+    const close = page.get<HTMLButtonElement>('.app-modal-close')
+    close.element.focus()
+    await flushPromises()
+    expect(input.attributes('aria-invalid')).toBe('false')
+    await close.trigger('click')
+    expect(view.emitted('close')).toHaveLength(1)
+    expect(updateUser).not.toHaveBeenCalled()
   })
 })

@@ -1,102 +1,74 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { getMovieFunctions, stripTrailingSlashes } from '../../services/movieFunctions'
-import placeholderImage from '../../assets/images/placeholder.svg'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import MoviePoster from '@/components/common/MoviePoster.vue'
+import type { PortalMovie } from '@/types/movie'
 
 interface CarouselSlide {
   image: string
   alt: string
   title: string
 }
-
+const props = defineProps<{ movies: readonly PortalMovie[] }>()
 const slides = ref<CarouselSlide[]>([])
-
-const autoSlideInterval = 5000
-
-let intervalId: ReturnType<typeof setInterval> | undefined
-
-function startAutoSlide(): void {
-  intervalId = setInterval(() => {
-    nextSlide()
-  }, autoSlideInterval)
-}
-
-function stopAutoSlide(): void {
-  if (intervalId) {
-    clearInterval(intervalId)
-  }
-}
-
-function setPlaceholderSlides(): void {
-  slides.value = [
-    {
-      image: placeholderImage,
-      alt: 'Cinetadel',
-      title: 'Cinetadel',
-    },
-  ]
-}
-
-onMounted(async () => {
-  try {
-    const movies = await getMovieFunctions()
-
-    if (!movies?.length) {
-      setPlaceholderSlides()
-    } else {
-      slides.value = movies.map((movie: { title: string; posterImage: string }) => ({
-        image: `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image/${movie.posterImage}`,
-        alt: movie.title,
-        title: movie.title,
-      }))
-    }
-  } catch {
-    setPlaceholderSlides()
-  }
-
-  startAutoSlide()
-})
-
-onUnmounted(() => {
-  stopAutoSlide()
-})
-
 const currentIndex = ref(0)
-
+const paused = ref(false)
+const interacting = ref(false)
+watch(
+  () => props.movies,
+  (movies) => {
+    slides.value = movies.length
+      ? movies.slice(0, 4).map((movie) => ({
+          image: movie.posterImage,
+          alt: movie.title,
+          title: movie.title,
+        }))
+      : [{ image: '', alt: 'Cinetadel', title: 'Cinetadel' }]
+    currentIndex.value = 0
+  },
+  { immediate: true },
+)
+let intervalId: ReturnType<typeof setInterval> | undefined
+onMounted(() => {
+  paused.value = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+  intervalId = setInterval(() => {
+    if (!paused.value && !interacting.value) nextSlide()
+  }, 5000)
+})
+onUnmounted(() => {
+  clearInterval(intervalId)
+})
 const currentSlide = computed(() => slides.value[currentIndex.value])
-
-function nextSlide(): void {
-  if (!slides.value.length) return
+function nextSlide() {
   currentIndex.value = (currentIndex.value + 1) % slides.value.length
 }
-
-function previousSlide(): void {
-  if (!slides.value.length) return
+function previousSlide() {
   currentIndex.value = (currentIndex.value - 1 + slides.value.length) % slides.value.length
 }
-
-function selectSlide(index: number): void {
+function selectSlide(index: number) {
   currentIndex.value = index
 }
-
-function handleImageError(): void {
-  const slide = slides.value[currentIndex.value]
-
-  if (!slide || slide.image === placeholderImage) return
-
-  slide.image = placeholderImage
+function leave(event: FocusEvent) {
+  interacting.value =
+    event.relatedTarget instanceof Node &&
+    (event.currentTarget as HTMLElement).contains(event.relatedTarget)
 }
 </script>
 
 <template>
-  <section class="hero-carousel" aria-label="Películas destacadas">
+  <section
+    class="hero-carousel"
+    aria-label="Películas destacadas"
+    @mouseenter="interacting = true"
+    @mouseleave="interacting = false"
+    @focusin="interacting = true"
+    @focusout="leave"
+  >
     <Transition name="carousel-fade" mode="out-in">
       <div v-if="currentSlide" :key="currentIndex" class="carousel-slide">
-        <img
-          :src="currentSlide.image"
-          :alt="currentSlide.alt"
+        <MoviePoster
+          :poster-image="currentSlide.image"
+          :title="currentSlide.alt"
           class="hero-image"
-          @error="handleImageError"
         />
 
         <div class="hero-overlay"></div>
@@ -129,6 +101,7 @@ function handleImageError(): void {
         class="indicator"
         :class="{ active: index === currentIndex }"
         :aria-label="`Mostrar película ${index + 1}`"
+        :aria-current="index === currentIndex ? 'true' : undefined"
         @click="selectSlide(index)"
       ></button>
     </div>
@@ -146,6 +119,7 @@ function handleImageError(): void {
 }
 
 .hero-image {
+  --poster-aspect-ratio: 21 / 7.7;
   display: block;
 
   width: 100%;
@@ -159,12 +133,14 @@ function handleImageError(): void {
   position: absolute;
   inset: 0;
 
-  background: linear-gradient(
-    90deg,
-    var(--hero-overlay-start) 0%,
-    var(--hero-overlay-end) 60%,
-    transparent 100%
-  );
+  background:
+    linear-gradient(180deg, var(--hero-overlay-start), transparent 140px),
+    linear-gradient(
+      90deg,
+      var(--hero-overlay-start) 0%,
+      var(--hero-overlay-end) 60%,
+      transparent 100%
+    );
 }
 
 .carousel-control {
@@ -174,8 +150,8 @@ function handleImageError(): void {
   display: grid;
   place-items: center;
 
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
 
   border: 0;
   border-radius: 50%;
@@ -208,19 +184,46 @@ function handleImageError(): void {
 }
 
 .indicator {
-  width: 10px;
-  height: 10px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
 
   padding: 0;
 
-  border: 1px solid var(--content-background);
+  border: 0;
   border-radius: 50%;
 
   background: transparent;
 }
 
-.indicator.active {
+.indicator::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--content-background);
+  border-radius: 50%;
+}
+.indicator.active::after {
   background-color: var(--accent-color);
+}
+.hero-carousel button:focus-visible {
+  outline-color: var(--focus-on-dark);
+}
+@media (max-width: 576px) {
+  .hero-image {
+    --poster-aspect-ratio: 4 / 3;
+    aspect-ratio: 4 / 3;
+  }
+  .carousel-control {
+    top: calc(50% + 24px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .carousel-fade-enter-active,
+  .carousel-fade-leave-active {
+    transition: none;
+  }
 }
 
 .carousel-slide {

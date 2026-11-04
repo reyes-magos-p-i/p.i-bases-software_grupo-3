@@ -3,6 +3,16 @@ import { mount } from '@vue/test-utils'
 import LoadingState from '@/components/common/LoadingState.vue'
 
 describe('LoadingState', () => {
+  it('uses the same accessible indicator in compact contexts', () => {
+    const wrapper = mount(LoadingState, {
+      props: { message: 'Buscando películas…', compact: true, surface: 'dark' },
+    })
+    expect(wrapper.classes()).toContain('loading-state--compact')
+    expect(wrapper.classes()).toContain('loading-state--dark')
+    expect(wrapper.findAll('svg')).toHaveLength(1)
+    expect(wrapper.get('[role="status"]').text()).toBe('Buscando películas…')
+    wrapper.unmount()
+  })
   it('announces the supplied message and hides the decoration from assistive technology', () => {
     const wrapper = mount(LoadingState, { props: { message: 'Cargando clientes…' } })
 
@@ -10,6 +20,7 @@ describe('LoadingState', () => {
     expect(wrapper.attributes('aria-live')).toBe('polite')
     expect(wrapper.attributes('aria-atomic')).toBe('true')
     expect(wrapper.get('.loading-indicator').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.classes()).not.toContain('loading-state--dark')
     wrapper.unmount()
   })
 
@@ -19,6 +30,19 @@ describe('LoadingState', () => {
 
     expect(wrapper.get('[role="status"]').text()).toBe('Cargando proyecciones…')
     expect(wrapper.text()).not.toContain('Cargando salas')
+    wrapper.unmount()
+  })
+
+  it('supports dark surfaces and switches back to a light surface without changing the message', async () => {
+    const wrapper = mount(LoadingState, {
+      props: { message: 'Cargando películas…', surface: 'dark' },
+    })
+    expect(wrapper.classes()).toContain('loading-state--dark')
+    expect(wrapper.get('[role="status"]').text()).toBe('Cargando películas…')
+    expect(wrapper.get('.loading-indicator').attributes('aria-hidden')).toBe('true')
+    await wrapper.setProps({ surface: 'light' })
+    expect(wrapper.classes()).not.toContain('loading-state--dark')
+    expect(wrapper.get('[role="status"]').text()).toBe('Cargando películas…')
     wrapper.unmount()
   })
 })

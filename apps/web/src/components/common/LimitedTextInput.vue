@@ -1,41 +1,62 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue'
+import { computed, ref, useId } from 'vue'
+import { useBlurValidation } from '@/composables/useBlurValidation'
+import { characterCount as countCharacters } from '@/utils/user-validation'
 
-const props = withDefaults(defineProps<{
-  label: string
-  limit: number
-  placeholder?: string
-  disabled?: boolean
-  required?: boolean
-  multiline?: boolean
-  rows?: number
-}>(), {
-  placeholder: '',
-  disabled: false,
-  required: false,
-  multiline: false,
-  rows: 4
-})
+const props = withDefaults(
+  defineProps<{
+    label: string
+    limit: number
+    placeholder?: string
+    disabled?: boolean
+    required?: boolean
+    multiline?: boolean
+    rows?: number
+    error?: string
+  }>(),
+  {
+    placeholder: '',
+    disabled: false,
+    required: false,
+    multiline: false,
+    rows: 4,
+    error: '',
+  },
+)
 
 const value = defineModel<string>({
-  default: ''
+  default: '',
 })
 
 const id = useId()
+const touched = ref(false)
+const shouldValidate = useBlurValidation()
 
-const characterCount = computed(() => value.value.length)
+const characterCount = computed(() => countCharacters(value.value))
 
-const isInvalid = computed(() =>
-  characterCount.value > props.limit
+const isInvalid = computed(() => characterCount.value > props.limit)
+const feedback = computed(
+  () =>
+    props.error ||
+    (touched.value
+      ? !value.value.trim() && props.required
+        ? 'Este campo es obligatorio.'
+        : isInvalid.value
+          ? `Escribe como máximo ${props.limit} ${props.limit === 1 ? 'carácter' : 'caracteres'}.`
+          : ''
+      : ''),
 )
 
+function blur(event: FocusEvent) {
+  if (shouldValidate(event)) touched.value = true
+}
 </script>
 
 <template>
   <div class="limited-input">
-
     <label :for="id">
       {{ label }}
+      <span v-if="required" aria-hidden="true"> *</span>
     </label>
 
     <!-- Multiline input -->
@@ -48,8 +69,9 @@ const isInvalid = computed(() =>
       :placeholder="placeholder"
       :disabled="disabled"
       :required="required"
-      :aria-invalid="isInvalid"
-      :aria-describedby="`${id}-count`"
+      :aria-invalid="!!feedback"
+      :aria-describedby="id + '-count' + (feedback ? ' ' + id + '-error' : '')"
+      @blur="blur"
     ></textarea>
 
     <!-- Single-line input -->
@@ -62,31 +84,21 @@ const isInvalid = computed(() =>
       :placeholder="placeholder"
       :disabled="disabled"
       :required="required"
-      :aria-invalid="isInvalid"
-      :aria-describedby="`${id}-count`"
+      :aria-invalid="!!feedback"
+      :aria-describedby="id + '-count' + (feedback ? ' ' + id + '-error' : '')"
+      @blur="blur"
     />
 
     <!-- Validation and counter -->
     <div class="input-information">
-
-      <span
-        v-if="isInvalid"
-        class="input-error"
-        role="alert"
-      >
-        Se ha superado el límite de caracteres.
+      <span v-if="feedback" :id="`${id}-error`" class="input-error" role="alert">
+        {{ feedback }}
       </span>
 
-      <span
-        :id="`${id}-count`"
-        class="character-counter"
-        :class="{ 'input-error': isInvalid }"
-      >
+      <span :id="`${id}-count`" class="character-counter" :class="{ 'input-error': !!feedback }">
         {{ characterCount }} / {{ limit }}
       </span>
-
     </div>
-
   </div>
 </template>
 
@@ -128,7 +140,7 @@ textarea.text-input {
 }
 
 /* Invalid input */
-.text-input[aria-invalid="true"] {
+.text-input[aria-invalid='true'] {
   border-color: var(--error-color);
 }
 

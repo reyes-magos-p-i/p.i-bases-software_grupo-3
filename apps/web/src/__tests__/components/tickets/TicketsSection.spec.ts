@@ -1,0 +1,144 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
+// import TicketDetailDialog from '@/components/tickets/TicketDetailDialog.vue'
+import TicketsSection from '@/components/tickets/TicketsSection.vue'
+import ModifyTicketDialog from '@/components/tickets/ModifyTicketDialog.vue'
+
+const { getTicket } = vi.hoisted(() => ({ getTicket: vi.fn() }))
+
+vi.mock('@/services/ticket.service', () => ({ getTicket }))
+vi.mock('@/composables/useEmployeeSessionRecovery', () => ({
+  useEmployeeSessionRecovery: () => ({
+    sessionExpired: vi.fn(),
+    refreshPermissions: vi.fn(),
+  }),
+}))
+
+const ticket = {
+  title: 'Dune',
+  theaterId: 3,
+  startTime: '2026/10/10 18:00',
+  endTime: '2026/10/10 20:30',
+  seat: '1-2',
+}
+
+async function search(wrapper: ReturnType<typeof mount>, value: string) {
+  await wrapper.get('#ticket-number').setValue(value)
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+}
+
+describe('TicketsSection', () => {
+  beforeEach(() => {
+    getTicket.mockReset()
+    const prototype = HTMLDialogElement.prototype
+    Object.defineProperty(prototype, 'showModal', { configurable: true, value: vi.fn() })
+    Object.defineProperty(prototype, 'close', { configurable: true, value: vi.fn() })
+  })
+
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
+    Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
+  })
+
+  it('keeps the numbered destination group and the existing ticket update contract', async () => {
+    const wrapper = mount(ModifyTicketDialog, {
+      props: {
+        showtimes: [
+          {
+            movieFunctionId: 9,
+            theaterId: 3,
+            seatRow: 1,
+            seatColumn: 2,
+            date: '2026-12-15',
+            time: '18:00',
+          },
+        ],
+      },
+    })
+    wrapper.vm.open()
+    expect(wrapper.get('.dialog-section-title').text()).toBe('1 Proyección de destino')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    await wrapper.get('#ticket-showtime').setValue('9')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toEqual([[{ movieFunctionId: 9 }]])
+    expect(wrapper.get('form').element.lastElementChild).toBe(wrapper.get('footer').element)
+    wrapper.unmount()
+  })
+
+  it('shows the searched ticket in the results table', async () => {
+    getTicket.mockResolvedValue(ticket)
+    const wrapper = mount(TicketsSection)
+
+    await search(wrapper, '1001')
+
+    expect(getTicket).toHaveBeenCalledWith(1001, expect.any(AbortSignal))
+    const cells = wrapper.findAll('tbody td').map((cell) => cell.text())
+    expect(cells.slice(0, 6)).toEqual([
+      '1001',
+      'Dune',
+      '3',
+      '10/10/2026, 18:00',
+      '10/10/2026, 20:30',
+      '1-2',
+    ])
+    expect(
+      wrapper.findAll('tbody td [aria-label]').map((button) => button.attributes('aria-label')),
+    ).toEqual(['Modificar'])
+  })
+
+  // Unwired: detail dialog is not rendered in TicketsSection for now
+  // it('opens the ticket detail dialog from the "Ver detalle" button', async () => {
+  //   getTicket.mockResolvedValue(ticket)
+  //   const wrapper = mount(TicketsSection)
+  //
+  //   await search(wrapper, '1001')
+  //   expect(wrapper.findComponent(TicketDetailDialog).props('ticket')).toBeNull()
+  //
+  //   await wrapper.get('button[aria-label="Ver detalle"]').trigger('click')
+  //
+  //   expect(wrapper.findComponent(TicketDetailDialog).props('ticket')).toMatchObject({
+  //     id: 1001,
+  //     title: 'Dune',
+  //     seat: '1-2',
+  //   })
+  // })
+
+  it('reports when no ticket matches the number', async () => {
+    getTicket.mockResolvedValue('')
+    const wrapper = mount(TicketsSection)
+
+    await search(wrapper, '999')
+
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El boleto no existe')
+    expect(wrapper.find('table').exists()).toBe(false)
+  })
+
+  it('rejects a ticket number that is not a positive integer without calling the API', async () => {
+    const wrapper = mount(TicketsSection)
+
+    await search(wrapper, 'abc')
+
+    expect(getTicket).not.toHaveBeenCalled()
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe(
+      'Ingresa un número de boleto válido.',
+    )
+  })
+
+  it('replaces the not-found notification when the next search is invalid', async () => {
+    getTicket.mockResolvedValue('')
+    const wrapper = mount(TicketsSection)
+
+    await search(wrapper, '999')
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe('El boleto no existe')
+
+    await search(wrapper, '0')
+
+    expect(getTicket).toHaveBeenCalledTimes(1)
+    expect(wrapper.findComponent(NotificationPopup).props('message')).toBe(
+      'Ingresa un número de boleto válido.',
+    )
+  })
+})

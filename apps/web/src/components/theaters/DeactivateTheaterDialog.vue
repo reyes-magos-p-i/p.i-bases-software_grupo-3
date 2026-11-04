@@ -13,10 +13,13 @@ const error = ref('')
 const feedback = ref<HTMLElement | null>(null)
 let disposed = false
 
-watch(() => props.theater, () => {
-  error.value = ''
-  blocked.value = false
-})
+watch(
+  () => props.theater,
+  () => {
+    error.value = ''
+    blocked.value = false
+  },
+)
 
 function close() {
   if (!saving.value) emit('close')
@@ -44,7 +47,8 @@ async function confirm() {
     } else if (status === 409) {
       error.value = 'No se puede desactivar la sala porque tiene proyecciones programadas.'
     } else {
-      error.value = 'No se pudo confirmar la desactivación. Cierra y actualiza el listado antes de intentarlo nuevamente.'
+      error.value =
+        'No se pudo confirmar la desactivación. Cierra y actualiza el listado antes de intentarlo nuevamente.'
     }
     await nextTick()
     feedback.value?.focus()
@@ -59,11 +63,23 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <BaseModal :open="theater !== null" title="Desactivar sala" :close-disabled="saving" @close="close">
-    <div v-if="theater" class="theater-deactivation-content" :aria-busy="saving">
-      <p>¿Deseas desactivar la sala <strong>{{ theater.theaterId }}</strong>?</p>
-      <p class="deactivation-warning">La sala dejará de estar disponible, pero sus datos se conservarán.</p>
-      <p v-if="error" ref="feedback" class="deactivation-error" role="alert" tabindex="-1">{{ error }}</p>
+  <BaseModal
+    :open="theater !== null"
+    title="Desactivar sala"
+    :close-disabled="saving"
+    @close="close"
+  >
+    <div v-if="theater" class="theater-deactivation-content dialog-content" :aria-busy="saving">
+      <p>
+        ¿Deseas desactivar la sala <strong>{{ theater.theaterId }}</strong
+        >?
+      </p>
+      <p class="deactivation-warning">
+        La sala dejará de estar disponible, pero sus datos se conservarán.
+      </p>
+      <p v-if="error" ref="feedback" class="deactivation-error" role="alert" tabindex="-1">
+        {{ error }}
+      </p>
       <footer>
         <button type="button" class="secondary" :disabled="saving" @click="close">Cancelar</button>
         <button type="button" class="primary" :disabled="saving || blocked" @click="confirm">

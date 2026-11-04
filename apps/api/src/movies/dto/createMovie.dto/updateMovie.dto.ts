@@ -1,41 +1,23 @@
-import {
-  IsArray,
-  IsInt,
-  IsNotEmpty,
-  IsString,
-  Min,
-  IsOptional
-} from 'class-validator';
+import { OmitType, PartialType } from '@nestjs/mapped-types';
+import { ArrayUnique, IsArray, IsInt, IsOptional, Min } from 'class-validator';
+import { CreateMovieDto } from './createMovie.dto';
 
-export class UpdateMovieDto {
-  @IsString()
-  @IsNotEmpty()
-  title?: string;
-
-  @IsInt()
-  @Min(1)
-  runningTime?: number;
-
-  @IsString()
-  @IsNotEmpty()
-  synopsis?: string;
-
-  @IsString()
-  @IsNotEmpty()
+export class UpdateMovieDto extends PartialType(
+  OmitType(CreateMovieDto, ['languageIds', 'genreIds'] as const),
+  { skipNullProperties: false },
+) {
+  // Updates retain the existing ability to clear a movie's catalog associations.
   @IsOptional()
-  posterImage?: string;
-
-  @IsInt()
-  releaseYear?: number;
-
-  @IsInt()
-  classificationId?: number;
-
-  @IsArray()
-  @IsInt({ each: true })
+  @IsArray({ message: 'Selecciona los idiomas de la película.' })
+  @ArrayUnique({ message: 'No repitas idiomas.' })
+  @IsInt({ each: true, message: 'Selecciona únicamente idiomas disponibles.' })
+  @Min(1, { each: true, message: 'Selecciona únicamente idiomas disponibles.' })
   languageIds?: number[];
 
-  @IsArray()
-  @IsInt({ each: true })
+  @IsOptional()
+  @IsArray({ message: 'Selecciona los géneros de la película.' })
+  @ArrayUnique({ message: 'No repitas géneros.' })
+  @IsInt({ each: true, message: 'Selecciona únicamente géneros disponibles.' })
+  @Min(1, { each: true, message: 'Selecciona únicamente géneros disponibles.' })
   genreIds?: number[];
 }

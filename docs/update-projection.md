@@ -1,7 +1,7 @@
 # Modificar proyección (SCRUM-44)
 
 Solo `ADMINISTRATOR` con contraseña vigente (`PasswordStatusGuard`); exige el
-origen del frontend. No requiere cambios de base de datos.
+origen del frontend. La política de boletos requiere los campos de formato, tecnología y estreno descritos en [Compra de boletos](./ticket-purchase.md).
 
 ## Endpoint
 
@@ -9,15 +9,21 @@ origen del frontend. No requiere cambios de base de datos.
 
 ```json
 {
-  "movieId": 3, "theaterId": 7,
-  "startDate": "2026-07-22", "startTime": "21:00", "endTime": "00:55",
-  "cleaningMinutes": 30, "advertisementMinutes": 15,
-  "price": 4200, "status": "ACTIVE"
+  "movieId": 3,
+  "theaterId": 7,
+  "startDate": "2026-07-22",
+  "startTime": "21:00",
+  "endTime": "00:55",
+  "cleaningMinutes": 30,
+  "advertisementMinutes": 15,
+  "format": "2D",
+  "technology": "IMAX",
+  "isPremiere": false,
+  "status": "ACTIVE"
 }
 ```
 
-`price` y `status` (`ACTIVE` o `INACTIVE`) son opcionales: si se omiten se
-conserva el valor actual. No se acepta `endDate`. Responde `200` con el detalle
+`format`, `technology`, `isPremiere` y `status` (`ACTIVE` o `INACTIVE`) son opcionales: si se omiten se conserva la configuración actual. El precio se recalcula con la política central. No se acepta `endDate`. Responde `200` con el detalle
 actualizado (mismo formato que `GET /api/projections/:id`).
 
 ## Reglas
@@ -25,7 +31,7 @@ actualizado (mismo formato que `GET /api/projections/:id`).
 - Solo se modifican proyecciones `ACTIVE` o `INACTIVE`; las demás responden `409`
   «Solo se pueden modificar proyecciones activas o inactivas.».
 - Aplican las mismas validaciones de [Crear proyección](create-projection.md):
-  inicio no pasado, hora fin ≥ anuncios + película + limpieza, precio positivo.
+  inicio no pasado, hora fin ≥ anuncios + película + limpieza y formato compatible con la tecnología.
 - Sala o película no disponibles: `409` «El elemento seleccionado ya no está disponible.».
 - Los conflictos de horario excluyen a la propia proyección y listan los choques.
 - Bloquea la proyección y la sala durante la transacción; reemplaza sus actividades
@@ -38,3 +44,9 @@ La acción «Modificar» del listado (solo activas o inactivas) abre el formular
 precargado. «Guardar cambios» muestra la confirmación con cada campo
 `valor anterior → valor nuevo`; «Deshacer» restaura los valores originales. Si
 falla el guardado, el formulario conserva lo ingresado y muestra el motivo.
+
+## Actualización de tarifas
+
+Una función con boletos vendidos no puede cambiar de sala: responde 409 con un mensaje claro, porque los boletos apuntan a esa función y sala. Los demás cambios siguen permitidos.
+
+Modificar formato, tecnología o estreno recalcula el precio general con la política central de boletos. Omitir esas opciones conserva la configuración actual. El campo heredado `price` no sustituye la fórmula. Las facturas previas conservan los importes originales. Véase [Compra de boletos](./ticket-purchase.md).

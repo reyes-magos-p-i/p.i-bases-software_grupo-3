@@ -1,26 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { stripTrailingSlashes } from '../../services/movieFunctions'
 
+const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }))
+vi.mock('@/services/api', () => ({ getApi: () => ({ get: apiGet }) }))
+
 const API_BASE_URL = 'https://api.example.com'
 const ENDPOINT = `${API_BASE_URL}/movie-fuctions`
 
 describe('stripTrailingSlashes', () => {
   it('leaves a string with no trailing slash unchanged', () => {
-    expect(stripTrailingSlashes('https://api.example.com/v1')).toBe(
-      'https://api.example.com/v1',
-    )
+    expect(stripTrailingSlashes('https://api.example.com/v1')).toBe('https://api.example.com/v1')
   })
 
   it('removes a single trailing slash', () => {
-    expect(stripTrailingSlashes('https://api.example.com/')).toBe(
-      'https://api.example.com',
-    )
+    expect(stripTrailingSlashes('https://api.example.com/')).toBe('https://api.example.com')
   })
 
   it('removes multiple trailing slashes', () => {
-    expect(stripTrailingSlashes('https://api.example.com///')).toBe(
-      'https://api.example.com',
-    )
+    expect(stripTrailingSlashes('https://api.example.com///')).toBe('https://api.example.com')
   })
 
   it('keeps slashes in the middle', () => {
@@ -40,6 +37,8 @@ describe('stripTrailingSlashes', () => {
 describe('getMovieFunctions', () => {
   beforeEach(() => {
     vi.resetModules()
+    apiGet.mockReset()
+    localStorage.clear()
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
   })
@@ -114,5 +113,40 @@ describe('getMovieFunctions', () => {
     const { getMovieFunctions } = await loadService()
 
     await expect(getMovieFunctions()).rejects.toThrow('Failed to load movie functions: 500')
+  })
+  it('fetches the complete general catalog without credentials', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', API_BASE_URL)
+    apiGet.mockResolvedValue({ data: [{ id: 1, title: 'General', posterImage: '1.jpg' }] })
+    const signal = new AbortController().signal
+    const { getPortalMovies } = await loadService()
+    await expect(getPortalMovies(false, signal)).resolves.toEqual([
+      { id: 1, title: 'General', posterImage: '1.jpg' },
+    ])
+    expect(apiGet).toHaveBeenCalledExactlyOnceWith('/movie-fuctions/catalog', {
+      adapter: 'fetch',
+      withCredentials: false,
+      timeout: 10000,
+      signal,
+    })
+  })
+  it('uses the current client bearer token for personalized movies', async () => {
+    localStorage.setItem('accessToken', 'client-token')
+    apiGet.mockResolvedValue({ data: [] })
+    const { getPortalMovies } = await loadService()
+    await expect(getPortalMovies(true)).resolves.toEqual([])
+    expect(apiGet).toHaveBeenCalledExactlyOnceWith('/clients/me/preferences/portal', {
+      adapter: 'fetch',
+      withCredentials: false,
+      timeout: 10000,
+      headers: { Authorization: 'Bearer client-token' },
+      signal: undefined,
+    })
+  })
+  it('rejects personalized requests without a token and propagates service failures', async () => {
+    const { getPortalMovies } = await loadService()
+    await expect(getPortalMovies(true)).rejects.toMatchObject({ status: 401 })
+    expect(apiGet).not.toHaveBeenCalled()
+    apiGet.mockRejectedValue(new Error('offline'))
+    await expect(getPortalMovies()).rejects.toThrow('offline')
   })
 })

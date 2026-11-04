@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ProjectionFormDialog from '@/components/projections/ProjectionFormDialog.vue'
+import DatePicker from '@/components/common/DatePicker.vue'
 import type { AvailableMovie, ProjectionDetail } from '@/types/projection'
 
-const { searchAvailableMovies } = vi.hoisted(() => ({ searchAvailableMovies: vi.fn() }))
-vi.mock('@/services/projection.service', () => ({ searchAvailableMovies }))
+const { searchAvailableMovies, previewProjectionPrice } = vi.hoisted(() => ({
+  searchAvailableMovies: vi.fn(),
+  previewProjectionPrice: vi.fn(),
+}))
+vi.mock('@/services/projection.service', () => ({ searchAvailableMovies, previewProjectionPrice }))
 
 const spiderMan: AvailableMovie = {
   movieId: 3,
@@ -12,7 +16,12 @@ const spiderMan: AvailableMovie = {
   runningTime: 190,
   posterImage: 'spiderman.jpg',
 }
-const odyssey: AvailableMovie = { movieId: 4, title: 'The Odyssey', runningTime: 170, posterImage: 'o.jpg' }
+const odyssey: AvailableMovie = {
+  movieId: 4,
+  title: 'The Odyssey',
+  runningTime: 170,
+  posterImage: 'o.jpg',
+}
 const props = {
   cinemas: [
     { branchId: 2, name: 'Mall Oxígeno' },
@@ -34,6 +43,14 @@ function render(extra: Record<string, unknown> = {}) {
 }
 
 const field = (name: string) => wrapper!.get(`[name="${name}"]`)
+const calendar = (name: string) =>
+  wrapper!
+    .findAllComponents(DatePicker)
+    .find((picker) => picker.get('input').attributes('name') === name)!
+async function setDate(name: string, value: string) {
+  calendar(name).vm.$emit('update:modelValue', value)
+  await flushPromises()
+}
 
 async function searchMovie(text: string) {
   await field('movie').setValue(text)
@@ -46,14 +63,25 @@ async function fillValidForm() {
   await field('theaterId').setValue('7')
   await searchMovie('spi')
   await field('movie').trigger('keydown', { key: 'Enter' })
-  await field('startDate').setValue('2099-07-21')
+  await setDate('startDate', '2099-07-21')
   await field('startTime').setValue('21:00')
-  await field('price').setValue('4500.50')
+  await flushPromises()
 }
 
 beforeEach(() => {
+  vi.stubEnv('VITE_API_BASE_URL', 'https://cinema.example/api')
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   searchAvailableMovies.mockReset().mockResolvedValue([spiderMan, odyssey])
+  previewProjectionPrice.mockReset().mockImplementation((settings) =>
+    Promise.resolve({
+      ...settings,
+      base: 3000,
+      unitPrice:
+        3000 + (settings.technology === 'IMAX' ? 1000 : 0) + (settings.isPremiere ? 500 : 0),
+      modifiers: [],
+      categories: [],
+    }),
+  )
   Object.defineProperties(dialogPrototype, {
     showModal: {
       configurable: true,
@@ -74,15 +102,51 @@ afterEach(() => {
   wrapper?.unmount()
   wrapper = undefined
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   Reflect.deleteProperty(dialogPrototype, 'showModal')
   Reflect.deleteProperty(dialogPrototype, 'close')
   document.body.innerHTML = ''
 })
 
 describe('ProjectionFormDialog', () => {
+  it('selects projection dates with the shared calendar without validating while picking', async () => {
+    render()
+    const picker = calendar('startDate')
+    const earliest = picker.props('min')!
+    expect(field('startDate').attributes('readonly')).toBeDefined()
+    await field('startDate').trigger('click')
+    expect(field('startDate').attributes('aria-invalid')).toBe('false')
+    expect(picker.get('.calendar-footer').text()).toBe('Cerrar')
+    await picker.get(`[data-date="${earliest}"]`).trigger('click')
+    expect(picker.props('modelValue')).toBe(earliest)
+    expect(calendar('endDate').props('min')).toBe(earliest)
+    expect(picker.find('.calendar-panel').exists()).toBe(false)
+    expect(wrapper!.emitted('submit')).toBeUndefined()
+  })
+
+  it.each(['startDate', 'endDate'])(
+    'cancels with one click after leaving an empty %s without showing an error',
+    async (name) => {
+      render()
+      await field(name).trigger('click')
+      const cancel = wrapper!.findAll('button').find((button) => button.text() === 'Cancelar')!
+      cancel.element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+      await field(name).trigger('focusout', { relatedTarget: cancel.element })
+      expect(field(name).attributes('aria-invalid')).toBe('false')
+      await cancel.trigger('click')
+      expect(wrapper!.get('dialog').attributes('open')).toBeUndefined()
+    },
+  )
+
   it('schedules a projection with the suggested end time', async () => {
     render()
     expect(wrapper!.get('h2').text()).toBe('Agregar nueva proyección')
+    expect(wrapper!.findAll('.dialog-section-title').map((heading) => heading.text())).toEqual([
+      '1 Película y sala',
+      '2 Fecha y horario',
+      '3 Tiempos de la función',
+      '4 Precio',
+    ])
     expect(field('movie').attributes('disabled')).toBeDefined()
 
     await field('branchId').setValue('2')
@@ -94,14 +158,14 @@ describe('ProjectionFormDialog', () => {
 
     expect(searchAvailableMovies).toHaveBeenCalledExactlyOnceWith(2, 'spi', expect.any(AbortSignal))
     expect(field('movie').element).toHaveProperty('value', spiderMan.title)
-    expect(wrapper!.get('img').attributes('src')).toContain('/image/spiderman.jpg')
-    expect(wrapper!.get<HTMLInputElement>('[readonly]').element.value).toBe('190')
+    expect(wrapper!.get('img').attributes('src')).toContain('/uploads/posters/spiderman.jpg')
+    expect(wrapper!.get<HTMLInputElement>('[id$="-duration"]').element.value).toBe('190')
     expect(field('endTime').element).toHaveProperty('value', '00:55')
     expect(wrapper!.get('.schedule-summary').text()).toBe(
       'Anuncios 15 min + película 190 min + limpieza 30 min = 235 min. La sala queda ocupada de 21:00 a 00:55 del día siguiente.',
     )
     expect(wrapper!.get('.poster-title').text()).toBe(spiderMan.title)
-    expect(field('price').attributes('aria-describedby')).toMatch(/-price-hint$/)
+    expect(field('price').attributes('aria-describedby')).toMatch(/-price-policy$/)
 
     await field('startTime').setValue('')
     expect(wrapper!.get('.schedule-summary').text()).toBe(
@@ -126,7 +190,10 @@ describe('ProjectionFormDialog', () => {
           endTime: '00:55',
           cleaningMinutes: 30,
           advertisementMinutes: 15,
-          price: 4500.5,
+          price: 3000,
+          format: '2D',
+          technology: 'STANDARD',
+          isPremiere: false,
           status: 'INACTIVE',
         },
       ],
@@ -147,7 +214,6 @@ describe('ProjectionFormDialog', () => {
         'Selecciona la fecha de la proyección.',
         'Selecciona la hora de inicio.',
         'Selecciona la hora de fin.',
-        'El precio debe ser un número positivo en colones.',
       ]),
     )
     expect(document.activeElement?.getAttribute('aria-invalid')).toBe('true')
@@ -157,7 +223,7 @@ describe('ProjectionFormDialog', () => {
   it('validates dates, activity minutes, price and the minimum end time', async () => {
     render()
     await fillValidForm()
-    await field('endDate').setValue('2099-07-20')
+    await setDate('endDate', '2099-07-20')
     await field('cleaningMinutes').setValue('241')
     await field('price').setValue('10.123')
     await field('endTime').setValue('00:54')
@@ -167,12 +233,12 @@ describe('ProjectionFormDialog', () => {
     const text = wrapper!.text()
     expect(text).toContain('La fecha final no puede ser anterior a la fecha inicial.')
     expect(text).toContain('Introduce minutos enteros entre 0 y 240.')
-    expect(text).toContain('El precio debe ser un número positivo en colones.')
+    expect(field('price').attributes('readonly')).toBeDefined()
     expect(text).toContain('La hora de fin debe ser igual o posterior a las')
 
-    await field('endDate').setValue('2099-08-25')
+    await setDate('endDate', '2099-08-25')
     expect(wrapper!.text()).toContain('El rango no puede superar 31 días.')
-    await field('startDate').setValue('2000-01-01')
+    await setDate('startDate', '2000-01-01')
     expect(wrapper!.text()).toContain('La fecha de la proyección no puede estar en el pasado.')
     expect(wrapper!.emitted('submit')).toBeUndefined()
   })
@@ -220,7 +286,9 @@ describe('ProjectionFormDialog', () => {
 
     searchAvailableMovies.mockResolvedValueOnce([])
     await searchMovie('zzz')
-    expect(wrapper!.text()).toContain('No hay películas disponibles con ese nombre en esta sucursal.')
+    expect(wrapper!.text()).toContain(
+      'No hay películas disponibles con ese nombre en esta sucursal.',
+    )
 
     searchAvailableMovies.mockRejectedValueOnce(new Error('offline'))
     await searchMovie('zz')
@@ -254,10 +322,14 @@ describe('ProjectionFormDialog', () => {
     await fillValidForm()
     await field('branchId').setValue('5')
     expect(field('theaterId').element).toHaveProperty('value', '')
-    expect(wrapper!.get<HTMLInputElement>('[readonly]').element.value).toBe('—')
+    expect(wrapper!.get<HTMLInputElement>('[id$="-duration"]').element.value).toBe('—')
     expect(wrapper!.get('.schedule-summary').text()).toContain('Selecciona una película')
     await vi.advanceTimersByTimeAsync(300)
-    expect(searchAvailableMovies).toHaveBeenLastCalledWith(5, spiderMan.title, expect.any(AbortSignal))
+    expect(searchAvailableMovies).toHaveBeenLastCalledWith(
+      5,
+      spiderMan.title,
+      expect.any(AbortSignal),
+    )
   })
 
   it('shows option and submission states', async () => {
@@ -277,25 +349,27 @@ describe('ProjectionFormDialog', () => {
     expect(wrapper!.get('dialog').attributes('open')).toBeDefined()
   })
 
-  it('prefills the default ticket price and lets the administrator change it', async () => {
+  it('uses the server pricing preview instead of an editable default', async () => {
     render()
-    expect(field('price').element).toHaveProperty('value', '')
-    await wrapper!.setProps({ defaultPrice: 3500 })
-    expect(field('price').element).toHaveProperty('value', '3500')
-    expect(wrapper!.get(`[id$="-price-hint"]`).text()).toContain('Precio por defecto: ₡3500')
-
-    await field('price').setValue('4200')
-    await wrapper!.setProps({ defaultPrice: 3600 })
-    expect(field('price').element).toHaveProperty('value', '4200')
-
+    await flushPromises()
+    expect(field('price').attributes('readonly')).toBeDefined()
+    expect(field('price').element).toHaveProperty('value', '3000')
+    await field('technology').setValue('IMAX')
+    await flushPromises()
+    expect(field('price').element).toHaveProperty('value', '4000')
+    await field('isPremiere').setValue(true)
+    await flushPromises()
+    expect(field('price').element).toHaveProperty('value', '4500')
     wrapper!.vm.complete()
     await flushPromises()
-    expect(field('price').element).toHaveProperty('value', '3600')
+    expect(field('price').element).toHaveProperty('value', '3000')
   })
 
   it('falls back to the placeholder poster and resets after completing', async () => {
     render()
     await fillValidForm()
+    await wrapper!.get('img').trigger('error')
+    expect(wrapper!.get('img').attributes('src')).toContain('/api/image/spiderman.jpg')
     await wrapper!.get('img').trigger('error')
     expect(wrapper!.get('img').attributes('src')).not.toContain('spiderman.jpg')
 
@@ -323,6 +397,9 @@ describe('ProjectionFormDialog', () => {
       endTime: '2099-07-23T00:55',
       status: 'INACTIVE',
       price: 4000,
+      format: '2D',
+      technology: 'IMAX',
+      isPremiere: false,
       runningTime: 190,
       posterImage: 'spiderman.jpg',
       createdAt: '2099-07-01T09:30',
@@ -331,7 +408,10 @@ describe('ProjectionFormDialog', () => {
     }
 
     async function renderEdit(extra: Record<string, unknown> = {}) {
-      wrapper = mount(ProjectionFormDialog, { props: { ...props, ...extra }, attachTo: document.body })
+      wrapper = mount(ProjectionFormDialog, {
+        props: { ...props, ...extra },
+        attachTo: document.body,
+      })
       wrapper.vm.edit(detail)
       await flushPromises()
     }
@@ -343,7 +423,7 @@ describe('ProjectionFormDialog', () => {
       expect(field('branchId').element).toHaveProperty('value', '2')
       expect(field('theaterId').element).toHaveProperty('value', '7')
       expect(field('movie').element).toHaveProperty('value', spiderMan.title)
-      expect(field('startDate').element).toHaveProperty('value', '2099-07-22')
+      expect(field('startDate').element).toHaveProperty('value', '22/07/2099')
       expect(field('startTime').element).toHaveProperty('value', '21:00')
       expect(field('endTime').element).toHaveProperty('value', '00:55')
       expect(field('price').element).toHaveProperty('value', '4000')
@@ -367,25 +447,28 @@ describe('ProjectionFormDialog', () => {
 
     it('confirms every change before saving', async () => {
       await renderEdit()
-      await field('price').setValue('4200')
+      await field('isPremiere').setValue(true)
+      await flushPromises()
       await field('startTime').setValue('20:00')
       await field('status').setValue('ACTIVE')
       await wrapper!.get('form').trigger('submit')
       await flushPromises()
 
-      const items = wrapper!.findAll('.confirm-changes li').map((item) => [
-        item.get('strong').text(),
-        item.get('.before').text(),
-        item.get('.after').text(),
-      ])
+      const items = wrapper!
+        .findAll('.confirm-changes li')
+        .map((item) => [
+          item.get('strong').text(),
+          item.get('.before').text(),
+          item.get('.after').text(),
+        ])
       expect(items.slice(0, 3)).toEqual([
         ['Estado:', 'Inactiva', 'Activa'],
         ['Hora inicio:', '9:00 pm', '8:00 pm'],
         ['Hora fin:', '12:55 am', '11:55 pm'],
       ])
-      expect(items[3]![0]).toBe('Precio:')
-      expect(items[3]![1]).toMatch(/4\s?000/u)
-      expect(items[3]![2]).toMatch(/4\s?200/u)
+      const priceChange = items.find((item) => item[0] === 'Precio:')!
+      expect(priceChange[1]).toMatch(/4\s?000/u)
+      expect(priceChange[2]).toMatch(/4\s?500/u)
       expect(document.activeElement?.textContent).toBe('Confirma los cambios')
       expect(wrapper!.get('fieldset').attributes('disabled')).toBeDefined()
 
@@ -403,7 +486,10 @@ describe('ProjectionFormDialog', () => {
             endTime: '23:55',
             cleaningMinutes: 30,
             advertisementMinutes: 15,
-            price: 4200,
+            price: 4500,
+            format: '2D',
+            technology: 'IMAX',
+            isPremiere: true,
             status: 'ACTIVE',
           },
         ],
@@ -413,11 +499,14 @@ describe('ProjectionFormDialog', () => {
 
     it('returns to the form when saving fails and undoes the changes', async () => {
       await renderEdit()
-      await field('price').setValue('4200')
+      await field('isPremiere').setValue(true)
+      await flushPromises()
       await wrapper!.get('form').trigger('submit')
-      await wrapper!.setProps({ submissionErrors: ['No se pudieron guardar los cambios, intenta de nuevo.'] })
+      await wrapper!.setProps({
+        submissionErrors: ['No se pudieron guardar los cambios, intenta de nuevo.'],
+      })
       expect(wrapper!.find('.confirm-changes').exists()).toBe(false)
-      expect(field('price').element).toHaveProperty('value', '4200')
+      expect(field('price').element).toHaveProperty('value', '4500')
 
       await wrapper!.get('.undo-button').trigger('click')
       expect(field('price').element).toHaveProperty('value', '4000')
@@ -430,7 +519,7 @@ describe('ProjectionFormDialog', () => {
       })
       wrapper.vm.edit({ ...detail, price: null, cleaningMinutes: null, advertisementMinutes: null })
       await flushPromises()
-      expect(field('price').element).toHaveProperty('value', '3500')
+      expect(field('price').element).toHaveProperty('value', '4000')
       expect(field('cleaningMinutes').element).toHaveProperty('value', '30')
       expect(field('advertisementMinutes').element).toHaveProperty('value', '15')
 

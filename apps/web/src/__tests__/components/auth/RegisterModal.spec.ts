@@ -58,6 +58,8 @@ describe('RegisterModal.vue', () => {
     const page = new DOMWrapper(document.body)
     await nextTick()
     expect(page.get('dialog').element.open).toBe(true)
+    expect(page.get('.app-modal-card').classes()).toContain('app-modal-card--auth')
+    expect(page.get('.app-modal-card').classes()).not.toContain('cinema-dialog')
     expect(document.activeElement).toBe(page.get('#email').element)
     await page.get('form').trigger('submit')
     expect(page.text()).toContain('Ingresa un correo válido')
@@ -232,7 +234,12 @@ describe('RegisterModal.vue', () => {
     )
     expect(wrapper.text()).toContain('Te enviamos un enlace de confirmación')
     expect(wrapper.text()).toContain('juan.perez@example.com')
-    expect(wrapper.get('button[type="button"]').text()).toContain('Reenviar correo')
+    expect(
+      wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Reenviar correo'))!
+        .text(),
+    ).toContain('Reenviar correo')
     expect(wrapper.emitted('authenticated')).toBeUndefined()
     expect(wrapper.emitted('close')).toBeUndefined()
   })
@@ -256,7 +263,10 @@ describe('RegisterModal.vue', () => {
     await wrapper.find('form').trigger('submit.prevent')
 
     expect(wrapper.text()).toContain('La cuenta quedó pendiente')
-    await wrapper.get('button[type="button"]').trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Reenviar correo'))!
+      .trigger('click')
     expect(resendEmailVerification).toHaveBeenCalledExactlyOnceWith('ana@example.com')
     expect(wrapper.text()).toContain('Te enviamos un enlace de confirmación')
   })
@@ -345,6 +355,45 @@ describe('RegisterModal.vue', () => {
     expect(view.text()).toContain('La contraseña no puede superar 128 caracteres.')
     expect(registerUser).not.toHaveBeenCalled()
     expect(view.text()).not.toMatch(/bytes|UTF-8|Unicode/u)
+  })
+
+  it('does not validate registration when closing with the native close button', async () => {
+    realWrapper = mount(RegisterModal, {
+      props: { open: true },
+      attachTo: document.body,
+      global: { stubs: { SocialAuthButtons: true } },
+    })
+    const page = new DOMWrapper(document.body)
+    await nextTick()
+    const email = page.get<HTMLInputElement>('#email')
+    await email.setValue('invalid')
+    email.element.focus()
+    const close = page.get<HTMLButtonElement>('.app-modal-close')
+    close.element.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'touch' }),
+    )
+    await email.trigger('focusout', { relatedTarget: null })
+    expect(email.classes()).not.toContain('is-invalid')
+    await close.trigger('pointerup')
+    await close.trigger('click')
+    expect(realWrapper.emitted('close')).toHaveLength(1)
+    expect(registerUser).not.toHaveBeenCalled()
+    await realWrapper.setProps({ open: false })
+  })
+
+  it('reveals the password without validating the field being left', async () => {
+    const wrapper = createWrapper()
+    const password = wrapper.get('#password')
+    await password.setValue('unfinished')
+    const toggle = wrapper.get('button[aria-controls="password"]')
+    await password.trigger('focusout', { relatedTarget: toggle.element })
+    expect(password.classes()).not.toContain('is-invalid')
+    await toggle.trigger('click')
+    expect(password.attributes('type')).toBe('text')
+    expect(registerUser).not.toHaveBeenCalled()
+    await wrapper.get('form').trigger('submit')
+    expect(password.classes()).toContain('is-invalid')
+    expect(registerUser).not.toHaveBeenCalled()
   })
 })
 

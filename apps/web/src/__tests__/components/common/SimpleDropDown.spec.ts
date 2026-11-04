@@ -1,57 +1,37 @@
-
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 
 describe('SimpleDropdown', () => {
-  const props = {
-    label: 'Clasificación',
-    options: [
-      { id: 1, name: 'TP' },
-      { id: 2, name: 'M15' },
-      { id: 3, name: 'M18' }
-    ]
-  }
-
-  it('renders the label and placeholder', () => {
-    const wrapper = mount(SimpleDropdown, { props })
-
-    expect(wrapper.find('label').text()).toBe('Clasificación')
-    expect(wrapper.find('option').text()).toBe('Seleccione una opción')
-  })
-
-  it('renders all options', () => {
-    const wrapper = mount(SimpleDropdown, { props })
-
-    const options = wrapper.findAll('option')
-
-    expect(options).toHaveLength(4)
-    expect(options[1]?.text()).toBe('TP')
-    expect(options[2]?.text()).toBe('M15')
-    expect(options[3]?.text()).toBe('M18')
-  })
-
-  it('updates the selected value', async () => {
-    const wrapper = mount(SimpleDropdown, { props })
-
-    await wrapper.find('select').setValue('2')
-
-    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([2])
-  })
-
-  it('disables the dropdown when disabled is true', () => {
-    const wrapper = mount(SimpleDropdown, {
-      props: { ...props, disabled: true }
+  it('capitalizes labels without changing selected values', async () => {
+    const view = mount(SimpleDropdown, {
+      props: { label: 'Idioma', options: [{ id: 'es', name: 'español' }] },
     })
-
-    expect(wrapper.find('select').attributes('disabled')).toBeDefined()
+    expect(view.get('option[value="es"]').text()).toBe('Español')
+    await view.get('select').setValue('es')
+    expect(view.emitted('update:modelValue')).toEqual([['es']])
+    view.unmount()
   })
 
-  it('sets required when required is true', () => {
-    const wrapper = mount(SimpleDropdown, {
-      props: { ...props, required: true }
-    })
+  it('waits for blur before displaying a missing required selection', async () => {
+    const view = mount(SimpleDropdown, { props: { label: 'Idioma', required: true, options: [] } })
+    expect(view.find('[role="alert"]').exists()).toBe(false)
+    await view.get('select').trigger('blur')
+    expect(view.get('[role="alert"]').text()).toBe('Selecciona una opción.')
+    const feedbackId = view.get('[role="alert"]').attributes('id')
+    expect(view.get('select').attributes('aria-describedby')).toBe(feedbackId)
+    view.unmount()
+  })
 
-    expect(wrapper.find('select').attributes('required')).toBeDefined()
+  it('does not let blur validation interrupt cancellation and supports server field messages', async () => {
+    const cancel = document.createElement('button')
+    document.body.append(cancel)
+    const view = mount(SimpleDropdown, { props: { label: 'Idioma', required: true, options: [] } })
+    await view.get('select').trigger('blur', { relatedTarget: cancel })
+    expect(view.find('[role="alert"]').exists()).toBe(false)
+    await view.setProps({ error: 'Selecciona un idioma disponible.' })
+    expect(view.get('[role="alert"]').text()).toBe('Selecciona un idioma disponible.')
+    view.unmount()
+    cancel.remove()
   })
 })

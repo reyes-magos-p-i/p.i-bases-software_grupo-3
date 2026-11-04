@@ -71,12 +71,31 @@ describe('BaseModal', () => {
 
   it('opens in the native modal layer, names the dialog and focuses the first field', async () => {
     await render()
+    expect(page.get('.app-modal-card').classes()).toContain('cinema-dialog')
+    expect(page.find('.app-modal-card--auth').exists()).toBe(false)
     expect(prototype.showModal).toHaveBeenCalledOnce()
     expect(page.get('dialog').element.open).toBe(true)
     expect(page.get('h2').attributes('id')).toBe(page.get('dialog').attributes('aria-labelledby'))
     expect(document.activeElement).toBe(page.get('input').element)
     expect(document.body.style.position).toBe('fixed')
     expect(document.documentElement.style.overflow).toBe('hidden')
+  })
+
+  it('opts into the auth appearance while preserving focus, naming and close protection', async () => {
+    const wrapper = await render()
+    await wrapper.setProps({ appearance: 'auth', closeDisabled: true })
+    expect(page.get('.app-modal-card').classes()).toContain('app-modal-card--auth')
+    expect(page.get('.app-modal-card').classes()).not.toContain('cinema-dialog')
+    expect(document.activeElement).toBe(page.get('input').element)
+    expect(page.get('h2').attributes('id')).toBe(page.get('dialog').attributes('aria-labelledby'))
+    await page.get('dialog').trigger('cancel')
+    expect(wrapper.emitted('close')).toBeUndefined()
+    await wrapper.setProps({ closeDisabled: false })
+    await page.get('.app-modal-close').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    await wrapper.setProps({ open: false })
+    expect(document.activeElement).toBe(opener)
+    expect(document.body.style.position).toBe('')
   })
 
   it('uses distinct accessible title identifiers', async () => {

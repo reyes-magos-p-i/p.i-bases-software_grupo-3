@@ -9,6 +9,9 @@ const { create, get, post, put, patch } = vi.hoisted(() => ({
   post: vi.fn(),
 }))
 
+// api.ts registers a response interceptor when it is first imported.
+const interceptors = { response: { use: vi.fn() } }
+
 vi.mock('axios', () => ({ default: { create } }))
 
 describe('projection service', () => {
@@ -16,7 +19,7 @@ describe('projection service', () => {
     vi.resetModules()
     vi.resetAllMocks()
     vi.stubEnv('VITE_API_BASE_URL', '/api')
-    create.mockImplementation((defaults) => ({ defaults, get, post, put, patch }))
+    create.mockImplementation((defaults) => ({ defaults, interceptors, get, post, put, patch }))
   })
 
   afterEach(() => vi.unstubAllEnvs())
@@ -50,9 +53,8 @@ describe('projection service', () => {
   it('loads the list, its filter options and one detail', async () => {
     const controller = new AbortController()
     get.mockResolvedValue({ data: 'data' })
-    const { getProjectionFilterOptions, getProjections, getProjectionDetail } = await import(
-      '@/services/projection.service'
-    )
+    const { getProjectionFilterOptions, getProjections, getProjectionDetail } =
+      await import('@/services/projection.service')
     const query = { page: 2, pageSize: 25, status: 'ACTIVE' as const }
 
     await expect(getProjectionFilterOptions(controller.signal)).resolves.toBe('data')
@@ -90,5 +92,17 @@ describe('projection service', () => {
 
     await expect(cancelProjection(21)).resolves.toBe('cancelled')
     expect(patch).toHaveBeenCalledWith('/projections/21/cancel', undefined, { timeout: 30000 })
+  })
+  it('requests the authoritative price preview for the selected format and technology', async () => {
+    const settings = { format: '3D' as const, technology: 'IMAX' as const, isPremiere: true }
+    const { previewProjectionPrice } = await import('@/services/projection.service')
+    const { getApi } = await import('@/services/api')
+    vi.mocked(getApi().post).mockResolvedValueOnce({ data: { unitPrice: 5000 } })
+    expect(await previewProjectionPrice(settings)).toEqual({ unitPrice: 5000 })
+    expect(getApi().post).toHaveBeenCalledWith(
+      '/projections/price-preview',
+      settings,
+      expect.objectContaining({ timeout: 10000 }),
+    )
   })
 })

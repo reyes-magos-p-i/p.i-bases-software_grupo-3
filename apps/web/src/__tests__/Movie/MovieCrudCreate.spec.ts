@@ -1,24 +1,27 @@
-
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
-
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import MovieCrudCreate from '@/components/Movies/MovieCrudCreate.vue'
 import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
-import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 import ReusableSearchDropdown from '@/components/common/ReusableSearchDropdown.vue'
 import { createMovie } from '@/services/movie.service'
 
 vi.mock('@/services/movie.service', () => ({
-  createMovie: vi.fn()
+  createMovie: vi.fn(),
+}))
+
+vi.mock('@/services/image-handler.service', () => ({
+  uploadPoster: vi.fn(),
+  getPosterUrl: vi.fn(() => null),
 }))
 
 describe('MovieCrudCreate', () => {
   const props = {
     classifications: [{ id: 1, name: 'TP' }],
     languages: [{ id: 1, name: 'Español' }],
-    genres: [{ id: 2, name: 'Ciencia ficción' }]
+    genres: [{ id: 2, name: 'Ciencia ficción' }],
   }
 
   function mountForm() {
@@ -27,10 +30,11 @@ describe('MovieCrudCreate', () => {
       global: {
         stubs: {
           BaseModal: {
-            template: '<div><slot /></div>'
-          }
-        }
-      }
+            template: '<div><slot /></div>',
+          },
+          ImageUpload: true,
+        },
+      },
     })
   }
 
@@ -45,8 +49,7 @@ describe('MovieCrudCreate', () => {
     numbers[0]!.vm.$emit('update:modelValue', 169)
     numbers[1]!.vm.$emit('update:modelValue', 2014)
 
-    wrapper.findComponent(SimpleDropdown)
-      .vm.$emit('update:modelValue', 1)
+    wrapper.getComponent({ name: 'SimpleDropdown' }).vm.$emit('update:modelValue', 1)
 
     dropdowns[0]!.vm.$emit('update:modelValue', [1])
     dropdowns[1]!.vm.$emit('update:modelValue', [2])
@@ -58,15 +61,22 @@ describe('MovieCrudCreate', () => {
     vi.clearAllMocks()
   })
 
-  it('disables submit when the form is incomplete', async () => {
+  it('identifies missing fields before sending an incomplete form', async () => {
     const wrapper = mountForm()
+    expect(wrapper.findAll('.dialog-section-title').map((heading) => heading.text())).toEqual([
+      'Información general',
+      'Idiomas y géneros',
+      'Sinopsis',
+      'Póster',
+    ])
 
-    expect(wrapper.find('button[type="submit"]').attributes('disabled'))
-      .toBeDefined()
+    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
 
     await wrapper.find('form').trigger('submit')
 
     expect(createMovie).not.toHaveBeenCalled()
+    expect(wrapper.findAll('[aria-invalid="true"]').length).toBeGreaterThan(0)
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
   })
 
   it('creates a movie and emits saved and close', async () => {
@@ -85,7 +95,8 @@ describe('MovieCrudCreate', () => {
       releaseYear: 2014,
       classificationId: 1,
       languageIds: [1],
-      genreIds: [2]
+      genreIds: [2],
+      posterImage: null,
     })
 
     expect(wrapper.emitted('saved')).toHaveLength(1)
@@ -110,21 +121,22 @@ describe('MovieCrudCreate', () => {
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    expect(wrapper.find('[role="alert"]').text())
-      .toBe('No se pudo crear la película.')
+    expect(wrapper.getComponent(NotificationPopup).props('message')).toBe(
+      'No se pudo crear la película. Vuelve a intentarlo.',
+    )
 
     expect(wrapper.emitted('saved')).toBeUndefined()
   })
 
   it.each([
     [401, 'session-expired'],
-    [403, 'forbidden']
+    [403, 'forbidden'],
   ])('emits %s error event', async (status, event) => {
     vi.mocked(createMovie).mockRejectedValue(
       Object.assign(new Error('Request failed'), {
         isAxiosError: true,
-        response: { status }
-      })
+        response: { status },
+      }),
     )
 
     const wrapper = mountForm()

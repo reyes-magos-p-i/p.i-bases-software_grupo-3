@@ -14,8 +14,15 @@ withDefaults(
     rows: tableRow[]
     showActions?: boolean
     caption?: string
+    deleteLabel?: string
+    deleteIcon?: string
   }>(),
-  { showActions: true, caption: undefined },
+  {
+    showActions: true,
+    caption: undefined,
+    deleteLabel: 'Desactivar',
+    deleteIcon: 'bi-person-slash',
+  },
 )
 
 const emit = defineEmits<{
@@ -58,18 +65,18 @@ const emit = defineEmits<{
             <slot name="actions" :row="row">
               <div class="default-actions">
                 <span title="Ver" class="action-hint">
-                  <button type="button" @click="emit('view', row)">
+                  <button type="button" aria-label="Ver" @click="emit('view', row)">
                     <i class="bi bi-eye" aria-hidden="true"></i>
                   </button>
                 </span>
                 <span title="Modificar" class="action-hint">
-                  <button type="button" @click="emit('edit', row)">
+                  <button type="button" aria-label="Modificar" @click="emit('edit', row)">
                     <i class="bi bi-pencil-square" aria-hidden="true"></i>
                   </button>
                 </span>
-                <span title="Desactivar" class="action-hint">
-                  <button type="button" @click="emit('delete', row)">
-                    <i class="bi bi-person-slash" aria-hidden="true"></i>
+                <span :title="deleteLabel" class="action-hint">
+                  <button type="button" :aria-label="deleteLabel" @click="emit('delete', row)">
+                    <i :class="['bi', deleteIcon]" aria-hidden="true"></i>
                   </button>
                 </span>
               </div>
@@ -179,8 +186,8 @@ button:disabled {
   padding: 8px;
   text-decoration: none;
   justify-content: center;
-  width: 36px;
-  min-height: 36px;
+  width: 44px;
+  min-height: 44px;
   background: transparent;
   border: 0;
   color: var(--text-primary);

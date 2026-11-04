@@ -29,7 +29,8 @@ describe('LoginModal', () => {
       global: {
         stubs: {
           BaseModal: {
-            props: ['open', 'title'],
+            name: 'BaseModal',
+            props: ['open', 'title', 'appearance'],
             emits: ['close'],
             template:
               '<section v-if="open"><h2>{{ title }}</h2><button class="close" @click="$emit(\'close\')">Cerrar</button><slot /></section>',
@@ -45,6 +46,7 @@ describe('LoginModal', () => {
     'requests %s recovery through the existing modal',
     async (mode) => {
       const wrapper = render({ mode, enabled: true })
+      expect(wrapper.getComponent({ name: 'BaseModal' }).props('appearance')).toBe('auth')
       await wrapper.get('.recovery-option button').trigger('click')
       expect(wrapper.get('h2').text()).toBe('Recuperar contraseña')
       expect(wrapper.find('[name="password"]').exists()).toBe(false)
@@ -391,5 +393,45 @@ describe('LoginModal', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain('<strong>')
     expect(wrapper.find('strong').exists()).toBe(false)
     expect(document.activeElement).toBe(wrapper.get('[role="alert"]').element)
+  })
+
+  it.each(['.close', '.password-toggle', '.recovery-option button'])(
+    'does not reveal validation before the %s action',
+    async (selector) => {
+      const wrapper = render({ enabled: true })
+      const email = wrapper.get<HTMLInputElement>('[name="email"]')
+      await email.setValue('invalid')
+      email.element.focus()
+      const action = wrapper.get<HTMLButtonElement>(selector)
+      action.element.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }),
+      )
+      action.element.focus()
+      await nextTick()
+      expect(email.attributes('aria-invalid')).toBe('false')
+      await action.trigger('pointerup')
+      await action.trigger('click')
+      if (selector === '.close') expect(wrapper.emitted('close')).toHaveLength(1)
+      else if (selector === '.password-toggle')
+        expect(wrapper.get('[name="password"]').attributes('type')).toBe('text')
+      else expect(wrapper.get('h2').text()).toBe('Recuperar contraseña')
+      expect(wrapper.emitted('submit')).toBeUndefined()
+      expect(requestPasswordRecovery).not.toHaveBeenCalled()
+    },
+  )
+
+  it('returns from recovery without validating an unfinished email', async () => {
+    const wrapper = render({ enabled: true })
+    await wrapper.get('.recovery-option button').trigger('click')
+    const email = wrapper.get<HTMLInputElement>('[name="email"]')
+    await email.setValue('invalid')
+    email.element.focus()
+    const action = wrapper.get<HTMLButtonElement>('.recovery-option button')
+    action.element.focus()
+    await nextTick()
+    expect(email.attributes('aria-invalid')).toBe('false')
+    await action.trigger('click')
+    expect(wrapper.find('[name="password"]').exists()).toBe(true)
+    expect(requestPasswordRecovery).not.toHaveBeenCalled()
   })
 })

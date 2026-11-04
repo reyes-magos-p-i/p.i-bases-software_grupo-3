@@ -1,25 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import placeholderPoster from '@/assets/images/placeholder.svg'
-import { stripTrailingSlashes } from '@/services/movieFunctions'
+import MoviePoster from '@/components/common/MoviePoster.vue'
 
-const props = defineProps<{ posterImage?: string; title?: string; emptyText?: string }>()
-const imagesBaseUrl = `${stripTrailingSlashes(String(import.meta.env.VITE_API_BASE_URL ?? ''))}/image`
-const failed = ref(false)
-const source = computed(() =>
-  props.posterImage && !failed.value ? `${imagesBaseUrl}/${props.posterImage}` : placeholderPoster,
-)
-watch(
-  () => props.posterImage,
-  () => {
-    failed.value = false
-  },
-)
+defineProps<{ posterImage?: string; title?: string; emptyText?: string }>()
 </script>
 
 <template>
   <aside class="poster" aria-label="Película">
-    <img :src="source" :alt="title ? `Póster de ${title}` : 'Sin película'" @error="failed = true" />
+    <MoviePoster :poster-image="posterImage" :title="title" />
     <p v-if="title" class="poster-title">{{ title }}</p>
     <p v-else-if="emptyText" class="poster-empty">{{ emptyText }}</p>
   </aside>

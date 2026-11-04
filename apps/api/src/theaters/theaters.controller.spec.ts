@@ -3,6 +3,7 @@ import { TheatersController } from './theaters.controller';
 import { TheatersService } from './theaters.service';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
+import { UpdateSeatsDto } from './dto/update-seats.dto';
 
 describe('TheatersController', () => {
   let controller: TheatersController;
@@ -13,6 +14,8 @@ describe('TheatersController', () => {
     findOne: jest.Mock;
     update: jest.Mock;
     remove: jest.Mock;
+    getSeats: jest.Mock;
+    updateSelected: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -23,6 +26,8 @@ describe('TheatersController', () => {
       findOne: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
+      getSeats: jest.fn(),
+      updateSelected: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -40,6 +45,24 @@ describe('TheatersController', () => {
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
+
+  it.each(['0', '-1', '1.5', 'abc', '9007199254740992'])(
+    'rejects an invalid route identifier %s without calling the service',
+    (id) => {
+      expect(() => controller.findOne(id)).toThrow(
+        'El número de sala debe ser un entero positivo.',
+      );
+      expect(() => controller.update(id, {})).toThrow(
+        'El número de sala debe ser un entero positivo.',
+      );
+      expect(() => controller.remove(id)).toThrow(
+        'El número de sala debe ser un entero positivo.',
+      );
+      expect(service.findOne).not.toHaveBeenCalled();
+      expect(service.update).not.toHaveBeenCalled();
+      expect(service.remove).not.toHaveBeenCalled();
+    },
+  );
 
   it('creates a theater through the service', async () => {
     const theaterDto = {
@@ -103,9 +126,69 @@ describe('TheatersController', () => {
   });
 
   it('protects the controller with the admin and password status guards', () => {
-    const guards: unknown[] = Reflect.getMetadata('__guards__', TheatersController);
+    const guards: unknown[] = Reflect.getMetadata(
+      '__guards__',
+      TheatersController,
+    );
 
     expect(guards).toHaveLength(3);
-    expect(guards).toEqual(expect.arrayContaining([AdministratorGuard, PasswordStatusGuard]));
+    expect(guards).toEqual(
+      expect.arrayContaining([AdministratorGuard, PasswordStatusGuard]),
+    );
+  });
+
+  describe('getSeats', () => {
+    it('delegates to the service and returns its seats', async () => {
+      const seats = [
+        {
+          theaterId: 7,
+          rowNumber: 1,
+          columnNumber: 2,
+          type: 'vip',
+          state: 'free',
+        },
+      ];
+
+      service.getSeats.mockResolvedValueOnce(seats);
+
+      await expect(controller.getSeats(7)).resolves.toEqual(seats);
+
+      expect(service.getSeats).toHaveBeenCalledWith(7);
+    });
+
+    it('propagates service errors', async () => {
+      const error = new Error('Seat retrieval failed');
+      service.getSeats.mockRejectedValueOnce(error);
+
+      await expect(controller.getSeats(7)).rejects.toBe(error);
+    });
+  });
+
+  describe('updateSeats', () => {
+    const dto: UpdateSeatsDto = {
+      seats: [{ rowNumber: 1, columnNumber: 2 }],
+      state: 'indisponible',
+      type: 'vip',
+    };
+
+    it('delegates to the service and returns its result', async () => {
+      const result = {
+        theaterId: 7,
+        seatsUpdated: 1,
+      };
+      service.updateSelected.mockResolvedValueOnce(result);
+
+      await expect(controller.updateSeats(7, dto)).resolves.toEqual(result);
+
+      expect(service.updateSelected).toHaveBeenCalledTimes(1);
+      expect(service.updateSelected).toHaveBeenCalledWith(7, dto);
+    });
+
+    it('propagates service errors', async () => {
+      const error = new Error('Seat update failed');
+      service.updateSelected.mockRejectedValueOnce(error);
+
+      await expect(controller.updateSeats(7, dto)).rejects.toBe(error);
+    });
   });
 });

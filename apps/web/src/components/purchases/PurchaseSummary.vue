@@ -1,0 +1,224 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import QrCode from '@/components/common/QrCode.vue'
+import MoviePoster from '@/components/common/MoviePoster.vue'
+import { PROJECTION_STATUS_LABELS, type ProjectionStatus } from '@/types/projection'
+import { formatDateTime, formatColones, formatPaymentMethod } from '@/utils/transaction-format'
+import { TICKET_CATEGORY_LABELS, type PurchaseQuote, type PurchaseReceipt } from '@/types/purchase'
+const props = defineProps<{
+  purchase: PurchaseQuote | PurchaseReceipt
+  buyerEmail?: string
+  showPayment?: boolean
+}>()
+const email = computed(
+  () => props.buyerEmail || ('buyerEmail' in props.purchase ? props.purchase.buyerEmail : ''),
+)
+const purchaseCode = computed(() => {
+  if (!('reference' in props.purchase)) return ''
+  return props.purchase.qrPayload
+})
+</script>
+<template>
+  <section class="purchase-summary" aria-label="Resumen de compra">
+    <div class="summary-heading">
+      <MoviePoster :poster-image="purchase.function.posterImage" :title="purchase.function.title" />
+      <h2>{{ purchase.function.title }}</h2>
+      <dl>
+        <div v-if="email">
+          <dt>Correo del comprador</dt>
+          <dd>{{ email }}</dd>
+        </div>
+        <div>
+          <dt>Sucursal</dt>
+          <dd>{{ purchase.function.branchName }}</dd>
+        </div>
+        <div>
+          <dt>Sala</dt>
+          <dd>{{ purchase.function.theaterId }}</dd>
+        </div>
+        <div>
+          <dt>Función</dt>
+          <dd>{{ formatDateTime(purchase.function.startsAt) }}</dd>
+        </div>
+        <div>
+          <dt>Formato</dt>
+          <dd>
+            {{ purchase.function.format }} ·
+            {{
+              purchase.function.technology === 'STANDARD'
+                ? 'Estándar'
+                : purchase.function.technology
+            }}{{ purchase.function.isPremiere ? ' · Estreno' : '' }}
+          </dd>
+        </div>
+      </dl>
+    </div>
+    <p v-if="'seats' in purchase">
+      Asientos:
+      {{
+        purchase.seats
+          .map(
+            (seat) =>
+              `Fila ${seat.rowNumber}, asiento ${seat.columnNumber} (${TICKET_CATEGORY_LABELS[seat.category]})`,
+          )
+          .join('; ')
+      }}
+    </p>
+    <div class="line-scroll" tabindex="0" aria-label="Productos de la compra">
+      <table>
+        <caption>
+          Productos de la compra
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Producto</th>
+            <th scope="col">Cantidad</th>
+            <th scope="col">Precio unitario</th>
+            <th scope="col">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="line in purchase.lines" :key="line.code">
+            <td>
+              {{ line.label }}
+            </td>
+            <td>{{ line.quantity }}</td>
+            <td>{{ formatColones(line.unitPrice) }}</td>
+            <td>{{ formatColones(line.subtotal) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="total">Total: {{ formatColones(purchase.total) }}</p>
+    <template v-if="'reference' in purchase"
+      ><p v-if="purchase.functionCancelled" class="function-cancelled" role="status">
+        Esta función fue cancelada.
+      </p>
+      <p>
+        <strong>{{ purchase.reference }}</strong> · {{ formatDateTime(purchase.purchasedAt) }} ·
+        {{ purchase.status === 'PAID' ? 'Pagada' : 'Cancelada' }}
+      </p>
+      <p v-if="showPayment">Método de pago: {{ formatPaymentMethod(purchase) }}</p>
+      <QrCode
+        :value="purchaseCode"
+        :label="`Código QR de la compra ${purchase.reference}`"
+        class="purchase-qr"
+      >
+        Código de tu compra.
+      </QrCode>
+      <h3>Tus boletos</h3>
+      <ul v-if="purchase.tickets.length" class="tickets">
+        <li v-for="ticket in purchase.tickets" :key="ticket.id">
+          <strong>Boleto {{ ticket.id }}</strong> · Fila {{ ticket.rowNumber }}, asiento
+          {{ ticket.columnNumber }} · {{ TICKET_CATEGORY_LABELS[ticket.category]
+          }}<span
+            ><strong v-if="ticket.functionId !== purchase.function.id">Reprogramado: </strong
+            >{{ ticket.title }} · {{ ticket.branchName }} · Sala {{ ticket.theaterId }} ·
+            {{ formatDateTime(ticket.startsAt) }} ({{
+              PROJECTION_STATUS_LABELS[ticket.functionStatus as ProjectionStatus] ??
+              ticket.functionStatus
+            }})</span
+          >
+        </li>
+      </ul>
+      <p v-else>Esta compra histórica no tiene boletos vinculados para consultar.</p></template
+    >
+  </section>
+</template>
+<style scoped>
+.function-cancelled {
+  padding: 12px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-small);
+  font-weight: 600;
+}
+.purchase-summary {
+  background: var(--content-background);
+  color: var(--text-primary);
+  padding: clamp(18px, 4vw, 32px);
+  border-radius: var(--radius-medium);
+  overflow-wrap: anywhere;
+}
+.summary-heading {
+  display: grid;
+  grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+.summary-heading img {
+  grid-row: span 2;
+}
+.summary-heading h2 {
+  margin-top: 0;
+}
+.summary-heading img {
+  border-radius: var(--radius-small);
+}
+dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+dt {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+dd {
+  margin: 4px 0 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+caption {
+  caption-side: top;
+  color: var(--text-primary);
+}
+th,
+td {
+  padding: 14px 10px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+  vertical-align: top;
+}
+.purchase-qr {
+  margin: 24px 0;
+}
+.line-scroll {
+  overflow-x: auto;
+}
+.total {
+  font-size: 1.4rem;
+  font-weight: 700;
+  text-align: right;
+  margin: 24px 0;
+}
+.tickets {
+  max-height: 360px;
+  overflow: auto;
+  padding-left: 20px;
+}
+.tickets li {
+  margin: 12px 0;
+}
+.tickets span {
+  display: block;
+  color: var(--warning-text);
+}
+@media (max-width: 480px) {
+  .summary-heading {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 16px;
+  }
+  .summary-heading img {
+    grid-row: auto;
+    max-width: 88px;
+  }
+  dl {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+  }
+}
+</style>

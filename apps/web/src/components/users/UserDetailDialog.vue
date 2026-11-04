@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import UserStatusBadge from '@/components/users/UserStatusBadge.vue'
@@ -175,8 +176,13 @@ onBeforeUnmount(() => request?.abort())
 
 <template>
   <BaseModal :open="!!selection" :title="title" @close="close">
-    <div class="user-detail-content" :aria-busy="loading">
-      <p v-if="loading" class="detail-feedback" role="status">Cargando datos del usuario…</p>
+    <div class="user-detail-content dialog-content" :aria-busy="loading">
+      <LoadingState
+        v-if="loading"
+        class="detail-feedback"
+        message="Cargando datos del usuario…"
+        compact
+      />
       <div v-else-if="error" class="detail-feedback detail-error">
         <NotificationPopup type="error" :message="error" :duration="0" />
         <button v-if="retryable" type="button" class="detail-button" @click="load">
@@ -210,42 +216,11 @@ onBeforeUnmount(() => request?.abort())
 </template>
 
 <style scoped>
-:global(.app-modal-backdrop:has(.user-detail-content)::backdrop) {
-  background: var(--overlay-background);
-}
 :global(.app-modal-card:has(.user-detail-content)) {
   width: min(880px, 100%);
   max-width: 880px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--dialog-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
-:global(.app-modal-card:has(.user-detail-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 24px;
-  background: var(--primary-color);
-  color: var(--content-background);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.25rem;
-}
-:global(.app-modal-card:has(.user-detail-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--content-background);
-  border-radius: var(--radius-small);
-}
-:global(.app-modal-card:has(.user-detail-content) .app-modal-close:hover) {
-  background: var(--surface-on-dark-hover);
-}
-:global(.app-modal-card:has(.user-detail-content) .app-modal-close:focus-visible) {
-  outline-color: var(--focus-on-dark);
-}
+
 .user-detail-content {
   min-height: 0;
   padding: 24px;
@@ -260,24 +235,7 @@ onBeforeUnmount(() => request?.abort())
   font-size: 1rem;
   font-weight: 700;
 }
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px 20px;
-  margin: 0;
-}
-.detail-field {
-  min-width: 0;
-}
-dt {
-  margin-bottom: 6px;
-  font-weight: 500;
-}
-dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
+
 .detail-feedback {
   padding: 16px;
   border-left: 3px solid var(--primary-color);
@@ -310,15 +268,6 @@ dd {
 @media (max-width: 575px) {
   .user-detail-content {
     padding: 20px 16px;
-  }
-  .detail-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  :global(.app-modal-card:has(.user-detail-content) .app-modal-title) {
-    padding-left: 16px;
-  }
-  :global(.app-modal-card:has(.user-detail-content) .app-modal-close) {
-    right: 16px;
   }
 }
 </style>

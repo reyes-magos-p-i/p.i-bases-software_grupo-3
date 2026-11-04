@@ -1,8 +1,13 @@
+import {
+  beginClientSessionChange,
+  clearClientSession,
+  establishClientSession,
+} from '@/services/client-session.service'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import App from '../App.vue'
 import router from '../router'
-import { getMovieFunctions } from '@/services/movieFunctions'
+import { getPortalMovies } from '@/services/movieFunctions'
 
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')
@@ -14,7 +19,7 @@ vi.mock('@/services/employee-session.service', async () => {
 })
 vi.mock('@/services/movieFunctions', async (original) => ({
   ...(await original<typeof import('@/services/movieFunctions')>()),
-  getMovieFunctions: vi.fn().mockResolvedValue([]),
+  getPortalMovies: vi.fn().mockResolvedValue([]),
 }))
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')
@@ -27,25 +32,32 @@ vi.mock('@/services/employee-session.service', async () => {
 
 describe('App', () => {
   afterEach(() => {
+    clearClientSession()
+    vi.clearAllMocks()
     vi.unstubAllEnvs()
-    vi.mocked(getMovieFunctions).mockResolvedValue([])
+    vi.mocked(getPortalMovies).mockResolvedValue([])
   })
 
-  it.each(['/api', '/api/'])('loads catalog and carousel images through %s', async (baseUrl) => {
-    vi.stubEnv('VITE_API_BASE_URL', baseUrl)
-    vi.mocked(getMovieFunctions).mockResolvedValue([
-      { title: 'Test movie', posterImage: 'poster.png' },
-    ])
-    await router.push('/')
-    await router.isReady()
-    const wrapper = mount(App, { global: { plugins: [router] } })
-    try {
-      await flushPromises()
-      expect(wrapper.findAll('img[src="/api/image/poster.png"]').length).toBeGreaterThanOrEqual(2)
-    } finally {
-      wrapper.unmount()
-    }
-  })
+  it.each(['/api', '/api/'])(
+    'loads catalog and carousel images from uploads with API base %s',
+    async (baseUrl) => {
+      vi.stubEnv('VITE_API_BASE_URL', baseUrl)
+      vi.mocked(getPortalMovies).mockResolvedValue([
+        { id: 1, title: 'Test movie', posterImage: 'poster.png' },
+      ])
+      await router.push('/')
+      await router.isReady()
+      const wrapper = mount(App, { global: { plugins: [router] } })
+      try {
+        await flushPromises()
+        expect(
+          wrapper.findAll('img[src$="/uploads/posters/poster.png"]').length,
+        ).toBeGreaterThanOrEqual(2)
+      } finally {
+        wrapper.unmount()
+      }
+    },
+  )
 
   it('renders the home page through the router', async () => {
     await router.push('/')
@@ -59,5 +71,77 @@ describe('App', () => {
 
     expect(wrapper.text()).toContain('Iniciar sesión')
     wrapper.unmount()
+  })
+  it('shares one ordered catalog between the four-slide carousel and all movie cards after login and logout', async () => {
+    const general = Array.from({ length: 6 }, (_item, index) => ({
+      id: index + 1,
+      title: `Película ${index + 1}`,
+      posterImage: `${index + 1}.jpg`,
+    }))
+    const preferred = [general[5]!, ...general.slice(0, 5)]
+    vi.mocked(getPortalMovies).mockImplementation((personalized) =>
+      Promise.resolve(personalized ? preferred : general),
+    )
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(App, { global: { plugins: [router] } })
+    try {
+      await flushPromises()
+      expect(wrapper.findAll('.movie-card')).toHaveLength(6)
+      expect(wrapper.findAll('.indicator')).toHaveLength(4)
+      expect(wrapper.get('.hero-image').attributes('alt')).toBe('Póster de Película 1')
+      expect(getPortalMovies).toHaveBeenCalledTimes(1)
+      establishClientSession(
+        { id: 7, firstName: 'Ana', lastName: '', email: 'a@example.com' },
+        'token',
+      )
+      await flushPromises()
+      expect(wrapper.get('.hero-image').attributes('alt')).toBe('Póster de Película 6')
+      expect(wrapper.get('.movie-card img').attributes('alt')).toBe('Póster de Película 6')
+      expect(wrapper.findAll('.movie-card')).toHaveLength(6)
+      clearClientSession()
+      await flushPromises()
+      expect(wrapper.get('.hero-image').attributes('alt')).toBe('Póster de Película 1')
+      expect(vi.mocked(getPortalMovies).mock.calls.map(([personalized]) => personalized)).toEqual([
+        false,
+        true,
+        false,
+      ])
+    } finally {
+      wrapper.unmount()
+    }
+  })
+  it('renders the public catalog when an anonymous session operation finishes during loading', async () => {
+    clearClientSession()
+    let finish!: (movies: Awaited<ReturnType<typeof getPortalMovies>>) => void
+    vi.mocked(getPortalMovies).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(App, { global: { plugins: [router] } })
+    try {
+      beginClientSessionChange()
+      finish([{ id: 1, title: 'Cartelera pública', posterImage: 'public.jpg' }])
+      await flushPromises()
+      expect(wrapper.get('.movie-card').text()).toContain('Cartelera pública')
+      expect(wrapper.get('.hero-image').attributes('alt')).toBe('Póster de Cartelera pública')
+      expect(wrapper.text()).not.toContain('No hay películas disponibles')
+      expect(getPortalMovies).toHaveBeenCalledExactlyOnceWith(false, expect.any(AbortSignal))
+    } finally {
+      wrapper.unmount()
+    }
+  })
+  it('opens the purchase route for a guest without requiring a client session', async () => {
+    clearClientSession()
+    await router.push('/buy-tickets?movieId=2')
+    expect(router.currentRoute.value.path).toBe('/buy-tickets')
+    expect(router.currentRoute.value.query).toEqual({ movieId: '2' })
+    const matched = router.resolve('/buy-tickets?movieId=2').matched[0]!
+    expect(matched.meta.requiresClient).not.toBe(true)
+    expect(matched.components!.default).toMatchObject({ __name: 'TicketPurchaseView' })
   })
 })

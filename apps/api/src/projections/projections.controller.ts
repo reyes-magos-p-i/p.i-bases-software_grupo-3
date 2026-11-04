@@ -14,11 +14,12 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
-import { EmployeeSessionOriginGuard } from '../auth/guards/employee-session-origin.guard';
+import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import type { UserIdentity } from '../users/types/user-identity.type';
 import { AvailableMoviesQueryDto } from './dto/available-movies-query.dto';
+import { ProjectionPriceQueryDto } from './dto/projection-price-query.dto';
 import { CreateProjectionDto } from './dto/create-projection.dto';
 import { ListProjectionsQueryDto } from './dto/list-projections-query.dto';
 import { ProjectionIdParamsDto } from './dto/projection-id-params.dto';
@@ -56,13 +57,13 @@ export class ProjectionsController {
   }
 
   @Patch(':id/cancel')
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   cancel(@Param() params: ProjectionIdParamsDto) {
     return this.projectionsService.cancel(params.id);
   }
 
   @Put(':id')
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   update(
     @Param() params: ProjectionIdParamsDto,
     @Body() data: UpdateProjectionDto,
@@ -71,8 +72,15 @@ export class ProjectionsController {
     return this.projectionsService.update(params.id, data, request.user.id);
   }
 
+  @Post('price-preview')
+  @HttpCode(200)
+  @UseGuards(SessionOriginGuard)
+  pricePreview(@Body() data: ProjectionPriceQueryDto) {
+    return this.projectionsService.quotePrice(data);
+  }
+
   @Post()
-  @UseGuards(EmployeeSessionOriginGuard)
+  @UseGuards(SessionOriginGuard)
   @HttpCode(HttpStatus.CREATED)
   create(
     @Body() data: CreateProjectionDto,

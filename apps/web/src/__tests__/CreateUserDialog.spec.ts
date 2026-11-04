@@ -84,6 +84,32 @@ async function renderDialog(props: Partial<InstanceType<typeof CreateUserDialog>
 }
 
 describe('client form', () => {
+  it('shows a duplicate email beside its field without displaying a general notification', async () => {
+    const view = await renderDialog({ mode: 'client' })
+    await view.get('[name="email"]').setValue('ana@example.com')
+    await view.setProps({
+      submissionValidation: true,
+      submissionErrors: ['Ya existe una cuenta con ese correo.'],
+    })
+    await nextTick()
+    expect(view.get('[name="email"]').attributes('aria-invalid')).toBe('true')
+    expect(view.text()).toContain('Ya existe una cuenta con ese correo.')
+    expect(view.find('.notification-popup').exists()).toBe(false)
+    expect(document.activeElement).toBe(view.get('[name="email"]').element)
+  })
+
+  it('keeps unrecognized server validation readable and separate from general failures', async () => {
+    const view = await renderDialog({ mode: 'client' })
+    await view.setProps({
+      submissionValidation: true,
+      submissionErrors: ['property unexpected should not exist'],
+    })
+    expect(view.get('[role="alert"]').text()).toBe(
+      'Revisa los datos del formulario e inténtalo nuevamente.',
+    )
+    expect(view.text()).not.toContain('property unexpected')
+    expect(view.find('.notification-popup').exists()).toBe(false)
+  })
   it('shows a character counter while retaining the Oracle storage limit', async () => {
     const view = await renderDialog({ mode: 'client' })
     await view.get('.address-toggle input').setValue(true)
@@ -903,6 +929,53 @@ describe('CreateUserDialog', () => {
       expect(view.text()).not.toMatch(/bytes|UTF-8|Unicode/u)
     },
   )
+
+  it.each(['client', 'employee'] as const)(
+    'does not validate the %s form before cancelling or closing',
+    async (mode) => {
+      const view = await renderDialog({
+        mode,
+        provinces,
+        cantons,
+        districts,
+        branches: [{ id: 7, label: 'Centro' }],
+      })
+      for (const selector of ['.cancel-button', '.close-button']) {
+        const name = view.get<HTMLInputElement>('[name="firstName"]')
+        await name.setValue('Ana123')
+        name.element.focus()
+        const action = view.get<HTMLButtonElement>(selector)
+        action.element.dispatchEvent(
+          new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }),
+        )
+        action.element.focus()
+        await nextTick()
+        expect(name.attributes('aria-invalid')).toBe('false')
+        expect(view.find('.field-error').exists()).toBe(false)
+        await action.trigger('pointerup')
+        await action.trigger('click')
+        expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
+        expect(view.emitted('submit')).toBeUndefined()
+        view.vm.open()
+        await nextTick()
+      }
+    },
+  )
+
+  it('opens the reusable calendar without showing an unrelated name error', async () => {
+    const view = await renderDialog({ mode: 'client' })
+    const name = view.get<HTMLInputElement>('[name="firstName"]')
+    await name.setValue('Ana123')
+    name.element.focus()
+    const calendar = view.get<HTMLInputElement>('[name="birthday"]')
+    calendar.element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+    calendar.element.focus()
+    await nextTick()
+    expect(name.attributes('aria-invalid')).toBe('false')
+    await calendar.trigger('click')
+    expect(view.find('[role="dialog"]').exists()).toBe(true)
+    expect(view.emitted('submit')).toBeUndefined()
+  })
 })
 
 async function setFormField(view: VueWrapper, name: string, value: string) {

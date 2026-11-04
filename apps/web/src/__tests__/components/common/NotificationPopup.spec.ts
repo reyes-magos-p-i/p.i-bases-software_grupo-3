@@ -17,12 +17,31 @@ describe('NotificationPopup', () => {
     expect(wrapper.attributes('role')).toBe(role)
     expect(wrapper.text()).toContain(title)
     expect(wrapper.text()).toContain('Hola')
+    expect(wrapper.classes()).not.toContain('notification-popup--floating')
     wrapper.unmount()
   })
 
   it('allows a custom title', () => {
     const wrapper = mount(NotificationPopup, { props: { message: 'x', title: 'LISTO' } })
     expect(wrapper.text()).toContain('LISTO')
+    wrapper.unmount()
+  })
+
+  it('supports floating placement without changing its content, accessibility or default timeout', async () => {
+    const wrapper = mount(NotificationPopup, {
+      props: { type: 'error', message: 'No se pudo guardar.', placement: 'bottom-right' },
+    })
+    expect(wrapper.classes()).toContain('notification-popup--floating')
+    expect(wrapper.attributes('role')).toBe('alert')
+    expect(wrapper.attributes('aria-live')).toBe('assertive')
+    expect(wrapper.text()).toContain('No se pudo guardar.')
+    vi.advanceTimersByTime(3999)
+    expect(wrapper.emitted('close')).toBeUndefined()
+    vi.advanceTimersByTime(1)
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    await wrapper.setProps({ placement: 'inline' })
+    expect(wrapper.classes()).not.toContain('notification-popup--floating')
+    expect(wrapper.text()).toContain('No se pudo guardar.')
     wrapper.unmount()
   })
 
@@ -36,6 +55,56 @@ describe('NotificationPopup', () => {
     expect(persistent.emitted('close')).toBeUndefined()
     timed.unmount()
     persistent.unmount()
+  })
+
+  it('emits close when clicked', async () => {
+    const wrapper = mount(NotificationPopup, { props: { message: 'x', duration: 0 } })
+    await wrapper.trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('offers a keyboard accessible close action and pauses expiry while it has focus', async () => {
+    const wrapper = mount(NotificationPopup, {
+      attachTo: document.body,
+      props: { message: 'Guardado.', duration: 1000, placement: 'bottom-right' },
+    })
+    const close = wrapper.get<HTMLButtonElement>('[aria-label="Cerrar notificación"]')
+    close.element.focus()
+    vi.advanceTimersByTime(5000)
+    expect(wrapper.emitted('close')).toBeUndefined()
+    await wrapper.trigger('mouseenter')
+    close.element.blur()
+    vi.advanceTimersByTime(1000)
+    expect(wrapper.emitted('close')).toBeUndefined()
+    await wrapper.trigger('mouseleave')
+    vi.advanceTimersByTime(1000)
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    await wrapper.setProps({ message: 'Actualizado.' })
+    await wrapper.get('[aria-label="Cerrar notificación"]').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(2)
+    expect(wrapper.find('.notification-popup').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('opens floating notifications above native dialogs when supported', async () => {
+    const show = vi.fn()
+    const previous = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'showPopover')
+    Object.defineProperty(HTMLElement.prototype, 'showPopover', { configurable: true, value: show })
+    const wrapper = mount(NotificationPopup, {
+      attachTo: document.body,
+      props: { message: 'Listo.', placement: 'bottom-right' },
+    })
+    try {
+      expect(wrapper.attributes('popover')).toBe('manual')
+      expect(show).toHaveBeenCalledOnce()
+      await wrapper.setProps({ placement: 'inline' })
+      expect(wrapper.attributes('popover')).toBeUndefined()
+    } finally {
+      wrapper.unmount()
+      if (previous) Object.defineProperty(HTMLElement.prototype, 'showPopover', previous)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'showPopover')
+    }
   })
 
   it('pauses auto-dismiss while hovered', async () => {

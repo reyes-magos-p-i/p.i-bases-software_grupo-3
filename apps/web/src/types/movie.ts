@@ -1,9 +1,8 @@
 // Eventual changes, using a simple structure for mocking reasons right now
 
-export interface Movie{
+export interface Movie {
   title: string
   posterImage: string
-
 }
 
 export interface MovieAll {
@@ -25,9 +24,8 @@ export interface MovieDetail {
   synopsis: string | null
   runningTime: number
   releaseYear: number | null
-
+  posterImage?: string | null
   classification: MovieOption
-
   languages: MovieOption[]
   genres: MovieOption[]
 }
@@ -40,4 +38,8 @@ export type UpdateMoviePayload = {
   classificationId: number
   languageIds: number[]
   genreIds: number[]
+}
+
+export interface PortalMovie extends Movie {
+  id: number
 }

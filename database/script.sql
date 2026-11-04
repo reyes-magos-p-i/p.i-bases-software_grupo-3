@@ -1,14 +1,15 @@
 -- =========================================================
 -- Cinetadel - full schema
 --
--- Generated from the live PRODUCTION schema (DBMS_METADATA) on
--- 2026-10-16 and kept in creation order (every table appears after
--- the tables it references). Incremental changes go in migrations/.
---
--- Pending (marked PENDING below, not applied to PRODUCTION yet):
---   migrations/20261016_cinemas_status.sql
---   migrations/20261016_sales_invoices_products.sql
+-- Bootstrap an empty application schema using SQLcl/SQL*Plus.
+-- Tables appear after the tables they reference. This includes the ticket
+-- purchase changes checked against Oracle metadata on 2026-11-01.
+-- Existing schemas must use migrations/ instead of rerunning this file.
+-- The relative migration at the end installs the required ticket products.
 -- =========================================================
+
+WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK
+SET DEFINE OFF
 
 -- =========================================================
 -- SECTION: Geographic Locations
@@ -60,12 +61,20 @@ CREATE TABLE Cinemas (
     branch_id       NUMBER GENERATED ALWAYS AS IDENTITY,
     name            VARCHAR2(150) NOT NULL,
     company_id      NUMBER NOT NULL,
-    status          VARCHAR2(8 CHAR) DEFAULT 'ACTIVE' NOT NULL,  -- PENDING: migrations/20261016_cinemas_status.sql
+    status          VARCHAR2(8 CHAR) DEFAULT 'ACTIVE' NOT NULL,
     CONSTRAINT pk_cinemas PRIMARY KEY (branch_id),
     CONSTRAINT ck_cinemas_status
         CHECK (status IN ('ACTIVE', 'INACTIVE')),
     CONSTRAINT fk_cinemas_company
         FOREIGN KEY (company_id) REFERENCES Companies (company_id)
+);
+
+-- Two active branches cannot share a name, ignoring case, accents and outer
+-- spaces (SCRUM-32/33, migration 20261027_cinemas_active_name.sql).
+CREATE UNIQUE INDEX ux_cinemas_active_name ON Cinemas (
+    CASE WHEN status = 'ACTIVE'
+         THEN TRANSLATE(LOWER(TRIM(name)), 'áéíóúüñ', 'aeiouun')
+    END
 );
 
 -- =========================================================
@@ -160,6 +169,8 @@ END;
 --     the only business rule (that a client must have at least one login method)
 --     is validated in the application, not here.
 --   - Passwords expire EXPIRATION_DAYS after PASSWORD_SET_AT (SCRUM-287).
+--     Employees always have 30 days; clients start with 30 and may pick
+--     30, 60, 90 or 120.
 -- =========================================================
 CREATE TABLE Employee_local_credentials (
     credentials_id      NUMBER GENERATED ALWAYS AS IDENTITY,
@@ -167,11 +178,11 @@ CREATE TABLE Employee_local_credentials (
     password_hash       VARCHAR2(255) NOT NULL,
     salt                VARCHAR2(100) NOT NULL,
     password_set_at     TIMESTAMP WITH TIME ZONE,  -- NULL = unknown, treated as expired
-    expiration_days     NUMBER(3) DEFAULT 120 NOT NULL,
+    expiration_days     NUMBER(3) DEFAULT 30 NOT NULL,
     CONSTRAINT pk_emp_local_credentials PRIMARY KEY (credentials_id),
     CONSTRAINT uq_emp_local_cred_employee UNIQUE (employee_id),
     CONSTRAINT chk_employee_local_cred_expiration
-        CHECK (expiration_days IN (30, 60, 90, 120)),
+        CHECK (expiration_days = 30),
     CONSTRAINT fk_emp_local_cred_employee
         FOREIGN KEY (employee_id) REFERENCES Employees (employee_id)
 );
@@ -202,7 +213,7 @@ CREATE TABLE Client_local_credentials (
     password_hash       VARCHAR2(255) NOT NULL,
     salt                VARCHAR2(100) NOT NULL,
     password_set_at     TIMESTAMP WITH TIME ZONE NOT NULL,
-    expiration_days     NUMBER(3) NOT NULL,
+    expiration_days     NUMBER(3) DEFAULT 30 NOT NULL,
     CONSTRAINT chk_client_local_cred_expiration
         CHECK (expiration_days IN (30, 60, 90, 120)),
     CONSTRAINT fk_client_local_cred_client
@@ -274,7 +285,7 @@ CREATE TABLE Movies (
     movie_id            NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     title               VARCHAR2(100) NOT NULL,
     running_time        NUMBER NOT NULL,
-    synopsis            VARCHAR2(500) NOT NULL,
+    synopsis            VARCHAR2(1000 CHAR) NOT NULL,
     poster_image        VARCHAR2(200) NOT NULL,
     release_year        NUMBER(4) NOT NULL,
     classification_id   NUMBER,
@@ -301,6 +312,28 @@ CREATE TABLE Movie_languages (
     CONSTRAINT fk_movlang_langid
         FOREIGN KEY (language_id) REFERENCES Languages (language_id)
 );
+
+CREATE TABLE Client_genre_preferences (
+    client_id       NUMBER NOT NULL,
+    genre_id        NUMBER NOT NULL,
+    CONSTRAINT pk_client_genre_prefs PRIMARY KEY (client_id, genre_id),
+    CONSTRAINT fk_cl_genre_pref_client
+        FOREIGN KEY (client_id) REFERENCES Clients (client_id) ON DELETE CASCADE,
+    CONSTRAINT fk_cl_genre_pref_genre
+        FOREIGN KEY (genre_id) REFERENCES Genres (genre_id) ON DELETE CASCADE
+);
+CREATE INDEX ix_cl_genre_pref_genre ON Client_genre_preferences (genre_id);
+
+CREATE TABLE Client_language_preferences (
+    client_id       NUMBER NOT NULL,
+    language_id     NUMBER NOT NULL,
+    CONSTRAINT pk_client_language_prefs PRIMARY KEY (client_id, language_id),
+    CONSTRAINT fk_cl_lang_pref_client
+        FOREIGN KEY (client_id) REFERENCES Clients (client_id) ON DELETE CASCADE,
+    CONSTRAINT fk_cl_lang_pref_language
+        FOREIGN KEY (language_id) REFERENCES Languages (language_id) ON DELETE CASCADE
+);
+CREATE INDEX ix_cl_lang_pref_language ON Client_language_preferences (language_id);
 
 -- Movies available per branch: the projection form only offers
 -- movies with IS_AVAILABLE = 1 in the branch of the selected theater.
@@ -352,6 +385,18 @@ CREATE TABLE Theaters (
         FOREIGN KEY (theater_status_id) REFERENCES TheaterStatuses (theater_status_id)
 );
 
+CREATE TABLE Seats (
+    theater_id      NUMBER NOT NULL,
+    row_number      NUMBER NOT NULL,
+    column_number   NUMBER NOT NULL,
+    seat_type       VARCHAR2(20) DEFAULT 'normal' NOT NULL,
+    seat_state      VARCHAR2(20) DEFAULT 'libre' NOT NULL,
+    CONSTRAINT pk_seats PRIMARY KEY (theater_id, row_number, column_number),
+    CONSTRAINT chk_seat_type CHECK (seat_type IN ('vip', 'normal', 'accesibilidad')),
+    CONSTRAINT chk_seat_state CHECK (seat_state IN ('libre', 'reservado', 'ocupado', 'indisponible')),
+    CONSTRAINT fk_seats_theaters FOREIGN KEY (theater_id) REFERENCES Theaters (theater_id)
+);
+
 -- =========================================================
 -- SECTION: Activities and Movie Functions (proyecciones)
 --   START_TIME / END_TIME are Costa Rica local time (TIMESTAMP without
@@ -383,6 +428,9 @@ CREATE TABLE Movie_functions (
     price               NUMBER(10, 2) NOT NULL,
     status              VARCHAR2(20) DEFAULT 'ACTIVE' NOT NULL,
     created_at          TIMESTAMP WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+    projection_format   VARCHAR2(2 BYTE),
+    technology          VARCHAR2(8 BYTE),
+    is_premiere         NUMBER(1),
     CONSTRAINT fk_movie_function_employee
         FOREIGN KEY (created_by) REFERENCES Employees (employee_id),
     CONSTRAINT fk_movie_function_movie
@@ -390,6 +438,11 @@ CREATE TABLE Movie_functions (
     CONSTRAINT fk_movie_function_theater
         FOREIGN KEY (theater_id) REFERENCES Theaters (theater_id),
     CONSTRAINT uq_movie_function UNIQUE (movie_id, theater_id, start_time, end_time),
+    CONSTRAINT uq_movie_functions_id_theater UNIQUE (movie_function_id, theater_id),
+    CONSTRAINT chk_mf_format CHECK (projection_format IN ('2D', '3D')),
+    CONSTRAINT chk_mf_technology CHECK (technology IN ('STANDARD', 'IMAX', '70MM')),
+    CONSTRAINT chk_mf_premiere CHECK (is_premiere IN (0, 1)),
+    CONSTRAINT chk_mf_format_tech CHECK (technology <> '70MM' OR projection_format <> '3D'),
     CONSTRAINT chk_movie_function_times
         CHECK (end_time > start_time),
     CONSTRAINT chk_movie_function_price
@@ -456,20 +509,21 @@ END;
 /
 
 -- =========================================================
--- SECTION: Sales (invoices, products, tickets)
---   PENDING: migrations/20261016_sales_invoices_products.sql
+-- SECTION: Sales (invoices and products)
 --   One invoice is one purchase for one movie function. The administrator
 --   sees it as a transaction (FAC-000123) and the client as an order
 --   (ORD-000123): both are LPAD(invoice_id, 6, '0') with another prefix.
 -- =========================================================
 
--- TICKET products take their price from Movie_functions.price;
+-- Ticket codes identify category and seat type; the API computes their prices.
 -- FOOD products (snacks, drinks) have a fixed catalog price.
 CREATE TABLE Products (
     product_id      NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     name            VARCHAR2(100) NOT NULL,
     product_type    VARCHAR2(10) NOT NULL,
     price           NUMBER(10, 2),
+    code            VARCHAR2(40 BYTE),
+    CONSTRAINT uq_product_code UNIQUE (code),
     CONSTRAINT uq_products_name UNIQUE (name),
     CONSTRAINT chk_products_type
         CHECK (product_type IN ('TICKET', 'FOOD')),
@@ -482,13 +536,13 @@ CREATE TABLE Products (
 
 -- Card payments go through Stripe: PENDING until the payment_intent.succeeded
 -- webhook marks it PAID; FAILED if declined or abandoned. Lists only show
--- PAID and CANCELLED. Cash invoices are created PAID, without Stripe data.
+-- PAID and CANCELLED. CASH/SIMULATED invoices use no Stripe data.
 -- STRIPE_LIVEMODE: 0 = Stripe test mode, 1 = real payment.
 -- Only the card brand and its last 4 digits are stored.
 -- TOTAL equals the sum of QUANTITY * UNIT_PRICE of its lines (API rule).
 CREATE TABLE Invoices (
     invoice_id                  NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    client_id                   NUMBER NOT NULL,
+    client_id                   NUMBER,
     movie_function_id           NUMBER NOT NULL,
     created_at                  TIMESTAMP WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
     status                      VARCHAR2(10) DEFAULT 'PENDING' NOT NULL,
@@ -498,24 +552,34 @@ CREATE TABLE Invoices (
     card_brand                  VARCHAR2(20),
     card_last4                  CHAR(4),
     total                       NUMBER(12, 2) NOT NULL,
+    request_key                 VARCHAR2(36 BYTE),
+    request_hash                VARCHAR2(64 BYTE),
+    buyer_email                 VARCHAR2(150 BYTE),
+    purchase_context            CLOB,
     CONSTRAINT fk_invoice_client
         FOREIGN KEY (client_id) REFERENCES Clients (client_id),
     CONSTRAINT fk_invoice_movie_function
         FOREIGN KEY (movie_function_id) REFERENCES Movie_functions (movie_function_id),
     CONSTRAINT uq_invoice_function UNIQUE (invoice_id, movie_function_id),
     CONSTRAINT uq_invoice_payment_intent UNIQUE (stripe_payment_intent_id),
+    CONSTRAINT uq_invoice_request UNIQUE (request_key),
+    CONSTRAINT chk_invoice_request
+        CHECK ((request_key IS NULL AND request_hash IS NULL)
+            OR (request_key IS NOT NULL AND request_hash IS NOT NULL)),
+    CONSTRAINT chk_invoice_buyer CHECK (client_id IS NOT NULL OR buyer_email IS NOT NULL),
+    CONSTRAINT chk_invoice_context CHECK (purchase_context IS JSON),
     CONSTRAINT chk_invoice_status
         CHECK (status IN ('PENDING', 'PAID', 'FAILED', 'CANCELLED')),
     CONSTRAINT chk_invoice_card_last4
         CHECK (card_last4 IS NULL OR REGEXP_LIKE(card_last4, '^[0-9]{4}$')),
-    CONSTRAINT chk_invoice_payment
+    CONSTRAINT chk_invoice_payment_v2
         CHECK (
             (payment_method = 'CARD'
                 AND stripe_payment_intent_id IS NOT NULL
                 AND stripe_livemode IN (0, 1)
                 AND (status <> 'PAID'
                     OR (card_brand IS NOT NULL AND card_last4 IS NOT NULL)))
-            OR (payment_method = 'CASH'
+            OR (payment_method IN ('CASH', 'SIMULATED')
                 AND status IN ('PAID', 'CANCELLED')
                 AND stripe_payment_intent_id IS NULL
                 AND stripe_livemode IS NULL
@@ -533,7 +597,7 @@ CREATE INDEX ix_invoices_created ON Invoices (created_at);
 CREATE TABLE Invoice_products (
     invoice_id      NUMBER NOT NULL,
     product_id      NUMBER NOT NULL,
-    quantity        NUMBER(3) NOT NULL,
+    quantity        NUMBER(5) NOT NULL,
     unit_price      NUMBER(10, 2) NOT NULL,
     CONSTRAINT pk_invoice_products PRIMARY KEY (invoice_id, product_id),
     CONSTRAINT fk_invoice_products_invoice
@@ -547,21 +611,35 @@ CREATE TABLE Invoice_products (
         CHECK (unit_price >= 0)
 );
 
--- One row per seat of a TICKET line, always for its invoice's function.
+-- Invoice links remain nullable for historical tickets. No invoice/function
+-- composite key is added: an existing ticket may be rescheduled independently.
 CREATE TABLE Tickets (
-    ticket_id           NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    invoice_id          NUMBER NOT NULL,
-    product_id          NUMBER NOT NULL,
+    tickets_id          NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     movie_function_id   NUMBER NOT NULL,
-    seat                VARCHAR2(10) NOT NULL,
-    CONSTRAINT fk_ticket_invoice_line
-        FOREIGN KEY (invoice_id, product_id)
-        REFERENCES Invoice_products (invoice_id, product_id)
-        ON DELETE CASCADE,
-    CONSTRAINT fk_ticket_invoice_function
-        FOREIGN KEY (invoice_id, movie_function_id)
-        REFERENCES Invoices (invoice_id, movie_function_id)
-        ON DELETE CASCADE,
-    CONSTRAINT uq_ticket_function_seat
-        UNIQUE (movie_function_id, seat)
+    theater_id          NUMBER NOT NULL,
+    seat_row            NUMBER NOT NULL,
+    seat_column         NUMBER NOT NULL,
+    invoice_id          NUMBER,
+    product_id          NUMBER,
+    CONSTRAINT uq_tickets_function_seat UNIQUE (movie_function_id, seat_row, seat_column),
+    CONSTRAINT fk_tickets_mf_theater
+        FOREIGN KEY (movie_function_id, theater_id)
+        REFERENCES Movie_functions (movie_function_id, theater_id),
+    CONSTRAINT tickets_movie_functions_fk
+        FOREIGN KEY (movie_function_id) REFERENCES Movie_functions (movie_function_id),
+    CONSTRAINT fk_tickets_seats
+        FOREIGN KEY (theater_id, seat_row, seat_column)
+        REFERENCES Seats (theater_id, row_number, column_number),
+    CONSTRAINT chk_ticket_invoice_product
+        CHECK ((invoice_id IS NULL AND product_id IS NULL)
+            OR (invoice_id IS NOT NULL AND product_id IS NOT NULL)),
+    CONSTRAINT fk_ticket_invoice FOREIGN KEY (invoice_id) REFERENCES Invoices (invoice_id),
+    CONSTRAINT fk_ticket_invoice_product
+        FOREIGN KEY (invoice_id, product_id) REFERENCES Invoice_products (invoice_id, product_id)
 );
+CREATE INDEX ix_ticket_invoice_product ON Tickets (invoice_id, product_id);
+
+@@migrations/20261101_ticket_purchase.sql
+@@migrations/20261102_purchase_ticket_email.sql
+@@migrations/20261102_global_settings.sql
+@@migrations/20261102_ticket_limit_by_availability.sql

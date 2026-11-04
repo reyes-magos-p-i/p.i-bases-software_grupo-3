@@ -49,7 +49,7 @@ import * as oracledb from 'oracledb';
       m.SYNOPSIS,
       m.RUNNING_TIME,
       m.RELEASE_YEAR,
-
+      m.POSTER_IMAGE,
       c.CLASSIFICATION_ID,
       c.CLASSIFICATION_NAME AS CLASSIFICATION,
 
@@ -95,7 +95,7 @@ import * as oracledb from 'oracledb';
       synopsis: first.SYNOPSIS,
       runningTime: first.RUNNING_TIME,
       releaseYear: first.RELEASE_YEAR,
-
+      posterImage: first.POSTER_IMAGE ?? null,
       classification: {
         id: first.CLASSIFICATION_ID,
         name: first.CLASSIFICATION,

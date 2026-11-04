@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import DialogSection from '@/components/common/DialogSection.vue'
+import LoadingState from '@/components/common/LoadingState.vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, useTemplateRef, watch } from 'vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import { movieErrorsFromApi, validateMovie, type MovieErrors } from '@/utils/movie-validation'
 import { isAxiosError } from 'axios'
-
 import BaseModal from '@/components/common/BaseModal.vue'
 import { getMovie, updateMovie } from '@/services/movie.service'
 import type { MovieDetail, MovieOption } from '@/types/movie'
@@ -9,6 +12,8 @@ import ReusableSearchDropdown from '../common/ReusableSearchDropdown.vue'
 import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
 import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
+import ImageUpload from '../image/ImageUpload.vue'
+import { uploadPoster, getPosterUrl } from '@/services/image-handler.service'
 
 const props = defineProps<{
   movieId: number | null
@@ -29,7 +34,11 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const saveError = ref('')
+const validationNotice = ref('')
+const fieldErrors = reactive<MovieErrors>({})
+const formElement = useTemplateRef<HTMLFormElement>('form-element')
 const retryable = ref(false)
+const selectedPoster = ref<File | null>(null)
 
 const form = reactive({
   title: '',
@@ -39,27 +48,13 @@ const form = reactive({
   classificationId: null as number | null,
   languageIds: [] as number[],
   genreIds: [] as number[],
-  posterImage: 'default-poster',
+  posterImage: null as string | null,
 })
+
+const existingPosterUrl = computed(() => getPosterUrl(form.posterImage))
 
 let request: AbortController | undefined
 let saveRequest: AbortController | undefined
-
-const isFormValid = computed(() => {
-  return (
-    form.title.trim().length > 0 &&
-    form.title.length <= 100 &&
-    form.synopsis.trim().length > 0 &&
-    form.synopsis.length <= 1000 &&
-    Number.isInteger(form.runningTime) &&
-    form.runningTime !== null &&
-    form.runningTime > 0 &&
-    Number.isInteger(form.releaseYear) &&
-    form.releaseYear !== null &&
-    form.releaseYear > 0 &&
-    form.classificationId !== null
-  )
-})
 
 const hasChanges = computed(() => {
   if (!movie.value) return false
@@ -68,44 +63,49 @@ const hasChanges = computed(() => {
 
   const sameIds = (a: number[], b: number[]) =>
     a.length === b.length &&
-    [...a].sort((x, y) => x - y)
-      .every((id, index) => id === [...b].sort((x, y) => x - y)[index])
+    [...a].sort((x, y) => x - y).every((id, index) => id === [...b].sort((x, y) => x - y)[index])
 
   return (
+    selectedPoster.value !== null ||
+    form.posterImage !== (original.posterImage ?? null) ||
     form.title !== original.title ||
     form.synopsis !== original.synopsis ||
     form.runningTime !== original.runningTime ||
     form.releaseYear !== original.releaseYear ||
-    form.classificationId !== original.classification.id ||
-    !sameIds(form.languageIds, original.languages.map(l => l.id)) ||
-    !sameIds(form.genreIds, original.genres.map(g => g.id))
+    form.classificationId !== (original.classification?.id ?? null) ||
+    !sameIds(
+      form.languageIds,
+      original.languages.map((l) => l.id),
+    ) ||
+    !sameIds(
+      form.genreIds,
+      original.genres.map((g) => g.id),
+    )
   )
 })
 
-const canSave = computed(() =>
-  hasChanges.value &&
-  isFormValid.value &&
-  !saving.value &&
-  !loading.value
-)
+const canSave = computed(() => hasChanges.value && !saving.value && !loading.value)
 
 const title = computed(() =>
-  movie.value
-    ? `Modificar ${movie.value.title}`
-    : 'Modificar película',
+  movie.value ? `Modificar ${movie.value.title}` : 'Modificar película',
 )
 
 const languageOptions = computed(() =>
-  props.languages.map(language => ({
+  props.languages.map((language) => ({
     value: language.id,
-    label: language.name
-  }))
+    label: language.name,
+  })),
+)
+
+const genreOptions = computed(() =>
+  props.genres.map((genre) => ({
+    value: genre.id,
+    label: genre.name,
+  })),
 )
 
 function reportError(failure: unknown, operation: 'load' | 'save') {
-  const status = isAxiosError(failure)
-    ? failure.response?.status
-    : undefined
+  const status = isAxiosError(failure) ? failure.response?.status : undefined
 
   let message: string
 
@@ -118,19 +118,19 @@ function reportError(failure: unknown, operation: 'load' | 'save') {
   } else if (status === 404) {
     message = 'La película seleccionada ya no existe.'
   } else if (status === 400 && operation === 'save') {
-    const backendMessage = isAxiosError(failure)
-      ? failure.response?.data?.message
-      : undefined
-
-    message = Array.isArray(backendMessage)
-      ? backendMessage.join(' ')
-      : typeof backendMessage === 'string'
-        ? backendMessage
-        : 'Revisa los datos ingresados.'
+    Object.assign(
+      fieldErrors,
+      movieErrorsFromApi(isAxiosError(failure) ? failure.response?.data?.message : undefined),
+    )
+    if (!Object.keys(fieldErrors).length)
+      validationNotice.value =
+        'Revisa los datos y la imagen seleccionada antes de volver a intentarlo.'
+    return
   } else {
-    message = operation === 'load'
-      ? 'No se pudo cargar la película. Vuelve a intentarlo.'
-      : 'No se pudieron guardar los cambios. Vuelve a intentarlo.'
+    message =
+      operation === 'load'
+        ? 'No se pudo cargar la película. Vuelve a intentarlo.'
+        : 'No se pudieron guardar los cambios. Vuelve a intentarlo.'
 
     if (operation === 'load') {
       retryable.value = true
@@ -149,8 +149,12 @@ async function load() {
   saveRequest?.abort()
 
   movie.value = null
+  selectedPoster.value = null
+  form.posterImage = null
   error.value = ''
   saveError.value = ''
+  validationNotice.value = ''
+  for (const field of Object.keys(fieldErrors)) delete fieldErrors[field as keyof MovieErrors]
   retryable.value = false
   saving.value = false
 
@@ -173,6 +177,7 @@ async function load() {
     movie.value = detail
 
     Object.assign(form, {
+      posterImage: detail.posterImage ?? null,
       title: detail.title ?? '',
       synopsis: detail.synopsis ?? '',
       runningTime: detail.runningTime ?? null,
@@ -199,13 +204,16 @@ async function save() {
   if (movieId === null || saving.value || loading.value) return
 
   saveError.value = ''
+  validationNotice.value = ''
 
   // Validate again after trimming and before sending the request.
   if (!hasChanges.value) return
 
-  if (!isFormValid.value) {
-    saveError.value =
-      'Completa los campos requeridos con valores válidos.'
+  for (const field of Object.keys(fieldErrors)) delete fieldErrors[field as keyof MovieErrors]
+  Object.assign(fieldErrors, validateMovie(form, props, false))
+  if (Object.keys(fieldErrors).length) {
+    await nextTick()
+    formElement.value?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
     return
   }
 
@@ -214,9 +222,21 @@ async function save() {
   saving.value = true
 
   try {
+    if (selectedPoster.value) {
+      const uploaded = await uploadPoster(selectedPoster.value)
+
+      // An upload may finish after this modal closes or switches movies.
+      if (current.signal.aborted || props.movieId !== movieId) return
+
+      // Keep the uploaded path for a retry if updating the movie fails.
+      form.posterImage = uploaded.path
+      selectedPoster.value = null
+    }
+
     await updateMovie(
       movieId,
       {
+        posterImage: form.posterImage,
         title: form.title.trim(),
         synopsis: form.synopsis.trim(),
         runningTime: Number(form.runningTime),
@@ -266,160 +286,152 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <BaseModal
-    :open="movieId !== null"
-    :title="title"
-    @close="close"
-  >
-    <div
-      class="movie-detail-content"
-      :aria-busy="loading || saving"
-    >
-      <p v-if="loading" class="detail-feedback" role="status">
-        Cargando datos de la película…
-      </p>
+  <BaseModal :open="movieId !== null" :title="title" :close-disabled="saving" @close="close">
+    <div class="movie-detail-content dialog-content" :aria-busy="loading || saving">
+      <LoadingState
+        v-if="loading"
+        class="detail-feedback"
+        message="Cargando datos de la película…"
+        compact
+      />
 
-      <div
-        v-else-if="error"
-        class="detail-feedback detail-error"
-        role="alert"
-      >
+      <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         <p>{{ error }}</p>
 
-        <button
-          v-if="retryable"
-          type="button"
-          class="detail-button"
-          @click="load"
-        >
+        <button v-if="retryable" type="button" class="detail-button" @click="load">
           Reintentar
         </button>
       </div>
 
-      <form v-else-if="movie" @submit.prevent="save">
+      <form
+        v-else-if="movie"
+        ref="form-element"
+        novalidate
+        @submit.prevent="save"
+        @input="validationNotice = ''"
+        @change="validationNotice = ''"
+      >
         <fieldset class="edit-fieldset" :disabled="saving">
-          <section class="detail-group">
-            <h3>Información general</h3>
-
-            <div class="detail-grid">
-              <div class="detail-field">
-                <span class="field-label">ID</span>
-                <p>MOV{{ movie.id }}</p>
-              </div>
-
-              <div class="detail-field">
+          <div class="movie-edit-layout">
+            <div class="movie-fields dialog-sections">
+              <DialogSection title="Información general" :number="1">
+                <div class="form-grid">
+                  <div class="detail-field">
+                    <span class="field-label">ID</span>
+                    <p>MOV{{ movie.id }}</p>
+                  </div>
+                  <LimitedTextInput
+                    v-model="form.title"
+                    label="Título"
+                    placeholder="Ingrese el título"
+                    :limit="100"
+                    :error="fieldErrors.title"
+                    @update:model-value="delete fieldErrors.title"
+                    required
+                  />
+                  <PositiveNumberInput
+                    v-model="form.runningTime"
+                    label="Duración en minutos"
+                    placeholder="Ej. 120"
+                    :min="1"
+                    :max="999"
+                    required
+                    :error="fieldErrors.runningTime"
+                    @update:model-value="delete fieldErrors.runningTime"
+                  />
+                  <PositiveNumberInput
+                    v-model="form.releaseYear"
+                    label="Año de estreno"
+                    placeholder="Ej. 2026"
+                    :min="1888"
+                    :max="2077"
+                    required
+                    :error="fieldErrors.releaseYear"
+                    @update:model-value="delete fieldErrors.releaseYear"
+                  />
+                  <SimpleDropdown
+                    v-model="form.classificationId"
+                    label="Clasificación"
+                    placeholder="Seleccione una clasificación"
+                    :options="classifications"
+                    :error="fieldErrors.classificationId"
+                    @update:model-value="delete fieldErrors.classificationId"
+                    required
+                  />
+                </div>
+              </DialogSection>
+              <DialogSection title="Idiomas y géneros" :number="2">
+                <div class="option-grid">
+                  <ReusableSearchDropdown
+                    v-model="form.languageIds"
+                    label="Idiomas"
+                    placeholder="Buscar idiomas..."
+                    :options="languageOptions"
+                    :error="fieldErrors.languageIds"
+                    @update:model-value="delete fieldErrors.languageIds"
+                  />
+                  <ReusableSearchDropdown
+                    v-model="form.genreIds"
+                    label="Géneros"
+                    placeholder="Buscar géneros..."
+                    :options="genreOptions"
+                    :error="fieldErrors.genreIds"
+                    @update:model-value="delete fieldErrors.genreIds"
+                  />
+                </div>
+              </DialogSection>
+              <DialogSection title="Sinopsis" :number="3">
                 <LimitedTextInput
-                  v-model="form.title"
-                  label="Título"
-                  placeholder="Ingrese el título"
-                  :limit="100"
+                  v-model="form.synopsis"
+                  label="Sinopsis"
+                  placeholder="Ingrese la sinopsis"
+                  :limit="1000"
+                  :error="fieldErrors.synopsis"
+                  @update:model-value="delete fieldErrors.synopsis"
+                  multiline
+                  :rows="5"
                   required
                 />
-              </div>
-
-              <div class="detail-field">
-                <PositiveNumberInput
-                  v-model="form.runningTime"
-                  label="Duración en minutos"
-                  placeholder="Ej. 120"
-                  required
-                />
-              </div>
-
-              <div class="detail-field">
-                <PositiveNumberInput
-                  v-model="form.releaseYear"
-                  label="Año de estreno"
-                  placeholder="Ej. 2026"
-                  required
-                />
-              </div>
+              </DialogSection>
             </div>
-          </section>
-
-          <section class="detail-group">
-            <SimpleDropdown
-              v-model="form.classificationId"
-              label="Clasificación"
-              placeholder="Seleccione una clasificación"
-              :options="classifications"
-              required
-            />
-          </section>
-
-
-          <ReusableSearchDropdown
-            class="detail-group"
-            v-model="form.languageIds"
-            label="Idiomas"
-            placeholder="Buscar idiomas..."
-            :options="languageOptions"
-          />
-
-          <fieldset class="detail-group option-fieldset">
-            <legend>Géneros</legend>
-
-            <div class="edit-options">
-              <label
-                v-for="genre in genres"
-                :key="genre.id"
-                class="edit-option"
-              >
-                <input
-                  v-model="form.genreIds"
-                  type="checkbox"
-                  :value="genre.id"
+            <aside class="poster-column">
+              <DialogSection title="Póster" :number="4">
+                <ImageUpload
+                  v-model="selectedPoster"
+                  label="Póster de la película"
+                  :existing-image-url="existingPosterUrl"
+                  :disabled="saving"
                 />
-                {{ genre.name }}
-              </label>
-            </div>
-          </fieldset>
-
-          <section class="detail-group">
-              <LimitedTextInput
-              v-model="form.synopsis"
-              label="Sinopsis"
-              placeholder="Ingrese la sinopsis"
-              :limit="1000"
-              multiline
-              :rows="5"
-              required
-            />
-          </section>
+              </DialogSection>
+            </aside>
+          </div>
         </fieldset>
 
-        <p
-          v-if="saveError"
-          class="detail-feedback detail-error"
-          role="alert"
-        >
-          {{ saveError }}
+        <p v-if="validationNotice" class="detail-feedback detail-error" role="alert">
+          {{ validationNotice }}
         </p>
+        <NotificationPopup
+          v-if="saveError"
+          type="error"
+          :message="saveError"
+          :duration="0"
+          placement="bottom-right"
+          @close="saveError = ''"
+        />
 
         <footer class="detail-footer">
-          <button
-            type="button"
-            class="detail-button"
-            :disabled="saving"
-            @click="close"
-          >
+          <button type="button" class="detail-button" :disabled="saving" @click="close">
             Cancelar
           </button>
 
-          <button
-            type="submit"
-            class="detail-button save-button"
-            :disabled="!canSave"
-          >
+          <button type="submit" class="detail-button save-button" :disabled="!canSave">
             {{ saving ? 'Guardando…' : 'Guardar cambios' }}
           </button>
         </footer>
       </form>
 
       <footer v-if="!movie" class="detail-footer">
-        <button type="button" class="detail-button" @click="close">
-          Cerrar
-        </button>
+        <button type="button" class="detail-button" @click="close">Cerrar</button>
       </footer>
     </div>
   </BaseModal>
@@ -427,42 +439,16 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* Modal background */
-:global(.app-modal-backdrop:has(.movie-detail-content)::backdrop) {
-  background: var(--overlay-background);
-}
 
 /* Modal container */
 :global(.app-modal-card:has(.movie-detail-content)) {
   width: min(880px, 100%);
   max-width: 880px;
-  padding: 0;
-  border-radius: var(--radius-medium);
-  background: var(--dialog-background);
-  color: var(--text-primary);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
 /* Modal title */
-:global(.app-modal-card:has(.movie-detail-content) .app-modal-title) {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 24px 80px 24px 24px;
-  background: var(--primary-color);
-  color: var(--content-background);
-  text-align: left;
-  font-style: normal;
-  font-size: 1.25rem;
-}
 
 /* Modal close button */
-:global(.app-modal-card:has(.movie-detail-content) .app-modal-close) {
-  top: 14px;
-  right: 24px;
-  color: var(--content-background);
-  border-radius: var(--radius-small);
-}
 
 /* Main content */
 .movie-detail-content {
@@ -473,22 +459,27 @@ onBeforeUnmount(() => {
 }
 
 /* Sections */
-.detail-group {
-  margin-bottom: 24px;
-}
-
 .detail-group h3,
 .option-fieldset legend {
-  margin: 0 0 16px;
+  margin: 0 0 10px;
   font-size: 1rem;
   font-weight: 700;
 }
 
 /* Form layout */
+.option-grid {
+  display: grid;
+  gap: 16px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px 20px;
+  gap: 12px 16px;
   margin: 0;
 }
 
@@ -577,7 +568,7 @@ textarea.edit-input {
   justify-content: flex-end;
   gap: 12px;
   flex-wrap: wrap;
-  margin-top: 24px;
+  margin-top: 16px;
 }
 
 /* General buttons */
@@ -622,12 +613,36 @@ textarea.edit-input {
   outline-offset: 2px;
 }
 
+.movie-edit-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 24px;
+  align-items: start;
+}
+
+.poster-column,
+.movie-fields {
+  min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .movie-edit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .poster-column {
+    width: 100%;
+    max-width: 240px;
+    justify-self: center;
+  }
+}
 /* Mobile layout */
 @media (max-width: 575px) {
   .movie-detail-content {
     padding: 20px 16px;
   }
 
+  .form-grid,
   .detail-grid {
     grid-template-columns: minmax(0, 1fr);
   }

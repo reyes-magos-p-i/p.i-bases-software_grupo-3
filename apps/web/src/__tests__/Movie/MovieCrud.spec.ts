@@ -9,6 +9,8 @@ import MovieCrudEdit from '@/components/Movies/MovieCrudEdit.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import type { MovieAll } from '@/types/movie'
 import MovieCrudDelete from '@/components/Movies/MovieCrudDelete.vue'
+import MovieCrudCreate from '@/components/Movies/MovieCrudCreate.vue'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
 
 import {
   getMovies,
@@ -44,6 +46,33 @@ describe('MovieCrud', () => {
     vi.mocked(getClassifications).mockResolvedValue([{ id: 1, name: 'TP' }])
     vi.mocked(getGenres).mockResolvedValue([{ id: 3, name: 'Drama' }])
     vi.mocked(getLanguages).mockResolvedValue([{ id: 1, name: 'English' }])
+  })
+
+  it('uses the same floating success notification after creation, modification and deletion', async () => {
+    const wrapper = shallowMount(MovieCrud)
+    await flushPromises()
+    await wrapper.get('.add-user-button').trigger('click')
+    wrapper.getComponent(MovieCrudCreate).vm.$emit('saved')
+    await flushPromises()
+    expect(wrapper.getComponent(NotificationPopup).props()).toMatchObject({
+      type: 'success',
+      placement: 'bottom-right',
+      message: 'Película creada con éxito.',
+    })
+    wrapper.getComponent(MovieCrudEdit).vm.$emit('saved')
+    await flushPromises()
+    expect(wrapper.getComponent(NotificationPopup).props('message')).toBe(
+      'Película modificada con éxito.',
+    )
+    wrapper.getComponent(MovieCrudDelete).vm.$emit('deleted')
+    await flushPromises()
+    expect(wrapper.getComponent(NotificationPopup).props('message')).toBe(
+      'Película eliminada con éxito.',
+    )
+    wrapper.getComponent(NotificationPopup).vm.$emit('close')
+    await flushPromises()
+    expect(wrapper.findComponent(NotificationPopup).exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it.each(['success', 'failure'])(

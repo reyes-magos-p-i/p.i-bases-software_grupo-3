@@ -1,14 +1,20 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { isAxiosError } from 'axios'
 import { authErrorMessage } from '@/utils/auth-errors'
+import { announcePasswordExpiry, dismissPasswordExpiry } from '@/services/password-expiry-notice'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import CreateUserDialog from '@/components/users/CreateUserDialog.vue'
 import UserListPanel from '@/components/users/UserListPanel.vue'
-import TheatersSection from '@/components/theaters/TheatersSection.vue'
-import ProjectionsSection from '@/components/projections/ProjectionsSection.vue'
 import DashboardLayout from '@/components/layout/DashboardLayout.vue'
+import {
+  administratorSectionIds,
+  availableSectionsFor,
+  dashboardSections,
+  type DashboardSectionId,
+} from '@/components/layout/dashboard-sections'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import type { UserCreationOptions, CreateUserRequest, UserApiError } from '@/types/user'
 import type { UserDetailSelection } from '@/types/user'
@@ -23,21 +29,17 @@ import MovieCrud from '@/components/Movies/MovieCrud.vue'
 
 import { clearClientAuth } from '@/services/client-session.service'
 import { EmployeeAuthError, getEmployeePasswordStatus } from '@/services/authService'
+import { onPasswordBlocked } from '@/services/api'
 
 const router = useRouter()
 const identity = employeeSession.user
 const role = computed(() => identity.value?.role ?? 'EMPLOYEE')
-type DashboardSection = 'employees' | 'clients' | 'theaters' | 'screenings' | 'password' | 'movies'
-// Sections an employee is moved away from when the server reports that role.
-const ADMINISTRATOR_SECTIONS: readonly DashboardSection[] = [
-  'employees',
-  'theaters',
-  'screenings',
-  'password',
-]
-const activeSection = ref<DashboardSection>(
+const activeSection = ref<DashboardSectionId>(
   role.value === 'ADMINISTRATOR' ? 'employees' : 'clients',
 )
+// An expired or missing password keeps the dashboard on the password change.
+const passwordBlocked = ref(false)
+let stopPasswordBlocked: (() => void) | undefined
 const loggingOut = ref(false)
 const logoutError = ref('')
 const passwordStatusError = ref('')
@@ -54,6 +56,7 @@ const isUserSection = computed(
   () => activeSection.value === 'employees' || activeSection.value === 'clients',
 )
 const submissionErrors = ref<string[]>([])
+const submissionValidation = ref(false)
 const submissionBlocked = ref(false)
 const creationResult = ref('')
 const operationNotice = ref('')
@@ -71,11 +74,19 @@ function sessionExpired() {
   void router.replace({ path: '/', query: { login: 'employee', reason: 'expired' } })
 }
 
+function lockToPasswordChange() {
+  passwordBlocked.value = true
+  activeSection.value = 'password'
+}
+
 async function checkPasswordStatus() {
   passwordStatusError.value = ''
   try {
-    const status = await getEmployeePasswordStatus()
-    if (!disposed && status !== 'valid') activeSection.value = 'password'
+    const expiry = await getEmployeePasswordStatus()
+    if (disposed) return
+    announcePasswordExpiry(expiry)
+    if (expiry.status !== 'valid') lockToPasswordChange()
+    else passwordBlocked.value = false
   } catch (error) {
     if (disposed) return
     if (error instanceof EmployeeAuthError && error.status === 401) {
@@ -109,6 +120,7 @@ async function logout() {
   if (submitting.value || passwordChanging.value || loggingOut.value) return
   loggingOut.value = true
   logoutError.value = ''
+  dismissPasswordExpiry()
   try {
     await closeEmployeeSession()
     await clearClientAuth()
@@ -136,6 +148,7 @@ async function submitUser(data: CreateUserRequest) {
   const submittingDialog = userDialog.value
   submitting.value = true
   submissionErrors.value = []
+  submissionValidation.value = false
   operationNotice.value = ''
   creationResult.value = ''
   let completed = false
@@ -161,6 +174,7 @@ async function submitUser(data: CreateUserRequest) {
     } else if (status === 401) {
       sessionExpired()
     } else if (status === 400) {
+      submissionValidation.value = true
       const message: unknown = isAxiosError<UserApiError>(error)
         ? error.response?.data?.message
         : undefined
@@ -178,6 +192,7 @@ async function submitUser(data: CreateUserRequest) {
       ]
       void refreshPermissions()
     } else if (status === 409) {
+      submissionValidation.value = true
       submissionErrors.value = [
         'Ya existe una cuenta con ese correo. Revisa el correo introducido.',
       ]
@@ -194,7 +209,7 @@ async function submitUser(data: CreateUserRequest) {
         submittingDialog?.complete()
         userList.value?.refresh()
         await nextTick()
-        resultNotice.value?.focus()
+        resultNotice.value?.querySelector<HTMLButtonElement>('.notification-close')?.focus()
       }
     }
   }
@@ -254,45 +269,45 @@ watch([role, activeSection], () => {
 })
 onBeforeUnmount(() => {
   disposed = true
+  stopPasswordBlocked?.()
   cancelCatalogRequest()
 })
 onMounted(() => {
+  // Any endpoint rejected for an expired password also locks the dashboard.
+  stopPasswordBlocked = onPasswordBlocked(lockToPasswordChange)
   void checkPasswordStatus()
 })
-const availableSections = computed(() =>
-  role.value === 'ADMINISTRATOR'
-    ? ['employees', 'clients', 'theaters', 'screenings', 'password', 'movies']
-    : ['clients', 'password'],
+const availableSections = computed(() => availableSectionsFor(role.value))
+const activeDefinition = computed(() =>
+  dashboardSections.find((section) => section.id === activeSection.value),
 )
-const sectionTitle = computed(() =>
-  activeSection.value === 'employees'
-    ? 'Empleados'
-    : activeSection.value === 'clients'
-      ? 'Clientes'
-      : activeSection.value === 'theaters'
-        ? 'Salas'
-        : activeSection.value === 'password'
-          ? 'Cambiar contraseña'
-          : activeSection.value === 'movies'
-            ? 'Peliculas'
-            : 'Clientes',
-)
+const sectionTitle = computed(() => activeDefinition.value?.label ?? 'Clientes')
 
 watch(role, () => {
-  if (role.value === 'EMPLOYEE' && ADMINISTRATOR_SECTIONS.includes(activeSection.value)) {
+  if (role.value === 'EMPLOYEE' && administratorSectionIds.includes(activeSection.value)) {
     activeSection.value = 'clients'
   }
 })
 
+// Any section can be requested, but only the password change is shown until it is valid.
+watch(activeSection, (section) => {
+  if (passwordBlocked.value && section !== 'password') activeSection.value = 'password'
+})
+
 function navigate(section: string) {
   if (submitting.value || passwordChanging.value || sectionBusy.value || loggingOut.value) return
-  if (availableSections.value.includes(section)) {
+  if (availableSections.value.includes(section as DashboardSectionId)) {
     operationNotice.value = ''
-    activeSection.value = section as DashboardSection
+    activeSection.value = section as DashboardSectionId
   }
 }
 
-function returnToDashboard() {
+async function returnToDashboard() {
+  // The lock ends only when the server confirms the new password.
+  if (passwordBlocked.value) {
+    await checkPasswordStatus()
+    if (disposed || passwordBlocked.value) return
+  }
   activeSection.value = role.value === 'ADMINISTRATOR' ? 'employees' : 'clients'
 }
 </script>
@@ -308,7 +323,7 @@ function returnToDashboard() {
     @navigate="navigate"
     @logout="logout"
   >
-    <p v-if="loggingOut" role="status">Cerrando sesión…</p>
+    <LoadingState v-if="loggingOut" message="Cerrando sesión…" compact surface="dark" />
     <p v-if="logoutError" role="alert">{{ logoutError }}</p>
     <div v-if="passwordStatusError" role="alert">
       {{ passwordStatusError }}
@@ -318,7 +333,6 @@ function returnToDashboard() {
     <div
       v-if="(creationResult || operationNotice) && isUserSection"
       ref="result-notice"
-      class="creation-result"
       tabindex="-1"
     >
       <NotificationPopup
@@ -326,17 +340,14 @@ function returnToDashboard() {
         :type="!operationNotice && resultIsWarning ? 'alert' : 'success'"
         :message="operationNotice || creationResult"
         :duration="!operationNotice && resultIsWarning ? 0 : 4000"
+        placement="bottom-right"
         @close="dismissUserNotification"
       />
     </div>
 
-    <TheatersSection
-      v-if="activeSection === 'theaters'"
-      :disabled="loggingOut"
-      @busy="sectionBusy = $event"
-    />
-    <ProjectionsSection
-      v-else-if="activeSection === 'screenings'"
+    <component
+      :is="activeDefinition?.component"
+      v-if="activeDefinition?.component"
       :disabled="loggingOut"
       @busy="sectionBusy = $event"
     />
@@ -398,6 +409,7 @@ function returnToDashboard() {
       :catalogs-error="catalogsError"
       :submitting="submitting"
       :submission-errors="submissionErrors"
+      :submission-validation="submissionValidation"
       :submission-blocked="submissionBlocked"
       @retry-catalogs="loadCatalogs"
       @submit="submitUser"

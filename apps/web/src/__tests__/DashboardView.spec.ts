@@ -15,6 +15,14 @@ import {
   restoreEmployeeSession,
 } from '@/services/employee-session.service'
 import type { UserCreationOptions } from '@/types/user'
+import type { PasswordExpiry } from '@/services/authService'
+import { notifyPasswordBlocked } from '@/services/api'
+import {
+  dismissPasswordExpiry,
+  expectPasswordExpiryNotice,
+  passwordExpiryMessage,
+  passwordExpiryNotice,
+} from '@/services/password-expiry-notice'
 
 const {
   getUsers,
@@ -46,6 +54,18 @@ vi.mock('@/services/theater.service', () => ({
   getTheaters,
   createTheater,
   updateTheater: vi.fn(),
+}))
+vi.mock('@/services/branch.service', () => ({
+  formatBranchId: (id: number) => `SU-${String(id).padStart(3, '0')}`,
+  getBranches: vi.fn().mockResolvedValue({
+    items: [{ id: 1, name: 'Sucursal Heredia Centro', companyId: 2, companyName: 'Cinetadel S.A' }],
+    total: 1,
+    page: 1,
+    pageSize: 10,
+    totalPages: 1,
+  }),
+  getCompanies: vi.fn().mockResolvedValue([]),
+  getBranch: vi.fn(),
 }))
 vi.mock('@/services/authService', async () => {
   const actual =
@@ -113,7 +133,7 @@ beforeEach(() => {
   getUsers
     .mockReset()
     .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 })
-  getEmployeePasswordStatus.mockReset().mockResolvedValue('valid')
+  getEmployeePasswordStatus.mockReset().mockResolvedValue(expiry('valid'))
   getEmployeeListOptions.mockReset().mockResolvedValue({ branches: [] })
   Object.assign(employeeSession.user, {
     value: { id: 21, role: 'ADMINISTRATOR', firstName: 'Ana', email: 'ana@example.com' },
@@ -177,6 +197,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  dismissPasswordExpiry()
   wrapper?.unmount()
   wrapper = undefined
   for (const history of routeHistories.splice(0)) history.destroy()
@@ -206,6 +227,12 @@ async function renderDashboard() {
   wrapper = mount(DashboardView, { attachTo: document.body, global: { plugins: [router] } })
   return wrapper
 }
+
+const expiry = (
+  status: PasswordExpiry['status'],
+  expirationDays: number | null = 120,
+  expiresInDays: number | null = null,
+): PasswordExpiry => ({ status, expirationDays, expiresInDays })
 
 describe('DashboardView', () => {
   it('shows the password section to administrators and returns from its embedded view', async () => {
@@ -353,13 +380,89 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
   })
 
+  it('does not warn an employee who refreshes the dashboard', async () => {
+    getEmployeePasswordStatus.mockResolvedValueOnce(expiry('valid', 120, 1))
+    await renderDashboard()
+    await flushPromises()
+
+    expect(getEmployeePasswordStatus).toHaveBeenCalled()
+    expect(passwordExpiryNotice.message.value).toBe('')
+  })
+
+  it('warns an employee who just logged in during the last day of the password (UT-082)', async () => {
+    getEmployeePasswordStatus.mockResolvedValueOnce(expiry('valid', 120, 1))
+    // The header login marks the session as new before opening the dashboard.
+    expectPasswordExpiryNotice()
+    const view = await renderDashboard()
+    await flushPromises()
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).not.toBe(
+      'Cambiar contraseña',
+    )
+    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(1))
+    dismissPasswordExpiry()
+  })
+
   it('opens the password form when the employee password has expired', async () => {
-    getEmployeePasswordStatus.mockResolvedValueOnce('expired').mockResolvedValueOnce('expired')
+    getEmployeePasswordStatus
+      .mockResolvedValueOnce(expiry('expired'))
+      .mockResolvedValueOnce(expiry('expired'))
     const view = await renderDashboard()
     await flushPromises()
 
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
     expect(view.text()).toContain('Tu contraseña venció.')
+  })
+
+  it('keeps an employee with an expired password on the password change (UT-086)', async () => {
+    getEmployeePasswordStatus.mockResolvedValue(expiry('expired'))
+    const view = await renderDashboard()
+    await flushPromises()
+
+    // Every section can be requested, but only the password change is shown.
+    for (const section of ['Empleados', 'Clientes', 'Salas', 'Proyecciones', 'Películas']) {
+      const item = view.get(`[aria-label="${section}"]`)
+      expect(item.attributes('disabled')).toBeUndefined()
+      await item.trigger('click')
+      await flushPromises()
+      expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
+      expect(view.get('h1').text()).toBe('Cambiar contraseña')
+      expect(view.text()).toContain('Tu contraseña venció.')
+    }
+  })
+
+  it('locks the dashboard when any endpoint rejects an expired password', async () => {
+    const view = await renderDashboard()
+    await flushPromises()
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
+
+    notifyPasswordBlocked({
+      isAxiosError: true,
+      response: { status: 403, data: { code: 'PASSWORD_EXPIRED' } },
+    })
+    await flushPromises()
+
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
+    await view.get('[aria-label="Empleados"]').trigger('click')
+    await flushPromises()
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
+  })
+
+  it('unlocks the sections only after the server confirms a valid password', async () => {
+    getEmployeePasswordStatus.mockResolvedValue(expiry('expired'))
+    const view = await renderDashboard()
+    await flushPromises()
+    const passwordView = view.getComponent(ChangePasswordView)
+
+    passwordView.vm.$emit('return-to-dashboard')
+    await flushPromises()
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Cambiar contraseña')
+
+    getEmployeePasswordStatus.mockResolvedValue(expiry('valid'))
+    passwordView.vm.$emit('return-to-dashboard')
+    await flushPromises()
+    expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Empleados')
+    expect(view.get('[aria-label="Salas"]').attributes('disabled')).toBeUndefined()
   })
 
   it('prevents section navigation and logout while the password change is pending', async () => {
@@ -414,7 +517,7 @@ describe('DashboardView', () => {
       cinema: 'Cinetadel Central',
       status: 'Disponible',
     })
-    expect(view.get('.creation-result').text()).toContain('Sala 4 creada exitosamente')
+    expect(view.get('.notification-popup--floating').text()).toContain('Sala 4 creada exitosamente')
     expect(view.get<HTMLDialogElement>('.theater-dialog').element.open).toBe(false)
   })
 
@@ -427,7 +530,8 @@ describe('DashboardView', () => {
     await view.get('.theater-dialog form').trigger('submit')
 
     expect(createTheater).not.toHaveBeenCalled()
-    expect(view.get('.field-error').text()).toContain('entre 1 y 5000')
+    const errorId = view.get('[name="numberOfSeats"]').attributes('aria-describedby')
+    expect(view.get(`[id="${errorId}"]`).text()).toContain('entre 1 y 5000')
   })
 
   it('rejects theater seat counts that do not match the dimensions', async () => {
@@ -441,7 +545,8 @@ describe('DashboardView', () => {
     await view.get('.theater-dialog form').trigger('submit')
 
     expect(createTheater).not.toHaveBeenCalled()
-    expect(view.get('.field-error').text()).toContain('igual a Filas por Columnas')
+    const errorId = view.get('[name="numberOfSeats"]').attributes('aria-describedby')
+    expect(view.get(`[id="${errorId}"]`).text()).toContain('igual a Filas por Columnas')
   })
 
   it('shows projections to administrators only', async () => {
@@ -449,12 +554,27 @@ describe('DashboardView', () => {
     await view.get('[aria-label="Proyecciones"]').trigger('click')
 
     expect(view.get('h1').text()).toBe('Proyecciones')
-    expect(view.get('.add-user-button').text()).toContain('Agregar Proyección')
-    expect(view.find('.creation-result').exists()).toBe(false)
+    expect(view.get('.add-user-button').text()).toContain('Agregar proyección')
+    expect(view.find('.notification-popup--floating').exists()).toBe(false)
 
     await setRole('EMPLOYEE')
     expect(view.get('h1').text()).toBe('Clientes')
     expect(view.find('[aria-label="Proyecciones"]').exists()).toBe(false)
+  })
+
+  it('shows branches to administrators only', async () => {
+    const view = await renderDashboard()
+    await view.get('[aria-label="Sucursales"]').trigger('click')
+    await flushPromises()
+
+    expect(view.get('h1').text()).toBe('Sucursales')
+    expect(view.get('.result-count').text()).toBe('1 sucursal')
+    expect(view.text()).toContain('SU-001')
+
+    await setRole('EMPLOYEE')
+    expect(view.get('h1').text()).toBe('Clientes')
+    expect(view.find('[aria-label="Sucursales"]').exists()).toBe(false)
+    expect(view.getComponent(DashboardLayout).props('availableSections')).not.toContain('branches')
   })
 
   it('moves to clients and hides administrator options when the server reports an employee role', async () => {
@@ -467,7 +587,8 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
     expect(view.get('nav').text()).not.toContain('Tablero')
-    expect(view.get('nav').findAll('button')).toHaveLength(7)
+    expect(view.get('nav').text()).not.toContain('Sucursales')
+    expect(view.get('nav').findAll('button')).toHaveLength(6)
   })
 
   it('preserves clients as the current section across role changes', async () => {
@@ -486,7 +607,7 @@ describe('DashboardView', () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(4)
+    expect(pending).toHaveLength(3)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')
@@ -817,8 +938,12 @@ describe('employee creation', () => {
       })
       expect(getUsers).toHaveBeenCalledTimes(2)
       expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
-      expect(view.get('.creation-result').text()).toContain('Cuenta creada para ana@example.com')
-      expect(document.activeElement).toBe(view.get('.creation-result').element)
+      expect(view.get('.notification-popup--floating').text()).toContain(
+        'Cuenta creada para ana@example.com',
+      )
+      expect(document.activeElement).toBe(
+        view.get('.notification-popup--floating .notification-close').element,
+      )
       await view.get('.add-user-button').trigger('click')
       expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('')
       expect(view.getComponent(CreateUserDialog).get('[name="role"]').element).toHaveProperty(
@@ -863,8 +988,8 @@ describe('employee creation', () => {
   })
 
   it.each([
-    [400, ['Revisa el teléfono.'], 'Revisa el teléfono.'],
-    [400, 'Revisa el correo.', 'Revisa el correo.'],
+    [400, ['Revisa el teléfono.'], 'Revisa este campo'],
+    [400, 'Revisa el correo.', 'Revisa este campo'],
     [400, null, 'Revisa los datos'],
     [403, 'private', 'No tienes permiso'],
     [409, 'private', 'Ya existe una cuenta'],
@@ -878,7 +1003,11 @@ describe('employee creation', () => {
       const view = await filledForm()
       await view.getComponent(CreateUserDialog).get('form').trigger('submit')
       await flushPromises()
-      expect(view.get('[role="alert"]').text()).toContain(expected)
+      const dialog = view.getComponent(CreateUserDialog)
+      expect(
+        dialog.get(status === 403 ? '.notification-message' : '.field-error').text(),
+      ).toContain(expected)
+      expect(dialog.find('.notification-popup--floating').exists()).toBe(status === 403)
       expect(view.get<HTMLInputElement>('[name="firstName"]').element.value).toBe('Ana')
       expect(view.get('.create-button').attributes('disabled')).toBeUndefined()
       await view.getComponent(CreateUserDialog).get('[name="phoneNumber"]').setValue('88887777')
@@ -905,9 +1034,9 @@ describe('employee creation', () => {
     await flushPromises()
     expect(getUsers).toHaveBeenCalledTimes(2)
     expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
-    expect(view.get('.creation-result .notification-popup').attributes('role')).toBe('alert')
-    expect(view.get('.creation-result').text()).toContain('fue creada')
-    expect(view.get('.creation-result').text()).toContain('No repitas')
+    expect(view.get('.notification-popup--floating').attributes('role')).toBe('alert')
+    expect(view.get('.notification-popup--floating').text()).toContain('fue creada')
+    expect(view.get('.notification-popup--floating').text()).toContain('No repitas')
     expect(createUser).toHaveBeenCalledTimes(1)
   })
 
@@ -922,7 +1051,7 @@ describe('employee creation', () => {
     const view = await filledForm()
     await view.getComponent(CreateUserDialog).get('form').trigger('submit')
     await flushPromises()
-    expect(view.get('[role="alert"]').text()).toContain('No se pudo confirmar')
+    expect(view.getComponent(CreateUserDialog).text()).toContain('No se pudo confirmar')
     expect(view.get('.create-button').attributes('disabled')).toBeDefined()
     await view.getComponent(CreateUserDialog).get('form').trigger('submit')
     await view.get('.form-actions .cancel-button').trigger('click')
@@ -980,8 +1109,12 @@ describe('client creation', () => {
       language: 'es',
     })
     expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
-    expect(view.get('.creation-result').text()).toContain('Cuenta creada para cliente@example.com')
-    expect(document.activeElement).toBe(view.get('.creation-result').element)
+    expect(view.get('.notification-popup--floating').text()).toContain(
+      'Cuenta creada para cliente@example.com',
+    )
+    expect(document.activeElement).toBe(
+      view.get('.notification-popup--floating .notification-close').element,
+    )
     await view.get('.add-user-button').trigger('click')
     await flushPromises()
     expect(view.getComponent(CreateUserDialog).get('[name="firstName"]').element).toHaveProperty(
@@ -1013,7 +1146,7 @@ describe('client creation', () => {
   })
 
   it.each([
-    [400, ['Revisa el correo.'], 'Revisa el correo.'],
+    [400, ['Revisa el correo.'], 'Revisa este campo'],
     [403, 'private', 'No tienes permiso'],
     [409, 'private', 'Ya existe una cuenta'],
   ])(
@@ -1025,7 +1158,11 @@ describe('client creation', () => {
         .mockRejectedValueOnce({ isAxiosError: true, response: { status, data: { message } } })
       await view.getComponent(CreateUserDialog).get('form').trigger('submit')
       await flushPromises()
-      expect(view.get('[role="alert"]').text()).toContain(expected)
+      const dialog = view.getComponent(CreateUserDialog)
+      expect(
+        dialog.get(status === 403 ? '.notification-message' : '.field-error').text(),
+      ).toContain(expected)
+      expect(dialog.find('.notification-popup--floating').exists()).toBe(status === 403)
       expect(view.getComponent(CreateUserDialog).get('[name="email"]').element).toHaveProperty(
         'value',
         'cliente@example.com',
@@ -1064,10 +1201,10 @@ describe('client creation', () => {
     await view.getComponent(CreateUserDialog).get('form').trigger('submit')
     await flushPromises()
     expect(view.get<HTMLDialogElement>('dialog').element.open).toBe(false)
-    expect(view.get('.creation-result').text()).toContain(
+    expect(view.get('.notification-popup--floating').text()).toContain(
       'La cuenta de cliente@example.com fue creada',
     )
-    expect(view.get('.creation-result .notification-popup').attributes('role')).toBe('alert')
+    expect(view.get('.notification-popup--floating').attributes('role')).toBe('alert')
     expect(createUser).toHaveBeenCalledTimes(1)
   })
 
@@ -1085,7 +1222,7 @@ describe('client creation', () => {
     await view.get('[aria-label="Empleados"]').trigger('click')
     await view.get('.add-user-button').trigger('click')
     await flushPromises()
-    expect(view.get('[role="alert"]').text()).toContain('No se pudo confirmar')
+    expect(view.getComponent(CreateUserDialog).text()).toContain('No se pudo confirmar')
     expect(view.get('.create-button').attributes('disabled')).toBeDefined()
     await view.getComponent(CreateUserDialog).get('form').trigger('submit')
     await view.get('.close-button').trigger('click')
@@ -1094,7 +1231,7 @@ describe('client creation', () => {
     await setRole('ADMINISTRATOR')
     await view.get('.add-user-button').trigger('click')
     await view.getComponent(CreateUserDialog).get('form').trigger('submit')
-    expect(view.get('[role="alert"]').text()).toContain('No se pudo confirmar')
+    expect(view.getComponent(CreateUserDialog).text()).toContain('No se pudo confirmar')
     expect(createUser).toHaveBeenCalledTimes(1)
   })
 

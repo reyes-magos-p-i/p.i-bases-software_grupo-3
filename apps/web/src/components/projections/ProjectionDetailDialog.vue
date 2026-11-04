@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import LoadingState from '@/components/common/LoadingState.vue'
 import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue'
 import { isAxiosError } from 'axios'
 import ProjectionDialogShell from './ProjectionDialogShell.vue'
@@ -34,11 +35,17 @@ const fields = computed(() => {
     { label: 'Fecha de proyección', value: formatProjectionDate(item.startTime) },
     { label: 'Hora inicio', value: formatProjectionTime(item.startTime) },
     { label: 'Hora fin', value: formatProjectionTime(item.endTime) },
-    { label: 'Ocupación de la sala', value: formatProjectionDuration(item.startTime, item.endTime) },
+    {
+      label: 'Ocupación de la sala',
+      value: formatProjectionDuration(item.startTime, item.endTime),
+    },
     { label: 'Anuncios', value: minutes(item.advertisementMinutes) },
     { label: 'Duración de la película', value: minutes(item.runningTime) },
     { label: 'Limpieza', value: minutes(item.cleaningMinutes) },
-    { label: 'Precio por persona', value: formatPrice(item.price) },
+    { label: 'Precio general desde', value: formatPrice(item.price) },
+    { label: 'Formato', value: item.format || 'Sin registrar' },
+    { label: 'Tecnología', value: item.technology || 'Sin registrar' },
+    { label: 'Estreno', value: item.isPremiere ? 'Sí' : 'No' },
     {
       label: 'Fecha de creación',
       value: `${formatProjectionDate(item.createdAt)} ${formatProjectionTime(item.createdAt)}`,
@@ -93,12 +100,17 @@ watch(
 )
 
 onBeforeUnmount(() => request?.abort())
+
+function closeDialog() {
+  shell.value?.close()
+  emit('close')
+}
 </script>
 
 <template>
   <ProjectionDialogShell ref="shell" title="Detalle de proyección" @close="emit('close')">
     <div class="detail-content" :aria-busy="loading">
-      <p v-if="loading" class="detail-feedback" role="status">Cargando el detalle…</p>
+      <LoadingState v-if="loading" class="detail-feedback" message="Cargando el detalle…" compact />
       <div v-else-if="error" class="detail-feedback detail-error" role="alert">
         {{ error }}
         <button type="button" class="link-button" @click="retry">Reintentar</button>
@@ -118,6 +130,9 @@ onBeforeUnmount(() => request?.abort())
         </div>
         <ProjectionPoster :poster-image="detail.posterImage" :title="detail.movieTitle" />
       </div>
+      <footer class="detail-footer">
+        <button type="button" class="secondary-button" @click="closeDialog">Cerrar</button>
+      </footer>
     </div>
   </ProjectionDialogShell>
 </template>
@@ -139,31 +154,7 @@ onBeforeUnmount(() => request?.abort())
   font-size: 1.25rem;
   font-weight: 700;
 }
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px 16px;
-  margin: 0;
-}
-.detail-field {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: var(--radius-small);
-  background: var(--content-background);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--page-background) 12%, transparent);
-  color: var(--text-primary);
-}
-.detail-field dt {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-.detail-field dd {
-  margin: 0;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
+
 .detail-feedback {
   margin: 0;
   padding: 24px;
@@ -185,16 +176,10 @@ onBeforeUnmount(() => request?.abort())
   .detail-body {
     grid-template-columns: 1fr;
   }
-  .detail-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 @media (max-width: 640px) {
   .detail-content {
     padding: 20px 16px;
-  }
-  .detail-grid {
-    grid-template-columns: 1fr;
   }
 }
 </style>

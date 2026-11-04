@@ -1,3 +1,5 @@
+import { ClientProfileModule } from './clients/profile/client-profile.module';
+import { PurchasesModule } from './purchases/purchases.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { HealthModule } from './health/health.module';
@@ -11,7 +13,10 @@ import { TheatersModule } from './theaters/theaters.module';
 import { CinemasModule } from './cinemas/cinemas.module';
 import { ProjectorsModule } from './projectors/projectors.module';
 import { ProjectionsModule } from './projections/projections.module';
-
+import { TicketsModule } from './tickets/tickets.module';
+import { TransactionsModule } from './transactions/transactions.module';
+//import { ImagesModule } from './images/images.module';
+import { ImageHandlerModule } from './image-handler/image-handler.module';
 
 @Module({
   imports: [
@@ -23,12 +28,18 @@ import { ProjectionsModule } from './projections/projections.module';
     MovieFuctionsModule,
     DatabaseModule,
     AuthModule,
+    ClientProfileModule,
     UsersModule,
     MoviesModule,
     TheatersModule,
     CinemasModule,
     ProjectorsModule,
     ProjectionsModule,
+    TicketsModule,
+    TransactionsModule,
+    //ImagesModule,
+    ImageHandlerModule,
+    PurchasesModule,
   ],
   controllers: [ImageController],
 })

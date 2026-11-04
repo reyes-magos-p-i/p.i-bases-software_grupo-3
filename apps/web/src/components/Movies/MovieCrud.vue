@@ -5,12 +5,9 @@ import MovieCrudView from './MovieCrudView.vue'
 
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
-import {
-  getMovies,
-  getClassifications,
-  getGenres,
-  getLanguages,
-} from '@/services/movie.service'
+import NotificationPopup from '@/components/common/NotificationPopup.vue'
+import { displayText } from '@/utils/display-text'
+import { getMovies, getClassifications, getGenres, getLanguages } from '@/services/movie.service'
 import type { MovieAll, MovieOption } from '@/types/movie'
 import MovieCrudEdit from './MovieCrudEdit.vue'
 import MovieCrudCreate from './MovieCrudCreate.vue'
@@ -23,6 +20,7 @@ const movieToDelete = ref<MovieAll | null>(null)
 const selectedMovieId = ref<number | null>(null)
 const editingMovieId = ref<number | null>(null)
 const creatingMovie = ref(false)
+const notice = ref('')
 
 const classifications = ref<MovieOption[]>([])
 const languages = ref<MovieOption[]>([])
@@ -48,8 +46,7 @@ function closeCreate() {
 function openDelete(row: Record<string, unknown>) {
   if (typeof row.id !== 'number') return
 
-  movieToDelete.value =
-    movies.value.find(movie => movie.id === row.id) ?? null
+  movieToDelete.value = movies.value.find((movie) => movie.id === row.id) ?? null
 }
 
 function closeDelete() {
@@ -69,7 +66,9 @@ const rows = computed(() =>
     ...MovieAll,
     runningTime: `${MovieAll.runningTime} min`,
     releaseYear: MovieAll.releaseYear ?? 'Sin registrar',
-    classification: MovieAll.classification ?? 'Sin registrar',
+    classification: MovieAll.classification
+      ? displayText(MovieAll.classification)
+      : 'Sin registrar',
   })),
 )
 
@@ -119,8 +118,6 @@ async function load() {
 
     if (currentRequest.signal.aborted || disposed) return
 
-    console.log(data)
-
     movies.value = data
   } catch (error) {
     if (currentRequest.signal.aborted || disposed) return
@@ -139,8 +136,6 @@ async function load() {
 }
 
 function viewMovie(row: Record<string, unknown>) {
-  console.log('View:', row)
-
   const id = Number(row.id)
 
   if (Number.isNaN(id)) return
@@ -149,7 +144,6 @@ function viewMovie(row: Record<string, unknown>) {
 }
 
 function editMovie(row: Record<string, unknown>) {
-  console.log('Edit:', row)
   const id = Number(row.id)
 
   if (!Number.isInteger(id) || id <= 0) return
@@ -157,8 +151,16 @@ function editMovie(row: Record<string, unknown>) {
   editingMovieId.value = id
 }
 
-
 function refresh() {
+  void load()
+}
+
+function completed(action: 'created' | 'updated' | 'deleted') {
+  notice.value = {
+    created: 'Película creada con éxito.',
+    updated: 'Película modificada con éxito.',
+    deleted: 'Película eliminada con éxito.',
+  }[action]
   void load()
 }
 
@@ -177,13 +179,10 @@ defineExpose({ refresh })
 <template>
   <div class="movie-list-panel" :aria-busy="loading">
     <div class="section-heading">
-        <h1>Peliculas</h1>
-      <button type="button"
-        @click="openCreate"
-        class="add-user-button"
-        >
-         <i class="bi bi-plus-lg" aria-hidden="true"></i>
-      Agregar película
+      <h1>Películas</h1>
+      <button type="button" @click="openCreate" class="add-user-button">
+        <i class="bi bi-plus-lg" aria-hidden="true"></i>
+        Agregar película
       </button>
     </div>
     <LoadingState v-if="loading" message="Cargando películas…" />
@@ -199,6 +198,8 @@ defineExpose({ refresh })
       :columns="columns"
       :rows="rows"
       caption="Películas"
+      delete-label="Eliminar película"
+      delete-icon="bi-trash"
       @view="viewMovie"
       @edit="editMovie"
       @delete="openDelete"
@@ -216,7 +217,7 @@ defineExpose({ refresh })
       :languages="languages"
       :genres="genres"
       @close="closeCreate"
-      @saved="load"
+      @saved="completed('created')"
       @session-expired="emit('session-expired')"
       @forbidden="emit('forbidden')"
     />
@@ -227,15 +228,18 @@ defineExpose({ refresh })
       :languages="languages"
       :genres="genres"
       @close="editingMovieId = null"
-      @saved="load"
+      @saved="completed('updated')"
       @session-expired="emit('session-expired')"
       @forbidden="emit('forbidden')"
     />
 
-    <MovieCrudDelete
-      :movie="movieToDelete"
-      @close="closeDelete"
-      @deleted="load"
+    <MovieCrudDelete :movie="movieToDelete" @close="closeDelete" @deleted="completed('deleted')" />
+    <NotificationPopup
+      v-if="notice"
+      type="success"
+      :message="notice"
+      placement="bottom-right"
+      @close="notice = ''"
     />
   </div>
 </template>
