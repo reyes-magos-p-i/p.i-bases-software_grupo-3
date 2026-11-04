@@ -29,9 +29,15 @@ La numeración organiza el formulario y no introduce pantallas de Siguiente o An
 
 Los pies de acciones comparten separación, tipografía, bordes y altura mínima de 44 píxeles. Los botones pasan a otra fila si falta espacio, sin comprimirse hasta cortar su texto. Las acciones secundarias utilizan texto oscuro sobre superficie clara; las destructivas mantienen su color de error. Los contenedores nativos comparten el fondo superpuesto, las esquinas y el límite de altura de la ventana; el ancho depende del contenido. El encabezado permanece visible mientras se desplazan los campos. El detalle de boleto también conserva Cerrar cuando hay un error de carga.
 
+Los controles y sus contenedores pueden reducir su ancho sin invadir columnas vecinas. En salas, los selectores ocupan únicamente el ancho de su campo y acortan visualmente los nombres largos, conservando su valor y las opciones completas. Los botones permiten distribuir el texto y las acciones en varias filas cuando el espacio es limitado.
+
+`PaginationControls` comparte la navegación de usuarios, sucursales, proyecciones, transacciones e historial de compras. Presenta dos flechas de 44 píxeles y «Página X de Y», centrados y con nombres accesibles. El componente solo emite el cambio de página; las consultas, filtros y selectores de cantidad existentes permanecen en cada listado. Los límites y las solicitudes pendientes deshabilitan las acciones correspondientes.
+
 Las barras de desplazamiento tienen una pista transparente y un indicador discreto que se adapta a superficies claras y oscuras, con colores centralizados en `variables.css`. No se oculta la posibilidad de desplazarse y se conserva la adaptación a colores forzados del navegador. Los filtros retiran ayudas de formato redundantes y mantienen sus nombres accesibles. Usuarios, salas, sucursales, proyecciones y transacciones comparten la altura `--filter-control-height` de 44 píxeles. Los selectores se ajustan al ancho de su columna y acortan visualmente los valores largos; las opciones completas siguen disponibles al desplegarlos. Transacciones y proyecciones alinean sus controles por el borde inferior para compensar las etiquetas de fechas y horas.
 
 El cierre de sesión del portal se ofrece dentro del menú del perfil. El encabezado de cambio de contraseña utiliza texto claro cuando está sobre el fondo azul y oscuro cuando se integra en una superficie clara del perfil.
+
+La vista de contraseña recibe el contexto de superficie independientemente de que esté integrada: el dashboard indica `surface="dark"`; el perfil conserva su superficie clara. El encabezado y el indicador de carga utilizan ese contexto, mientras las tarjetas del formulario mantienen texto oscuro sobre fondo claro.
 
 Todas las selecciones de fecha utilizan `DatePicker`: nacimiento en el registro público; nacimiento y contratación en la creación de usuarios; fecha al crear o modificar proyecciones y repetición al crearlas; filtros de proyecciones, transacciones, historial de compras y selección de función durante la compra. El componente muestra día/mes/año y mantiene valores `YYYY-MM-DD` para las solicitudes. Las horas conservan sus controles existentes.
 
@@ -44,6 +50,8 @@ Cuando el navegador dispone de Popover API, el calendario se presenta en la capa
 `MoviePoster` centraliza la presentación de pósteres en el portal, proyecciones, detalle de película, selección inicial de compra y resumen. Intenta primero la ruta pública de imágenes, después la ruta heredada y finalmente la imagen de reemplazo existente. Los errores de imagen no interrumpen la vista.
 
 El catálogo ofrece acceso visible a la compra en pantallas táctiles y mediante teclado. El carrusel conserva sus cuatro películas y el orden recibido. No presenta un botón de pausa; detiene la rotación durante la interacción y respeta el movimiento reducido. No cambia el algoritmo de preferencias. En el resumen de compra, el póster se alinea con el título en escritorio y móvil, y los datos se distribuyen según el espacio disponible.
+
+En el formulario de proyecciones, el póster permanece dentro de una columna estable del diálogo en escritorio. Los campos y la confirmación de cambios se desplazan dentro de la otra columna; las acciones inferiores conservan su espacio. La imagen se ajusta también a ventanas de poca altura. En móvil, el póster se apila sobre los campos y el contenido se desplaza dentro del modal.
 
 La creación y modificación de películas comparten validaciones de título, sinopsis, duración, año, clasificación, géneros e idiomas. Se comprueban antes de enviar y también en los DTO de la API. Los mensajes son comprensibles para el usuario y no describen bytes ni codificaciones. Editar conserva la posibilidad existente de vaciar géneros e idiomas.
 
@@ -114,3 +122,18 @@ El 4 de noviembre de 2026 se sustituyeron los ocho controles nativos pendientes 
 Pasan las 1776 pruebas de los 120 archivos del frontend, incluidas las de registro, creación de usuarios y compra que ya utilizaban el calendario. La cobertura global de líneas es 95,90 %; las líneas ejecutables añadidas respecto a `370a259` alcanzan 100 % (46/46), y las ramas añadidas 97,67 % (42/43). También pasan lint, formato, tipos y compilación. Las pruebas verifican selección y limpieza sin consultas duplicadas, fechas ISO en solicitudes, aplicación explícita del historial, límites, cierre, foco y cancelación con un clic desde ambos calendarios de proyecciones.
 
 En Edge, con API simulada, se comprobaron los cuatro componentes a anchos de 320, 390, 768 y 1440 píxeles, incluyendo una ventana horizontal de 768 por 390. El calendario se mantuvo dentro del espacio visible, conservó el foco al abrir y se presentó sobre el contenido de los diálogos. No se observaron desbordamientos horizontales de la página ni excepciones de JavaScript. No se ejecutaron operaciones contra la base de datos real. La revisión utiliza emulación y no sustituye una prueba en un teléfono físico.
+
+## Verificación del hotfix de controles y disponibilidad
+
+La revisión del 4 de noviembre de 2026 cubre los controles de salas, la disponibilidad de compra, la paginación compartida, el póster del formulario de proyecciones y el contraste del cambio de contraseña.
+
+| Aplicación | Archivos de pruebas | Pruebas aprobadas | Cobertura global de líneas | Cobertura de líneas ejecutables añadidas |
+| ---------- | ------------------: | ----------------: | -------------------------: | ---------------------------------------: |
+| API        |                 122 |              2673 |                    98,25 % |                              100 % (3/3) |
+| Web        |                 122 |              1797 |                    95,90 % |                          90,11 % (82/91) |
+
+La cobertura añadida se calcula con LCOV y el diff contra `9284849`, incluyendo los nuevos componentes y utilidades; no incluye CSS. Las ramas añadidas alcanzan 100 % (2/2) en API y 98,17 % (215/219) en web. También pasan lint, formato, tipos y compilación. Las pruebas conservan la protección de compras pendientes, los bloqueos de asientos y la recuperación de compras previas.
+
+En Edge, con respuestas de API simuladas, se comprobaron anchos de 320, 390, 768 y 1440 píxeles. Los selectores de salas con nombres largos no invaden los controles vecinos y conservan su valor completo. Los cinco listados paginados presentan flechas de 44 por 44 píxeles y separación de 12 píxeles, sin desbordar la página. En escritorio, desplazar los campos de proyecciones no desplaza el póster; en una ventana de 1440 por 500 píxeles, la imagen permanece dentro de su columna y sobre el pie de acciones. En móvil, el formulario permite llegar a las acciones mediante su desplazamiento interno.
+
+El encabezado de cambio de contraseña utiliza texto claro en el dashboard y oscuro en el perfil de superficie clara. Se revisaron además los controles visibles de creación de usuarios, películas, sucursales y registro a 320 píxeles, sin intersecciones entre botones. La emulación no sustituye una prueba en un teléfono físico. No se realizaron compras, envíos de correo ni consultas o modificaciones contra Oracle real; los contratos SQL se verificaron mediante mocks. No se modificaron CI/CD, SonarQube ni el esquema de la base de datos.
