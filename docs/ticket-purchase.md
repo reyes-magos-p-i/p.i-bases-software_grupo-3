@@ -6,6 +6,8 @@ El cliente inicia la compra desde una película del catálogo, elige sucursal y 
 
 Los cuatro pasos siguen una barra de progreso que se llena al avanzar y respeta la preferencia de movimiento reducido. El flujo se sitúa junto al header y no incluye un enlace adicional al historial. El selector de fecha conserva la apariencia del calendario compartido con los formularios de usuarios.
 
+Cada cambio de paso lleva al inicio de la página una vez renderizado el nuevo contenido, tanto al avanzar como al retroceder, para clientes e invitados. El desplazamiento es inmediato. Cambiar asientos o categorías, validar datos y reintentar una operación sin salir del paso actual conserva la posición de lectura.
+
 La selección inicial y el resumen presentan el póster de la película mediante `MoviePoster`, compartido con el portal y las proyecciones. Si la imagen no está disponible, se intenta la ruta heredada y luego el reemplazo existente. El resumen alinea el póster con el título en escritorio y móvil. El plano mantiene todos los asientos registrados dentro de un contenedor desplazable, con la referencia de pantalla visible. Las filas sin asientos registrados se ocultan para clientes sin renumerar las demás, y los diagnósticos del plano se reservan para administración. Estos ajustes de presentación no cambian precios, disponibilidad, concurrencia ni confirmación de pago. Véase [Consistencia de interfaz](./interface-consistency.md).
 
 La selección de asientos avisa que no los reserva hasta pagar. Las pantallas del cliente presentan categorías, formato, asiento VIP, importes finales y total, sin explicar la fórmula interna ni mostrar bases y recargos por separado. El resumen y la confirmación no incluyen mensajes sobre la implementación del pago.

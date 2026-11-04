@@ -49,6 +49,7 @@ const {
   error,
   notice,
 } = flow
+watch(step, () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }), { flush: 'post' })
 const emailNotice = ref(false)
 const ticketEmail = usePurchaseEmail(receipt, guestReceipt, (message, failed) => {
   emailNotice.value = !failed
