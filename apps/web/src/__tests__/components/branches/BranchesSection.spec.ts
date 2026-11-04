@@ -181,28 +181,25 @@ describe('BranchesSection', () => {
     expect(view.find('table').exists()).toBe(false)
   })
 
-  it('pages forward and back and changes the page size', async () => {
+  it('pages forward and back with ten results and no page-size selector', async () => {
     getBranches.mockResolvedValue(result({ total: 25, totalPages: 3 }))
     const view = await render()
-    expect(button(view, 'Anterior').attributes('disabled')).toBeDefined()
+    expect(view.find('[name="pageSize"]').exists()).toBe(false)
+    expect(view.get('[aria-label="Página anterior"]').attributes('disabled')).toBeDefined()
     getBranches.mockResolvedValueOnce(result({ total: 25, totalPages: 3, page: 2 }))
-    await button(view, 'Siguiente').trigger('click')
+    await view.get('[aria-label="Página siguiente"]').trigger('click')
     await flushPromises()
-    expect(lastQuery()).toMatchObject({ page: 2 })
-    expect(view.get('.current-page').text()).toContain('2')
-    await button(view, 'Anterior').trigger('click')
+    expect(lastQuery()).toEqual({ page: 2, pageSize: 10 })
+    expect(view.get('[aria-current="page"]').text()).toBe('Página 2 de 3')
+    await view.get('[aria-label="Página anterior"]').trigger('click')
     await flushPromises()
-    expect(lastQuery()).toMatchObject({ page: 1 })
-
-    await view.get('select[name="pageSize"]').setValue('20')
-    await flushPromises()
-    expect(lastQuery()).toEqual({ page: 1, pageSize: 20 })
+    expect(lastQuery()).toEqual({ page: 1, pageSize: 10 })
   })
 
   it('does not page past the last page', async () => {
     const view = await render()
-    expect(button(view, 'Siguiente').attributes('disabled')).toBeDefined()
-    await button(view, 'Siguiente').trigger('click')
+    expect(view.get('[aria-label="Página siguiente"]').attributes('disabled')).toBeDefined()
+    await view.get('[aria-label="Página siguiente"]').trigger('click')
     expect(getBranches).toHaveBeenCalledTimes(1)
   })
 

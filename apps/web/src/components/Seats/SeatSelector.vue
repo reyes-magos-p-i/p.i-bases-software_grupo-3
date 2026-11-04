@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import MovieSeat from './MovieSeat.vue'
+import { registeredSeatMap, validSeatDimensions } from '@/utils/seat-layout'
 import {
   seatKey,
   seatStateLabels,
@@ -37,14 +38,7 @@ const emit = defineEmits<{
 
 const selectedKeys = ref<string[]>([])
 
-const validDimensions = computed(
-  () =>
-    Number.isSafeInteger(props.rows) &&
-    props.rows > 0 &&
-    Number.isSafeInteger(props.columns) &&
-    props.columns > 0 &&
-    props.rows * props.columns <= 10_000,
-)
+const validDimensions = computed(() => validSeatDimensions(props.rows, props.columns))
 
 const limit = computed(() => {
   if (props.maxSelections === 'all') return Infinity
@@ -52,25 +46,7 @@ const limit = computed(() => {
 })
 
 // Missing positions are empty spaces, never fabricated free seats.
-const seatMap = computed(() => {
-  const map = new Map<string, Seat>()
-  if (!validDimensions.value) return map
-
-  for (const seat of props.seats) {
-    if (
-      seat.theaterId === props.theaterId &&
-      Number.isInteger(seat.rowNumber) &&
-      Number.isInteger(seat.columnNumber) &&
-      seat.rowNumber >= 1 &&
-      seat.rowNumber <= props.rows &&
-      seat.columnNumber >= 1 &&
-      seat.columnNumber <= props.columns
-    ) {
-      map.set(seatKey(seat), seat)
-    }
-  }
-  return map
-})
+const seatMap = computed(() => registeredSeatMap(props, props.seats))
 
 const selectedKeySet = computed(() => new Set(selectedKeys.value))
 const selectableSeats = computed(() => Array.from(seatMap.value.values()).filter(canSelect))

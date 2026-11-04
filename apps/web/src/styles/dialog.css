@@ -90,6 +90,19 @@ dialog.cinema-dialog[open] > :not(.dialog-heading) {
   gap: var(--dialog-section-gap);
 }
 
+.cinema-dialog :is(.field, .form-field, .field-grid, .section-grid, fieldset) {
+  min-width: 0;
+}
+
+.cinema-dialog :is(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+  max-width: 100%;
+}
+
+.cinema-dialog .dialog-actions > button {
+  min-width: 0;
+  white-space: normal;
+}
+
 .cinema-dialog :is(.detail-group, .edit-group) > h3 {
   margin: 0 0 16px;
   padding-bottom: 10px;

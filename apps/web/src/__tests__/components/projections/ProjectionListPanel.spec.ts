@@ -259,32 +259,19 @@ describe('ProjectionListPanel', () => {
     )
   })
 
-  it('pages through numbered pages and changes the page size', async () => {
+  it('pages with the shared arrows, ten results and no page-size selector', async () => {
     getProjections.mockResolvedValue(list({ page: 5, totalPages: 10, total: 100 }))
     await render()
-    expect(wrapper!.findAll('.pagination-bar nav > *').map((node) => node.text())).toEqual([
-      'Anterior',
-      '1',
-      '…',
-      '4',
-      '5',
-      '6',
-      '…',
-      '10',
-      'Siguiente',
-    ])
-    expect(wrapper!.get('[aria-current="page"]').text()).toBe('5')
-
-    await wrapper!.get('[aria-label="Página 6"]').trigger('click')
-    expect(lastQuery().page).toBe(6)
-    await wrapper!.findAll('.pagination-bar nav .secondary-button')[0]!.trigger('click')
-    expect(lastQuery().page).toBe(4)
-    await wrapper!.findAll('.pagination-bar nav .secondary-button')[1]!.trigger('click')
-    expect(lastQuery().page).toBe(6)
-
-    await field('pageSize').setValue(25)
+    expect(wrapper!.find('[name="pageSize"]').exists()).toBe(false)
+    expect(wrapper!.get('[aria-current="page"]').text()).toBe('Página 5 de 10')
+    getProjections.mockResolvedValueOnce(list({ page: 6, totalPages: 10, total: 100 }))
+    await wrapper!.get('[aria-label="Página siguiente"]').trigger('click')
     await flushPromises()
-    expect(lastQuery()).toEqual({ page: 1, pageSize: 25 })
+    expect(lastQuery()).toEqual({ page: 6, pageSize: 10 })
+    expect(wrapper!.get('[aria-current="page"]').text()).toBe('Página 6 de 10')
+    await wrapper!.get('[aria-label="Página anterior"]').trigger('click')
+    await flushPromises()
+    expect(lastQuery()).toEqual({ page: 5, pageSize: 10 })
   })
 
   it.each([

@@ -26,6 +26,7 @@ import {
 } from '@/services/purchase-attempt.service'
 import { authErrorStatus } from '@/utils/auth-errors'
 import { validEmail } from '@/utils/user-validation'
+import { registeredSeatMap } from '@/utils/seat-layout'
 import type { Seat } from '@/types/seats'
 import type {
   GuestBuyer,
@@ -256,8 +257,10 @@ export function useTicketPurchase(onExpired: () => void) {
     try {
       const data = await api().seats(id, operation.controller.signal)
       if (operation.active()) {
-        availability.value = data
-        step.value = 2
+        if (availableSeats(data).length) {
+          availability.value = data
+          step.value = 2
+        } else soldOut(id)
       }
     } catch (error_) {
       if (operation.active()) failed(error_)
@@ -265,10 +268,26 @@ export function useTicketPurchase(onExpired: () => void) {
       if (operation.serial === generation) loading.value = false
     }
   }
-  function applyAvailability(data: SeatAvailability) {
-    const free = new Set(
-      data.seats.filter((seat) => seat.state === 'free').map((seat) => seat.positionId),
+  function availableSeats(data: SeatAvailability) {
+    return [...registeredSeatMap(data.function, data.seats).values()].filter(
+      (seat) => seat.state === 'free',
     )
+  }
+  function soldOut(id: number) {
+    functions.value = functions.value.filter((item) => item.id !== id)
+    availability.value = null
+    selected.value = []
+    categories.value = {}
+    invalidate()
+    step.value = 1
+    notice.value = 'Esta función ya no tiene asientos disponibles. Selecciona otra función.'
+  }
+  function applyAvailability(data: SeatAvailability) {
+    const free = new Set(availableSeats(data).map((seat) => seat.positionId))
+    if (!free.size) {
+      soldOut(data.function.id)
+      return
+    }
     const remaining = selected.value.filter((seat) =>
       free.has((seat.rowNumber - 1) * data.function.columns + seat.columnNumber),
     )
@@ -501,7 +520,9 @@ export function useTicketPurchase(onExpired: () => void) {
     await load(currentMovieId)
   }
   function back() {
-    if (!busy.value && !locked()) step.value = Math.max(1, step.value - 1)
+    if (busy.value || locked()) return
+    if (step.value === 2 && currentMovieId) void load(currentMovieId)
+    else step.value = Math.max(1, step.value - 1)
   }
   function resetOperations() {
     generation++

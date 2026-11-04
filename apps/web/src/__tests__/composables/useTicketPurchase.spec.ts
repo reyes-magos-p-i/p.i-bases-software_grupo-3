@@ -155,6 +155,61 @@ afterEach(() => {
   vi.useRealTimers()
 })
 describe('Ticket purchase coordination', () => {
+  it.each(['client', 'guest'])(
+    'omits a function that sells out while the %s chooses it',
+    async (kind) => {
+      if (kind === 'guest') {
+        wrapper.unmount()
+        clearClientSession()
+        render()
+      }
+      await flow.load(2)
+      const readSeats = kind === 'guest' ? getGuestPurchaseSeats : getPurchaseSeats
+      vi.mocked(readSeats).mockResolvedValueOnce({
+        function: context,
+        categories: [],
+        maxTickets: 10,
+        seats: seats.map((seat) => ({ ...seat, state: 'in-use' })),
+      })
+      await flow.chooseFunction(4)
+      expect(flow.step.value).toBe(1)
+      expect(flow.functions.value).toEqual([])
+      expect(flow.availability.value).toBeNull()
+      expect(flow.notice.value).toContain('ya no tiene asientos disponibles')
+      expect(confirmPurchase).not.toHaveBeenCalled()
+      expect(confirmGuestPurchase).not.toHaveBeenCalled()
+    },
+  )
+
+  it('returns to the function list when the last registered seat becomes occupied', async () => {
+    await ready()
+    vi.mocked(getPurchaseSeats).mockResolvedValueOnce({
+      function: context,
+      categories: [],
+      maxTickets: 10,
+      seats: seats.map((seat) => ({ ...seat, state: 'in-use' })),
+    })
+    await flow.refresh()
+    expect(flow.step.value).toBe(1)
+    expect(flow.selected.value).toEqual([])
+    expect(flow.quote.value).toBeNull()
+    expect(flow.functions.value).toEqual([])
+  })
+
+  it('reloads the available functions when returning from seat selection', async () => {
+    await flow.load(2)
+    await flow.chooseFunction(4)
+    vi.mocked(getPurchaseFunctions).mockResolvedValueOnce({
+      movie: { id: 2, title: 'Película', synopsis: '', posterImage: '' },
+      functions: [],
+    })
+    flow.back()
+    await flushPromises()
+    expect(flow.step.value).toBe(1)
+    expect(flow.functions.value).toEqual([])
+    expect(flow.availability.value).toBeNull()
+  })
+
   async function guestReady() {
     wrapper.unmount()
     clearClientSession()

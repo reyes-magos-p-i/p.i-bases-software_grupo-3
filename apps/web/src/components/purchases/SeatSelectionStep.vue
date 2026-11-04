@@ -2,6 +2,7 @@
 import { computed, useId } from 'vue'
 import SeatSelector from '@/components/Seats/SeatSelector.vue'
 import { formatDateTime } from '@/utils/transaction-format'
+import { registeredSeatMap } from '@/utils/seat-layout'
 import type { Seat } from '@/types/seats'
 import type { SeatAvailability, TicketCategory } from '@/types/purchase'
 const props = defineProps<{
@@ -18,7 +19,10 @@ const emit = defineEmits<{
 }>()
 const id = useId()
 const available = computed(
-  () => props.availability.seats.filter((seat) => seat.state === 'free').length,
+  () =>
+    [...registeredSeatMap(props.availability.function, props.availability.seats).values()].filter(
+      (seat) => seat.state === 'free',
+    ).length,
 )
 // Only a setting below the free seats limits the selection, so buyers keep 'select all'.
 const limit = computed(() =>

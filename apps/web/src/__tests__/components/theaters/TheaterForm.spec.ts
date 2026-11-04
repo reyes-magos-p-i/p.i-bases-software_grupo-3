@@ -79,6 +79,21 @@ describe('TheaterForm projector select', () => {
 })
 
 describe('TheaterForm cinema select', () => {
+  it('keeps the complete branch value and label when its visible text must fit a narrow column', async () => {
+    const name = 'Cinetadel Multiplaza del Este · Sucursal con un nombre especialmente largo'
+    const view = mount(TheaterForm, {
+      props: { ...props, cinemas: [{ branchId: 1, name, companyId: 1 }] },
+    })
+    const select = view.get<HTMLSelectElement>('[name="cinema"]')
+    await select.setValue(name)
+    expect(select.element.value).toBe(name)
+    const options = select.findAll('option')
+    expect(options[options.length - 1]!.text()).toBe(name)
+    const label = view.get(`label[for="${select.attributes('id')}"]`)
+    expect(label.text()).toContain('Sucursal')
+    view.unmount()
+  })
+
   it('shows "No hay sucursales" when there are no cinemas', () => {
     const select = mount(TheaterForm, { props }).get('[name="cinema"]')
 

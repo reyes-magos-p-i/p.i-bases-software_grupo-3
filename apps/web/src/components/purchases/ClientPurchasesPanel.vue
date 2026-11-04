@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaginationControls from '@/components/common/PaginationControls.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, useId } from 'vue'
 import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
@@ -174,24 +175,15 @@ onBeforeUnmount(() => {
               </button>
             </template>
           </CrudTable>
-          <nav v-if="data.totalPages > 1" aria-label="Paginación de compras">
-            <button
-              type="button"
-              :disabled="data.page <= 1"
-              aria-label="Página anterior"
-              @click="load(data.page - 1)"
-            >
-              <i class="bi bi-chevron-left" aria-hidden="true" /></button
-            ><span>Página {{ data.page }} de {{ data.totalPages }}</span
-            ><button
-              type="button"
-              :disabled="data.page >= data.totalPages"
-              aria-label="Página siguiente"
-              @click="load(data.page + 1)"
-            >
-              <i class="bi bi-chevron-right" aria-hidden="true" />
-            </button>
-          </nav>
+          <PaginationControls
+            class="history-pagination"
+            v-if="data.totalPages > 1"
+            label="Paginación de compras"
+            :page="data.page"
+            :total-pages="data.totalPages"
+            :disabled="loading"
+            @change="load"
+          />
         </template>
       </template>
     </div>
@@ -270,11 +262,7 @@ button:disabled {
 .status-badge.cancelled {
   font-weight: 600;
 }
-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
+.history-pagination {
   margin-top: 16px;
 }
 </style>
