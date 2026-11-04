@@ -25,11 +25,18 @@ import { authErrorMessage } from '@/utils/auth-errors'
 const props = withDefaults(
   defineProps<{
     embedded?: boolean
+    surface?: 'light' | 'dark'
     accountType?: 'client' | 'employee'
     recovery?: boolean
     recoveryToken?: string
   }>(),
-  { embedded: false, accountType: 'client', recovery: false, recoveryToken: '' },
+  {
+    embedded: false,
+    surface: undefined,
+    accountType: 'client',
+    recovery: false,
+    recoveryToken: '',
+  },
 )
 const emit = defineEmits<{
   'return-to-dashboard': []
@@ -37,6 +44,7 @@ const emit = defineEmits<{
   'submission-state': [loading: boolean]
 }>()
 const router = useRouter()
+const surface = computed(() => props.surface ?? (props.embedded ? 'light' : 'dark'))
 const user = computed(() =>
   props.accountType === 'employee'
     ? (employeeSession.user.value as EmployeeIdentity | null)
@@ -261,7 +269,10 @@ function goHome() {
 <template>
   <AppHeader v-if="!props.embedded" />
 
-  <main class="change-password-page" :class="{ 'is-embedded': props.embedded }">
+  <main
+    class="change-password-page"
+    :class="{ 'is-embedded': props.embedded, 'on-light-surface': surface === 'light' }"
+  >
     <div class="change-password-container">
       <header class="page-heading">
         <p class="page-eyebrow">SEGURIDAD DE LA CUENTA</p>
@@ -284,7 +295,7 @@ function goHome() {
         :message="
           props.embedded ? 'Cargando seguridad…' : 'Comprobando el estado de tu contraseña…'
         "
-        :surface="props.embedded ? 'light' : 'dark'"
+        :surface="surface"
       />
 
       <div v-else class="password-layout">
@@ -576,6 +587,8 @@ function goHome() {
 .is-embedded .page-heading {
   margin-bottom: 20px;
   text-align: left;
+}
+.on-light-surface .page-heading {
   color: var(--text-primary);
 }
 
@@ -1012,12 +1025,12 @@ function goHome() {
 .page-status {
   color: var(--text-on-dark-secondary);
 }
-.is-embedded .page-heading .page-eyebrow,
-.is-embedded .page-heading h1 {
+.on-light-surface .page-heading .page-eyebrow,
+.on-light-surface .page-heading h1 {
   color: var(--text-primary);
 }
-.is-embedded .page-description,
-.is-embedded .page-status {
+.on-light-surface .page-description,
+.on-light-surface .page-status {
   color: var(--text-secondary);
 }
 </style>

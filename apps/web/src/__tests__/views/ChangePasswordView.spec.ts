@@ -72,6 +72,7 @@ describe('ChangePasswordView.vue', () => {
   function mountView(
     props: {
       embedded?: boolean
+      surface?: 'light' | 'dark'
       accountType?: 'client' | 'employee'
       recovery?: boolean
       recoveryToken?: string
@@ -110,6 +111,15 @@ describe('ChangePasswordView.vue', () => {
     expect(wrapper.find('form').exists()).toBe(true)
     expect(getEmployeePasswordStatus).not.toHaveBeenCalled()
     wrapper.unmount()
+  })
+
+  it('keeps the dashboard heading and loading indicator on the explicitly dark surface', async () => {
+    vi.mocked(getEmployeePasswordStatus).mockReturnValueOnce(new Promise(() => {}))
+    const view = mountView({ embedded: true, accountType: 'employee', surface: 'dark' })
+    expect(view.get('main').classes()).not.toContain('on-light-surface')
+    expect(view.getComponent(LoadingState).props('surface')).toBe('dark')
+    expect(view.get('.page-heading h1').text()).toBe('Cambiar contraseña')
+    view.unmount()
   })
 
   it('replaces the profile security indicator with a retryable error after a failed lookup', async () => {
