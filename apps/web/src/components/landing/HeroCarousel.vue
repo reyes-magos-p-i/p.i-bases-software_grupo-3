@@ -105,16 +105,6 @@ function leave(event: FocusEvent) {
         @click="selectSlide(index)"
       ></button>
     </div>
-    <button
-      v-if="slides.length > 1"
-      type="button"
-      class="carousel-pause"
-      :aria-label="paused ? 'Reanudar carrusel' : 'Pausar carrusel'"
-      :aria-pressed="paused"
-      @click="paused = !paused"
-    >
-      <i :class="['bi', paused ? 'bi-play-fill' : 'bi-pause-fill']" aria-hidden="true" />
-    </button>
   </section>
 </template>
 
@@ -216,17 +206,6 @@ function leave(event: FocusEvent) {
 }
 .indicator.active::after {
   background-color: var(--accent-color);
-}
-.carousel-pause {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: var(--radius-small);
-  color: var(--text-on-dark);
-  background: var(--carousel-control-background);
 }
 .hero-carousel button:focus-visible {
   outline-color: var(--focus-on-dark);

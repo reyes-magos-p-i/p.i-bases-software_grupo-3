@@ -52,7 +52,7 @@ describe('HeroCarousel', () => {
     expect(wrapper.get('img').attributes('src')).toBe(placeholderImage)
   })
 
-  it('pauses rotation during pointer or keyboard interaction and resumes explicitly', async () => {
+  it('pauses rotation during interaction and resumes after focus leaves', async () => {
     vi.useFakeTimers()
     wrapper = mount(HeroCarousel, { props: { movies }, attachTo: document.body })
     await wrapper.trigger('mouseenter')
@@ -64,10 +64,7 @@ describe('HeroCarousel', () => {
     await vi.advanceTimersByTimeAsync(5000)
     expect(wrapper.get('img').attributes('alt')).toBe('Póster de Película 1')
     await wrapper.trigger('focusout', { relatedTarget: null })
-    await wrapper.get('[aria-label="Pausar carrusel"]').trigger('click')
-    await vi.advanceTimersByTimeAsync(5000)
-    expect(wrapper.get('img').attributes('alt')).toBe('Póster de Película 1')
-    await wrapper.get('[aria-label="Reanudar carrusel"]').trigger('click')
+    expect(wrapper.find('.carousel-pause').exists()).toBe(false)
     await vi.advanceTimersByTimeAsync(5000)
     expect(wrapper.get('img').attributes('alt')).toBe('Póster de Película 2')
   })
