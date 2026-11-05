@@ -1,3 +1,5 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { ImageHandlerController } from './image-handler.controller';
 import { ImageHandlerService } from './image-handler.service';
 
@@ -7,49 +9,70 @@ describe('ImageHandlerController', () => {
     savePoster: jest.Mock;
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     service = {
       savePoster: jest.fn(),
     };
 
-    controller = new ImageHandlerController(
-      service as unknown as ImageHandlerService,
-    );
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [ImageHandlerController],
+      providers: [
+        {
+          provide: ImageHandlerService,
+          useValue: service,
+        },
+      ],
+    }).compile();
+
+    controller = module.get<ImageHandlerController>(ImageHandlerController);
   });
 
-  it('passes the uploaded file to the service and returns its result', async () => {
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+
+  it('passes the uploaded file to the service and returns its response', async () => {
     const file = {
       fieldname: 'image',
-      originalname: 'poster.jpg',
-      mimetype: 'image/jpeg',
-      buffer: Buffer.from('poster'),
-      size: 6,
+      originalname: 'poster.png',
+      encoding: '7bit',
+      mimetype: 'image/png',
+      buffer: Buffer.from('image content'),
+      size: 13,
     } as Express.Multer.File;
 
-    const result = {
-      filename: 'saved.jpg',
-      path: '/uploads/posters/saved.jpg',
+    const response = {
+      filename: 'poster.webp',
+      path: '/uploads/posters/poster.webp',
     };
 
-    service.savePoster.mockResolvedValue(result);
+    service.savePoster.mockResolvedValue(response);
 
-    expect(await controller.uploadPoster(file)).toEqual(result);
+    await expect(controller.uploadPoster(file)).resolves.toEqual(response);
+
     expect(service.savePoster).toHaveBeenCalledTimes(1);
     expect(service.savePoster).toHaveBeenCalledWith(file);
   });
 
   it('passes undefined to the service when no file is provided', async () => {
-    service.savePoster.mockResolvedValue(undefined);
+    const error = new BadRequestException('Archivo requerido');
+    service.savePoster.mockRejectedValue(error);
 
-    await controller.uploadPoster();
+    await expect(controller.uploadPoster()).rejects.toBe(error);
 
+    expect(service.savePoster).toHaveBeenCalledTimes(1);
     expect(service.savePoster).toHaveBeenCalledWith(undefined);
   });
 
   it('propagates service errors', async () => {
-    const error = new Error('Invalid poster');
+    const file = {
+      buffer: Buffer.from('invalid image'),
+      mimetype: 'image/png',
+    } as Express.Multer.File;
+
+    const error = new BadRequestException('Imagen inválida');
     service.savePoster.mockRejectedValue(error);
 
-    await expect(controller.uploadPoster()).rejects.toBe(error);
+    await expect(controller.uploadPoster(file)).rejects.toBe(error);
   });
 });
