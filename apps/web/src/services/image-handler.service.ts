@@ -14,7 +14,10 @@ export async function uploadPoster(file: File): Promise<PosterUploadResponse> {
   return response.data
 }
 
-export function getPosterUrl(storedValue?: string | null, legacy = false): string | null {
+export function getPosterUrl(
+  storedValue?: string | null,
+  legacy = false,
+): string | null {
   if (!storedValue) return null
 
   const filename = storedValue.split('/').pop()
@@ -26,15 +29,18 @@ export function getPosterUrl(storedValue?: string | null, legacy = false): strin
     throw new Error('Falta configurar VITE_API_BASE_URL.')
   }
 
-  const imageOrigin = apiBaseUrl.startsWith('/')
-    ? window.location.origin
-    : new URL(apiBaseUrl).origin
+  const base = new URL(apiBaseUrl, window.location.origin)
 
-  if (legacy) {
-    const base = new URL(apiBaseUrl, window.location.origin)
-    if (!base.pathname.endsWith('/')) base.pathname += '/'
-    return new URL(`image/${encodeURIComponent(filename)}`, base).href
+  // Your local base has no path; NestJS still requires /api.
+  if (base.pathname === '/') {
+    base.pathname = '/api/'
+  } else if (!base.pathname.endsWith('/')) {
+    base.pathname += '/'
   }
 
-  return new URL(`/uploads/posters/${encodeURIComponent(filename)}`, imageOrigin).href
+  const path = legacy
+    ? `image/${encodeURIComponent(filename)}`
+    : `image-handler/posters/${encodeURIComponent(filename)}`
+
+  return new URL(path, base).href
 }
