@@ -128,8 +128,10 @@ const purchaseCode = computed(() => {
 <style scoped>
 .function-cancelled {
   padding: 12px 16px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--error-color);
   border-radius: var(--radius-small);
+  color: var(--error-text);
+  background: var(--error-background);
   font-weight: 600;
 }
 .purchase-summary {

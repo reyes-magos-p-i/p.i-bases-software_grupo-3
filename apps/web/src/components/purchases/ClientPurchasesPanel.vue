@@ -257,7 +257,8 @@ button:disabled {
 .function-cancelled {
   display: block;
   margin-top: 4px;
-  color: var(--text-secondary);
+  color: var(--error-text);
+  font-weight: 600;
 }
 .status-badge.cancelled {
   font-weight: 600;

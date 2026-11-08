@@ -4,6 +4,8 @@ import QrCode from '@/components/common/QrCode.vue'
 import MoviePoster from '@/components/common/MoviePoster.vue'
 import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
 import type { PurchaseQuote, PurchaseReceipt } from '@/types/purchase'
+import summarySource from '@/components/purchases/PurchaseSummary.vue?raw'
+import { contrastRatio, cssValue } from '../../helpers/contrast'
 const quote = {
   function: {
     id: 4,
@@ -180,11 +182,20 @@ describe('PurchaseSummary', () => {
     } as never
     const cancelled = mount(PurchaseSummary, { props: { purchase } })
     expect(cancelled.text()).toContain('Esta función fue cancelada.')
+    expect(cancelled.find('.function-cancelled').attributes('role')).toBe('status')
     cancelled.unmount()
     const active = mount(PurchaseSummary, {
       props: { purchase: { ...(purchase as object), functionCancelled: false } as never },
     })
     expect(active.text()).not.toContain('fue cancelada')
+    expect(active.find('.function-cancelled').exists()).toBe(false)
     active.unmount()
+  })
+  it('shows the cancelled-function warning in red with at least 4.5:1', () => {
+    const color = cssValue(summarySource, '.function-cancelled', 'color')
+    const background = cssValue(summarySource, '.function-cancelled', 'background')
+    expect(color).toBe('var(--error-text)')
+    expect(background).toBe('var(--error-background)')
+    expect(contrastRatio(color, background)).toBeGreaterThanOrEqual(4.5)
   })
 })
