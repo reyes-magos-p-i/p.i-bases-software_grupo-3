@@ -12,7 +12,8 @@ type Rgb = [number, number, number]
 
 function declarations(css: string) {
   const values = new Map<string, string>()
-  const pattern = /(--[\w-]+)\s*:\s*([^;]+);/g
+  // No \s* after the colon: [^;]+ already takes those spaces and the value is trimmed below.
+  const pattern = /(--[\w-]+)\s*:([^;]+);/g
   for (let match = pattern.exec(css); match; match = pattern.exec(css)) {
     // Multi-line color-mix() declarations are folded to "color-mix(in srgb, a 85%, b)".
     const value = match[2]!.replace(/\s+/g, ' ').replace(/\(\s/g, '(').replace(/\s\)/g, ')')
@@ -51,7 +52,7 @@ export function resolveColor(value: string): Rgb {
   const hex = /^#([\da-f]{3}|[\da-f]{6})$/i.exec(color)
   if (hex) {
     const digits = hex[1]!.length === 3 ? [...hex[1]!].map((d) => d + d).join('') : hex[1]!
-    return [0, 2, 4].map((i) => parseInt(digits.slice(i, i + 2), 16)) as Rgb
+    return [0, 2, 4].map((i) => Number.parseInt(digits.slice(i, i + 2), 16)) as Rgb
   }
   const variable = /^var\((--[\w-]+)\)$/.exec(color)
   if (variable) {
@@ -91,10 +92,10 @@ export function contrastRatio(foreground: string, background: string) {
 
 /** Value of a property inside the first rule for a selector in a component's source. */
 export function cssValue(source: string, selector: string, property: string) {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const rule = new RegExp(`(?:^|[},\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(source)
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
+  const rule = new RegExp(String.raw`(?:^|[},\s])${escaped}\s*\{([^}]*)\}`).exec(source)
   if (!rule) throw new Error(`No rule for ${selector}`)
-  const value = new RegExp(`(?:^|;|\\s)${property}\\s*:\\s*([^;]+);`).exec(rule[1]!)
+  const value = new RegExp(String.raw`(?:^|;|\s)${property}\s*:([^;]+);`).exec(rule[1]!)
   if (!value) throw new Error(`No ${property} in ${selector}`)
   return value[1]!.trim()
 }
