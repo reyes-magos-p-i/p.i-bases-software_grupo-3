@@ -250,7 +250,7 @@ defineExpose({ refresh })
     <fieldset class="filters" :disabled="!options">
       <legend class="visually-hidden">Filtros de proyecciones</legend>
       <label
-        ><span class="visually-hidden">Estado</span>
+        ><span>Estado</span>
         <select v-model="filters.status" name="status" @change="filtersChanged">
           <option value="">Todos los estados</option>
           <option v-for="[value, label] in statuses" :key="value" :value="value">
@@ -259,7 +259,7 @@ defineExpose({ refresh })
         </select>
       </label>
       <label
-        ><span class="visually-hidden">Sucursal</span>
+        ><span>Sucursal</span>
         <select
           v-model="filters.branchId"
           name="branchId"
@@ -277,7 +277,7 @@ defineExpose({ refresh })
         </select>
       </label>
       <label
-        ><span class="visually-hidden">Sala</span>
+        ><span>Sala</span>
         <select v-model="filters.theaterId" name="theaterId" @change="filtersChanged">
           <option value="">Todas las salas</option>
           <option
@@ -290,7 +290,7 @@ defineExpose({ refresh })
         </select>
       </label>
       <label
-        ><span class="visually-hidden">Película</span>
+        ><span>Película</span>
         <select
           v-model="filters.movieId"
           name="movieId"

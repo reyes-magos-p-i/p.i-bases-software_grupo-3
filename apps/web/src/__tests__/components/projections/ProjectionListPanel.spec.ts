@@ -228,6 +228,47 @@ describe('ProjectionListPanel', () => {
     expect(field('search').element).toHaveProperty('value', '')
   })
 
+  const filterLabels = [
+    ['status', 'Estado'],
+    ['branchId', 'Sucursal'],
+    ['theaterId', 'Sala'],
+    ['movieId', 'Película'],
+    ['timeFrom', 'Hora inicio'],
+    ['timeTo', 'Hora fin'],
+  ] as const
+  const visibleLabel = (name: string) => {
+    const label = field(name).element.closest('label')!
+    const title = label.querySelector('span')!
+    expect(title.classList.contains('visually-hidden')).toBe(false)
+    return title.textContent
+  }
+
+  it('shows a visible title on every filter box', async () => {
+    await render()
+    for (const [name, title] of filterLabels) expect(visibleLabel(name)).toBe(title)
+    const dateTitles = wrapper!.findAll('.date-filter > label').map((label) => label.text())
+    expect(dateTitles).toEqual(['Fecha inicio', 'Fecha fin'])
+  })
+
+  it('keeps each title next to the chosen value and shows only the title after clearing', async () => {
+    await render()
+    await field('status').setValue('ACTIVE')
+    await field('branchId').setValue('2')
+    await field('theaterId').setValue('4')
+    await field('movieId').setValue('3')
+    await flushPromises()
+    for (const [name, title] of filterLabels.slice(0, 4)) expect(visibleLabel(name)).toBe(title)
+    expect(lastQuery()).toMatchObject({ status: 'ACTIVE', branchId: 2, theaterId: 4, movieId: 3 })
+
+    await wrapper!.get('.search-bar .secondary-button').trigger('click')
+    await flushPromises()
+    for (const [name, title] of filterLabels.slice(0, 4)) {
+      expect(visibleLabel(name)).toBe(title)
+      expect(field(name).element).toHaveProperty('value', '')
+    }
+    expect(lastQuery()).toEqual({ page: 1, pageSize: 10 })
+  })
+
   it.each([
     ['search', 'x'.repeat(101), 'La búsqueda admite como máximo 100 caracteres.'],
     ['dateTo', '2000-01-01', 'La fecha inicial no puede ser posterior a la fecha final.'],
