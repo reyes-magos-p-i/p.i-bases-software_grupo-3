@@ -587,7 +587,8 @@ button:focus-visible {
 }
 .result-count {
   margin: 0 0 12px;
-  color: var(--text-secondary);
+  /* The panel sits on the dark dashboard background, like Users or Transactions. */
+  color: var(--text-on-dark-secondary);
   font-size: 0.875rem;
 }
 .empty-state {
