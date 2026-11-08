@@ -246,10 +246,6 @@ async function logoutClient() {
     )
   }
 }
-
-function goToChangePassword() {
-  void router.push('/account/password')
-}
 </script>
 
 <template>
@@ -263,7 +259,6 @@ function goToChangePassword() {
           v-if="clientUser"
           :user="clientUser"
           @logout="logoutClient"
-          @change-password="goToChangePassword"
           @profile="router.push('/account/profile')"
         />
         <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"

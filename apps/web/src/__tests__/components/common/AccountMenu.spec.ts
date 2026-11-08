@@ -23,10 +23,10 @@ describe('AccountMenu.vue', () => {
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
     expect(wrapper.get('.account-dropdown').text()).toContain('Mi perfil')
     expect(wrapper.get('.account-dropdown').text()).not.toContain('Ajustes de Cuenta')
-    expect(wrapper.get('.account-dropdown').text()).toContain('Cambiar contraseña')
+    // SCRUM-430: changing the password lives only in Mi perfil > Seguridad.
+    expect(wrapper.get('.account-dropdown').text()).not.toContain('Cambiar contraseña')
     expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
       'Mi perfil',
-      'Cambiar contraseña',
       'Cerrar sesión',
     ])
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
