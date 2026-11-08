@@ -74,7 +74,7 @@ async function enforceClientPasswordStatus() {
   try {
     const expiry = await getClientPasswordStatus()
     if (disposed || clientUser.value !== user || !hasClientSession()) return
-    announcePasswordExpiry(expiry)
+    announcePasswordExpiry(expiry, 'client')
     if (expiry.status !== 'valid') {
       await router.replace({ path: PASSWORD_PATH, query: { reason: expiry.status } })
     }
@@ -246,10 +246,6 @@ async function logoutClient() {
     )
   }
 }
-
-function goToChangePassword() {
-  void router.push('/account/password')
-}
 </script>
 
 <template>
@@ -263,7 +259,6 @@ function goToChangePassword() {
           v-if="clientUser"
           :user="clientUser"
           @logout="logoutClient"
-          @change-password="goToChangePassword"
           @profile="router.push('/account/profile')"
         />
         <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"

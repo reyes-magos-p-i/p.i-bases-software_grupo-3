@@ -7,7 +7,6 @@ const props = defineProps<{ user: ClientIdentity }>()
 const emit = defineEmits<{
   (event: 'profile'): void
   (event: 'logout'): void
-  (event: 'change-password'): void
 }>()
 const menuOpen = ref(false)
 const root = ref<HTMLElement | null>(null)
@@ -99,10 +98,6 @@ onBeforeUnmount(() => {
         <button type="button" @click="openProfile">
           <i class="bi bi-person-badge" aria-hidden="true"></i>
           Mi perfil
-        </button>
-        <button type="button" @click="emit('change-password')">
-          <i class="bi bi-key" aria-hidden="true"></i>
-          Cambiar contraseña
         </button>
         <button type="button" class="account-logout" aria-label="Cerrar sesión" @click="logout">
           <i class="bi bi-box-arrow-right" aria-hidden="true"></i>

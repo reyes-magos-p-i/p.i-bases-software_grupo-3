@@ -206,7 +206,6 @@ describe('AppHeader authentication navigation', () => {
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
     expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
       'Mi perfil',
-      'Cambiar contraseña',
       'Cerrar sesión',
     ])
 
@@ -273,7 +272,8 @@ describe('AppHeader authentication navigation', () => {
     await flushPromises()
 
     expect(router.currentRoute.value.fullPath).toBe('/')
-    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(3))
+    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(3, 'client'))
+    expect(passwordExpiryNotice.message.value).toContain('Cámbiala en Mi perfil > Seguridad.')
 
     // Logging out removes a warning that is still on screen.
     if (!wrapper.find('.account-dropdown').exists())
