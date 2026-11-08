@@ -6,6 +6,8 @@ import DatePicker from '@/components/common/DatePicker.vue'
 import { getMyPurchases } from '@/services/purchase.service'
 import { establishClientSession, clearClientSession } from '@/services/client-session.service'
 import type { PurchaseList } from '@/types/purchase'
+import panelSource from '@/components/purchases/ClientPurchasesPanel.vue?raw'
+import { contrastRatio, cssValue } from '../../helpers/contrast'
 
 vi.mock('@/facebook-auth', () => ({ fbAuth: { status: 'unknown' }, logoutFromFacebook: vi.fn() }))
 vi.mock('@/services/purchase.service', () => ({
@@ -117,6 +119,22 @@ describe('ClientPurchasesPanel', () => {
     const rows = wrapper.findAll('tbody tr').map((row) => row.text())
     expect(rows[0]).toContain('Función cancelada')
     expect(rows[1]).not.toContain('Función cancelada')
+    const [cancelledRow, activeRow] = wrapper.findAll('tbody tr')
+    expect(cancelledRow!.find('.function-cancelled').text()).toBe('Función cancelada')
+    // The red style only exists on the cancelled label, so an active purchase has no red text.
+    expect(activeRow!.find('.function-cancelled').exists()).toBe(false)
+  })
+
+  it('shows "Función cancelada" in red with at least 4.5:1 on every table row background', () => {
+    const color = cssValue(panelSource, '.function-cancelled', 'color')
+    expect(color).toBe('var(--error-text)')
+    for (const background of [
+      '--table-background',
+      '--table-stripe-background',
+      '--table-hover-background',
+    ]) {
+      expect(contrastRatio(color, `var(${background})`)).toBeGreaterThanOrEqual(4.5)
+    }
   })
 
   it('uses the singular for one purchase', async () => {
