@@ -23,14 +23,14 @@ describe('PasswordExpiryNotice', () => {
   it('shows the warning as an alert popup and hides it when the popup closes', async () => {
     const wrapper = mount(PasswordExpiryNotice)
     expectPasswordExpiryNotice()
-    announcePasswordExpiry({ status: 'valid', expirationDays: 30, expiresInDays: 2 })
+    announcePasswordExpiry({ status: 'valid', expirationDays: 30, expiresInDays: 2 }, 'client')
     await nextTick()
 
     const popup = wrapper.getComponent(NotificationPopup)
     expect(wrapper.find('.password-expiry-notice').exists()).toBe(true)
     expect(popup.props()).toMatchObject({
       type: 'alert',
-      message: passwordExpiryMessage(2),
+      message: passwordExpiryMessage(2, 'client'),
       duration: 10000,
     })
 

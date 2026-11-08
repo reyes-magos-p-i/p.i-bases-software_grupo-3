@@ -400,7 +400,10 @@ describe('DashboardView', () => {
     expect(view.get('[aria-current="page"]').attributes('aria-label')).not.toBe(
       'Cambiar contraseña',
     )
-    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(1))
+    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(1, 'employee'))
+    expect(passwordExpiryNotice.message.value).toContain(
+      'Cámbiala en la sección Cambiar contraseña.',
+    )
     dismissPasswordExpiry()
   })
 
