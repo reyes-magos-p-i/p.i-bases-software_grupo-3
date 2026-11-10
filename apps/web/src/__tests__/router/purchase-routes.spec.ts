@@ -11,7 +11,7 @@ vi.mock('@/facebook-auth', () => ({ fbAuth: { status: 'unknown' }, logoutFromFac
 describe('Purchase route boundaries', () => {
   beforeEach(() => clearClientSession())
   afterAll(() => router.options.history.destroy())
-  it.each(['/buy-tickets?movieId=2', '/guest-purchases'])(
+  it.each(['/buy-tickets?movieId=2', '/guest-purchases/receipt#12.4AVG75NWK52Z476W4QDMW7DYQE'])(
     'allows an anonymous visitor to enter %s',
     async (path) => {
       const to = router.resolve(path) as unknown as Parameters<typeof requireClientSession>[0]
@@ -20,6 +20,10 @@ describe('Purchase route boundaries', () => {
       expect(to.matched).toHaveLength(1)
     },
   )
+  it('removes the manual consultation page', () => {
+    expect(router.resolve('/guest-purchases').name).toBe('NotFound')
+    expect(router.resolve('/guest-purchases/receipt').name).toBe('guest-purchase-receipt')
+  })
   it.each(['/account/profile', '/account/password'])(
     'continues requiring a client identity for %s',
     async (path) => {

@@ -831,18 +831,16 @@ describe('Atomic purchase storage', () => {
   });
   it('checks the consultation secret before reading tickets and excludes client invoices', async () => {
     const code = guestPurchaseCode(12, valid.requestKey);
-    await expect(repo.findGuest('ORD-000012')).rejects.toThrow(
-      'código de consulta',
-    );
+    await expect(repo.findGuest('ORD-000012')).rejects.toThrow('este enlace');
     expect(execute).not.toHaveBeenCalled();
     overrides['REQUEST_KEY AS'] = { rows: [] };
-    await expect(repo.findGuest(code)).rejects.toThrow('código de consulta');
+    await expect(repo.findGuest(code)).rejects.toThrow('este enlace');
     overrides['REQUEST_KEY AS'] = {
       rows: [{ requestKey: valid.requestKey, email: 'guest@example.com' }],
     };
     await expect(
       repo.findGuest(guestPurchaseCode(12, 'other')),
-    ).rejects.toThrow('código de consulta');
+    ).rejects.toThrow('este enlace');
     expect(
       execute.mock.calls.some(([sql]) => sql.includes('FROM TICKETS')),
     ).toBe(false);

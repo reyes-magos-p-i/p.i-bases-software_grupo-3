@@ -31,8 +31,9 @@ function functionNotice(status: string) {
 export function ticketEmailTemplate(
   message: TicketEmailMessage,
   theme: EmailTheme,
+  guestAccessUrl?: string,
 ) {
-  const { receipt, accessCode } = message;
+  const { receipt } = message;
   const tickets = receipt.tickets.map((ticket) => [
     `Boleto ${ticket.id}${ticket.functionId !== receipt.function.id ? ' · Reprogramado' : ''}`,
     ticket.title,
@@ -47,11 +48,11 @@ export function ticketEmailTemplate(
     '',
     ...tickets.flatMap((lines) => [...lines, '']),
     'El código QR adjunto identifica esta compra.',
-    ...(accessCode
+    ...(guestAccessUrl
       ? [
           '',
-          'Código privado de consulta: ' + accessCode,
-          'Guárdalo y no lo compartas. Úsalo en Consultar compra, en el pie de página del portal.',
+          'Ver mi compra: ' + guestAccessUrl,
+          'Guarda este enlace y no lo compartas. Quien lo tenga podrá consultar esta compra.',
         ]
       : []),
     '',
@@ -72,10 +73,10 @@ export function ticketEmailTemplate(
       </td></tr><tr><td style="height:16px"></td></tr>`;
     })
     .join('');
-  const guestAccess = accessCode
-    ? `<h2 style="font-size:18px">Código privado de consulta</h2>
-    <p style="overflow-wrap:anywhere;color:${theme['accent-color']};font-size:18px"><strong>${escapeHtml(accessCode)}</strong></p>
-    <p>Guárdalo y no lo compartas. Úsalo en «Consultar compra», en el pie de página del portal.</p>`
+  const guestAccess = guestAccessUrl
+    ? `<h2 style="font-size:18px">El enlace de tu compra</h2>
+    <p style="margin:24px 0"><a href="${escapeHtml(guestAccessUrl)}" referrerpolicy="no-referrer" style="display:inline-block;padding:12px 20px;border-radius:8px;background:${theme['accent-color']};color:${theme['page-background']};font-weight:bold;text-decoration:none">Ver mi compra</a></p>
+    <p>Guarda este enlace y no lo compartas. Quien lo tenga podrá consultar esta compra.</p>`
     : '';
   const html = `<!DOCTYPE html>
 <html lang="es">

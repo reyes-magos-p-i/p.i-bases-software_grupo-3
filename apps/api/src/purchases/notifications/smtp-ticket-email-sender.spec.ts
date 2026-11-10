@@ -14,6 +14,7 @@ const renderQr = QRCode.toBuffer;
 describe('SMTP ticket delivery', () => {
   const sendMail = jest.fn();
   let sender: SmtpTicketEmailSender;
+  let settings: Record<string, string>;
   const message = {
     email: 'client@example.com',
     receipt: {
@@ -43,17 +44,16 @@ describe('SMTP ticket delivery', () => {
     jest
       .mocked(nodemailer.createTransport)
       .mockReturnValue({ sendMail } as unknown as Mail<SMTPSentMessageInfo>);
-    const settings: Record<string, string> = {
+    settings = {
       SMTP_HOST: 'smtp.example.com',
       SMTP_PORT: '587',
       SMTP_SECURE: 'false',
       SMTP_USER: 'test',
       SMTP_PASSWORD: 'test',
       SMTP_FROM: 'cinema@example.com',
+      FRONTEND_URL: 'https://cinema.example',
     };
-    sender = new SmtpTicketEmailSender({
-      get: (key: string) => settings[key],
-    } as ConfigService);
+    sender = new SmtpTicketEmailSender(new ConfigService(settings));
   });
   // Inside Jest, pngjs takes seconds to pick a filter for each row, so only
   // the PNG test renders a real QR, and with a fixed filter.
@@ -98,7 +98,42 @@ describe('SMTP ticket delivery', () => {
     expect(png.readUInt32BE(16)).toBe(512);
     expect(mail.attachments).toHaveLength(1);
     expect(mail.attachments[0]!.cid).toBe('purchase-qr');
+    expect(mail.text).not.toContain('/guest-purchases/receipt');
+    expect(mail.html).not.toContain('Ver mi compra');
   });
+  it('includes the same private receipt link on initial delivery and resend without changing the QR', async () => {
+    const accessCode = '12.4AVG75NWK52Z476W4QDMW7DYQE';
+    const link = 'https://cinema.example/guest-purchases/receipt#' + accessCode;
+    await sender.send({ ...message, accessCode });
+    await sender.send({ ...message, accessCode });
+    expect(sendMail).toHaveBeenCalledTimes(2);
+    for (const [mail] of sendMail.mock.calls) {
+      expect(mail.text).toContain('Ver mi compra: ' + link);
+      expect(mail.html).toContain(`href="${link}"`);
+      expect(mail.text).not.toContain('Código privado de consulta');
+      expect(mail.html).not.toContain('pie de página');
+      expect(mail.to.address).toBe(message.email);
+    }
+    expect(generate()).toHaveBeenNthCalledWith(
+      2,
+      message.receipt.qrPayload,
+      expect.any(Object),
+    );
+  });
+  it.each([undefined, 'not-a-url'])(
+    'does not send a guest email with an unusable frontend URL: %s',
+    async (value) => {
+      if (value === undefined) delete settings.FRONTEND_URL;
+      else settings.FRONTEND_URL = value;
+      await expect(
+        sender.send({ ...message, accessCode: '12.PRIVATE' }),
+      ).rejects.toMatchObject({
+        uncertain: false,
+        message: 'Ticket email could not be sent.',
+      });
+      expect(sendMail).not.toHaveBeenCalled();
+    },
+  );
   it.each([
     { accepted: [], rejected: [message.email] },
     { accepted: [], rejected: [] },

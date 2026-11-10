@@ -38,10 +38,11 @@ export class GuestPurchaseLookupDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? normalizeGuestPurchaseCode(value) : value,
   )
-  @IsString({ message: 'Introduce el código de consulta de tu compra.' })
-  @MaxLength(85, { message: 'El código de consulta no es válido.' })
+  @IsString({ message: 'El enlace de esta compra no es válido.' })
+  @MaxLength(85, { message: 'El enlace de esta compra no es válido.' })
   @Matches(GUEST_PURCHASE_CODE, {
-    message: 'Introduce el código de consulta completo de tu compra.',
+    message:
+      'El enlace de esta compra no es válido. Comprueba que esté completo.',
   })
   accessCode: string;
 }
