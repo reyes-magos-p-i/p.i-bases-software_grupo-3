@@ -241,9 +241,7 @@ describe('Guest purchase HTTP with mocked persistence', () => {
   });
   it('does not expose a receipt for an unknown or altered code', async () => {
     repository.findGuest.mockRejectedValue(
-      new NotFoundException(
-        'No se encontró una compra con ese código de consulta.',
-      ),
+      new NotFoundException('No se encontró una compra con este enlace.'),
     );
     const result = await post('/lookup', {
       accessCode: guestPurchaseCode(12, randomUUID()),
