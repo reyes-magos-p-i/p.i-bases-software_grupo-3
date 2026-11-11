@@ -17,13 +17,12 @@ import { PasswordStatusGuard } from '../../auth/password/password-status.guard';
 import { ClientGuard } from './guards/client.guard';
 import { ClientProfileService } from './client-profile.service';
 import { ClientEmailChangeService } from './client-email-change.service';
-import {
-  DeactivateClientProfileDto,
-  UpdateClientProfileDto,
-} from './client-profile.dto';
+import { UpdateClientProfileDto } from './client-profile.dto';
+import { ConfirmationEmailDto } from '../../common/validation/confirmation-email.dto';
+import { requireEmailConfirmation } from '../../common/security/email-confirmation';
 import { RequestClientEmailChangeDto } from './client-email-change.dto';
 
-type ClientRequest = Request & { user: { id: number } };
+type ClientRequest = Request & { user: { id: number; email?: string } };
 
 @Controller('clients/me')
 @UseGuards(AuthGuard('jwt'), ClientGuard, PasswordStatusGuard)
@@ -57,8 +56,9 @@ export class ClientProfileController {
   @UseGuards(SessionOriginGuard)
   deactivate(
     @Req() request: ClientRequest,
-    @Body() _body: DeactivateClientProfileDto,
+    @Body() body: ConfirmationEmailDto,
   ) {
+    requireEmailConfirmation(body.email, request.user.email);
     return this.profile.deactivate(request.user.id);
   }
 

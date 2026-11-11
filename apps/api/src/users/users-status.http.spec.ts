@@ -97,7 +97,7 @@ describe('User status and session lifecycle with mocked persistence', () => {
           '=' +
           jwt.sign({ sub: 21, type: 'employee', sessionVersion: null }),
       )
-      .send({});
+      .send(action === 'deactivate' ? { email: identity.email } : {});
   }
 
   beforeAll(async () => {
