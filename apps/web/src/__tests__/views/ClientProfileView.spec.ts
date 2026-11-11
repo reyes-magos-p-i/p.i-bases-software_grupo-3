@@ -126,7 +126,10 @@ describe('ClientProfileView', () => {
           ClientPurchasesPanel: true,
           ClientPreferencesForm: true,
           ClientEmailChangeDialog: true,
-          ConfirmationDialog: true,
+          ConfirmationDialog: {
+            props: ['open', 'title', 'pending', 'surface'],
+            template: '<section v-if="open"><slot/></section>',
+          },
           ChangePasswordView: true,
           RouterLink: { template: '<a><slot /></a>' },
         },
@@ -402,17 +405,40 @@ describe('ClientProfileView', () => {
     await flushPromises()
     expect(dialog.props('open')).toBe(false)
     await button(wrapper, 'Desactivar mi cuenta').trigger('click')
+    await flushPromises()
+    await wrapper.get('input[type="email"]').setValue(data.email)
     dialog.vm.$emit('confirm')
     await flushPromises()
     expect(deactivateClientProfile).toHaveBeenCalledTimes(1)
     expect(clientSession.user.value).toBeNull()
     expect(wrapper.text()).toContain('Cuenta desactivada')
   })
+  it('requires the current client email and allows cancelling an invalid confirmation', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'deactivation')
+    await button(wrapper, 'Desactivar mi cuenta').trigger('click')
+    const dialog = confirmation(wrapper, '¿Desactivar tu cuenta?')
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(deactivateClientProfile).not.toHaveBeenCalled()
+    await wrapper.get('input[type="email"]').setValue('other@example.com')
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(deactivateClientProfile).not.toHaveBeenCalled()
+    dialog.vm.$emit('cancel')
+    await flushPromises()
+    expect(dialog.props('open')).toBe(false)
+    expect(clientSession.user.value?.id).toBe(7)
+  })
   it('shows a deactivation failure while retaining the session', async () => {
     vi.mocked(deactivateClientProfile).mockRejectedValue(new Error('offline'))
     const wrapper = render()
     await flushPromises()
     await choose(wrapper, 'deactivation')
+    await button(wrapper, 'Desactivar mi cuenta').trigger('click')
+    await flushPromises()
+    await wrapper.get('input[type="email"]').setValue(data.email)
     confirmation(wrapper, '¿Desactivar tu cuenta?').vm.$emit('confirm')
     await flushPromises()
     expect(wrapper.text()).toContain('No se pudo desactivar tu cuenta')
@@ -514,7 +540,7 @@ describe('ClientProfileView', () => {
     expect(wrapper.findComponent(ClientPreferencesForm).exists()).toBe(true)
     expect(getClientPreferenceSettings).toHaveBeenCalledTimes(1)
   })
-  it('keeps the blue loading indicator inside the light preferences card', async () => {
+  it('uses the white loading indicator inside the dark preferences card', async () => {
     let finish!: (settings: ClientPreferenceSettings) => void
     vi.mocked(getClientPreferenceSettings).mockImplementationOnce(
       () =>
@@ -525,7 +551,7 @@ describe('ClientProfileView', () => {
     const wrapper = render()
     await flushPromises()
     await choose(wrapper, 'preferences')
-    expect(wrapper.getComponent(LoadingState).props('surface')).toBe('light')
+    expect(wrapper.getComponent(LoadingState).props('surface')).toBe('dark')
     expect(wrapper.text()).toContain('Cargando preferencias')
     finish(preferences)
     await flushPromises()
@@ -642,6 +668,16 @@ describe('ClientProfileView', () => {
       path: '/',
       query: { login: 'client', reason: 'expired' },
     })
+  })
+  it('keeps purchase history on its original light surface when navigating profile sections', async () => {
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.get('.profile-card').classes()).toContain('surface-theme--dark')
+    await choose(wrapper, 'purchases')
+    expect(wrapper.findComponent(ClientPurchasesPanel).exists()).toBe(true)
+    expect(wrapper.get('.profile-card').element.closest('.surface-theme--dark')).toBeNull()
+    await choose(wrapper, 'security')
+    expect(wrapper.get('.profile-card').classes()).toContain('surface-theme--dark')
   })
   it('opens the purchase of the URL and keeps the selected purchase in it', async () => {
     Object.assign(navigation.query, { section: 'purchases', purchaseId: '12' })

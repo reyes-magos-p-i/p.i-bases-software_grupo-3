@@ -5,6 +5,7 @@ import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import SectionNavigation from '@/components/common/SectionNavigation.vue'
 import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue'
+import EmailConfirmationField from '@/components/common/EmailConfirmationField.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import ClientPurchasesPanel from '@/components/purchases/ClientPurchasesPanel.vue'
@@ -79,6 +80,7 @@ const busy = ref(false)
 const emailOpen = ref(false)
 const emailError = ref('')
 const deactivating = ref(false)
+const deactivationConfirmation = ref<InstanceType<typeof EmailConfirmationField> | null>(null)
 const deactivated = ref(false)
 const discarding = ref(false)
 const notification = ref<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -320,10 +322,12 @@ async function sendEmail(email: string) {
 }
 async function deactivate() {
   if (busy.value) return
+  const email = deactivationConfirmation.value?.validate()
+  if (!email) return
   const session = sessionSnapshot()
   busy.value = true
   try {
-    await deactivateClientProfile()
+    await deactivateClientProfile(email)
     if (!session.current()) return
     deactivating.value = false
     deactivated.value = true
@@ -380,7 +384,7 @@ onBeforeUnmount(() => {
       placement="bottom-right"
       @close="notification = null"
     />
-    <section v-if="deactivated" class="profile-card completed">
+    <section v-if="deactivated" class="profile-card surface-theme--dark completed">
       <h2>Cuenta desactivada</h2>
       <p>
         Tu cuenta ya no está disponible para iniciar sesión. Si necesitas reactivarla, contacta con
@@ -389,7 +393,7 @@ onBeforeUnmount(() => {
       <RouterLink to="/">Volver al portal</RouterLink>
     </section>
     <LoadingState v-else-if="loading" message="Cargando perfil..." surface="dark" />
-    <section v-else-if="loadError" class="profile-card">
+    <section v-else-if="loadError" class="profile-card surface-theme--dark">
       <p role="alert">{{ loadError }}</p>
       <button type="button" @click="load">Reintentar</button>
     </section>
@@ -407,7 +411,11 @@ onBeforeUnmount(() => {
           @select="changeSection"
         />
       </aside>
-      <section class="profile-card" :aria-busy="busy">
+      <section
+        class="profile-card"
+        :class="{ 'surface-theme--dark': selected !== 'purchases' }"
+        :aria-busy="busy"
+      >
         <template v-if="selected === 'personal'">
           <ClientProfileForm
             v-if="editing && options"
@@ -506,6 +514,7 @@ onBeforeUnmount(() => {
           </div>
           <ChangePasswordView
             embedded
+            surface="dark"
             account-type="client"
             @submission-state="busy = $event"
             @return-to-profile="changeSection('personal')"
@@ -527,7 +536,11 @@ onBeforeUnmount(() => {
               }}
             </dd>
           </dl>
-          <LoadingState v-if="preferencesLoading" message="Cargando preferencias..." />
+          <LoadingState
+            v-if="preferencesLoading"
+            message="Cargando preferencias..."
+            surface="dark"
+          />
           <div v-else-if="preferencesError" role="alert">
             <p>{{ preferencesError }}</p>
             <button type="button" @click="loadPreferences">Reintentar</button>
@@ -556,6 +569,7 @@ onBeforeUnmount(() => {
       </section>
     </div>
     <ClientEmailChangeDialog
+      surface="dark"
       v-if="profile"
       :open="emailOpen"
       :current-email="profile.email"
@@ -566,6 +580,7 @@ onBeforeUnmount(() => {
     />
     <ConfirmationDialog
       :open="deactivating"
+      surface="dark"
       title="¿Desactivar tu cuenta?"
       message="Se cerrarán todas tus sesiones y perderás el acceso a tu cuenta. Tus datos se conservarán. Para reactivarla necesitarás contactar con asistencia. ¿Deseas continuar?"
       confirm-label="Desactivar cuenta"
@@ -573,9 +588,17 @@ onBeforeUnmount(() => {
       :pending="busy"
       @cancel="deactivating = false"
       @confirm="deactivate"
-    />
+    >
+      <EmailConfirmationField
+        v-if="profile && deactivating"
+        ref="deactivationConfirmation"
+        :expected-email="profile.email"
+        :disabled="busy"
+      />
+    </ConfirmationDialog>
     <ConfirmationDialog
       :open="discarding"
+      surface="dark"
       title="Cambios sin guardar"
       message="Tienes cambios sin guardar. Si continúas, se descartarán. ¿Deseas salir de la edición?"
       confirm-label="Descartar cambios"
@@ -643,7 +666,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   border-radius: var(--radius-medium);
   padding: clamp(1.25rem, 3vw, 2rem);
-  background: var(--content-background);
+  background: var(--panel-background);
   color: var(--text-primary);
   box-shadow: 0 8px 24px var(--shadow-color);
 }
