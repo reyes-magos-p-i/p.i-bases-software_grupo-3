@@ -112,9 +112,12 @@ describe('theater service', () => {
     const { updateTheater, deleteTheater } = await import('@/services/theater.service')
 
     await expect(updateTheater(17, payload)).resolves.toEqual(theater)
-    await expect(deleteTheater(17)).resolves.toBeUndefined()
+    await expect(deleteTheater(17, 'admin@example.com')).resolves.toBeUndefined()
     expect(patch).toHaveBeenCalledExactlyOnceWith('/theaters/17', payload, { timeout: 30000 })
-    expect(del).toHaveBeenCalledExactlyOnceWith('/theaters/17', { timeout: 30000 })
+    expect(del).toHaveBeenCalledExactlyOnceWith('/theaters/17', {
+      data: { email: 'admin@example.com' },
+      timeout: 30000,
+    })
   })
 
   it('propagates a catalog request failure without retrying', async () => {

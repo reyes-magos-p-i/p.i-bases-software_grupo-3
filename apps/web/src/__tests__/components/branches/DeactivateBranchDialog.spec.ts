@@ -15,6 +15,9 @@ let wrapper: VueWrapper | undefined
 async function render(props: Record<string, unknown> = {}) {
   wrapper = mount(DeactivateBranchDialog, { props: { branch, ...props }, attachTo: document.body })
   await flushPromises()
+  const input = page.find('input[type="email"]')
+  if (input.exists() && input.attributes('disabled') === undefined)
+    await input.setValue('admin@example.com')
   return wrapper
 }
 const button = (text: string) => page.findAll('button').find((item) => item.text() === text)!
@@ -41,6 +44,15 @@ afterEach(() => {
 })
 
 describe('DeactivateBranchDialog', () => {
+  it('requires written confirmation before emitting the normalized actor email', async () => {
+    const view = await render()
+    await page.get('input[type="email"]').setValue('')
+    await button('Confirmar').trigger('click')
+    expect(view.emitted('confirm')).toBeUndefined()
+    await page.get('input[type="email"]').setValue(' ADMIN@example.com ')
+    await button('Confirmar').trigger('click')
+    expect(view.emitted('confirm')).toEqual([['admin@example.com']])
+  })
   it('asks for confirmation with Confirmar and Cancelar (UT-037)', async () => {
     const view = await render()
     expect(page.get('.question').text()).toBe(

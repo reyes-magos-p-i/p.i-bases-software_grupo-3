@@ -48,6 +48,6 @@ export async function updateBranch(id: number, data: BranchRequest): Promise<Bra
 }
 
 /** Deactivating is final: the branch leaves the list and cannot be activated again. */
-export async function deactivateBranch(id: number): Promise<void> {
-  await getApi().patch(`/cinemas/${id}/deactivate`, undefined, { timeout: 10000 })
+export async function deactivateBranch(id: number, email: string): Promise<void> {
+  await getApi().patch(`/cinemas/${id}/deactivate`, { email }, { timeout: 10000 })
 }
