@@ -1,0 +1,54 @@
+.surface-theme--dark {
+  color-scheme: dark;
+  --panel-background: var(--surface-background);
+  --dialog-background: var(--page-background);
+  --text-primary: var(--text-on-dark);
+  --text-secondary: var(--text-on-dark-secondary);
+  --text-disabled: var(--dark-disabled-text);
+  --border-color: var(--border-on-dark);
+  --border-strong: var(--dark-border-strong);
+  --input-background: var(--page-background);
+  --input-disabled-background: var(--dark-muted-background);
+  --surface-hover: var(--surface-on-dark-hover);
+  --button-secondary-background: var(--page-background);
+  --button-secondary-text: var(--text-on-dark);
+  --warning-text: var(--text-on-dark);
+  --warning-background: var(--dark-warning-background);
+  --info-background: var(--dark-info-background);
+  --error-text: var(--dark-error-text);
+  --error-background: var(--dark-error-background);
+  --success-text: var(--dark-success-text);
+  --success-muted-text: var(--dark-success-text);
+  --success-emphasis-color: var(--dark-success-text);
+  --success-background: var(--dark-success-background);
+  --table-background: var(--surface-background);
+  --table-stripe-background: var(--dark-muted-background);
+  --table-hover-background: var(--surface-on-dark-hover);
+  --focus-color: var(--focus-on-dark);
+  --scrollbar-color: var(--scrollbar-thumb-on-dark);
+  --scrollbar-hover-color: var(--scrollbar-thumb-on-dark-hover);
+  --color-base-100: var(--surface-background);
+  --color-base-content: var(--text-on-dark);
+}
+
+.surface-theme--dark :is(input, select, textarea) {
+  color-scheme: dark;
+}
+
+.surface-theme--dark :where(.seat-selector, .purchase-summary, .checkbox-options, .table-wrapper) {
+  --scrollbar-color: var(--scrollbar-thumb-on-dark);
+  --scrollbar-hover-color: var(--scrollbar-thumb-on-dark-hover);
+}
+
+.surface-theme--dark
+  :is(.field-error, .input-error, .form-feedback.error, .policy-checklist li.violated) {
+  color: var(--error-text);
+}
+
+.surface-theme--dark .notification-popup {
+  --text-primary: var(--page-background);
+  --text-secondary: var(--surface-background);
+  --warning-text: var(--page-background);
+  --error-text: var(--error-color);
+  --success-text: var(--success-color);
+}

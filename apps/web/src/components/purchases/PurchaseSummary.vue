@@ -133,7 +133,7 @@ const purchaseCode = computed(() => {
   font-weight: 600;
 }
 .purchase-summary {
-  background: var(--content-background);
+  background: var(--panel-background);
   color: var(--text-primary);
   padding: clamp(18px, 4vw, 32px);
   border-radius: var(--radius-medium);

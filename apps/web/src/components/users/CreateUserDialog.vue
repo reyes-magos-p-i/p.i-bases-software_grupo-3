@@ -931,6 +931,9 @@ defineExpose({ open, complete })
 
 <style scoped>
 .user-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
   width: min(880px, calc(100% - 32px));
   max-width: none;
   max-height: calc(100dvh - 32px);

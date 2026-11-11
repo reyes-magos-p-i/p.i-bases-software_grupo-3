@@ -345,7 +345,7 @@ select:focus-visible {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-medium);
   color: var(--text-primary);
-  background: var(--content-background);
+  background: var(--panel-background);
   box-shadow: 0 8px 24px var(--shadow-strong-color);
 }
 .calendar-panel--floating {

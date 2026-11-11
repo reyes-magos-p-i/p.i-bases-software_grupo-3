@@ -117,7 +117,7 @@ input {
   padding: 10px 14px;
   border-radius: var(--radius-small);
   border: 1px solid var(--border-color);
-  background: var(--content-background);
+  background: var(--input-background);
   color: var(--text-primary);
   font: inherit;
 }
