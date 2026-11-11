@@ -120,6 +120,7 @@ describe('Branches HTTP contracts', () => {
     users.findEmployeeIdentityById.mockResolvedValue({
       id: 21,
       role: 'ADMINISTRATOR',
+      email: 'admin@example.com',
     });
     users.findEmployeeCredentialsStatus.mockResolvedValue({
       setAt: new Date(),
@@ -346,15 +347,17 @@ describe('Branches HTTP contracts', () => {
   describe('PATCH /cinemas/:id/deactivate', () => {
     it('deactivates the branch and answers 204 (UT-037)', async () => {
       repository.deactivateCinema.mockResolvedValue(true);
-      await send('patch', '/cinemas/21/deactivate', {}).expect(204);
+      await send('patch', '/cinemas/21/deactivate', {
+        email: 'admin@example.com',
+      }).expect(204);
       expect(repository.deactivateCinema).toHaveBeenCalledWith(21);
     });
 
     it('answers 404 for a branch already deactivated elsewhere (UT-040)', async () => {
       repository.deactivateCinema.mockResolvedValue(false);
-      const response = await send('patch', '/cinemas/21/deactivate', {}).expect(
-        404,
-      );
+      const response = await send('patch', '/cinemas/21/deactivate', {
+        email: 'admin@example.com',
+      }).expect(404);
       expect(response.body.message).toBe(
         'La sucursal no existe o ya fue desactivada',
       );
@@ -379,7 +382,9 @@ describe('Branches HTTP contracts', () => {
         id: 21,
         role: 'EMPLOYEE',
       });
-      await send('patch', '/cinemas/21/deactivate', {}).expect(403);
+      await send('patch', '/cinemas/21/deactivate', {
+        email: 'admin@example.com',
+      }).expect(403);
       expect(repository.deactivateCinema).not.toHaveBeenCalled();
     });
   });

@@ -1,9 +1,14 @@
+import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TheatersController } from './theaters.controller';
 import { TheatersService } from './theaters.service';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 import { UpdateSeatsDto } from './dto/update-seats.dto';
+
+const actor = { user: { id: 21, email: 'admin@example.com' } } as Parameters<
+  TheatersController['remove']
+>[2];
 
 describe('TheatersController', () => {
   let controller: TheatersController;
@@ -33,7 +38,10 @@ describe('TheatersController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TheatersController],
       providers: [{ provide: TheatersService, useValue: service }],
-    }).compile();
+    })
+      .overrideGuard(SessionOriginGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<TheatersController>(TheatersController);
   });
@@ -55,9 +63,9 @@ describe('TheatersController', () => {
       expect(() => controller.update(id, {})).toThrow(
         'El número de sala debe ser un entero positivo.',
       );
-      expect(() => controller.remove(id)).toThrow(
-        'El número de sala debe ser un entero positivo.',
-      );
+      expect(() =>
+        controller.remove(id, { email: 'admin@example.com' }, actor),
+      ).toThrow('El número de sala debe ser un entero positivo.');
       expect(service.findOne).not.toHaveBeenCalled();
       expect(service.update).not.toHaveBeenCalled();
       expect(service.remove).not.toHaveBeenCalled();
@@ -107,7 +115,9 @@ describe('TheatersController', () => {
   it('converts the id to a number when removing a theater', () => {
     service.remove.mockReturnValue('removed');
 
-    expect(controller.remove('4')).toBe('removed');
+    expect(controller.remove('4', { email: 'admin@example.com' }, actor)).toBe(
+      'removed',
+    );
     expect(service.remove).toHaveBeenCalledWith(4);
   });
 
@@ -190,5 +200,11 @@ describe('TheatersController', () => {
 
       await expect(controller.updateSeats(7, dto)).rejects.toBe(error);
     });
+  });
+  it('rejects a confirmation email that does not belong to the actor', () => {
+    expect(() =>
+      controller.remove('4', { email: 'other@example.com' }, actor),
+    ).toThrow('El correo debe coincidir');
+    expect(service.remove).not.toHaveBeenCalled();
   });
 });
