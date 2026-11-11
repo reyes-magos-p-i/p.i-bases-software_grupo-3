@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 
@@ -16,13 +17,16 @@ import { UpdateMovieDto } from './dto/createMovie.dto/updateMovie.dto';
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { AuthGuard } from '@nestjs/passport';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
+import type { Request } from 'express';
+import type { UserIdentity } from '../users/types/user-identity.type';
+import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
+import { ConfirmationEmailDto } from '../common/validation/confirmation-email.dto';
+import { requireEmailConfirmation } from '../common/security/email-confirmation';
 
 @UseGuards(AuthGuard('jwt'), AdministratorGuard, PasswordStatusGuard)
 @Controller('movies')
 export class MoviesController {
-  constructor(
-    private readonly moviesService: MoviesService,
-  ) {}
+  constructor(private readonly moviesService: MoviesService) {}
 
   @Post()
   create(@Body() dto: CreateMovieDto) {
@@ -35,7 +39,7 @@ export class MoviesController {
   }
 
   @Get('classifications')
-    findClassifications() {
+  findClassifications() {
     return this.moviesService.findClassifications();
   }
 
@@ -54,18 +58,19 @@ export class MoviesController {
     return this.moviesService.findOne(id);
   }
 
-
-
   @Patch(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateMovieDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMovieDto) {
     return this.moviesService.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  @UseGuards(SessionOriginGuard)
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: ConfirmationEmailDto,
+    @Req() request: Request & { user: UserIdentity },
+  ) {
+    requireEmailConfirmation(data.email, request.user.email);
     return this.moviesService.remove(id);
   }
 }

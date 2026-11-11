@@ -25,6 +25,8 @@ import { ListProjectionsQueryDto } from './dto/list-projections-query.dto';
 import { ProjectionIdParamsDto } from './dto/projection-id-params.dto';
 import { UpdateProjectionDto } from './dto/update-projection.dto';
 import { ProjectionsService } from './projections.service';
+import { ConfirmationEmailDto } from '../common/validation/confirmation-email.dto';
+import { requireEmailConfirmation } from '../common/security/email-confirmation';
 
 @Controller('projections')
 @UseGuards(AuthGuard('jwt'), AdministratorGuard, PasswordStatusGuard)
@@ -58,7 +60,12 @@ export class ProjectionsController {
 
   @Patch(':id/cancel')
   @UseGuards(SessionOriginGuard)
-  cancel(@Param() params: ProjectionIdParamsDto) {
+  cancel(
+    @Param() params: ProjectionIdParamsDto,
+    @Body() data: ConfirmationEmailDto,
+    @Req() request: Request & { user: UserIdentity },
+  ) {
+    requireEmailConfirmation(data.email, request.user.email);
     return this.projectionsService.cancel(params.id);
   }
 

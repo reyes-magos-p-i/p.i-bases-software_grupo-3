@@ -3,6 +3,10 @@ import { MoviesService } from './movies.service';
 import { CreateMovieDto } from './dto/createMovie.dto/createMovie.dto';
 import { UpdateMovieDto } from './dto/createMovie.dto/updateMovie.dto';
 
+const actor = { user: { id: 21, email: 'admin@example.com' } } as Parameters<
+  MoviesController['remove']
+>[2];
+
 describe('MoviesController', () => {
   let controller: MoviesController;
 
@@ -20,9 +24,7 @@ describe('MoviesController', () => {
   beforeEach(() => {
     jest.resetAllMocks();
 
-    controller = new MoviesController(
-      service as unknown as MoviesService,
-    );
+    controller = new MoviesController(service as unknown as MoviesService);
   });
 
   it('creates a movie', async () => {
@@ -99,7 +101,15 @@ describe('MoviesController', () => {
   it('removes the requested movie', async () => {
     service.remove.mockResolvedValue(undefined);
 
-    expect(await controller.remove(24)).toBeUndefined();
+    expect(
+      await controller.remove(24, { email: 'admin@example.com' }, actor),
+    ).toBeUndefined();
     expect(service.remove).toHaveBeenCalledWith(24);
+  });
+  it('rejects a confirmation email that does not belong to the actor', () => {
+    expect(() =>
+      controller.remove(24, { email: 'other@example.com' }, actor),
+    ).toThrow('El correo debe coincidir');
+    expect(service.remove).not.toHaveBeenCalled();
   });
 });
