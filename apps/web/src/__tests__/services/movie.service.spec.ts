@@ -1,4 +1,3 @@
-
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import {
@@ -9,7 +8,7 @@ import {
   deleteMovie,
   getClassifications,
   getGenres,
-  getLanguages
+  getLanguages,
 } from '@/services/movie.service'
 
 // Mock the API methods
@@ -17,11 +16,11 @@ const api = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   patch: vi.fn(),
-  delete: vi.fn()
+  delete: vi.fn(),
 }))
 
 vi.mock('@/services/api', () => ({
-  getApi: () => api
+  getApi: () => api,
 }))
 
 describe('Movie Service', () => {
@@ -36,7 +35,7 @@ describe('Movie Service', () => {
     const result = await getMovies()
 
     expect(api.get).toHaveBeenCalledWith('/movies', {
-      signal: undefined
+      signal: undefined,
     })
     expect(result).toEqual(movies)
   })
@@ -48,7 +47,7 @@ describe('Movie Service', () => {
     const result = await getMovie(24)
 
     expect(api.get).toHaveBeenCalledWith('/movies/24', {
-      signal: undefined
+      signal: undefined,
     })
     expect(result).toEqual(movie)
   })
@@ -61,7 +60,7 @@ describe('Movie Service', () => {
       releaseYear: 2014,
       classificationId: 1,
       languageIds: [1],
-      genreIds: [2]
+      genreIds: [2],
     }
 
     api.post.mockResolvedValue({ data: 24 })
@@ -79,19 +78,15 @@ describe('Movie Service', () => {
 
     await updateMovie(24, payload)
 
-    expect(api.patch).toHaveBeenCalledWith(
-      '/movies/24',
-      payload,
-      { signal: undefined }
-    )
+    expect(api.patch).toHaveBeenCalledWith('/movies/24', payload, { signal: undefined })
   })
 
   it('deletes a movie', async () => {
     api.delete.mockResolvedValue({})
 
-    await deleteMovie(24)
+    await deleteMovie(24, 'admin@example.com')
 
-    expect(api.delete).toHaveBeenCalledWith('/movies/24')
+    expect(api.delete).toHaveBeenCalledWith('/movies/24', { data: { email: 'admin@example.com' } })
   })
 
   it('gets classifications', async () => {
@@ -135,10 +130,6 @@ describe('Movie Service', () => {
 
     expect(api.get).toHaveBeenCalledWith('/movies', { signal })
     expect(api.get).toHaveBeenCalledWith('/movies/24', { signal })
-    expect(api.patch).toHaveBeenCalledWith(
-      '/movies/24',
-      { title: 'Updated' },
-      { signal }
-    )
+    expect(api.patch).toHaveBeenCalledWith('/movies/24', { title: 'Updated' }, { signal })
   })
 })

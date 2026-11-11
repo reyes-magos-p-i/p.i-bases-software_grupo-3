@@ -90,8 +90,12 @@ describe('projection service', () => {
     patch.mockResolvedValue({ data: 'cancelled' })
     const { cancelProjection } = await import('@/services/projection.service')
 
-    await expect(cancelProjection(21)).resolves.toBe('cancelled')
-    expect(patch).toHaveBeenCalledWith('/projections/21/cancel', undefined, { timeout: 30000 })
+    await expect(cancelProjection(21, 'admin@example.com')).resolves.toBe('cancelled')
+    expect(patch).toHaveBeenCalledWith(
+      '/projections/21/cancel',
+      { email: 'admin@example.com' },
+      { timeout: 30000 },
+    )
   })
   it('requests the authoritative price preview for the selected format and technology', async () => {
     const settings = { format: '3D' as const, technology: 'IMAX' as const, isPremiere: true }

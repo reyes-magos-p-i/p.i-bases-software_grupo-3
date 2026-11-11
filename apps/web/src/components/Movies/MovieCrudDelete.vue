@@ -5,6 +5,8 @@ import { isAxiosError } from 'axios'
 import BaseModal from '@/components/common/BaseModal.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { deleteMovie } from '@/services/movie.service'
+import EmailConfirmationField from '@/components/common/EmailConfirmationField.vue'
+import { employeeSession } from '@/services/employee-session.service'
 
 const props = defineProps<{
   movie: {
@@ -19,6 +21,7 @@ const emit = defineEmits<{
 }>()
 
 const deleting = ref(false)
+const confirmation = ref<InstanceType<typeof EmailConfirmationField> | null>(null)
 const error = ref('')
 
 function close() {
@@ -29,6 +32,8 @@ function close() {
 
 async function confirmDelete() {
   if (!props.movie || deleting.value) return
+  const email = confirmation.value?.validate()
+  if (!email) return
 
   const movieId = props.movie.id
 
@@ -36,7 +41,7 @@ async function confirmDelete() {
   error.value = ''
 
   try {
-    await deleteMovie(movieId)
+    await deleteMovie(movieId, email)
 
     emit('deleted')
     emit('close')
@@ -77,6 +82,13 @@ async function confirmDelete() {
       </p>
 
       <p class="delete-warning">Esta acción no se puede deshacer.</p>
+      <EmailConfirmationField
+        v-if="movie"
+        :key="movie.id"
+        ref="confirmation"
+        :expected-email="employeeSession.user.value?.email"
+        :disabled="deleting"
+      />
 
       <NotificationPopup
         v-if="error"

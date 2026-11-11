@@ -29,6 +29,9 @@ let wrapper: VueWrapper | undefined
 async function render(value: ListedProjection | null = projection) {
   wrapper = mount(CancelProjectionDialog, { props: { projection: value }, attachTo: document.body })
   await flushPromises()
+  const input = page.find('input[type="email"]')
+  if (input.exists() && input.attributes('disabled') === undefined)
+    await input.setValue('admin@example.com')
 }
 
 function button(text: string) {
@@ -84,7 +87,7 @@ describe('CancelProjectionDialog', () => {
 
     await button('Cancelar proyección').trigger('click')
     await flushPromises()
-    expect(cancelProjection).toHaveBeenCalledExactlyOnceWith(21)
+    expect(cancelProjection).toHaveBeenCalledExactlyOnceWith(21, 'admin@example.com')
     expect(wrapper!.emitted('cancelled')).toEqual([[{ ...projection, status: 'CANCELLED' }]])
   })
 
@@ -94,11 +97,17 @@ describe('CancelProjectionDialog', () => {
   ])('reinforces the refund warning for urgent projections %#', async (override, message) => {
     await render({ ...projection, ...override })
     expect(page.get('.cancel-urgent').text()).toContain(message)
-    expect(page.get('.cancel-urgent').text()).toContain('coordina el reembolso en oficina de inmediato')
+    expect(page.get('.cancel-urgent').text()).toContain(
+      'coordina el reembolso en oficina de inmediato',
+    )
   })
 
   it.each([
-    [httpError(409, 'La proyección ya está cancelada.'), 'La proyección ya está cancelada.', undefined],
+    [
+      httpError(409, 'La proyección ya está cancelada.'),
+      'La proyección ya está cancelada.',
+      undefined,
+    ],
     [httpError(409), 'No se pudo cancelar la proyección, intenta de nuevo.', undefined],
     [httpError(404), 'Esta proyección ya no está disponible.', undefined],
     [httpError(403), 'No tienes permisos para realizar esta acción.', 'forbidden'],
