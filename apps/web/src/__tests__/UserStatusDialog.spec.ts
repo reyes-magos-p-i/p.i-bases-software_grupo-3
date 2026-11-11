@@ -9,6 +9,9 @@ const { activateUser, deactivateUser } = vi.hoisted(() => ({
   deactivateUser: vi.fn(),
 }))
 vi.mock('@/services/user.service', () => ({ activateUser, deactivateUser }))
+vi.mock('@/services/employee-session.service', () => ({
+  employeeSession: { user: { value: { email: 'admin@example.com' } } },
+}))
 const page = new DOMWrapper(document.body)
 const prototype = HTMLDialogElement.prototype
 const originalShow = Object.getOwnPropertyDescriptor(prototype, 'showModal')
@@ -36,6 +39,9 @@ async function render(selectionValue: UserStatusSelection | null = selection) {
     attachTo: document.body,
   })
   await flushPromises()
+  const input = page.find('input[type="email"]')
+  if (input.exists() && input.attributes('disabled') === undefined)
+    await input.setValue('admin@example.com')
   return wrapper
 }
 function button(text: string) {
@@ -77,6 +83,16 @@ afterEach(() => {
 })
 
 describe('UserStatusDialog', () => {
+  it('rejects missing or different confirmation email without preventing cancellation', async () => {
+    const view = await render()
+    for (const email of ['', 'other@example.com']) {
+      await page.get('input[type="email"]').setValue(email)
+      await button('Confirmar desactivación').trigger('click')
+      expect(deactivateUser).not.toHaveBeenCalled()
+    }
+    await button('Cancelar').trigger('click')
+    expect(view.emitted('close')).toHaveLength(1)
+  })
   it('reactivates only after confirmation and explains that old sessions stay revoked', async () => {
     const inactive = { ...selection, status: 'INACTIVE' as const }
     const view = await render(inactive)
@@ -130,14 +146,16 @@ describe('UserStatusDialog', () => {
   })
   it('submits exactly the selected user after confirmation and emits success', async () => {
     await render()
+    await page.get('input[type="email"]').setValue('admin@example.com')
     await button('Confirmar desactivación').trigger('click')
     await flushPromises()
-    expect(deactivateUser).toHaveBeenCalledWith(selection)
+    expect(deactivateUser).toHaveBeenCalledWith(selection, 'admin@example.com')
     expect(wrapper?.emitted('status-changed')).toHaveLength(1)
   })
   it('clears the previous failure and restores confirmation when reopened for another user', async () => {
     deactivateUser.mockRejectedValueOnce(failure(404))
     const view = await render()
+    await page.get('input[type="email"]').setValue('admin@example.com')
     await button('Confirmar desactivación').trigger('click')
     await flushPromises()
     expect(page.get('[role="alert"]').text()).toContain('no existe')
@@ -151,9 +169,10 @@ describe('UserStatusDialog', () => {
     expect(page.find('[role="alert"]').exists()).toBe(false)
     expect(page.text()).toContain('Luis Rojas')
     expect(button('Confirmar desactivación').attributes('disabled')).toBeUndefined()
+    await page.get('input[type="email"]').setValue('admin@example.com')
     await button('Confirmar desactivación').trigger('click')
     await flushPromises()
-    expect(deactivateUser).toHaveBeenLastCalledWith(nextSelection)
+    expect(deactivateUser).toHaveBeenLastCalledWith(nextSelection, 'admin@example.com')
     expect(view.emitted('status-changed')).toHaveLength(1)
   })
   it('prevents duplicate confirmation and closing while saving', async () => {
@@ -165,6 +184,7 @@ describe('UserStatusDialog', () => {
         }),
     )
     await render()
+    await page.get('input[type="email"]').setValue('admin@example.com')
     await button('Confirmar desactivación').trigger('click')
     expect(button('Cancelar').attributes('disabled')).toBeDefined()
     await button('Desactivando…').trigger('click')
@@ -188,6 +208,7 @@ describe('UserStatusDialog', () => {
       failure(status as number | undefined, 'private database detail'),
     )
     await render()
+    await page.get('input[type="email"]').setValue('admin@example.com')
     await button('Confirmar desactivación').trigger('click')
     await flushPromises()
     expect(page.get('[role="alert"]').text()).toContain(text as string)
@@ -207,6 +228,7 @@ describe('UserStatusDialog', () => {
   ])('explains protected accounts: %s', async (message) => {
     deactivateUser.mockRejectedValue(failure(409, message))
     await render()
+    await page.get('input[type="email"]').setValue('admin@example.com')
     await button('Confirmar desactivación').trigger('click')
     await flushPromises()
     expect(page.get('.notification-message').text()).toBe(message)
@@ -220,6 +242,7 @@ describe('UserStatusDialog', () => {
         }),
     )
     const view = await render()
+    await page.get('input[type="email"]').setValue('admin@example.com')
     await button('Confirmar desactivación').trigger('click')
     view.unmount()
     wrapper = undefined
