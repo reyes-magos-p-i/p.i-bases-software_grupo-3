@@ -1,6 +1,6 @@
 # Historial de compras — SCRUM-347
 
-El cliente consulta sus compras desde el menú lateral del perfil, en «Historial de compras». Las rutas `/historial-compras` y `/historial-compras/:id` llevan a esa sección; sin sesión, la guarda de cliente redirige al inicio de sesión. Una factura es una compra: el administrador la ve como `FAC-000123` y el cliente como `ORD-000123`.
+El cliente consulta sus compras desde «Historial de compras», disponible en el desplegable del avatar en cualquier pantalla del cliente. La opción abre `/account/profile?section=purchases`. Las rutas `/historial-compras` y `/historial-compras/:id` también llevan a esa sección; sin sesión, la guarda de cliente redirige al inicio de sesión. Una factura es una compra: el administrador la ve como `FAC-000123` y el cliente como `ORD-000123`.
 
 ## Lista
 

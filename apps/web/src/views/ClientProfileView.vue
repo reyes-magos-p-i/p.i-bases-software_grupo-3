@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
-import SectionNavigation from '@/components/common/SectionNavigation.vue'
 import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue'
+import EmailConfirmationField from '@/components/common/EmailConfirmationField.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import ClientPurchasesPanel from '@/components/purchases/ClientPurchasesPanel.vue'
@@ -20,7 +20,6 @@ import type {
   ClientPreferenceSettings,
 } from '@/types/client-preferences'
 import ChangePasswordView from './ChangePasswordView.vue'
-import avatar from '@/assets/profile/profile-circle-svgrepo-com.svg'
 import {
   clientProfileError,
   deactivateClientProfile,
@@ -37,28 +36,25 @@ import {
   establishClientSession,
 } from '@/services/client-session.service'
 import { authErrorStatus } from '@/utils/auth-errors'
-import type {
-  ClientAddressOptions,
-  ClientProfile,
-  ClientProfileUpdate,
+import {
+  CLIENT_PROFILE_SECTIONS,
+  type ClientAddressOptions,
+  type ClientProfile,
+  type ClientProfileUpdate,
 } from '@/types/client-profile'
 
 const router = useRouter()
 const route = useRoute()
-const sections = [
-  { id: 'personal', label: 'Mis datos', icon: 'bi-person' },
-  { id: 'security', label: 'Seguridad', icon: 'bi-shield-lock' },
-  { id: 'purchases', label: 'Historial de compras', icon: 'bi-ticket-perforated' },
-  { id: 'preferences', label: 'Preferencias', icon: 'bi-sliders' },
-  { id: 'deactivation', label: 'Desactivar cuenta', icon: 'bi-person-dash' },
-]
 const preferenceSettings = ref<ClientPreferenceSettings | null>(null)
 const preferencesLoading = ref(false)
 const preferencesError = ref('')
 const preferencesFormKey = ref(0)
 let preferencesGeneration = 0
 let preferencesAbort: AbortController | undefined
-const selected = ref(route.query.section === 'purchases' ? 'purchases' : 'personal')
+const selected = computed(
+  () =>
+    CLIENT_PROFILE_SECTIONS.find((section) => section.id === route.query.section)?.id ?? 'personal',
+)
 // The open purchase lives in the URL, so a detail link can be reopened; the API checks ownership.
 const selectedPurchaseId = computed(() => {
   const id = route.query.purchaseId
@@ -79,21 +75,10 @@ const busy = ref(false)
 const emailOpen = ref(false)
 const emailError = ref('')
 const deactivating = ref(false)
+const deactivationConfirmation = ref<InstanceType<typeof EmailConfirmationField> | null>(null)
 const deactivated = ref(false)
 const discarding = ref(false)
 const notification = ref<{ type: 'success' | 'error'; message: string } | null>(null)
-const fullName = computed(() =>
-  profile.value
-    ? [
-        profile.value.firstName,
-        profile.value.secondName,
-        profile.value.firstSurname,
-        profile.value.secondSurname,
-      ]
-        .filter(Boolean)
-        .join(' ')
-    : '',
-)
 const genderLabels: Record<string, string> = {
   M: 'Masculino',
   F: 'Femenino',
@@ -208,17 +193,18 @@ function resolveDiscard(allow: boolean) {
   leaveResolve = undefined
 }
 function changeSection(section: string) {
-  requestDiscard(() => {
-    editing.value = false
-    selected.value = section
-    if (section === 'preferences') void loadPreferences()
-    else {
-      preferencesAbort?.abort()
-      preferencesGeneration++
-      preferencesLoading.value = false
-    }
-  })
+  void router.push({ path: '/account/profile', query: { section } })
 }
+
+watch([selected, () => Boolean(profile.value)], ([section, hasProfile]) => {
+  editing.value = false
+  if (hasProfile && section === 'preferences') void loadPreferences()
+  else {
+    preferencesAbort?.abort()
+    preferencesGeneration++
+    preferencesLoading.value = false
+  }
+})
 
 async function loadPreferences() {
   const session = sessionSnapshot()
@@ -320,10 +306,12 @@ async function sendEmail(email: string) {
 }
 async function deactivate() {
   if (busy.value) return
+  const email = deactivationConfirmation.value?.validate()
+  if (!email) return
   const session = sessionSnapshot()
   busy.value = true
   try {
-    await deactivateClientProfile()
+    await deactivateClientProfile(email)
     if (!session.current()) return
     deactivating.value = false
     deactivated.value = true
@@ -344,14 +332,17 @@ function beforeUnload(event: BeforeUnloadEvent) {
     event.returnValue = ''
   }
 }
-onBeforeRouteLeave(() => {
+function confirmNavigation() {
   if (busy.value) return false
   if (!dirty.value) return true
   discarding.value = true
+  leaveResolve?.(false)
   return new Promise<boolean>((resolve) => {
     leaveResolve = resolve
   })
-})
+}
+onBeforeRouteLeave(confirmNavigation)
+onBeforeRouteUpdate(confirmNavigation)
 onMounted(() => {
   void load()
   window.addEventListener('beforeunload', beforeUnload)
@@ -366,7 +357,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppHeader />
+  <AppHeader :account-navigation-disabled="busy || loading" />
   <main class="profile-page">
     <header class="page-heading">
       <p>MI CUENTA</p>
@@ -380,7 +371,7 @@ onBeforeUnmount(() => {
       placement="bottom-right"
       @close="notification = null"
     />
-    <section v-if="deactivated" class="profile-card completed">
+    <section v-if="deactivated" class="profile-card surface-theme--dark completed">
       <h2>Cuenta desactivada</h2>
       <p>
         Tu cuenta ya no está disponible para iniciar sesión. Si necesitas reactivarla, contacta con
@@ -389,173 +380,163 @@ onBeforeUnmount(() => {
       <RouterLink to="/">Volver al portal</RouterLink>
     </section>
     <LoadingState v-else-if="loading" message="Cargando perfil..." surface="dark" />
-    <section v-else-if="loadError" class="profile-card">
+    <section v-else-if="loadError" class="profile-card surface-theme--dark">
       <p role="alert">{{ loadError }}</p>
       <button type="button" @click="load">Reintentar</button>
     </section>
-    <div v-else-if="profile" class="profile-layout">
-      <aside>
-        <div class="profile-identity">
-          <img :src="avatar" alt="Avatar predeterminado" /><strong>{{ fullName }}</strong
-          ><span>{{ profile.email }}</span>
-        </div>
-        <SectionNavigation
-          :items="sections"
-          :selected="selected"
-          :disabled="busy"
-          label="Secciones de mi perfil"
-          @select="changeSection"
+    <section
+      v-else-if="profile"
+      class="profile-card"
+      :class="{ 'surface-theme--dark': selected !== 'purchases' }"
+      :aria-busy="busy"
+    >
+      <template v-if="selected === 'personal'">
+        <ClientProfileForm
+          v-if="editing && options"
+          :profile="profile"
+          :options="options"
+          :pending="busy"
+          @save="save"
+          @dirty="dirty = $event"
+          @cancel="
+            requestDiscard(() => {
+              editing = false
+            })
+          "
         />
-      </aside>
-      <section class="profile-card" :aria-busy="busy">
-        <template v-if="selected === 'personal'">
-          <ClientProfileForm
-            v-if="editing && options"
-            :profile="profile"
-            :options="options"
-            :pending="busy"
-            @save="save"
-            @dirty="dirty = $event"
-            @cancel="
-              requestDiscard(() => {
-                editing = false
-              })
-            "
-          />
-          <template v-else>
-            <div class="section-heading">
-              <div>
-                <h2>Mis datos</h2>
-                <p>La información registrada en tu cuenta.</p>
-              </div>
-              <button type="button" class="primary" :disabled="busy" @click="startEditing">
-                {{ busy ? 'Preparando…' : 'Editar datos' }}
-              </button>
-            </div>
-            <dl class="personal-data">
-              <div
-                v-for="field in [
-                  { key: 'firstName', label: 'Primer nombre' },
-                  { key: 'secondName', label: 'Segundo nombre' },
-                  { key: 'firstSurname', label: 'Primer apellido' },
-                  { key: 'secondSurname', label: 'Segundo apellido' },
-                ] as const"
-                :key="field.key"
-              >
-                <dt>{{ field.label }}</dt>
-                <dd>{{ profile[field.key] || 'Sin registrar' }}</dd>
-              </div>
-              <div>
-                <dt>Correo electrónico</dt>
-                <dd>{{ profile.email }}</dd>
-              </div>
-              <div>
-                <dt>Celular</dt>
-                <dd>{{ profile.phoneNumber || 'Sin registrar' }}</dd>
-              </div>
-              <div>
-                <dt>Fecha de nacimiento</dt>
-                <dd>{{ dateLabel(profile.birthday) }}</dd>
-              </div>
-              <div>
-                <dt>Género</dt>
-                <dd>{{ genderLabels[profile.gender || ''] || 'Sin especificar' }}</dd>
-              </div>
-              <div>
-                <dt>Fecha de registro</dt>
-                <dd>{{ dateLabel(profile.createdAt, true) }}</dd>
-              </div>
-              <div>
-                <dt>Estado</dt>
-                <dd>Activo</dd>
-              </div>
-              <div class="address-data">
-                <dt>Dirección</dt>
-                <dd v-if="profile.address">
-                  {{
-                    [
-                      profile.address.provinceName,
-                      profile.address.cantonName,
-                      profile.address.districtName,
-                      profile.address.details,
-                    ]
-                      .filter(Boolean)
-                      .join(', ')
-                  }}
-                </dd>
-                <dd v-else>Sin registrar</dd>
-              </div>
-            </dl>
-          </template>
-        </template>
-        <ClientPurchasesPanel
-          v-else-if="selected === 'purchases'"
-          :purchase-id="selectedPurchaseId"
-          @select="selectPurchase"
-          @session-expired="purchasesSessionExpired"
-        />
-        <template v-else-if="selected === 'security'">
-          <h2>Seguridad</h2>
-          <p>Controla cómo accedes a tu cuenta.</p>
-          <div class="email-security">
+        <template v-else>
+          <div class="section-heading">
             <div>
-              <h3>Correo electrónico</h3>
-              <p>{{ profile.email }}</p>
+              <h2>Mis datos</h2>
+              <p>La información registrada en tu cuenta.</p>
             </div>
-            <button type="button" :disabled="busy" @click="openEmailDialog">Cambiar correo</button>
+            <button type="button" class="primary" :disabled="busy" @click="startEditing">
+              {{ busy ? 'Preparando…' : 'Editar datos' }}
+            </button>
           </div>
-          <ChangePasswordView
-            embedded
-            account-type="client"
-            @submission-state="busy = $event"
-            @return-to-profile="changeSection('personal')"
-          />
-        </template>
-        <template v-else-if="selected === 'preferences'"
-          ><h2 v-if="!preferenceSettings || preferencesLoading || preferencesError">
-            Preferencias
-          </h2>
-          <dl>
-            <dt>Idioma registrado</dt>
-            <dd>
-              {{
-                profile.language === 'es'
-                  ? 'Español'
-                  : profile.language === 'en'
-                    ? 'Inglés'
-                    : profile.language
-              }}
-            </dd>
+          <dl class="personal-data">
+            <div
+              v-for="field in [
+                { key: 'firstName', label: 'Primer nombre' },
+                { key: 'secondName', label: 'Segundo nombre' },
+                { key: 'firstSurname', label: 'Primer apellido' },
+                { key: 'secondSurname', label: 'Segundo apellido' },
+              ] as const"
+              :key="field.key"
+            >
+              <dt>{{ field.label }}</dt>
+              <dd>{{ profile[field.key] || 'Sin registrar' }}</dd>
+            </div>
+            <div>
+              <dt>Correo electrónico</dt>
+              <dd>{{ profile.email }}</dd>
+            </div>
+            <div>
+              <dt>Celular</dt>
+              <dd>{{ profile.phoneNumber || 'Sin registrar' }}</dd>
+            </div>
+            <div>
+              <dt>Fecha de nacimiento</dt>
+              <dd>{{ dateLabel(profile.birthday) }}</dd>
+            </div>
+            <div>
+              <dt>Género</dt>
+              <dd>{{ genderLabels[profile.gender || ''] || 'Sin especificar' }}</dd>
+            </div>
+            <div>
+              <dt>Fecha de registro</dt>
+              <dd>{{ dateLabel(profile.createdAt, true) }}</dd>
+            </div>
+            <div>
+              <dt>Estado</dt>
+              <dd>Activo</dd>
+            </div>
+            <div class="address-data">
+              <dt>Dirección</dt>
+              <dd v-if="profile.address">
+                {{
+                  [
+                    profile.address.provinceName,
+                    profile.address.cantonName,
+                    profile.address.districtName,
+                    profile.address.details,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')
+                }}
+              </dd>
+              <dd v-else>Sin registrar</dd>
+            </div>
           </dl>
-          <LoadingState v-if="preferencesLoading" message="Cargando preferencias..." />
-          <div v-else-if="preferencesError" role="alert">
-            <p>{{ preferencesError }}</p>
-            <button type="button" @click="loadPreferences">Reintentar</button>
-          </div>
-          <ClientPreferencesForm
-            v-else-if="preferenceSettings"
-            :key="preferencesFormKey"
-            :settings="preferenceSettings"
-            :pending="busy"
-            @save="savePreferences"
-            @dirty="dirty = $event"
-            @cancel="cancelPreferences"
-          />
         </template>
-        <template v-else
-          ><h2>Desactivar cuenta</h2>
-          <p>
-            Al desactivar tu cuenta se cerrarán tus sesiones y no podrás iniciar sesión ni usar las
-            funciones de tu cuenta. Tus registros se conservarán.
-          </p>
-          <p>Para volver a usarla, deberás solicitar la reactivación a asistencia.</p>
-          <button type="button" class="danger" :disabled="busy" @click="deactivating = true">
-            Desactivar mi cuenta
-          </button></template
-        >
-      </section>
-    </div>
+      </template>
+      <ClientPurchasesPanel
+        v-else-if="selected === 'purchases'"
+        :purchase-id="selectedPurchaseId"
+        @select="selectPurchase"
+        @session-expired="purchasesSessionExpired"
+      />
+      <template v-else-if="selected === 'security'">
+        <h2>Seguridad</h2>
+        <p>Controla cómo accedes a tu cuenta.</p>
+        <div class="email-security">
+          <div>
+            <h3>Correo electrónico</h3>
+            <p>{{ profile.email }}</p>
+          </div>
+          <button type="button" :disabled="busy" @click="openEmailDialog">Cambiar correo</button>
+        </div>
+        <ChangePasswordView
+          embedded
+          surface="dark"
+          account-type="client"
+          @submission-state="busy = $event"
+          @return-to-profile="changeSection('personal')"
+        />
+      </template>
+      <template v-else-if="selected === 'preferences'"
+        ><h2 v-if="!preferenceSettings || preferencesLoading || preferencesError">Preferencias</h2>
+        <dl>
+          <dt>Idioma registrado</dt>
+          <dd>
+            {{
+              profile.language === 'es'
+                ? 'Español'
+                : profile.language === 'en'
+                  ? 'Inglés'
+                  : profile.language
+            }}
+          </dd>
+        </dl>
+        <LoadingState v-if="preferencesLoading" message="Cargando preferencias..." surface="dark" />
+        <div v-else-if="preferencesError" role="alert">
+          <p>{{ preferencesError }}</p>
+          <button type="button" @click="loadPreferences">Reintentar</button>
+        </div>
+        <ClientPreferencesForm
+          v-else-if="preferenceSettings"
+          :key="preferencesFormKey"
+          :settings="preferenceSettings"
+          :pending="busy"
+          @save="savePreferences"
+          @dirty="dirty = $event"
+          @cancel="cancelPreferences"
+        />
+      </template>
+      <template v-else
+        ><h2>Desactivar cuenta</h2>
+        <p>
+          Al desactivar tu cuenta se cerrarán tus sesiones y no podrás iniciar sesión ni usar las
+          funciones de tu cuenta. Tus registros se conservarán.
+        </p>
+        <p>Para volver a usarla, deberás solicitar la reactivación a asistencia.</p>
+        <button type="button" class="danger" :disabled="busy" @click="deactivating = true">
+          Desactivar mi cuenta
+        </button></template
+      >
+    </section>
     <ClientEmailChangeDialog
+      surface="dark"
       v-if="profile"
       :open="emailOpen"
       :current-email="profile.email"
@@ -566,6 +547,7 @@ onBeforeUnmount(() => {
     />
     <ConfirmationDialog
       :open="deactivating"
+      surface="dark"
       title="¿Desactivar tu cuenta?"
       message="Se cerrarán todas tus sesiones y perderás el acceso a tu cuenta. Tus datos se conservarán. Para reactivarla necesitarás contactar con asistencia. ¿Deseas continuar?"
       confirm-label="Desactivar cuenta"
@@ -573,9 +555,17 @@ onBeforeUnmount(() => {
       :pending="busy"
       @cancel="deactivating = false"
       @confirm="deactivate"
-    />
+    >
+      <EmailConfirmationField
+        v-if="profile && deactivating"
+        ref="deactivationConfirmation"
+        :expected-email="profile.email"
+        :disabled="busy"
+      />
+    </ConfirmationDialog>
     <ConfirmationDialog
       :open="discarding"
+      surface="dark"
       title="Cambios sin guardar"
       message="Tienes cambios sin guardar. Si continúas, se descartarán. ¿Deseas salir de la edición?"
       confirm-label="Descartar cambios"
@@ -609,41 +599,11 @@ onBeforeUnmount(() => {
 .page-heading > p:last-child {
   color: var(--text-on-dark-secondary);
 }
-.profile-layout {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 1.5rem;
-  align-items: start;
-}
-.profile-identity {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 1.5rem 1rem;
-  margin-bottom: 0.75rem;
-  border-radius: var(--radius-medium);
-  background: var(--surface-background);
-  color: var(--text-on-dark);
-  text-align: center;
-  overflow-wrap: anywhere;
-}
-.profile-identity img {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: var(--primary-color);
-  border: 2px solid var(--accent-color);
-}
-.profile-identity span {
-  font-size: 0.85rem;
-  color: var(--text-on-dark-secondary);
-}
 .profile-card {
   min-width: 0;
   border-radius: var(--radius-medium);
   padding: clamp(1.25rem, 3vw, 2rem);
-  background: var(--content-background);
+  background: var(--panel-background);
   color: var(--text-primary);
   box-shadow: 0 8px 24px var(--shadow-color);
 }
@@ -731,14 +691,6 @@ button:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--focus-color);
   outline-offset: 2px;
-}
-@media (max-width: 760px) {
-  .profile-layout {
-    grid-template-columns: 1fr;
-  }
-  .profile-identity {
-    display: none;
-  }
 }
 @media (max-width: 480px) {
   .profile-page {

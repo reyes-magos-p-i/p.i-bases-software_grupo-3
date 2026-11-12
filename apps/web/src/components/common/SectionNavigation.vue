@@ -1,15 +1,20 @@
 <script setup lang="ts">
 defineProps<{
-  items: { id: string; label: string; icon: string }[]
+  items: readonly { id: string; label: string; icon: string }[]
   selected: string
   disabled?: boolean
   label?: string
+  appearance?: 'sidebar' | 'menu'
 }>()
 const emit = defineEmits<{ select: [id: string] }>()
 </script>
 
 <template>
-  <nav class="section-navigation" :aria-label="label || 'Secciones'">
+  <nav
+    class="section-navigation"
+    :class="{ 'section-navigation--menu': appearance === 'menu' }"
+    :aria-label="label || 'Secciones'"
+  >
     <button
       v-for="item in items"
       :key="item.id"
@@ -60,8 +65,29 @@ button:focus-visible {
 button:disabled {
   opacity: 0.65;
 }
+.section-navigation--menu {
+  gap: 2px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.section-navigation--menu button {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  color: var(--text-primary);
+}
+.section-navigation--menu button:hover {
+  background: var(--surface-hover);
+}
+.section-navigation--menu button[aria-current] {
+  background: var(--accent-color);
+  color: var(--page-background);
+}
+.section-navigation--menu button:focus-visible {
+  outline-color: var(--focus-color);
+}
 @media (max-width: 760px) {
-  .section-navigation {
+  .section-navigation:not(.section-navigation--menu) {
     flex-direction: row;
     overflow-x: auto;
   }

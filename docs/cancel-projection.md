@@ -30,15 +30,15 @@ abajo).
 
 ## Revisión de criterios de aceptación (16 de octubre de 2026)
 
-| Criterio                                                                                                            | Estado           | Evidencia                                                                                       |
-| ------------------------------------------------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------- |
-| Al confirmar, el estado cambia a cancelada y la sala queda libre                                                    | Cumple           | `UPDATE … STATUS = 'CANCELLED'`; la detección de conflictos excluye `CANCELLED`                 |
-| Fallo de conexión o del backend: «No se pudo cancelar la proyección, intenta de nuevo»                              | Cumple           | Mensaje exacto en `CancelProjectionDialog.vue`                                                  |
-| Sin rol Administrador se deniega el acceso                                                                          | Cumple           | `AdministratorGuard` en la API (`403`); la sección no aparece para `EMPLOYEE`                   |
-| Con boletos vendidos, advertir «Esta función tiene boletos vendidos. Al cancelar, coordina el reembolso en oficina» | Cumple | Se complementa en el Sprint 3 junto con las reglas de negocio sobre reembolsos (gestion de reembolsos automaticos)                                               |
-| Próxima (menos de 24 h) o en curso: reforzar la advertencia de reembolso urgente                                    | Cumple           | Aviso con `role="alert"` para `IN_PROGRESS` o inicio en menos de 24 h                           |
-| Cancelación irreversible desde la interfaz                                                                          | Cumple           | Ningún endpoint ni acción reactiva una proyección cancelada                                     |
-| Solo aplica a proyecciones activas; no se cancela algo ya cancelado                                                 | Cumple           | Cancelada o finalizada se rechaza con `409`; una inactiva no está cancelada y se puede cancelar |
+| Criterio                                                                                                            | Estado | Evidencia                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| Al confirmar, el estado cambia a cancelada y la sala queda libre                                                    | Cumple | `UPDATE … STATUS = 'CANCELLED'`; la detección de conflictos excluye `CANCELLED`                                    |
+| Fallo de conexión o del backend: «No se pudo cancelar la proyección, intenta de nuevo»                              | Cumple | Mensaje exacto en `CancelProjectionDialog.vue`                                                                     |
+| Sin rol Administrador se deniega el acceso                                                                          | Cumple | `AdministratorGuard` en la API (`403`); la sección no aparece para `EMPLOYEE`                                      |
+| Con boletos vendidos, advertir «Esta función tiene boletos vendidos. Al cancelar, coordina el reembolso en oficina» | Cumple | Se complementa en el Sprint 3 junto con las reglas de negocio sobre reembolsos (gestion de reembolsos automaticos) |
+| Próxima (menos de 24 h) o en curso: reforzar la advertencia de reembolso urgente                                    | Cumple | Aviso con `role="alert"` para `IN_PROGRESS` o inicio en menos de 24 h                                              |
+| Cancelación irreversible desde la interfaz                                                                          | Cumple | Ningún endpoint ni acción reactiva una proyección cancelada                                                        |
+| Solo aplica a proyecciones activas; no se cancela algo ya cancelado                                                 | Cumple | Cancelada o finalizada se rechaza con `409`; una inactiva no está cancelada y se puede cancelar                    |
 
 ## Reembolsos y boletos vendidos (Sprint 3)
 
@@ -52,3 +52,7 @@ quedan fuera de los criterios de aceptación de este sprint:
 
 Mientras tanto, el diálogo mantiene el aviso de coordinar el reembolso en
 oficina cuando la función está en curso o empieza en menos de 24 horas.
+
+## Confirmación escrita del correo
+
+`PATCH /projections/{id}/cancel` requiere un cuerpo `{ "email": "administrador@example.com" }`. El diálogo solicita escribir el correo de quien realiza la acción y valida formato y coincidencia antes de enviar. La API lo compara con la identidad autenticada vigente antes de llamar al servicio. Una confirmación ausente, inválida o diferente responde 400 y no cancela la función. Se mantienen las reglas de cancelación, permisos, origen permitido y advertencias actuales. Volver o cerrar no exige completar el correo.

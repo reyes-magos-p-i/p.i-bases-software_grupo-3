@@ -72,7 +72,7 @@ compras ni a otros registros históricos.
 - `PATCH /api/users/clients/:id/activate`: empleados y administradores.
 - `PATCH /api/users/employees/:id/activate`: administradores.
 - ID: entero positivo dentro del rango seguro de JavaScript.
-- Cuerpo: omitido o `{}`; no admite campos.
+- Cuerpo de desactivación: `{ "email": "correo-de-la-sesion@example.com" }`. La activación conserva el cuerpo vacío.
 - Se requiere autenticación y el origen autorizado de la sesión.
 - Éxito: `204` sin cuerpo.
 - `400`: solicitud inválida; `401`: sesión no vigente; `403`: permiso u
@@ -138,3 +138,7 @@ misma transacción de escritura, evitando que una operación iniciada antes de l
 desactivación pueda guardar después. La limpieza existente de registros públicos
 pendientes elimina también su fila de recuperación antes de eliminar la cuenta,
 manteniendo la integridad referencial y la retención ya establecida.
+
+## Confirmación escrita del correo
+
+Para desactivar clientes o empleados se requiere `{ "email": "correo-de-la-sesion@example.com" }`. Se escribe el correo del empleado o administrador que realiza la acción, no el de la cuenta seleccionada. El DTO reutiliza la validación de correo del CRUD y normaliza espacios y mayúsculas. La identidad autenticada se obtiene de los datos vigentes de la cuenta; el backend rechaza la ausencia, un formato inválido o una coincidencia incorrecta con HTTP 400 antes de modificar datos. Los permisos, la protección de la propia cuenta y del último administrador se conservan. Activar usuarios continúa usando un cuerpo vacío. Cancelar y cerrar no requieren completar el campo.

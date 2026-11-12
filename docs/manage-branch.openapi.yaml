@@ -91,7 +91,9 @@ paths:
       summary: Desactivar una sucursal
       description: >-
         Cambia una sucursal activa a STATUS = 'INACTIVE'. No se borra, deja de aparecer
-        en el listado y no se puede volver a activar. No recibe cuerpo.
+        en el listado y no se puede volver a activar. Requiere escribir el correo de la sesión que realiza la acción.
+      requestBody:
+        $ref: "sensitive-actions.openapi.yaml#/components/requestBodies/EmailConfirmation"
       parameters:
         - name: id
           in: path

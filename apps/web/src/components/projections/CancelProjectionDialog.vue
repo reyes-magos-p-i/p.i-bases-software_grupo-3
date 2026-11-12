@@ -10,6 +10,8 @@ import {
   projectionCode,
 } from '@/utils/projection-format'
 import { localNow } from '@/utils/projection-time'
+import EmailConfirmationField from '@/components/common/EmailConfirmationField.vue'
+import { employeeSession } from '@/services/employee-session.service'
 
 const URGENT_HOURS = 24
 const props = defineProps<{ projection: ListedProjection | null }>()
@@ -20,6 +22,7 @@ const emit = defineEmits<{
   forbidden: []
 }>()
 const saving = ref(false)
+const confirmation = ref<InstanceType<typeof EmailConfirmationField> | null>(null)
 const error = ref('')
 const feedback = useTemplateRef<HTMLElement>('feedback')
 let disposed = false
@@ -51,10 +54,12 @@ function close() {
 async function confirm() {
   const projection = props.projection
   if (!projection || saving.value) return
+  const email = confirmation.value?.validate()
+  if (!email) return
   saving.value = true
   error.value = ''
   try {
-    const cancelled = await cancelProjection(projection.movieFunctionId)
+    const cancelled = await cancelProjection(projection.movieFunctionId, email)
     if (!disposed) emit('cancelled', cancelled)
   } catch (failure) {
     if (disposed) return
@@ -119,6 +124,12 @@ onBeforeUnmount(() => {
             oficina de inmediato.
           </span>
         </p>
+        <EmailConfirmationField
+          :key="projection.movieFunctionId"
+          ref="confirmation"
+          :expected-email="employeeSession.user.value?.email"
+          :disabled="saving"
+        />
         <p v-if="error" ref="feedback" class="cancel-error" role="alert" tabindex="-1">
           {{ error }}
         </p>

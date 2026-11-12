@@ -631,7 +631,7 @@ function goHome() {
 .policy-card {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-medium);
-  background: var(--content-background);
+  background: var(--panel-background);
   box-shadow: 0 8px 28px color-mix(in srgb, var(--page-background) 8%, transparent);
   color: var(--text-primary);
 }
@@ -680,7 +680,7 @@ function goHome() {
   padding: 10px 13px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background-color: var(--content-background);
+  background-color: var(--input-background);
   color: var(--text-primary);
   transition:
     border-color var(--transition-fast),
@@ -784,7 +784,7 @@ function goHome() {
   padding: 8px 13px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background: var(--content-background);
+  background: var(--panel-background);
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -805,7 +805,7 @@ function goHome() {
       color-mix(in srgb, var(--primary-color) 3%, transparent),
       transparent 55%
     ),
-    var(--content-background);
+    var(--panel-background);
   color: var(--text-primary);
 }
 

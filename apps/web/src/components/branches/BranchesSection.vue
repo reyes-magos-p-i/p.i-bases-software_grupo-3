@@ -196,14 +196,14 @@ function askDeactivation(row: { [key: string]: unknown }) {
 function closeDeactivation() {
   if (!submitting.value) deactivatingBranch.value = null
 }
-async function confirmDeactivation() {
+async function confirmDeactivation(email: string) {
   const branch = deactivatingBranch.value
   if (!branch || submitting.value || props.disabled || deactivationBlocked.value) return
   submitting.value = true
   emit('busy', true)
   deactivationError.value = ''
   try {
-    await deactivateBranch(branch.id)
+    await deactivateBranch(branch.id, email)
     if (state.disposed) return
     deactivatingBranch.value = null
     notice.value = 'Sucursal desactivada con éxito'

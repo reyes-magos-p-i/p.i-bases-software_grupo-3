@@ -206,7 +206,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleClickOutside
   padding: 10px 12px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background: var(--content-background);
+  background: var(--panel-background);
   color: var(--text-primary);
   font: inherit;
 }
@@ -257,7 +257,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleClickOutside
   padding: 4px 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-small);
-  background: var(--content-background);
+  background: var(--panel-background);
   color: var(--text-primary);
 }
 
@@ -298,7 +298,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleClickOutside
   overflow-y: auto;
 
   list-style: none;
-  background: var(--content-background);
+  background: var(--panel-background);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-small);

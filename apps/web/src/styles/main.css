@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import './dialog.css';
 @import './crud-modal.css';
+@import './surface-theme.css';
 
 *,
 *::before,

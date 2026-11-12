@@ -24,4 +24,19 @@ describe('SectionNavigation', () => {
     expect(wrapper.findAll('button:disabled')).toHaveLength(2)
     wrapper.unmount()
   })
+  it('supports menu presentation with the current section and disabled navigation', async () => {
+    const wrapper = mount(SectionNavigation, {
+      props: { items, selected: 'two', appearance: 'menu' },
+    })
+    expect(wrapper.get('nav').classes()).toContain('section-navigation--menu')
+    expect(wrapper.findAll('button')[1]!.attributes('aria-current')).toBe('page')
+    await wrapper.findAll('button')[0]!.trigger('click')
+    expect(wrapper.emitted('select')).toEqual([['one']])
+    await wrapper.setProps({ disabled: true })
+    await wrapper.findAll('button')[1]!.trigger('click')
+    expect(wrapper.emitted('select')).toHaveLength(1)
+    await wrapper.setProps({ appearance: 'sidebar' })
+    expect(wrapper.get('nav').classes()).not.toContain('section-navigation--menu')
+    wrapper.unmount()
+  })
 })

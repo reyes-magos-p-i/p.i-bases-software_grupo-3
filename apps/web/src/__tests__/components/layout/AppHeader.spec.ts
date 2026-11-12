@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
+import SectionNavigation from '@/components/common/SectionNavigation.vue'
 import AccountMenu from '@/components/common/AccountMenu.vue'
+import { CLIENT_PROFILE_SECTIONS } from '@/types/client-profile'
 import { establishClientSession } from '@/services/client-session.service'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import { requireClientSession } from '@/router/client-session.guard'
@@ -205,8 +207,11 @@ describe('AppHeader authentication navigation', () => {
     await wrapper.get('.account-avatar').trigger('click')
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
     expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
-      'Mi perfil',
-      'Cambiar contraseña',
+      'Mis datos',
+      'Seguridad',
+      'Historial de compras',
+      'Preferencias',
+      'Desactivar cuenta',
       'Cerrar sesión',
     ])
 
@@ -581,16 +586,75 @@ describe('AppHeader authentication navigation', () => {
     expect(page.get('[role="alert"]').text()).toContain('Tu sesión terminó')
     expect(page.get('[role="alert"]').text()).not.toContain('401')
   })
-  it('navigates to the profile from the existing account menu', async () => {
+  it.each(['/', '/buy-tickets', '/account/password'])(
+    'offers every client section with direct navigation from %s',
+    async (path) => {
+      await flushPromises()
+      establishClientSession(
+        { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: 'Rojas' },
+        'token',
+      )
+      for (const section of CLIENT_PROFILE_SECTIONS) {
+        await router.push(path)
+        await flushPromises()
+        await wrapper.get('.account-avatar').trigger('click')
+        expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
+          'Mis datos',
+          'Seguridad',
+          'Historial de compras',
+          'Preferencias',
+          'Desactivar cuenta',
+          'Cerrar sesión',
+        ])
+        const options = wrapper.getComponent(SectionNavigation).findAll('button')
+        await options.find((button) => button.text() === section.label)!.trigger('click')
+        await flushPromises()
+        expect(wrapper.find('.account-dropdown').exists()).toBe(false)
+        expect(router.currentRoute.value.path).toBe('/account/profile')
+        expect(router.currentRoute.value.query).toEqual({ section: section.id })
+        await wrapper.get('.account-avatar').trigger('click')
+        expect(wrapper.get('button[aria-current="page"]').text()).toBe(section.label)
+        await wrapper.get('.account-avatar').trigger('click')
+      }
+    },
+  )
+  it('blocks section changes during pending operations while keeping the options visible', async () => {
     await flushPromises()
     establishClientSession(
-      { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: '' },
+      { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: 'Rojas' },
       'token',
     )
-    await nextTick()
-    wrapper.getComponent(AccountMenu).vm.$emit('profile')
+    await wrapper.setProps({ accountNavigationDisabled: true })
+    await wrapper.get('.account-avatar').trigger('click')
+    const options = wrapper.getComponent(SectionNavigation).findAll('button')
+    expect(options).toHaveLength(5)
+    expect(options.every((button) => button.attributes('disabled') !== undefined)).toBe(true)
+    await options[0]!.trigger('click')
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(wrapper.find('.account-dropdown').exists()).toBe(true)
+    await wrapper.setProps({ accountNavigationDisabled: false })
+    await options[0]!.trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/account/profile')
+    expect(router.currentRoute.value.query.section).toBe('personal')
+  })
+  it('tracks the selected section through browser back and forward navigation', async () => {
+    await flushPromises()
+    establishClientSession(
+      { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: 'Rojas' },
+      'token',
+    )
+    await router.push('/account/profile?section=security')
+    await router.push('/account/profile?section=preferences')
+    await wrapper.get('.account-avatar').trigger('click')
+    expect(wrapper.get('button[aria-current="page"]').text()).toBe('Preferencias')
+    router.back()
+    await flushPromises()
+    expect(wrapper.get('button[aria-current="page"]').text()).toBe('Seguridad')
+    router.forward()
+    await flushPromises()
+    expect(wrapper.get('button[aria-current="page"]').text()).toBe('Preferencias')
+    await router.push('/account/profile?section=invalid')
+    expect(wrapper.get('button[aria-current="page"]').text()).toBe('Mis datos')
   })
   it('does not enforce password status while confirming a new email', async () => {
     await flushPromises()
