@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import logo from '@/assets/logos/cinetadel-logo.png'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
 import LoginModal from '@/components/auth/LoginModal.vue'
 import AccountMenu from '@/components/common/AccountMenu.vue'
+import SectionNavigation from '@/components/common/SectionNavigation.vue'
+import { CLIENT_PROFILE_SECTIONS } from '@/types/client-profile'
 import {
   EmployeeAuthError,
   getClientPasswordStatus,
@@ -32,7 +34,7 @@ import {
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
-defineProps<{ overlay?: boolean }>()
+defineProps<{ overlay?: boolean; accountNavigationDisabled?: boolean }>()
 
 const PASSWORD_PATH = '/account/password'
 const activeModal = ref<'register' | 'login' | null>(null)
@@ -40,6 +42,12 @@ const clientUser = clientSession.user
 const loginMode = ref<'client' | 'employee'>('client')
 const router = useRouter()
 const route = useRoute()
+const accountSection = computed(() =>
+  route.path === '/account/profile'
+    ? (CLIENT_PROFILE_SECTIONS.find((section) => section.id === route.query.section)?.id ??
+      'personal')
+    : '',
+)
 const sessionUser = employeeSession.user
 const submitting = ref(false)
 const loginError = ref('')
@@ -247,8 +255,8 @@ async function logoutClient() {
   }
 }
 
-function goToChangePassword() {
-  void router.push('/account/password')
+function goToProfileSection(section: string) {
+  void router.push({ path: '/account/profile', query: { section } })
 }
 </script>
 
@@ -259,13 +267,23 @@ function goToChangePassword() {
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
       </RouterLink>
       <div class="navbar-actions">
-        <AccountMenu
-          v-if="clientUser"
-          :user="clientUser"
-          @logout="logoutClient"
-          @change-password="goToChangePassword"
-          @profile="router.push('/account/profile')"
-        />
+        <AccountMenu v-if="clientUser" :user="clientUser" @logout="logoutClient">
+          <template #navigation="{ close }">
+            <SectionNavigation
+              :items="CLIENT_PROFILE_SECTIONS"
+              :selected="accountSection"
+              :disabled="accountNavigationDisabled"
+              appearance="menu"
+              label="Secciones de mi perfil"
+              @select="
+                (section) => {
+                  close()
+                  goToProfileSection(section)
+                }
+              "
+            />
+          </template>
+        </AccountMenu>
         <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
           >Ir al dashboard</RouterLink
         >

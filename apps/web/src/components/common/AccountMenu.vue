@@ -5,9 +5,7 @@ import type { ClientIdentity } from '@/types/client-auth'
 
 const props = defineProps<{ user: ClientIdentity }>()
 const emit = defineEmits<{
-  (event: 'profile'): void
   (event: 'logout'): void
-  (event: 'change-password'): void
 }>()
 const menuOpen = ref(false)
 const root = ref<HTMLElement | null>(null)
@@ -17,13 +15,14 @@ const fullName = computed(() =>
   [props.user.firstName, props.user.lastName].filter(Boolean).join(' '),
 )
 
-function openProfile() {
-  menuOpen.value = false
-  emit('profile')
-}
 function logout() {
   menuOpen.value = false
   emit('logout')
+}
+
+function closeNavigation() {
+  menuOpen.value = false
+  opener.value?.focus()
 }
 
 function closeOnOutsideClick(event: PointerEvent) {
@@ -44,7 +43,7 @@ async function openWithKeyboard(event: KeyboardEvent) {
   event.preventDefault()
   menuOpen.value = true
   await nextTick()
-  root.value?.querySelector<HTMLButtonElement>('.account-actions button')?.focus()
+  root.value?.querySelector<HTMLButtonElement>('.account-actions button:not(:disabled)')?.focus()
 }
 
 function leave(event: FocusEvent) {
@@ -83,6 +82,7 @@ onBeforeUnmount(() => {
       v-if="menuOpen"
       :id="dropdownId"
       class="account-dropdown"
+      :class="{ 'account-dropdown--navigation': !!$slots.navigation }"
       :aria-label="`Perfil de ${fullName}`"
     >
       <div class="account-details" aria-label="Datos de la cuenta">
@@ -96,14 +96,7 @@ onBeforeUnmount(() => {
         </p>
       </div>
       <div class="account-actions" aria-label="Opciones de cuenta">
-        <button type="button" @click="openProfile">
-          <i class="bi bi-person-badge" aria-hidden="true"></i>
-          Mi perfil
-        </button>
-        <button type="button" @click="emit('change-password')">
-          <i class="bi bi-key" aria-hidden="true"></i>
-          Cambiar contraseña
-        </button>
+        <slot name="navigation" :close="closeNavigation" />
         <button type="button" class="account-logout" aria-label="Cerrar sesión" @click="logout">
           <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
           Cerrar sesión
@@ -169,6 +162,12 @@ onBeforeUnmount(() => {
   background: var(--content-background);
   box-shadow: 0 8px 24px var(--shadow-color);
   color: var(--text-primary);
+}
+
+.account-dropdown--navigation {
+  max-height: calc(100dvh - 100px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .account-detail {
