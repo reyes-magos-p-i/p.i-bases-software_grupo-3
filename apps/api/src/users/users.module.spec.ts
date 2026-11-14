@@ -648,6 +648,8 @@ describe('UsersModule (application HTTP integration)', () => {
   });
 
   it('prevents module initialization when required SMTP configuration is missing', async () => {
+    // Only production sends real mail, so only production requires the SMTP settings.
+    settings.NODE_ENV = 'production';
     delete settings.SMTP_PASSWORD;
     await expect(buildModule()).rejects.toThrow(
       'Missing or invalid SMTP configuration: SMTP_PASSWORD.',
