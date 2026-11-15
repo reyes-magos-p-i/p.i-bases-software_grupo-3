@@ -30,7 +30,6 @@
 
       <section>
         <h2>SOBRE CINETADEL</h2>
-        <router-link to="/guest-purchases">Consultar compra</router-link>
         <router-link to="/terms-and-conditions">Términos y condiciones</router-link>
         <router-link to="/refund-policy">Política de reembolso</router-link>
         <router-link to="/privacy-policy">Aviso de privacidad</router-link>
