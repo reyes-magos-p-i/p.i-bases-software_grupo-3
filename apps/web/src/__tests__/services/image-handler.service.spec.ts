@@ -70,21 +70,21 @@ describe('image-handler.service', () => {
       'https://old.example.com/images/poster.webp',
     ])('extracts the filename from %s', (value) => {
       expect(getPosterUrl(value)).toBe(
-        `${window.location.origin}/uploads/posters/poster.webp`,
+        `${window.location.origin}/api/image-handler/posters/poster.webp`,
       )
     })
 
-    it('uses the origin of an absolute API URL', () => {
+    it('uses an absolute API base URL', () => {
       vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com/api')
 
       expect(getPosterUrl('poster.webp')).toBe(
-        'https://api.example.com/uploads/posters/poster.webp',
+        'https://api.example.com/api/image-handler/posters/poster.webp',
       )
     })
 
     it('encodes special characters in the filename', () => {
       expect(getPosterUrl('uploads/my poster #1.webp')).toBe(
-        `${window.location.origin}/uploads/posters/my%20poster%20%231.webp`,
+        `${window.location.origin}/api/image-handler/posters/my%20poster%20%231.webp`,
       )
     })
 
@@ -116,13 +116,13 @@ describe('image-handler.service', () => {
       )
     })
 
-    it('trims whitespace around the API base URL', () => {
-      vi.stubEnv('VITE_API_BASE_URL', '  https://api.example.com/api  ')
+  it('trims whitespace around the API base URL', () => {
+    vi.stubEnv('VITE_API_BASE_URL', '  https://api.example.com/api  ')
 
-      expect(getPosterUrl('poster.webp')).toBe(
-        'https://api.example.com/uploads/posters/poster.webp',
-      )
-    })
+    expect(getPosterUrl('poster.webp')).toBe(
+      'https://api.example.com/api/image-handler/posters/poster.webp',
+    )
+  })
 
     it.each(['', '   '])(
       'throws when the API base URL is blank: %j',

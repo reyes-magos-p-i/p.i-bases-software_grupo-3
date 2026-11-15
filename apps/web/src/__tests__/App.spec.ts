@@ -21,14 +21,7 @@ vi.mock('@/services/movieFunctions', async (original) => ({
   ...(await original<typeof import('@/services/movieFunctions')>()),
   getPortalMovies: vi.fn().mockResolvedValue([]),
 }))
-vi.mock('@/services/employee-session.service', async () => {
-  const { ref } = await import('vue')
-  return {
-    employeeSession: { user: ref(null), status: ref('unknown'), error: ref('') },
-    restoreEmployeeSession: vi.fn().mockResolvedValue(null),
-    authenticateEmployee: vi.fn(),
-  }
-})
+
 
 describe('App', () => {
   afterEach(() => {
@@ -39,25 +32,31 @@ describe('App', () => {
   })
 
   it.each(['/api', '/api/'])(
-    'loads catalog and carousel images from uploads with API base %s',
-    async (baseUrl) => {
-      vi.stubEnv('VITE_API_BASE_URL', baseUrl)
-      vi.mocked(getPortalMovies).mockResolvedValue([
-        { id: 1, title: 'Test movie', posterImage: 'poster.png' },
-      ])
-      await router.push('/')
-      await router.isReady()
-      const wrapper = mount(App, { global: { plugins: [router] } })
-      try {
-        await flushPromises()
-        expect(
-          wrapper.findAll('img[src$="/uploads/posters/poster.png"]').length,
-        ).toBeGreaterThanOrEqual(2)
-      } finally {
-        wrapper.unmount()
-      }
-    },
-  )
+  'loads catalog and carousel images through the API with API base %s',
+  async (baseUrl) => {
+    vi.stubEnv('VITE_API_BASE_URL', baseUrl)
+    vi.mocked(getPortalMovies).mockResolvedValue([
+      { id: 1, title: 'Test movie', posterImage: 'poster.png' },
+    ])
+
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(App, { global: { plugins: [router] } })
+
+    try {
+      await flushPromises()
+
+      expect(
+        wrapper.findAll(
+          'img[src$="/api/image-handler/posters/poster.png"]',
+        ).length,
+      ).toBeGreaterThanOrEqual(2)
+    } finally {
+      wrapper.unmount()
+    }
+  },
+)
 
   it('renders the home page through the router', async () => {
     await router.push('/')
