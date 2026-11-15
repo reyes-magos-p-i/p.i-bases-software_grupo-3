@@ -207,8 +207,8 @@ paths:
           description: No se pudo guardar; la transacción conserva las asociaciones anteriores
   /clients/me/preferences/portal:
     get:
-      summary: Consultar el catálogo completo priorizado por preferencias propias
-      description: Un punto por cada género e idioma preferido distinto coincidente. En empates conserva el orden por próxima función y luego ID. No excluye películas sin coincidencias. Devuelve películas con funciones futuras activas, sin límite; el carrusel usa las primeras cuatro.
+      summary: Consultar el catálogo completo priorizado por preferencias e historial propios
+      description: Un punto por cada género e idioma preferido distinto coincidente y 0,2 por cada compra válida que coincida con cada género o idioma. Considera todas las facturas pagadas con entradas asociadas a la identidad autenticada, sin multiplicar por boletos; excluye invitados y facturas canceladas, pendientes o fallidas. Incluye funciones finalizadas y respeta boletos reprogramados vigentes. Las películas ya compradas conservan su puntuación por preferencias, pero no reciben bonificación del historial. En empates mantiene el orden por próxima función disponible y luego ID. No excluye películas sin coincidencias. Devuelve películas con funciones futuras activas y asientos comprables, sin límite; el carrusel usa las primeras cuatro. No devuelve historial, afinidades ni puntuaciones.
       responses:
         "200":
           description: Catálogo personalizado; Cache-Control no-store
@@ -222,11 +222,13 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "500":
+          description: No se pudo obtener la personalización completa; el portal puede consultar el catálogo público sin presentar datos anteriores como recomendaciones válidas
   /movie-fuctions/catalog:
     get:
       security: []
       summary: Consultar el catálogo público completo
-      description: Películas con funciones futuras activas, una vez cada una, ordenadas por próxima función y luego ID. No consulta preferencias personales. Conserva el endpoint existente /movie-fuctions sin cambiar su formato.
+      description: Películas con funciones futuras activas y al menos un asiento comprable, una vez cada una, ordenadas por próxima función disponible y luego ID. No consulta preferencias ni historial personales. Conserva el endpoint existente /movie-fuctions sin cambiar su formato.
       responses:
         "200":
           description: Catálogo público; Cache-Control no-store
