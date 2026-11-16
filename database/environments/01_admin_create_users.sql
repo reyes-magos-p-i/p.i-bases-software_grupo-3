@@ -3,8 +3,9 @@
 --
 -- First create both users with their passwords, so no password is ever written in a script:
 --   Database Actions > Administration > Database Users > + Create User
---   1. User Name DEVELOPMENT, its password, Quota on tablespace DATA: UNLIMITED. Leave Web Access off.
---   2. User Name CINETADEL_APP, its password. Leave Web Access off. The form also grants it
+--   1. User Name DEVELOPMENT, its password, Quota on tablespace DATA: UNLIMITED. Turn Web Access on
+--      (alias 'development') so the team can open Database Actions with it.
+--   2. User Name CINETADEL_APP, its password. Leave Web Access off: only the server uses it. The form also grants it
 --      CONNECT and RESOURCE; this script revokes them.
 -- Autonomous Database passwords: 12-30 characters, upper and lower case letters and a number,
 -- no double quotes and not containing the user name.

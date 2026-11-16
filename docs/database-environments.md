@@ -38,8 +38,10 @@ Las consultas de la API no nombran el esquema (`PRODUCTION.Tabla`): el esquema l
 ## Creación inicial (una sola vez)
 
 1. **Usuarios.** Como `ADMIN`, en Database Actions › Administration › Database Users ›
-   *Create User*, crear `DEVELOPMENT` (cuota `UNLIMITED` en `DATA`) y `CINETADEL_APP`, cada uno
-   con su contraseña y sin *Web Access*. Así ninguna contraseña queda escrita en un script.
+   *Create User*, crear `DEVELOPMENT` (cuota `UNLIMITED` en `DATA`, con *Web Access* y alias
+   `development`, para que el equipo entre a Database Actions con esa cuenta) y `CINETADEL_APP`
+   (sin *Web Access*: solo lo usa el servidor). Así ninguna contraseña queda escrita en un script.
+   Si `DEVELOPMENT` se creó sin *Web Access*, se activa después en su tarjeta (⋮ › Activar REST).
    Después, en el SQL Worksheet como `ADMIN`, ejecutar `01_admin_create_users.sql` con *Run
    Script* (F5): da los roles y la cuota, y muestra los usuarios creados.
 
