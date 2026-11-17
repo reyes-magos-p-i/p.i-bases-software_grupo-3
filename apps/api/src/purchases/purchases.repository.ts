@@ -420,18 +420,14 @@ export class PurchasesRepository {
   async findGuest(code: string): Promise<GuestPurchaseReceipt> {
     const id = guestPurchaseId(code);
     if (id === null)
-      throw new NotFoundException(
-        'No se encontró una compra con ese código de consulta.',
-      );
+      throw new NotFoundException('No se encontró una compra con este enlace.');
     const result = await this.query<{ requestKey: string; email: string }>(
       `SELECT REQUEST_KEY AS "requestKey", BUYER_EMAIL AS "email" FROM INVOICES WHERE INVOICE_ID=:id AND CLIENT_ID IS NULL AND REQUEST_KEY IS NOT NULL AND STATUS IN ('PAID','CANCELLED')`,
       { id },
     );
     const row = result.rows?.[0];
     if (!row || !matchesGuestPurchaseCode(code, id, row.requestKey))
-      throw new NotFoundException(
-        'No se encontró una compra con ese código de consulta.',
-      );
+      throw new NotFoundException('No se encontró una compra con este enlace.');
     const receipt = await this.readReceipt(id, { email: row.email });
     return { ...receipt, accessCode: guestPurchaseCode(id, row.requestKey) };
   }
