@@ -13,7 +13,7 @@ describe('MoviePoster', () => {
     })
     const image = view.get('img')
     expect(image.attributes('alt')).toBe('Póster de Película')
-    expect(image.attributes('src')).toBe('https://cinema.example/uploads/posters/a%20b.jpg')
+    expect(image.attributes('src')).toBe('https://cinema.example/api/image-handler/posters/a%20b.jpg',)
     await image.trigger('error')
     expect(image.attributes('src')).toBe('https://cinema.example/api/image/a%20b.jpg')
     await image.trigger('error')
@@ -21,7 +21,7 @@ describe('MoviePoster', () => {
     await image.trigger('error')
     expect(image.attributes('src')).toBe(placeholder)
     await view.setProps({ posterImage: 'nuevo.jpg' })
-    expect(image.attributes('src')).toBe('https://cinema.example/uploads/posters/nuevo.jpg')
+    expect(image.attributes('src')).toBe('https://cinema.example/api/image-handler/posters/nuevo.jpg',)
     view.unmount()
   })
 
