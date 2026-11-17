@@ -50,7 +50,8 @@ describe('Ticket email content', () => {
     expect(body.html).not.toContain('cid:cinetadel-logo');
     expect(body.html).not.toContain('Código privado de consulta');
   });
-  it('includes the guest private code separately from the purchase QR and handles senior tickets', () => {
+  it('includes a private receipt link separately from the purchase QR and handles senior tickets', () => {
+    const link = 'https://cinema.example/guest-purchases/receipt#12.PRIVATE';
     const body = ticketEmailTemplate(
       {
         ...message,
@@ -61,10 +62,26 @@ describe('Ticket email content', () => {
         },
       },
       readEmailTheme(),
+      link,
     );
-    expect(body.text).toContain('Código privado de consulta: 12.PRIVATE');
-    expect(body.html).toContain('12.PRIVATE');
+    expect(body.text).toContain('Ver mi compra: ' + link);
+    expect(body.html).toContain(`href="${link}"`);
+    expect(body.html).toContain('>Ver mi compra</a>');
+    expect(body.html).not.toContain('Código privado de consulta');
+    expect(body.text).not.toContain('pie de página');
     expect(body.text).toContain('Adulto mayor');
     expect(body.text).toContain('no lo compartas');
+    expect(body.html).toContain('cid:purchase-qr');
+  });
+  it('escapes the private link when formatting HTML attributes', () => {
+    const body = ticketEmailTemplate(
+      message,
+      readEmailTheme(),
+      'https://cinema.example/#"&<',
+    );
+    expect(body.html).toContain(
+      'href="https://cinema.example/#&quot;&amp;&lt;"',
+    );
+    expect(body.text).toContain('https://cinema.example/#"&<');
   });
 });
