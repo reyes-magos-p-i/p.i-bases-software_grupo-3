@@ -74,8 +74,11 @@ nueva para continuar.».
   borra. Cerrar sesión oculta el aviso.
 
 - La notificación dura 10 segundos y se pausa al pasar el cursor encima. El
-  texto es «Tu contraseña vence en {N} días. Cámbiala en Perfil > Cambiar
-  contraseña.», en singular con 1 día.
+  texto indica dónde cambiarla según el tipo de usuario, en singular con 1 día:
+  - Cliente: «Tu contraseña vence en {N} días. Cámbiala en Mi perfil >
+    Seguridad.» La opción del menú de la cuenta se quitó en la SCRUM-430.
+  - Empleado: «Tu contraseña vence en {N} días. Cámbiala en la sección Cambiar
+    contraseña.», que es la sección del menú lateral del dashboard.
 - El cálculo ocurre en la API, así que las pruebas que ajustan el reloj del
   servidor (UT-080 a UT-084) no dependen del reloj del navegador.
 
