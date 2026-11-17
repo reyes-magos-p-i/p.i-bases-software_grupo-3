@@ -158,7 +158,9 @@ describe('ProjectionFormDialog', () => {
 
     expect(searchAvailableMovies).toHaveBeenCalledExactlyOnceWith(2, 'spi', expect.any(AbortSignal))
     expect(field('movie').element).toHaveProperty('value', spiderMan.title)
-    expect(wrapper!.get('img').attributes('src')).toContain('/uploads/posters/spiderman.jpg')
+    expect(wrapper!.get('img').attributes('src')).toContain(
+      '/api/image-handler/posters/spiderman.jpg',
+    )
     expect(wrapper!.get<HTMLInputElement>('[id$="-duration"]').element.value).toBe('190')
     expect(field('endTime').element).toHaveProperty('value', '00:55')
     expect(wrapper!.get('.schedule-summary').text()).toBe(

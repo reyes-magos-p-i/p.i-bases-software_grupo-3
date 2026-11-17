@@ -82,7 +82,7 @@ async function enforceClientPasswordStatus() {
   try {
     const expiry = await getClientPasswordStatus()
     if (disposed || clientUser.value !== user || !hasClientSession()) return
-    announcePasswordExpiry(expiry)
+    announcePasswordExpiry(expiry, 'client')
     if (expiry.status !== 'valid') {
       await router.replace({ path: PASSWORD_PATH, query: { reason: expiry.status } })
     }
