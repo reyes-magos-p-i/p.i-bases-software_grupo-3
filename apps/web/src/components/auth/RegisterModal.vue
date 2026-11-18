@@ -18,6 +18,8 @@ import SocialAuthButtons from '@/components/auth/SocialAuthButtons.vue'
 import type { ClientIdentity } from '@/types/client-auth'
 
 const shouldValidateOnBlur = useBlurValidation()
+const termsUrl = `${import.meta.env.BASE_URL}terms-and-conditions`
+const privacyUrl = `${import.meta.env.BASE_URL}privacy-policy`
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
@@ -369,7 +371,14 @@ async function resendVerificationEmail() {
                 :class="{ 'is-invalid': errors.acceptTerms }"
               />
               <label class="form-check-label" for="terms">
-                Acepto <a href="#" class="fw-bold text-dark">Términos y Condiciones.</a>
+                Acepto los
+                <a :href="termsUrl" class="terms-link" target="_blank" rel="noopener noreferrer"
+                  >términos y condiciones</a
+                >
+                y he leído el
+                <a :href="privacyUrl" class="terms-link" target="_blank" rel="noopener noreferrer"
+                  >aviso de privacidad</a
+                >.
               </label>
             </div>
             <div v-if="errors.acceptTerms" class="text-danger small text-center">
@@ -418,6 +427,12 @@ async function resendVerificationEmail() {
 </template>
 
 <style scoped>
+.terms-link {
+  color: var(--text-primary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .password-control {
   position: relative;
 }
