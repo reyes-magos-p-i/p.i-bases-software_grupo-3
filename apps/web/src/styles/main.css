@@ -112,6 +112,17 @@ a {
   text-decoration: none;
 }
 
+a.portal-return-link,
+a.portal-return-link:visited,
+a.portal-return-link:hover,
+a.portal-return-link:focus-visible {
+  color: var(--accent-color);
+}
+
+a.portal-return-link:focus-visible {
+  outline-color: var(--focus-on-dark);
+}
+
 img {
   max-width: 100%;
 }

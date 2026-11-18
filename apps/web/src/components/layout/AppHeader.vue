@@ -65,6 +65,7 @@ async function enforceClientPasswordStatus() {
   if (
     !user ||
     !hasClientSession() ||
+    route.meta.publicLegal === true ||
     route.path === PASSWORD_PATH ||
     route.path === '/recover-password' ||
     route.path === '/account/confirm-email'
@@ -73,13 +74,24 @@ async function enforceClientPasswordStatus() {
 
   try {
     const expiry = await getClientPasswordStatus()
-    if (disposed || clientUser.value !== user || !hasClientSession()) return
+    if (
+      disposed ||
+      clientUser.value !== user ||
+      !hasClientSession() ||
+      route.meta.publicLegal === true
+    )
+      return
     announcePasswordExpiry(expiry, 'client')
     if (expiry.status !== 'valid') {
       await router.replace({ path: PASSWORD_PATH, query: { reason: expiry.status } })
     }
   } catch (error) {
-    if (!disposed && clientUser.value === user && hasClientSession()) {
+    if (
+      !disposed &&
+      clientUser.value === user &&
+      hasClientSession() &&
+      route.meta.publicLegal !== true
+    ) {
       if (authErrorStatus(error) === 401) {
         clearClientSession()
         await router.replace({ path: '/', query: { login: 'client', reason: 'expired' } })

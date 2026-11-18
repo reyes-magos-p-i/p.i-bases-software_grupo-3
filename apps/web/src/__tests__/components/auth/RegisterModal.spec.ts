@@ -89,6 +89,24 @@ describe('RegisterModal.vue', () => {
     return realWrapper
   }
 
+  it('opens the legal documents separately while preserving the registration fields', async () => {
+    const wrapper = createWrapper()
+    await wrapper.get('#email').setValue('ana@example.com')
+    await wrapper.get('#terms').setValue(true)
+
+    for (const path of ['terms-and-conditions', 'privacy-policy']) {
+      const link = wrapper.get(`a[href="${import.meta.env.BASE_URL}${path}"]`)
+      expect(link.attributes('target')).toBe('_blank')
+      expect(link.attributes('rel')).toBe('noopener noreferrer')
+      await link.trigger('click')
+    }
+
+    expect(wrapper.get<HTMLInputElement>('#email').element.value).toBe('ana@example.com')
+    expect(wrapper.get<HTMLInputElement>('#terms').element.checked).toBe(true)
+    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(registerUser).not.toHaveBeenCalled()
+  })
+
   it('shows independent controls to reveal and hide both password fields', async () => {
     const wrapper = createWrapper()
     const password = wrapper.get('#password')
