@@ -163,6 +163,34 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 describe('TicketPurchaseView', () => {
+  it.each([false, true])(
+    'scrolls on entry before the functions load (guest: %s)',
+    async (guest) => {
+      if (guest) clearClientSession()
+      let finishLoading!: () => void
+      const pending = new Promise<Awaited<ReturnType<typeof getPurchaseFunctions>>>((resolve) => {
+        finishLoading = () => resolve({ movie: { id: 2 }, functions: [context] } as never)
+      })
+      vi.mocked(guest ? getGuestPurchaseFunctions : getPurchaseFunctions).mockReturnValueOnce(
+        pending,
+      )
+      render()
+
+      expect(wrapper.findComponent({ name: 'LoadingState' }).exists()).toBe(true)
+      expect(wrapper.findComponent(FunctionSelectionStep).exists()).toBe(false)
+      expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
+        top: 0,
+        left: 0,
+        behavior: 'instant',
+      })
+
+      finishLoading()
+      await flushPromises()
+      expect(wrapper.findComponent(FunctionSelectionStep).exists()).toBe(true)
+      expect(window.scrollTo).toHaveBeenCalledTimes(1)
+    },
+  )
+
   it('adds buyer identification and displays the consultation code only for completed guest purchases', async () => {
     clearClientSession()
     vi.mocked(getGuestPurchaseFunctions).mockResolvedValue({
@@ -193,7 +221,12 @@ describe('TicketPurchaseView', () => {
     } as never)
     render()
     await flushPromises()
-    expect(window.scrollTo).not.toHaveBeenCalled()
+    expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
+      top: 0,
+      left: 0,
+      behavior: 'instant',
+    })
+    vi.mocked(window.scrollTo).mockClear()
     wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
     await flushPromises()
     expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
@@ -237,7 +270,12 @@ describe('TicketPurchaseView', () => {
   it('completes function, seat, review and simulated payment through reusable steps', async () => {
     render()
     await flushPromises()
-    expect(window.scrollTo).not.toHaveBeenCalled()
+    expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
+      top: 0,
+      left: 0,
+      behavior: 'instant',
+    })
+    vi.mocked(window.scrollTo).mockClear()
     wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
     await flushPromises()
     expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
@@ -431,14 +469,15 @@ describe('TicketPurchaseView', () => {
 
   it('scrolls after the new step renders and keeps the position when review fails', async () => {
     let seatStepVisibleDuringScroll = false
+    vi.mocked(quotePurchase).mockRejectedValueOnce(new Error('offline'))
+    render()
+    await flushPromises()
+    vi.mocked(window.scrollTo).mockClear()
     vi.mocked(window.scrollTo).mockImplementation(() => {
       seatStepVisibleDuringScroll =
         wrapper.findComponent(SeatSelectionStep).exists() &&
         wrapper.getComponent(SeatSelectionStep).isVisible()
     })
-    vi.mocked(quotePurchase).mockRejectedValueOnce(new Error('offline'))
-    render()
-    await flushPromises()
     wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
     await flushPromises()
     expect(seatStepVisibleDuringScroll).toBe(true)
