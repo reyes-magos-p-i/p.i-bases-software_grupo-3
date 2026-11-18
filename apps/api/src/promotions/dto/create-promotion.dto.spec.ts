@@ -15,6 +15,7 @@ describe('CreatePromotionDto', () => {
     promotionTitle: 'Afternoon discount',
     description: 'Discount on afternoon screenings.',
     weekdays: [2, 4],
+    branchIds: [1, 2],
   });
 
   async function errorsFor(payload: object) {
@@ -35,6 +36,7 @@ describe('CreatePromotionDto', () => {
         endDate: '2026-12-31',
         promotionTitle: 'Fixed discount',
         description: 'Discount description.',
+        branchIds: [1, 2],
       }),
     ).resolves.toEqual([]);
   });
@@ -61,6 +63,7 @@ describe('CreatePromotionDto', () => {
     'endDate',
     'promotionTitle',
     'description',
+    'branchIds'
   ])('rejects a missing required field: %s', async (field) => {
     const payload: Record<string, unknown> = { ...validPayload() };
     delete payload[field];
@@ -134,4 +137,26 @@ describe('CreatePromotionDto', () => {
       }),
     ).resolves.toEqual([]);
   });
+
+  it.each([
+    { branchIds: undefined },
+    { branchIds: null },
+    { branchIds: [] },
+    { branchIds: [1, 1] },
+    { branchIds: [0] },
+    { branchIds: [-1] },
+    { branchIds: [1.5] },
+    { branchIds: ['1'] },
+    { branchIds: '1,2' },
+  ])('rejects invalid branchIds: $branchIds', async ({ branchIds }) => {
+    const errors = await errorsFor({
+      ...validPayload(),
+      branchIds,
+    });
+
+    expect(
+      errors.some((error) => error.property === 'branchIds'),
+    ).toBe(true);
+  });
+
 });

@@ -1,5 +1,6 @@
 import * as oracledb from 'oracledb';
 
+import { BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsRepository } from './promotions.repository';
@@ -30,6 +31,7 @@ describe('PromotionsRepository', () => {
     conditions: 'Subject to availability.',
     posterPath: '/uploads/posters/promotion.webp',
     weekdays: [2, 4],
+    branchIds: [1, 2],
   });
 
   beforeEach(() => {
@@ -114,14 +116,29 @@ describe('PromotionsRepository', () => {
   });
 
   it.each([undefined, null, []])(
-    'skips weekday inserts when weekdays is %p',
+    'skips weekday inserts but still associates cinemas when weekdays is %p',
     async (weekdays) => {
       await repository.create({
         ...validDto(),
         weekdays,
       });
 
-      expect(connection.executeMany).not.toHaveBeenCalled();
+      expect(connection.executeMany).toHaveBeenCalledTimes(1);
+
+      expect(connection.executeMany).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO promotion_cinemas'),
+        [
+          { promotionId: 42, branchId: 1 },
+          { promotionId: 42, branchId: 2 },
+        ],
+        {
+          autoCommit: false,
+          bindDefs: {
+            promotionId: { type: oracledb.NUMBER },
+            branchId: { type: oracledb.NUMBER },
+          },
+        },
+      );
     },
   );
 
@@ -196,5 +213,58 @@ describe('PromotionsRepository', () => {
     connection.executeMany.mockRejectedValueOnce(error);
 
     await expect(repository.create(validDto())).rejects.toBe(error);
+  });
+
+  it('associates the promotion with the selected cinemas', async () => {
+    await repository.create({
+      ...validDto(),
+      branchIds: [1, 2],
+    });
+
+    expect(connection.executeMany).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO promotion_cinemas'),
+      [
+        { promotionId: 42, branchId: 1 },
+        { promotionId: 42, branchId: 2 },
+      ],
+      {
+        autoCommit: false,
+        bindDefs: {
+          promotionId: { type: oracledb.NUMBER },
+          branchId: { type: oracledb.NUMBER },
+        },
+      },
+    );
+  });
+
+  it('propagates cinema insertion failures to the transaction handler', async () => {
+    const error = new Error('Cinema insert failed');
+
+    connection.executeMany.mockRejectedValueOnce(error);
+
+    await expect(
+      repository.create({
+        ...validDto(),
+        weekdays: [],
+      }),
+    ).rejects.toBe(error);
+  });
+
+  it('rejects nonexistent cinemas with a BadRequestException', async () => {
+    connection.executeMany.mockRejectedValueOnce(
+      Object.assign(new Error(
+        'ORA-02291: integrity constraint ' +
+        '(PRODUCTION.FK_PROMO_CINEMAS_CINEMA) violated - parent key not found',
+      ), {
+        errorNum: 2291,
+      }),
+    );
+
+    await expect(
+      repository.create({
+        ...validDto(),
+        weekdays: [],
+      }),
+    ).rejects.toThrow(BadRequestException);
   });
 });

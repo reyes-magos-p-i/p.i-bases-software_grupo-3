@@ -1,5 +1,6 @@
 // dto/create-promotion.dto.ts
 import {
+  ArrayNotEmpty,
   ArrayUnique,
   IsArray,
   IsIn,
@@ -94,4 +95,16 @@ export class CreatePromotionDto {
   @Min(1, { each: true })
   @Max(7, { each: true })
   weekdays?: number[] | null;
+
+  @IsArray()
+  @ArrayNotEmpty({
+    message: 'Select at least one cinema.',
+  })
+  @ArrayUnique({
+    message: 'Cinema IDs cannot be repeated.',
+  })
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  branchIds!: number[];
+
 }

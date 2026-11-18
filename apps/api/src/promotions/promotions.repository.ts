@@ -1,5 +1,5 @@
 // promotions.repository.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, } from '@nestjs/common';
 import * as oracledb from 'oracledb';
 
 import { DatabaseService } from '../database/database.service';
@@ -107,7 +107,52 @@ export class PromotionsRepository {
         );
       }
 
+      try {
+        await connection.executeMany(
+          `
+            INSERT INTO promotion_cinemas (
+              promotion_id,
+              branch_id
+            )
+            VALUES (
+              :promotionId,
+              :branchId
+            )
+          `,
+          dto.branchIds.map((branchId) => ({
+            promotionId,
+            branchId,
+          })),
+          {
+            autoCommit: false,
+            bindDefs: {
+              promotionId: { type: oracledb.NUMBER },
+              branchId: { type: oracledb.NUMBER },
+            },
+          },
+        );
+      } catch (error: unknown) {
+        const oracleError = error as {
+          errorNum?: number;
+          message?: string;
+        };
+
+        if (
+          oracleError?.errorNum === 2291
+          && oracleError.message
+            ?.toUpperCase()
+            .includes('FK_PROMO_CINEMAS_CINEMA')
+        ) {
+          throw new BadRequestException(
+            'One or more selected cinemas do not exist.',
+          );
+        }
+
+        throw error;
+      }
       return promotionId;
+
+
     });
   }
 
