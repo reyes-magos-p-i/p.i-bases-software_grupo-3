@@ -12,7 +12,7 @@ export const passwordExpiryNotice = { message: readonly(message) }
 export type PasswordExpiryAudience = 'client' | 'employee'
 
 const CHANGE_PASSWORD_PLACE: Record<PasswordExpiryAudience, string> = {
-  client: 'Mi perfil > Seguridad',
+  client: 'Seguridad en el menú de tu perfil',
   employee: 'la sección Cambiar contraseña',
 }
 

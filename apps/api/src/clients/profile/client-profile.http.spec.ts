@@ -267,10 +267,22 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
       .patch('/api/clients/me/deactivate')
       .auth(token(), { type: 'bearer' })
       .set('Origin', origin)
-      .send({});
+      .send({ email: identity.email });
     expect(response.status).toBe(204);
     expect(clients.deactivateClient).toHaveBeenCalledWith(7);
   });
+  it.each([{}, { email: 'invalid' }, { email: 'other@example.com' }])(
+    'requires the current email before self deactivation: %p',
+    async (body) => {
+      await request(server)
+        .patch('/api/clients/me/deactivate')
+        .auth(token(), { type: 'bearer' })
+        .set('Origin', origin)
+        .send(body)
+        .expect(400);
+      expect(clients.deactivateClient).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects attempts to select another client in paths or lifecycle payloads', async () => {
     const selected = await request(server)

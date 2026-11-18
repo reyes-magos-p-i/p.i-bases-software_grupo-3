@@ -66,10 +66,14 @@ export async function updateProjection(id: number, data: UpdateProjectionRequest
   return response.data
 }
 
-export async function cancelProjection(id: number) {
-  const response = await getApi().patch<ProjectionDetail>(`/projections/${id}/cancel`, undefined, {
-    timeout: 30000,
-  })
+export async function cancelProjection(id: number, email: string) {
+  const response = await getApi().patch<ProjectionDetail>(
+    `/projections/${id}/cancel`,
+    { email },
+    {
+      timeout: 30000,
+    },
+  )
   return response.data
 }
 

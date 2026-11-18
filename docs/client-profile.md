@@ -1,6 +1,8 @@
 # Perfil de cliente
 
-La ruta `/account/profile` permite consultar y modificar la cuenta del cliente autenticado. El menú de cuenta del portal incluye **Mi perfil**. El acceso mantiene las comprobaciones existentes de sesión, estado activo y vigencia de contraseña.
+La ruta `/account/profile` permite consultar y modificar la cuenta del cliente autenticado. El acceso mantiene las comprobaciones existentes de sesión, estado activo y vigencia de contraseña.
+
+El desplegable del avatar del cliente reúne siempre **Mis datos**, **Seguridad**, **Historial de compras**, **Preferencias** y **Desactivar cuenta**, además de **Cerrar sesión**, tanto en el perfil como en el portal y la compra. No existe una opción intermedia «Mi perfil» ni un menú lateral; la sección activa ocupa el ancho disponible. Seleccionar una sección cierra el desplegable y abre `/account/profile?section=<sección>`. El cambio de contraseña se encuentra en Seguridad. Los enlaces directos y la navegación atrás/adelante conservan las comprobaciones de cambios sin guardar y los bloqueos durante solicitudes. La navegación administrativa conserva su comportamiento.
 
 ## Alcance
 
@@ -106,4 +108,10 @@ La guarda y su prueba se renombran a `session-origin.guard.ts` y `session-origin
 
 ## Historial de compras
 
-El menú lateral del perfil incorpora la sección «Historial de compras», con filtros, paginación y detalle en un modal. Véase [Historial de compras](./purchase-history.md). El detalle muestra el mismo QR identificativo de la confirmación de compra, preparado para un futuro sistema de verificación en el cine. El QR no contiene un enlace ni abre el perfil. Véase [Compra de boletos](./ticket-purchase.md).
+El desplegable del avatar del cliente incorpora siempre la sección «Historial de compras», con filtros, paginación y detalle en un modal. Véase [Historial de compras](./purchase-history.md). El detalle muestra el mismo QR identificativo de la confirmación de compra, preparado para un futuro sistema de verificación en el cine. El QR no contiene un enlace ni abre el perfil. Véase [Compra de boletos](./ticket-purchase.md).
+
+## Presentación oscura y confirmación de desactivación
+
+Las secciones de datos, edición, seguridad y preferencias utilizan el tema oscuro local del perfil. También lo reciben los diálogos de correo y confirmación. El historial de compras y su diálogo de detalle conservan su presentación clara, al igual que los formularios administrativos y el cambio de contraseña fuera del perfil.
+
+Para desactivar la propia cuenta es obligatorio escribir su correo actual. El navegador valida al confirmar o salir del campo y la API compara con el correo vigente de la identidad autenticada. El cuerpo es `{ "email": "cliente@example.com" }`. Un correo ausente, inválido o diferente produce 400 sin desactivar ni cerrar la sesión. Cancelar y cerrar funcionan incluso con datos incompletos. No se envía un correo de confirmación.

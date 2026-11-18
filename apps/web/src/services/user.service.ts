@@ -88,19 +88,23 @@ export async function updateUser(
   return response.data
 }
 
-export function deactivateUser(selection: UserDetailSelection): Promise<void> {
-  return changeUserStatus(selection, 'INACTIVE')
+export function deactivateUser(selection: UserDetailSelection, email: string): Promise<void> {
+  return changeUserStatus(selection, 'INACTIVE', email)
 }
 
 export function activateUser(selection: UserDetailSelection): Promise<void> {
   return changeUserStatus(selection, 'ACTIVE')
 }
 
-async function changeUserStatus(selection: UserDetailSelection, status: UserStatus): Promise<void> {
+async function changeUserStatus(
+  selection: UserDetailSelection,
+  status: UserStatus,
+  email?: string,
+): Promise<void> {
   const action = status === 'ACTIVE' ? 'activate' : 'deactivate'
   await getApi().patch<void>(
     `/users/${selection.section}/${selection.id}/${action}`,
-    {},
+    status === 'INACTIVE' ? { email } : {},
     {
       timeout: 10000,
     },

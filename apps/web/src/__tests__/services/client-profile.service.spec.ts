@@ -45,8 +45,12 @@ describe('Client profile API', () => {
   it('sends profile and lifecycle mutations through protected endpoints', async () => {
     await updateClientProfile({ firstName: 'Ana' })
     expect(patch).toHaveBeenCalledWith('/clients/me', { firstName: 'Ana' }, options)
-    await deactivateClientProfile()
-    expect(patch).toHaveBeenCalledWith('/clients/me/deactivate', {}, options)
+    await deactivateClientProfile('client@example.com')
+    expect(patch).toHaveBeenCalledWith(
+      '/clients/me/deactivate',
+      { email: 'client@example.com' },
+      options,
+    )
   })
   it('allows SMTP time and confirms links without requiring an existing session', async () => {
     await requestClientEmailChange('new@example.com')
