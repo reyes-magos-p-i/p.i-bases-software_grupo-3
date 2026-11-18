@@ -166,11 +166,20 @@ describe('TicketsRepository', () => {
 
       const sql = databaseService.query.mock.calls[0][0] as string;
       expect(sql).toMatch(
-        /JOIN PRODUCTION\.Theaters cur_th\s+ON cur_th\.theater_id = cur\.theater_id/,
+        /JOIN Theaters cur_th\s+ON cur_th\.theater_id = cur\.theater_id/,
       );
       expect(sql).toMatch(
-        /JOIN PRODUCTION\.Theaters mf_th\s+ON mf_th\.theater_id\s+= mf\.theater_id\s+AND mf_th\.branch_id\s+= cur_th\.branch_id/,
+        /JOIN Theaters mf_th\s+ON mf_th\.theater_id\s+= mf\.theater_id\s+AND mf_th\.branch_id\s+= cur_th\.branch_id/,
       );
+    });
+
+    it('uses the schema of the session instead of a fixed one (SCRUM-435)', async () => {
+      databaseService.query.mockResolvedValue({ rows: [] });
+
+      await repository.getAlternativeShowtimesByTicketId(42);
+
+      const sql = databaseService.query.mock.calls[0][0] as string;
+      expect(sql).not.toMatch(/PRODUCTION\./i);
     });
 
     it.each([

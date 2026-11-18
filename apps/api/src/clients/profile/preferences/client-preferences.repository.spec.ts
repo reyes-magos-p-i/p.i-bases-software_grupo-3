@@ -34,7 +34,8 @@ describe('ClientPreferencesRepository', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: () => undefined,
+            get: (key: string) =>
+              key === 'DB_SCHEMA' ? 'TEST_SCHEMA' : 'test-' + key,
             getOrThrow: (key: string) => 'test-' + key,
           },
         },
