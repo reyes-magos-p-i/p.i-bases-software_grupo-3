@@ -272,7 +272,7 @@ defineExpose({ clearSelection })
   min-width: 0;
   padding: 20px;
   color: var(--text-primary);
-  background: var(--content-background);
+  background: var(--panel-background);
   border: 1px solid var(--border-color);
   border-radius: 12px;
 }
@@ -324,7 +324,7 @@ defineExpose({ clearSelection })
   align-self: stretch;
   display: grid;
   place-items: center;
-  background: var(--content-background);
+  background: var(--panel-background);
   width: 24px;
   flex-shrink: 0;
   color: var(--text-secondary);

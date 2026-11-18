@@ -96,7 +96,45 @@
   --sidebar-active-background: var(--accent-color);
   --sidebar-active-text: var(--page-background);
   --dialog-background: var(--content-background);
-  --dialog-heading-background: var(--primary-color);
+  --dialog-accent-color: var(--surface-background);
+  --dialog-heading-background: var(--dialog-accent-color);
+  --dialog-action-hover-background: color-mix(
+    in srgb,
+    var(--surface-background) 75%,
+    var(--page-background)
+  );
+  --dialog-focus-shadow: color-mix(in srgb, var(--surface-background) 20%, transparent);
+  --dialog-hover-background: color-mix(
+    in srgb,
+    var(--surface-background) 8%,
+    var(--content-background)
+  );
+  --panel-background: var(--content-background);
+  --dark-muted-background: color-mix(
+    in srgb,
+    var(--content-background) 6%,
+    var(--surface-background)
+  );
+  --dark-disabled-text: color-mix(
+    in srgb,
+    var(--content-background) 60%,
+    var(--surface-background)
+  );
+  --dark-border-strong: color-mix(
+    in srgb,
+    var(--content-background) 50%,
+    var(--surface-background)
+  );
+  --dark-error-text: color-mix(in srgb, var(--error-color) 45%, var(--content-background));
+  --dark-error-background: color-mix(in srgb, var(--error-color) 18%, var(--surface-background));
+  --dark-success-text: color-mix(in srgb, var(--success-color) 50%, var(--content-background));
+  --dark-success-background: color-mix(
+    in srgb,
+    var(--success-color) 18%,
+    var(--surface-background)
+  );
+  --dark-warning-background: color-mix(in srgb, var(--accent-color) 12%, var(--surface-background));
+  --dark-info-background: color-mix(in srgb, var(--primary-color) 15%, var(--surface-background));
   --dialog-heading-text: var(--content-background);
   --dialog-content-padding: 24px;
   --dialog-heading-size: 1.25rem;

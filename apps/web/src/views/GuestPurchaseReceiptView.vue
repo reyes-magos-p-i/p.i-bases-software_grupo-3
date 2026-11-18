@@ -50,7 +50,7 @@ onBeforeUnmount(() => controller?.abort())
 </script>
 <template>
   <AppHeader />
-  <main class="guest-receipt" :aria-busy="loading">
+  <main class="guest-receipt surface-theme--dark" :aria-busy="loading">
     <RouterLink to="/">← Volver al portal</RouterLink>
     <h1>Tu compra</h1>
     <p v-if="!accessCode">

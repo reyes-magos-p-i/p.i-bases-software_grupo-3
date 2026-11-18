@@ -85,9 +85,13 @@ paths:
     patch:
       summary: Desactivar la cuenta propia y revocar todas sus sesiones
       description: Requiere Origin autorizado. Conserva datos e historial. No acepta seleccionar otra cuenta.
+      requestBody:
+        $ref: "sensitive-actions.openapi.yaml#/components/requestBodies/EmailConfirmation"
       responses:
         "204":
           description: Desactivación y revocación completadas en una transacción
+        "400":
+          description: Correo ausente, inválido o diferente al de la sesión
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":

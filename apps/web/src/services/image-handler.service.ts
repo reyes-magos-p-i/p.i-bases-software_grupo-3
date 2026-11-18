@@ -14,10 +14,7 @@ export async function uploadPoster(file: File): Promise<PosterUploadResponse> {
   return response.data
 }
 
-export function getPosterUrl(
-  storedValue?: string | null,
-  legacy = false,
-): string | null {
+export function getPosterUrl(storedValue?: string | null, legacy = false): string | null {
   if (!storedValue) return null
 
   const filename = storedValue.split('/').pop()

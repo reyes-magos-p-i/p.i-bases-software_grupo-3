@@ -4,10 +4,13 @@ import { isAxiosError } from 'axios'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { deleteTheater } from '@/services/theater.service'
 import type { Theater } from '@/types/theater'
+import EmailConfirmationField from '@/components/common/EmailConfirmationField.vue'
+import { employeeSession } from '@/services/employee-session.service'
 
 const props = defineProps<{ theater: Theater | null }>()
 const emit = defineEmits<{ close: []; deactivated: []; 'session-expired': [] }>()
 const saving = ref(false)
+const confirmation = ref<InstanceType<typeof EmailConfirmationField> | null>(null)
 const blocked = ref(false)
 const error = ref('')
 const feedback = ref<HTMLElement | null>(null)
@@ -28,10 +31,12 @@ function close() {
 async function confirm() {
   const theater = props.theater
   if (!theater || saving.value || blocked.value) return
+  const email = confirmation.value?.validate()
+  if (!email) return
   saving.value = true
   error.value = ''
   try {
-    await deleteTheater(theater.theaterId)
+    await deleteTheater(theater.theaterId, email)
     if (!disposed) emit('deactivated')
   } catch (failure) {
     if (disposed) return
@@ -77,6 +82,12 @@ onBeforeUnmount(() => {
       <p class="deactivation-warning">
         La sala dejará de estar disponible, pero sus datos se conservarán.
       </p>
+      <EmailConfirmationField
+        :key="theater.theaterId"
+        ref="confirmation"
+        :expected-email="employeeSession.user.value?.email"
+        :disabled="saving"
+      />
       <p v-if="error" ref="feedback" class="deactivation-error" role="alert" tabindex="-1">
         {{ error }}
       </p>

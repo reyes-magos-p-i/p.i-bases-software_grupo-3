@@ -18,10 +18,10 @@ afterEach(dismissPasswordExpiry)
 
 describe('password expiry notice', () => {
   it.each([
-    [3, 'Tu contraseña vence en 3 días. Cámbiala en Mi perfil > Seguridad.'],
-    [2, 'Tu contraseña vence en 2 días. Cámbiala en Mi perfil > Seguridad.'],
-    [1, 'Tu contraseña vence en 1 día. Cámbiala en Mi perfil > Seguridad.'],
-  ])('points a client to Mi perfil > Seguridad with %i day(s) left', (days, text) => {
+    [3, 'Tu contraseña vence en 3 días. Cámbiala en Seguridad en el menú de tu perfil.'],
+    [2, 'Tu contraseña vence en 2 días. Cámbiala en Seguridad en el menú de tu perfil.'],
+    [1, 'Tu contraseña vence en 1 día. Cámbiala en Seguridad en el menú de tu perfil.'],
+  ])('points a client to Security in the profile menu with %i day(s) left', (days, text) => {
     expect(passwordExpiryMessage(days, 'client')).toBe(text)
   })
 
