@@ -160,6 +160,88 @@ describe('DatePicker', () => {
     expect(view.find('[data-date="2021-10-01"]').exists()).toBe(true)
     expect(view.find('.year-grid').exists()).toBe(false)
   })
+  it.each([false, true])(
+    'keeps the calendar open while replacing the focused year button (floating: %s)',
+    async (floating) => {
+      if (floating) {
+        Object.defineProperties(HTMLElement.prototype, {
+          showPopover: { configurable: true, value: vi.fn() },
+          hidePopover: { configurable: true, value: vi.fn() },
+        })
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'showPopover')
+        Reflect.deleteProperty(HTMLElement.prototype, 'hidePopover')
+      }
+      const view = render({ modelValue: '2026-10-18' })
+      await view.get('input').trigger('click')
+      view.get<HTMLButtonElement>('.year-toggle').element.focus()
+      await view.get('.year-toggle').trigger('click')
+      const yearButton = view.get<HTMLButtonElement>('.year-grid button')
+      yearButton.element.focus()
+      yearButton.element.click()
+      yearButton.element.dispatchEvent(
+        new FocusEvent('focusout', { bubbles: true, relatedTarget: null }),
+      )
+      await nextTick()
+      await nextTick()
+
+      expect(view.find('.calendar-panel').exists()).toBe(true)
+      expect(view.get('.year-toggle').text()).toBe('2021')
+      expect(document.activeElement).toBe(view.get('[data-date="2021-10-01"]').element)
+      expect(view.emitted('blur')).toBeUndefined()
+      expect(view.emitted('update:modelValue')).toBeUndefined()
+      await view.get('[data-date="2021-10-20"]').trigger('click')
+      expect(view.emitted('update:modelValue')).toEqual([['2021-10-20']])
+      expect(view.find('.calendar-panel').exists()).toBe(false)
+    },
+  )
+  it('keeps focus inside when the selected year has no allowed days in the current month', async () => {
+    const view = render({ modelValue: '2026-10-18', max: '2026-12-31' })
+    await view.get('input').trigger('click')
+    view.get<HTMLButtonElement>('.year-toggle').element.focus()
+    await view.get('.year-toggle').trigger('click')
+    const nextYear = view
+      .findAll<HTMLButtonElement>('.year-grid button')
+      .find((button) => button.text() === '2027')!
+    nextYear.element.focus()
+    nextYear.element.click()
+    nextYear.element.dispatchEvent(
+      new FocusEvent('focusout', { bubbles: true, relatedTarget: null }),
+    )
+    await nextTick()
+    await nextTick()
+
+    expect(view.find('.calendar-panel').exists()).toBe(true)
+    expect(document.activeElement).toBe(view.get('.month-select').element)
+    expect(view.findAll('[data-date]:not(:disabled)')).toHaveLength(0)
+    expect(view.emitted('blur')).toBeUndefined()
+    await view.get('[aria-label="Anterior"]').trigger('click')
+    expect(view.get('.year-toggle').text()).toBe('2027')
+    await view.get('.calendar-footer button:last-child').trigger('click')
+    expect(view.find('.calendar-panel').exists()).toBe(false)
+  })
+  it('closes when focus really leaves without a related target', async () => {
+    const view = render({ modelValue: '2026-10-18' })
+    await view.get('input').trigger('click')
+    await nextTick()
+    vi.advanceTimersByTime(1)
+    expect(document.activeElement).toBe(view.get('[data-date="2026-10-18"]').element)
+    view.get<HTMLButtonElement>('[data-date="2026-10-18"]').element.blur()
+    await nextTick()
+    await nextTick()
+    expect(view.find('.calendar-panel').exists()).toBe(false)
+    expect(view.emitted('blur')).toHaveLength(1)
+  })
+  it('discards a pending focus check after the calendar is unmounted', async () => {
+    const view = render({ modelValue: '2026-10-18' })
+    await view.get('input').trigger('click')
+    await nextTick()
+    vi.advanceTimersByTime(1)
+    view.get<HTMLButtonElement>('[data-date="2026-10-18"]').element.blur()
+    view.unmount()
+    await nextTick()
+    expect(view.emitted('blur')).toBeUndefined()
+  })
   it('disables dates outside the supplied range and opens at the nearest limit', async () => {
     const view = render({ min: '2030-01-10', max: '2030-01-20' })
     await view.get('input').trigger('click')

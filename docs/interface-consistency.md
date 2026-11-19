@@ -43,6 +43,10 @@ Todas las selecciones de fecha utilizan `DatePicker`: nacimiento en el registro 
 
 El calendario comparte colores, navegación con teclado, límites de fecha, limpieza de campos opcionales y cierre con Escape o al salir. La validación al abandonar un campo se ejecuta al salir del calendario completo, sin interrumpir la selección ni la cancelación del formulario. Seleccionar otra vez la fecha vigente no emite un cambio. Los filtros de proyecciones y transacciones consultan una vez por cambio; el historial conserva su aplicación mediante Buscar o Filtrar.
 
+Al seleccionar un año, el componente espera a que se actualicen sus controles antes de decidir si el foco salió del calendario. Reemplazar el botón del año no cierra el panel ni valida el formulario. Si el mes de ese año no contiene días permitidos, el foco pasa al selector de mes para continuar navegando. Una salida real sigue cerrando el calendario y un componente desmontado descarta las comprobaciones de foco pendientes.
+
+La regresión del 18 de noviembre de 2026 reproduce el reemplazo del botón enfocado con y sin Popover API. Pasan las 1877 pruebas de los 126 archivos de web, con 96,40 % de cobertura global de líneas y 100 % de las líneas y ramas nuevas del calendario. También pasan ESLint, Prettier, tipos y compilación. En Chrome, con el componente aislado y sin solicitudes a la API, se comprobaron clics reales a 390 y 1440 píxeles: cambio de año, selección de fecha, un año sin fechas permitidas, cierre al tocar fuera y Escape con recuperación del foco. No hubo excepciones sin controlar; la emulación no sustituye una prueba en un teléfono físico.
+
 Cuando el navegador dispone de Popover API, el calendario se presenta en la capa superior para evitar recortes dentro de diálogos. Su posición se ajusta al espacio visible al abrir, desplazar o redimensionar la ventana y al cambiar de mes o año. En ventanas de poca altura permite desplazamiento interno; en navegadores sin esa API conserva el anclaje al campo. Los filtros utilizan etiquetas asociadas por identificador, sin anidar los controles del calendario dentro de otra etiqueta.
 
 ## Películas y compra
