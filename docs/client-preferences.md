@@ -53,6 +53,12 @@ Se agregan `CLIENT_GENRE_PREFERENCES` y `CLIENT_LANGUAGE_PREFERENCES`. Las clave
 
 El repositorio bloquea la cuenta activa, valida y bloquea las opciones en orden, reemplaza las asociaciones con parámetros enlazados y confirma todo en una transacción. Cualquier fallo revierte ambos grupos. Las lecturas de la selección usan una sola sentencia para evitar combinar versiones parciales. No se modifican otras tablas ni preferencias de otros clientes.
 
+Antes de tomar los bloqueos, el guardado ejecuta `ALTER SESSION DISABLE PARALLEL DML` en su conexión, siguiendo el patrón existente de compras y proyecciones. En Autonomous Database, una sesión con DML paralelo puede producir `ORA-12860` al borrar asociaciones y volver a insertarlas en la misma transacción. La configuración se establece en cada guardado, por lo que no depende de cómo se haya utilizado previamente la conexión del pool. Las escrituras son secuenciales y conservan la misma transacción: no se añaden confirmaciones intermedias ni reintentos que puedan guardar solo uno de los grupos. Las consultas paralelas no se deshabilitan.
+
+El 18 de noviembre de 2026 pasaron las 2778 pruebas de las 126 suites de API, con 98,28 % de cobertura global de líneas y 100 % de las líneas ejecutables añadidas al repositorio de preferencias. La regresión con persistencia simulada reproduce `ORA-12860` sin la protección y comprueba guardados sucesivos al añadir y retirar idiomas y géneros, vaciar la selección y volver a configurarla. Las pruebas existentes mantienen las comprobaciones de validación, cuenta activa, commit y rollback. Pasan ESLint, Prettier, tipos y compilación.
+
+La comprobación real utilizó `DatabaseService` con la configuración local: usuario y esquema activos `DEVELOPMENT`, columnas requeridas de 13 tablas y las dos claves primarias y cuatro claves foráneas de preferencias habilitadas. Se ejecutaron los métodos existentes de lectura de géneros, idiomas, catálogo, preferencias e historial; el catálogo devolvió siete películas y una cuenta inexistente fue rechazada. No se modificaron datos, esquema ni configuración. El guardado y su rollback se probaron con mocks, no mediante escrituras en Oracle.
+
 DDL aplicado y verificado en la base configurada el 25 de octubre de 2026. Se comprobaron columnas, claves, referencias e índices mediante el diccionario Oracle. El archivo temporal de ejecución fue eliminado; no se incorpora ningún archivo `.sql` nuevo al repositorio. Para otros entornos, aplicar el siguiente DDL con el propietario correspondiente antes de desplegar la API:
 
 ```sql
