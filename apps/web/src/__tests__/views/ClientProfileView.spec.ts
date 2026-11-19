@@ -7,11 +7,13 @@ import {
 import type { ClientPreferenceSettings } from '@/types/client-preferences'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { computed, reactive } from 'vue'
 import ClientProfileView from '@/views/ClientProfileView.vue'
 import ClientProfileForm from '@/components/clients/ClientProfileForm.vue'
 import ClientEmailChangeDialog from '@/components/clients/ClientEmailChangeDialog.vue'
 import ConfirmationDialog from '@/components/common/ConfirmationDialog.vue'
 import SectionNavigation from '@/components/common/SectionNavigation.vue'
+import AccountMenu from '@/components/common/AccountMenu.vue'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
@@ -27,7 +29,7 @@ import {
   clientSession,
   establishClientSession,
 } from '@/services/client-session.service'
-import type { ClientProfile } from '@/types/client-profile'
+import { CLIENT_PROFILE_SECTIONS, type ClientProfile } from '@/types/client-profile'
 
 vi.mock('@/services/client-preferences.service', () => ({
   getClientPreferenceSettings: vi.fn(),
@@ -38,6 +40,7 @@ const navigation = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
   leave: undefined as undefined | (() => boolean | Promise<boolean>),
+  update: undefined as undefined | (() => boolean | Promise<boolean>),
   query: {} as Record<string, string>,
 }))
 vi.mock('vue-router', () => ({
@@ -45,6 +48,9 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ query: navigation.query }),
   onBeforeRouteLeave: (guard: () => boolean | Promise<boolean>) => {
     navigation.leave = guard
+  },
+  onBeforeRouteUpdate: (guard: () => boolean | Promise<boolean>) => {
+    navigation.update = guard
   },
 }))
 vi.mock('@/facebook-auth', () => ({ fbAuth: { status: 'unknown' }, logoutFromFacebook: vi.fn() }))
@@ -58,6 +64,13 @@ vi.mock('@/services/client-profile.service', async () => ({
   requestClientEmailChange: vi.fn(),
   deactivateClientProfile: vi.fn(),
 }))
+
+async function navigate(location: { path?: string; query?: Record<string, string> }) {
+  if (location.path && location.path !== '/account/profile') return
+  if ((await navigation.update?.()) === false) return
+  for (const key of Object.keys(navigation.query)) delete navigation.query[key]
+  Object.assign(navigation.query, location.query)
+}
 
 describe('ClientProfileView', () => {
   const data: ClientProfile = {
@@ -94,7 +107,11 @@ describe('ClientProfileView', () => {
   const wrappers: VueWrapper[] = []
   beforeEach(() => {
     vi.resetAllMocks()
-    navigation.query = {}
+    navigation.query = reactive({})
+    navigation.leave = undefined
+    navigation.update = undefined
+    navigation.push.mockImplementation(navigate)
+    navigation.replace.mockImplementation(navigate)
     vi.mocked(getClientPreferenceSettings).mockResolvedValue(structuredClone(preferences))
     vi.mocked(saveClientPreferences).mockResolvedValue({ genreIds: [], languageIds: [] })
     establishClientSession(
@@ -120,13 +137,34 @@ describe('ClientProfileView', () => {
     const wrapper = mount(ClientProfileView, {
       global: {
         stubs: {
-          AppHeader: true,
+          AppHeader: {
+            props: ['accountNavigationDisabled'],
+            components: { AccountMenu, SectionNavigation },
+            setup: () => ({
+              user: clientSession.user,
+              items: CLIENT_PROFILE_SECTIONS,
+              selected: computed(() => navigation.query.section || 'personal'),
+              select: (section: string) =>
+                navigation.push({ path: '/account/profile', query: { section } }),
+            }),
+            template: `<header>
+              <AccountMenu v-if="user" :user="user">
+                <template #navigation="{ close }">
+                  <SectionNavigation :items="items" :selected="selected" appearance="menu"
+                    :disabled="accountNavigationDisabled" @select="section => { close(); select(section) }" />
+                </template>
+              </AccountMenu>
+            </header>`,
+          },
           AppFooter: true,
           ClientProfileForm: true,
           ClientPurchasesPanel: true,
           ClientPreferencesForm: true,
           ClientEmailChangeDialog: true,
-          ConfirmationDialog: true,
+          ConfirmationDialog: {
+            props: ['open', 'title', 'pending', 'surface'],
+            template: '<section v-if="open"><slot/></section>',
+          },
           ChangePasswordView: true,
           RouterLink: { template: '<a><slot /></a>' },
         },
@@ -138,7 +176,10 @@ describe('ClientProfileView', () => {
   const button = (wrapper: VueWrapper, text: string) =>
     wrapper.findAll('button').find((item) => item.text().includes(text))!
   const choose = async (wrapper: VueWrapper, section: string) => {
-    wrapper.getComponent(SectionNavigation).vm.$emit('select', section)
+    await wrapper.get('.account-avatar').trigger('click')
+    const menu = wrapper.getComponent(SectionNavigation)
+    const index = menu.props('items').findIndex((item) => item.id === section)
+    await menu.findAll('button')[index]!.trigger('click')
     await flushPromises()
   }
   const confirmation = (wrapper: VueWrapper, title: string) =>
@@ -154,12 +195,84 @@ describe('ClientProfileView', () => {
     expect(wrapper.text()).toContain('Cargando perfil')
     expect(wrapper.getComponent(LoadingState).props('surface')).toBe('dark')
     await flushPromises()
-    expect(wrapper.text()).toContain('Ana María Rojas')
+    expect(wrapper.get('.personal-data').text()).toContain('María')
+    expect(wrapper.get('.personal-data').text()).toContain('Rojas')
     expect(wrapper.text()).toContain('Cerca del cine')
     expect(wrapper.text()).toContain('Femenino')
     expect(wrapper.find('input').exists()).toBe(false)
     expect(clientSession.user.value?.firstName).toBe('Ana')
     expect(getClientProfile).toHaveBeenCalledWith(expect.any(AbortSignal))
+  })
+  it('offers every profile section only inside the avatar dropdown and removes the sidebar', async () => {
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.find('aside').exists()).toBe(false)
+    expect(wrapper.findComponent(SectionNavigation).exists()).toBe(false)
+    await wrapper.get('.account-avatar').trigger('click')
+    const menu = wrapper.getComponent(SectionNavigation)
+    expect(menu.props('appearance')).toBe('menu')
+    expect(menu.findAll('button').map((button) => button.text())).toEqual([
+      'Mis datos',
+      'Seguridad',
+      'Historial de compras',
+      'Preferencias',
+      'Desactivar cuenta',
+    ])
+    expect(menu.get('button[aria-current="page"]').text()).toBe('Mis datos')
+    expect(wrapper.findAll('.account-actions [aria-label="Cerrar sesión"]')).toHaveLength(1)
+    await menu.findAll('button')[1]!.trigger('click')
+    expect(wrapper.find('.account-dropdown').exists()).toBe(false)
+    expect(wrapper.findComponent(ChangePasswordView).exists()).toBe(true)
+    expect(navigation.query.section).toBe('security')
+    await wrapper.get('.account-avatar').trigger('click')
+    expect(wrapper.get('button[aria-current="page"]').text()).toBe('Seguridad')
+  })
+  it('disables section changes while a profile update is pending', async () => {
+    let finish!: () => void
+    vi.mocked(updateClientProfile).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const wrapper = render()
+    await edit(wrapper)
+    wrapper.getComponent(ClientProfileForm).vm.$emit('save', { firstName: 'María' })
+    await flushPromises()
+    await wrapper.get('.account-avatar').trigger('click')
+    const menu = wrapper.getComponent(SectionNavigation)
+    expect(menu.findAll('button:disabled')).toHaveLength(5)
+    expect(navigation.update?.()).toBe(false)
+    await menu.findAll('button')[1]!.trigger('click')
+    expect(wrapper.findComponent(ChangePasswordView).exists()).toBe(false)
+    finish()
+    await flushPromises()
+    expect(wrapper.getComponent(SectionNavigation).findAll('button:disabled')).toHaveLength(0)
+  })
+  it.each([
+    ['personal', '.personal-data'],
+    ['security', '.email-security'],
+    ['purchases', 'client-purchases-panel-stub'],
+    ['preferences', 'client-preferences-form-stub'],
+    ['deactivation', '.danger'],
+    ['unknown', '.personal-data'],
+  ])('opens the requested section from a direct %s link', async (section, selector) => {
+    Object.assign(navigation.query, { section })
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.find(selector).exists()).toBe(true)
+    expect(getClientPreferenceSettings).toHaveBeenCalledTimes(section === 'preferences' ? 1 : 0)
+  })
+  it('confirms route updates and cancels the previous pending navigation', async () => {
+    const wrapper = render()
+    await edit(wrapper)
+    wrapper.getComponent(ClientProfileForm).vm.$emit('dirty', true)
+    const previous = navigation.update?.()
+    const current = navigation.update?.()
+    await expect(previous).resolves.toBe(false)
+    confirmation(wrapper, 'Cambios sin guardar').vm.$emit('cancel')
+    await expect(current).resolves.toBe(false)
+    expect(wrapper.findComponent(ClientProfileForm).exists()).toBe(true)
   })
   it('shows truthful empty values and the registered language alongside live preferences', async () => {
     vi.mocked(getClientProfile).mockResolvedValue({
@@ -402,17 +515,40 @@ describe('ClientProfileView', () => {
     await flushPromises()
     expect(dialog.props('open')).toBe(false)
     await button(wrapper, 'Desactivar mi cuenta').trigger('click')
+    await flushPromises()
+    await wrapper.get('input[type="email"]').setValue(data.email)
     dialog.vm.$emit('confirm')
     await flushPromises()
     expect(deactivateClientProfile).toHaveBeenCalledTimes(1)
     expect(clientSession.user.value).toBeNull()
     expect(wrapper.text()).toContain('Cuenta desactivada')
   })
+  it('requires the current client email and allows cancelling an invalid confirmation', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await choose(wrapper, 'deactivation')
+    await button(wrapper, 'Desactivar mi cuenta').trigger('click')
+    const dialog = confirmation(wrapper, '¿Desactivar tu cuenta?')
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(deactivateClientProfile).not.toHaveBeenCalled()
+    await wrapper.get('input[type="email"]').setValue('other@example.com')
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(deactivateClientProfile).not.toHaveBeenCalled()
+    dialog.vm.$emit('cancel')
+    await flushPromises()
+    expect(dialog.props('open')).toBe(false)
+    expect(clientSession.user.value?.id).toBe(7)
+  })
   it('shows a deactivation failure while retaining the session', async () => {
     vi.mocked(deactivateClientProfile).mockRejectedValue(new Error('offline'))
     const wrapper = render()
     await flushPromises()
     await choose(wrapper, 'deactivation')
+    await button(wrapper, 'Desactivar mi cuenta').trigger('click')
+    await flushPromises()
+    await wrapper.get('input[type="email"]').setValue(data.email)
     confirmation(wrapper, '¿Desactivar tu cuenta?').vm.$emit('confirm')
     await flushPromises()
     expect(wrapper.text()).toContain('No se pudo desactivar tu cuenta')
@@ -434,7 +570,7 @@ describe('ClientProfileView', () => {
     resolve(data)
     await flushPromises()
     expect(clientSession.user.value?.id).toBe(8)
-    expect(wrapper.text()).not.toContain('Ana María Rojas')
+    expect(wrapper.find('.personal-data').exists()).toBe(false)
   })
   it('blocks repeated saves and ignores an old mutation response after logout', async () => {
     let resolve!: () => void
@@ -514,7 +650,7 @@ describe('ClientProfileView', () => {
     expect(wrapper.findComponent(ClientPreferencesForm).exists()).toBe(true)
     expect(getClientPreferenceSettings).toHaveBeenCalledTimes(1)
   })
-  it('keeps the blue loading indicator inside the light preferences card', async () => {
+  it('uses the white loading indicator inside the dark preferences card', async () => {
     let finish!: (settings: ClientPreferenceSettings) => void
     vi.mocked(getClientPreferenceSettings).mockImplementationOnce(
       () =>
@@ -525,7 +661,7 @@ describe('ClientProfileView', () => {
     const wrapper = render()
     await flushPromises()
     await choose(wrapper, 'preferences')
-    expect(wrapper.getComponent(LoadingState).props('surface')).toBe('light')
+    expect(wrapper.getComponent(LoadingState).props('surface')).toBe('dark')
     expect(wrapper.text()).toContain('Cargando preferencias')
     finish(preferences)
     await flushPromises()
@@ -584,8 +720,7 @@ describe('ClientProfileView', () => {
     )
     const wrapper = render()
     await flushPromises()
-    wrapper.getComponent(SectionNavigation).vm.$emit('select', 'preferences')
-    await flushPromises()
+    await choose(wrapper, 'preferences')
     const signal = vi.mocked(getClientPreferenceSettings).mock.calls[0]![0]!
     await choose(wrapper, 'personal')
     expect(signal.aborted).toBe(true)
@@ -642,6 +777,16 @@ describe('ClientProfileView', () => {
       path: '/',
       query: { login: 'client', reason: 'expired' },
     })
+  })
+  it('keeps purchase history on its original light surface when navigating profile sections', async () => {
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.get('.profile-card').classes()).toContain('surface-theme--dark')
+    await choose(wrapper, 'purchases')
+    expect(wrapper.findComponent(ClientPurchasesPanel).exists()).toBe(true)
+    expect(wrapper.get('.profile-card').element.closest('.surface-theme--dark')).toBeNull()
+    await choose(wrapper, 'security')
+    expect(wrapper.get('.profile-card').classes()).toContain('surface-theme--dark')
   })
   it('opens the purchase of the URL and keeps the selected purchase in it', async () => {
     Object.assign(navigation.query, { section: 'purchases', purchaseId: '12' })

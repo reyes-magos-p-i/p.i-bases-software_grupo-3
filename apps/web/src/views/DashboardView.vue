@@ -84,7 +84,7 @@ async function checkPasswordStatus() {
   try {
     const expiry = await getEmployeePasswordStatus()
     if (disposed) return
-    announcePasswordExpiry(expiry)
+    announcePasswordExpiry(expiry, 'employee')
     if (expiry.status !== 'valid') lockToPasswordChange()
     else passwordBlocked.value = false
   } catch (error) {

@@ -95,6 +95,12 @@ describe('UsersModule (application HTTP integration)', () => {
       SMTP_USER: 'test-user',
       SMTP_PASSWORD: 'test-password',
       SMTP_FROM: 'cuentas@example.com',
+      DB_USER: 'test-user',
+      DB_PASSWORD: 'test-password',
+      DB_CONNECT_STRING: 'test-connect',
+      DB_WALLET_DIR: 'test-wallet',
+      DB_WALLET_PASSWORD: 'test-wallet-password',
+      DB_SCHEMA: 'TEST_SCHEMA',
     };
     (oracle.createPool as jest.Mock<Promise<oracle.Pool>>).mockResolvedValue(
       pool as unknown as oracle.Pool,

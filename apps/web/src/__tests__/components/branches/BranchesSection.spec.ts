@@ -523,9 +523,12 @@ describe('BranchesSection · Crear sucursal', () => {
       expect(page.get('.question').text()).toBe(
         '¿Está seguro de que desea desactivar la sucursal Sucursal Heredia Centro?',
       )
+      await page
+        .get('.branch-deactivation-content input[type="email"]')
+        .setValue('admin@example.com')
       await confirmButton().trigger('click')
       await flushPromises()
-      expect(deactivateBranch).toHaveBeenCalledWith(1)
+      expect(deactivateBranch).toHaveBeenCalledWith(1, 'admin@example.com')
       expect(view.emitted('busy')).toEqual([[true], [false]])
       expect(page.find('.branch-deactivation-content').exists()).toBe(false)
       expect(view.get('.branch-notification').text()).toContain('Sucursal desactivada con éxito')
@@ -550,6 +553,9 @@ describe('BranchesSection · Crear sucursal', () => {
       deactivateBranch.mockRejectedValueOnce(new Error('Network Error'))
       const view = await render()
       await ask(view)
+      await page
+        .get('.branch-deactivation-content input[type="email"]')
+        .setValue('admin@example.com')
       await confirmButton().trigger('click')
       await flushPromises()
       expect(page.get('.deactivation-error').text()).toBe(
@@ -564,6 +570,9 @@ describe('BranchesSection · Crear sucursal', () => {
       const view = await render()
       const loads = getBranches.mock.calls.length
       await ask(view)
+      await page
+        .get('.branch-deactivation-content input[type="email"]')
+        .setValue('admin@example.com')
       await confirmButton().trigger('click')
       await flushPromises()
       expect(page.get('.deactivation-error').text()).toBe(
@@ -578,6 +587,9 @@ describe('BranchesSection · Crear sucursal', () => {
       deactivateBranch.mockRejectedValueOnce(failure(403))
       const view = await render()
       await ask(view)
+      await page
+        .get('.branch-deactivation-content input[type="email"]')
+        .setValue('admin@example.com')
       await confirmButton().trigger('click')
       await flushPromises()
       expect(page.get('.deactivation-error').text()).toBe(
