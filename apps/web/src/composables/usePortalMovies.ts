@@ -44,7 +44,7 @@ export function usePortalMovies() {
         if (!personalized) throw error_
         result = await getPortalMovies(false, abort.signal)
         if (current())
-          warning.value = `${authErrorMessage(error_, 'No pudimos aplicar tus preferencias.')} Se muestra la cartelera general.`
+          warning.value = `${authErrorMessage(error_, 'No pudimos personalizar la cartelera.')} Se muestra la cartelera general.`
       }
       if (current()) movies.value = result
     } catch (error_) {

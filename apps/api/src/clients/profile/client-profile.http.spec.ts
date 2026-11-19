@@ -55,11 +55,12 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
   const catalog = {
     getCatalogCandidates: jest.fn(),
     getMovieFunctions: jest.fn(),
+    getPurchaseHistory: jest.fn(),
   };
   let savedPreferences: { genreIds: number[]; languageIds: number[] };
   const origin = 'https://cinema.example';
-  const token = (type = 'client') =>
-    jwt.sign({ sub: 7, type, sessionVersion: null });
+  const token = (type = 'client', id = 7) =>
+    jwt.sign({ sub: id, type, sessionVersion: null });
 
   beforeEach(async () => {
     jest.resetAllMocks();
@@ -84,6 +85,11 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
         languageIds: index === 5 ? [3] : [],
       })),
     );
+    catalog.getPurchaseHistory.mockResolvedValue({
+      purchasedMovieIds: [],
+      genres: [],
+      languages: [],
+    });
 
     auth.findById.mockResolvedValue(identity);
     auth.findPasswordStatus.mockResolvedValue({
@@ -472,6 +478,7 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
     const response = await request(server).get(path);
     expect(response.status).toBe(401);
     expect(preferences.getPreferences).not.toHaveBeenCalled();
+    expect(catalog.getPurchaseHistory).not.toHaveBeenCalled();
   });
   it('reports options removed from the catalog without pretending preferences were saved', async () => {
     preferences.savePreferences.mockRejectedValue(
@@ -498,6 +505,7 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
         .auth(bearer, { type: 'bearer' });
       expect(response.status).toBe(401);
       expect(preferences.getPreferences).not.toHaveBeenCalled();
+      expect(catalog.getPurchaseHistory).not.toHaveBeenCalled();
     },
   );
   it('returns the same complete ordered catalog for guests and clients without preferences', async () => {
@@ -507,6 +515,7 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
     expect(guest.body).toHaveLength(6);
     expect(preferences.getPreferences).not.toHaveBeenCalled();
     expect(auth.findById).not.toHaveBeenCalled();
+    expect(catalog.getPurchaseHistory).not.toHaveBeenCalled();
     savedPreferences = { genreIds: [], languageIds: [] };
     const client = await request(server)
       .get('/api/clients/me/preferences/portal')
@@ -516,5 +525,122 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
     expect(guest.body.map((movie: { id: number }) => movie.id)).toEqual([
       1, 2, 3, 4, 5, 6,
     ]);
+  });
+
+  it('uses newly recorded purchases on the next request and keeps bought films in the catalog', async () => {
+    savedPreferences = { genreIds: [], languageIds: [] };
+    const before = await request(server)
+      .get('/api/clients/me/preferences/portal')
+      .auth(token(), { type: 'bearer' });
+    expect(before.status).toBe(200);
+    expect(before.body.map((movie: { id: number }) => movie.id)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+    catalog.getPurchaseHistory.mockResolvedValue({
+      purchasedMovieIds: [99],
+      genres: [{ id: 2, purchaseCount: 1 }],
+      languages: [{ id: 3, purchaseCount: 1 }],
+    });
+    const after = await request(server)
+      .get('/api/clients/me/preferences/portal')
+      .auth(token(), { type: 'bearer' });
+    expect(after.status).toBe(200);
+    expect(after.body.map((movie: { id: number }) => movie.id)).toEqual([
+      6, 1, 2, 3, 4, 5,
+    ]);
+    expect(after.body).toHaveLength(6);
+    expect(Object.keys(after.body[0]).sort()).toEqual([
+      'id',
+      'posterImage',
+      'title',
+    ]);
+    catalog.getPurchaseHistory.mockResolvedValue({
+      purchasedMovieIds: [6],
+      genres: [{ id: 2, purchaseCount: 1 }],
+      languages: [],
+    });
+    const bought = await request(server)
+      .get('/api/clients/me/preferences/portal')
+      .auth(token(), { type: 'bearer' });
+    expect(bought.status).toBe(200);
+    expect(bought.body.map((movie: { id: number }) => movie.id)).toEqual([
+      1, 2, 3, 4, 5, 6,
+    ]);
+    expect(catalog.getPurchaseHistory.mock.calls).toEqual([[7], [7], [7]]);
+  });
+
+  it('isolates history between accounts and ignores a supplied client identifier', async () => {
+    savedPreferences = { genreIds: [], languageIds: [] };
+    auth.findById.mockImplementation((id: number) =>
+      Promise.resolve({ ...identity, id }),
+    );
+    catalog.getCatalogCandidates.mockResolvedValue([
+      {
+        id: 1,
+        title: 'Drama',
+        posterImage: '1.jpg',
+        genreIds: [1],
+        languageIds: [],
+      },
+      {
+        id: 2,
+        title: 'Acción',
+        posterImage: '2.jpg',
+        genreIds: [2],
+        languageIds: [],
+      },
+    ]);
+    catalog.getPurchaseHistory.mockImplementation((id: number) =>
+      Promise.resolve({
+        purchasedMovieIds: [id + 100],
+        genres: [{ id: id === 7 ? 2 : 1, purchaseCount: 1 }],
+        languages: [],
+      }),
+    );
+    const first = await request(server)
+      .get('/api/clients/me/preferences/portal?clientId=8')
+      .auth(token(), { type: 'bearer' });
+    const second = await request(server)
+      .get('/api/clients/me/preferences/portal')
+      .auth(token('client', 8), { type: 'bearer' });
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(first.body.map((movie: { id: number }) => movie.id)).toEqual([2, 1]);
+    expect(second.body.map((movie: { id: number }) => movie.id)).toEqual([
+      1, 2,
+    ]);
+    expect(catalog.getPurchaseHistory.mock.calls).toEqual([[7], [8]]);
+    for (const response of [first, second]) {
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(
+        response.body.every(
+          (movie: object) =>
+            Object.keys(movie).sort().join(',') === 'id,posterImage,title',
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('keeps the public catalog available when authenticated history cannot be read', async () => {
+    catalog.getPurchaseHistory.mockRejectedValue(
+      new Error('History unavailable'),
+    );
+    const personalized = await request(server)
+      .get('/api/clients/me/preferences/portal')
+      .auth(token(), { type: 'bearer' });
+    expect(personalized.status).toBe(500);
+    expect(personalized.body.message).not.toContain('History unavailable');
+    const general = await request(server).get('/api/movie-fuctions/catalog');
+    expect(general.status).toBe(200);
+    expect(general.body).toHaveLength(6);
+    expect(catalog.getPurchaseHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects staff sessions before querying purchase history', async () => {
+    const response = await request(server)
+      .get('/api/clients/me/preferences/portal')
+      .auth(token('employee'), { type: 'bearer' });
+    expect(response.status).toBe(403);
+    expect(catalog.getPurchaseHistory).not.toHaveBeenCalled();
   });
 });

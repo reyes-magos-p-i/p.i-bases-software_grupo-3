@@ -49,6 +49,12 @@ export class ClientPreferencesRepository {
     };
     try {
       return await this.db.transaction(async (connection) => {
+        // A parallel DELETE followed by inserts into the same table can deadlock within this transaction.
+        await connection.execute(
+          'ALTER SESSION DISABLE PARALLEL DML',
+          {},
+          { autoCommit: false },
+        );
         const account = await connection.execute<{ STATUS: string }>(
           'SELECT STATUS FROM CLIENTS WHERE CLIENT_ID = :id FOR UPDATE',
           { id },

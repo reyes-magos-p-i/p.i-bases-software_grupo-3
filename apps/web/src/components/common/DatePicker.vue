@@ -81,7 +81,9 @@ async function focusDay(value?: string) {
     ? panel.value?.querySelector<HTMLButtonElement>(`[data-date="${value}"]:not(:disabled)`)
     : undefined
   ;(
-    selected ?? panel.value?.querySelector<HTMLButtonElement>('[data-date]:not(:disabled)')
+    selected ??
+    panel.value?.querySelector<HTMLButtonElement>('[data-date]:not(:disabled)') ??
+    panel.value?.querySelector<HTMLSelectElement>('.month-select')
   )?.focus()
 }
 async function toggle() {
@@ -162,8 +164,13 @@ function keyboard(event: KeyboardEvent, value: string) {
 function outside(event: PointerEvent) {
   if (event.target instanceof Node && !root.value?.contains(event.target)) close()
 }
-function leave(event: FocusEvent) {
+async function leave(event: FocusEvent) {
   if (event.relatedTarget instanceof Node && root.value?.contains(event.relatedTarget)) return
+  if (event.relatedTarget === null) {
+    // Replacing a focused year button can blur it before the new day receives focus.
+    await nextTick()
+    if (!root.value || root.value.contains(document.activeElement)) return
+  }
   close()
   emit('blur', event)
 }
