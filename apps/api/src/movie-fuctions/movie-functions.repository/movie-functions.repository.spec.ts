@@ -81,6 +81,13 @@ describe('MovieFunctionsRepository', () => {
     expect(sql).toContain('UNION ALL');
     expect(sql).toContain('ORDER BY u.next_start, m.movie_id');
     expect(sql).not.toContain('FETCH FIRST');
+    expect(sql).toContain("s.SEAT_STATE='libre'");
+    expect(sql).toContain('s.ROW_NUMBER BETWEEN 1 AND t.DIMENSION_X');
+    expect(sql).toContain('s.COLUMN_NUMBER BETWEEN 1 AND t.DIMENSION_Y');
+    expect(sql).toContain('tk.MOVIE_FUNCTION_ID=mf.MOVIE_FUNCTION_ID');
+    expect(sql).toContain(
+      'tk.SEAT_ROW=s.ROW_NUMBER AND tk.SEAT_COLUMN=s.COLUMN_NUMBER',
+    );
   });
   it('preserves the legacy four-item response while the full catalog remains complete', async () => {
     const rows = Array.from({ length: 6 }, (_item, index) => ({
@@ -131,6 +138,73 @@ describe('MovieFunctionsRepository', () => {
     expect(logger).toHaveBeenCalledWith(
       'Error fetching upcoming movie functions',
       error,
+    );
+  });
+
+  it('loads the requested account purchase affinities in one aggregated query', async () => {
+    database.query.mockResolvedValue({
+      rows: [
+        { kind: 'MOVIE', id: 10, purchaseCount: 2 },
+        { kind: 'MOVIE', id: 20, purchaseCount: 1 },
+        { kind: 'GENRE', id: 1, purchaseCount: 3 },
+        { kind: 'GENRE', id: 2, purchaseCount: 1 },
+        { kind: 'LANGUAGE', id: 1, purchaseCount: 3 },
+      ],
+    });
+    await expect(repository.getPurchaseHistory(7)).resolves.toEqual({
+      purchasedMovieIds: [10, 20],
+      genres: [
+        { id: 1, purchaseCount: 3 },
+        { id: 2, purchaseCount: 1 },
+      ],
+      languages: [{ id: 1, purchaseCount: 3 }],
+    });
+    expect(database.query).toHaveBeenCalledTimes(1);
+    const [sql, binds] = database.query.mock.calls[0] as [string, unknown];
+    expect(binds).toEqual({ clientId: 7 });
+    expect(sql).toContain("i.CLIENT_ID = :clientId AND i.STATUS = 'PAID'");
+    expect(sql).toContain("p.PRODUCT_TYPE = 'TICKET' AND ip.QUANTITY > 0");
+    expect(sql).toContain('COUNT(DISTINCT p.INVOICE_ID)');
+    expect(sql).not.toContain('SUM(ip.QUANTITY)');
+    expect(sql).not.toContain('BUYER_EMAIL');
+    expect(sql).not.toContain('FETCH FIRST');
+    expect(sql).not.toContain('START_TIME >');
+  });
+
+  it('supports legacy invoices and current rescheduled tickets without counting cancelled functions', async () => {
+    database.query.mockResolvedValue({ rows: [] });
+    await expect(repository.getPurchaseHistory(9)).resolves.toEqual({
+      purchasedMovieIds: [],
+      genres: [],
+      languages: [],
+    });
+    const sql = database.query.mock.calls[0][0] as string;
+    expect(sql).toContain('tk.INVOICE_ID = i.INVOICE_ID');
+    expect(sql).toContain(
+      "current_mf.STATUS IN ('ACTIVE', 'IN_PROGRESS', 'FINISHED')",
+    );
+    expect(sql).toContain(
+      'NOT EXISTS (SELECT 1 FROM TICKETS tk WHERE tk.INVOICE_ID = i.INVOICE_ID)',
+    );
+    expect(sql).toContain("mf.STATUS IN ('ACTIVE', 'IN_PROGRESS', 'FINISHED')");
+  });
+
+  it.each([{}, { rows: null }, { rows: [] }])(
+    'handles empty purchase history %p',
+    async (result) => {
+      database.query.mockResolvedValue(result);
+      await expect(repository.getPurchaseHistory(7)).resolves.toEqual({
+        purchasedMovieIds: [],
+        genres: [],
+        languages: [],
+      });
+    },
+  );
+
+  it('propagates history errors instead of returning a successful empty history', async () => {
+    database.query.mockRejectedValue(new Error('History unavailable'));
+    await expect(repository.getPurchaseHistory(7)).rejects.toThrow(
+      'History unavailable',
     );
   });
 });

@@ -7,8 +7,9 @@ const props = withDefaults(
     title: string
     closeDisabled?: boolean
     appearance?: 'standard' | 'auth'
+    surface?: 'light' | 'dark'
   }>(),
-  { appearance: 'standard' },
+  { appearance: 'standard', surface: 'light' },
 )
 const emit = defineEmits<{ (e: 'close'): void }>()
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
@@ -98,7 +99,10 @@ onBeforeUnmount(() => {
       <div
         v-if="open"
         class="app-modal-card"
-        :class="appearance === 'auth' ? 'app-modal-card--auth' : 'cinema-dialog'"
+        :class="[
+          appearance === 'auth' ? 'app-modal-card--auth' : 'cinema-dialog',
+          { 'surface-theme--dark': surface === 'dark' },
+        ]"
       >
         <header class="dialog-heading">
           <h2 :id="titleId" class="app-modal-title">{{ title }}</h2>

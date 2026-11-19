@@ -1,0 +1,102 @@
+openapi: 3.0.3
+info:
+  title: Cinetadel - Confirmación escrita de acciones sensibles
+  version: 1.0.0
+  description: El correo debe coincidir con el de la identidad autenticada vigente. La confirmación expresa intención; no envía mensajes ni acredita acceso al buzón.
+servers:
+  - url: /api
+security:
+  - employeeSession: []
+  - bearerAuth: []
+paths:
+  /movies/{id}:
+    delete:
+      summary: Eliminar una película con confirmación del correo del administrador
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        $ref: "#/components/requestBodies/EmailConfirmation"
+      responses:
+        "200": { description: Película eliminada según las reglas existentes }
+        "400": { $ref: "#/components/responses/InvalidConfirmation" }
+        "401": { description: Sesión ausente o no vigente }
+        "403":
+          {
+            description: Permisos insuficientes,
+            contraseña bloqueada u origen no permitido,
+          }
+        "404": { description: Película no encontrada }
+  /theaters/{id}:
+    delete:
+      summary: Desactivar una sala con confirmación del correo del administrador
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        $ref: "#/components/requestBodies/EmailConfirmation"
+      responses:
+        "200": { description: Sala desactivada según las reglas existentes }
+        "400": { $ref: "#/components/responses/InvalidConfirmation" }
+        "401": { description: Sesión ausente o no vigente }
+        "403":
+          {
+            description: Permisos insuficientes,
+            contraseña bloqueada u origen no permitido,
+          }
+        "404": { description: Sala no encontrada }
+  /projections/{id}/cancel:
+    patch:
+      summary: Cancelar una proyección con confirmación del correo del administrador
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        $ref: "#/components/requestBodies/EmailConfirmation"
+      responses:
+        "200": { description: Detalle actualizado de la proyección cancelada }
+        "400": { $ref: "#/components/responses/InvalidConfirmation" }
+        "401": { description: Sesión ausente o no vigente }
+        "403":
+          {
+            description: Permisos insuficientes,
+            contraseña bloqueada u origen no permitido,
+          }
+        "404": { description: Proyección no encontrada }
+        "409": { description: El estado de la proyección impide cancelarla }
+components:
+  securitySchemes:
+    employeeSession:
+      { type: apiKey, in: cookie, name: cinetadel_employee_session }
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      schema: { type: string, format: uri }
+  schemas:
+    ConfirmationEmail:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Correo del actor de la sesión, normalizado a minúsculas y sin espacios exteriores. Máximo de almacenamiento de 150 bytes, con las mismas reglas del CRUD de usuarios.
+          example: administrador@example.com
+  requestBodies:
+    EmailConfirmation:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ConfirmationEmail" }
+  responses:
+    InvalidConfirmation:
+      description: Correo obligatorio, inválido o diferente al de la sesión; no se ejecuta la acción.

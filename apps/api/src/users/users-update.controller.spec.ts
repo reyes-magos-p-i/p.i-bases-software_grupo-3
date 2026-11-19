@@ -18,6 +18,9 @@ describe('UsersUpdateController', () => {
   const controller = new UsersUpdateController(
     service as unknown as UsersService,
   );
+  const actor = { user: { id: 21, email: 'admin@example.com' } } as Request & {
+    user: UserIdentity;
+  };
   beforeEach(() => jest.resetAllMocks());
   it('activates the selected client and obtains the staff actor from the session', async () => {
     await controller.activateClient({ id: 42 }, {});
@@ -43,23 +46,25 @@ describe('UsersUpdateController', () => {
   });
 
   it('deactivates the selected client without returning personal data', async () => {
-    await controller.deactivateClient({ id: 42 }, {});
+    await controller.deactivateClient(
+      { id: 42 },
+      { email: 'admin@example.com' },
+      actor,
+    );
     expect(service.deactivateClient).toHaveBeenCalledWith(42);
   });
   it('obtains the acting administrator from the authenticated request', async () => {
-    await controller.deactivateEmployee(
-      { id: 42 },
-      { user: { id: 21 } } as Request & { user: UserIdentity },
-      undefined,
-    );
+    await controller.deactivateEmployee({ id: 42 }, actor, {
+      email: 'admin@example.com',
+    });
     expect(service.deactivateEmployee).toHaveBeenCalledWith(42, 21);
   });
-  it.each([null, [], 'invalid', { actorId: 99 }, { status: 'ACTIVE' }])(
+  it.each(['other@example.com', ''])(
     'rejects unsupported deactivation data %p',
     (body) => {
-      expect(() => controller.deactivateClient({ id: 42 }, body)).toThrow(
-        BadRequestException,
-      );
+      expect(() =>
+        controller.deactivateClient({ id: 42 }, { email: body }, actor),
+      ).toThrow(BadRequestException);
       expect(service.deactivateClient).not.toHaveBeenCalled();
     },
   );

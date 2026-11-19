@@ -102,3 +102,7 @@ en la lista, y una compañía sin nombre, que no aparece.
 En `apps/api`: `npm test -- src/cinemas`, `npm run lint`, `npm run type-check`.
 En `apps/web`: `npx vitest run src/__tests__/components/branches src/__tests__/utils/branch-validation.spec.ts`,
 `npm run lint`, `npm run type-check`.
+
+## Confirmación escrita al desactivar
+
+La desactivación requiere escribir el correo del administrador de la sesión y enviarlo en el cuerpo como `email`. El formulario comprueba formato y coincidencia antes de enviar. La API vuelve a validarlos con la identidad autenticada y responde 400 si no coinciden; la operación no se ejecuta. Se mantienen la validación de origen, los permisos y las restricciones existentes. Se puede cancelar sin completar el correo.

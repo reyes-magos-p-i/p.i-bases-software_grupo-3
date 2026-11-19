@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { CinemasService } from './cinemas.service';
@@ -19,6 +20,10 @@ import { ListCinemasQueryDto } from './dto/list-cinemas-query.dto';
 import { CinemaIdParamsDto } from './dto/cinema-id-params.dto';
 import { CreateCinemaDto } from './dto/create-cinema.dto';
 import { UpdateCinemaDto } from './dto/update-cinema.dto';
+import type { Request } from 'express';
+import type { UserIdentity } from '../users/types/user-identity.type';
+import { ConfirmationEmailDto } from '../common/validation/confirmation-email.dto';
+import { requireEmailConfirmation } from '../common/security/email-confirmation';
 
 @UseGuards(AuthGuard('jwt'), AdministratorGuard, PasswordStatusGuard)
 @Controller('cinemas')
@@ -64,7 +69,12 @@ export class CinemasController {
   @Patch(':id/deactivate')
   @UseGuards(SessionOriginGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  deactivateCinema(@Param() params: CinemaIdParamsDto) {
+  deactivateCinema(
+    @Param() params: CinemaIdParamsDto,
+    @Body() data: ConfirmationEmailDto,
+    @Req() request: Request & { user: UserIdentity },
+  ) {
+    requireEmailConfirmation(data.email, request.user.email);
     return this.cinemasService.deactivateCinema(params.id);
   }
 }
