@@ -22,6 +22,7 @@ describe('PromotionsService', () => {
     promotionTitle: 'Afternoon discount',
     description: 'Discount on afternoon screenings.',
     weekdays: [2, 4],
+    branchIds: [1, 2]
   });
 
   beforeEach(() => {

@@ -7,10 +7,20 @@ import DialogSection from '@/components/common/DialogSection.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import ReusableSearchDropdown from '@/components/common/ReusableSearchDropdown.vue'
-import ImageUpload from '@/components/image/ImageUpload.vue'
-import { uploadPoster, getPosterUrl } from '@/services/image-handler.service'
+import PromotionImageUpload from '@/components/image/PromotionImageUpload.vue'
+import {
+  uploadPromotionPoster,
+  getPromotionPosterUrl,
+ } from '@/services/image-handler.service'
 import { createPromotion } from '@/services/promotion.service'
-import type { CinemaOption, PromotionErrors, PromotionForm } from '@/types/promotion'
+import type {
+  CinemaOption,
+  PromotionErrors,
+  PromotionForm,
+  ProjectionFormat,
+  PromotionType,
+  Technology,
+} from '@/types/promotion'
 import {
   buildPromotionPayload,
   PROMOTION_POSTER_PATH_LIMIT,
@@ -18,6 +28,8 @@ import {
   PROMOTION_TITLE_LIMIT,
   validatePromotion,
 } from '@/utils/promotion-validation'
+import DatePicker from '@/components/common/DatePicker.vue'
+import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 
 const props = defineProps<{ cinemas: CinemaOption[] }>()
 const emit = defineEmits<{
@@ -40,7 +52,9 @@ const fieldErrors = reactive<PromotionErrors>({})
 const formElement = useTemplateRef<HTMLFormElement>('form-element')
 const selectedPoster = ref<File | null>(null)
 const endAtMidnight = ref(false)
-const existingPosterUrl = computed(() => getPosterUrl(form.posterPath))
+const existingPosterUrl = computed(() =>
+  getPromotionPosterUrl(form.posterPath),
+)
 const cinemaOptions = computed(() => props.cinemas.map((item) => ({ value: item.id, label: item.name })))
 const allCinemasSelected = computed(() => props.cinemas.length > 0
   && props.cinemas.every((cinema) => form.branchIds.includes(cinema.id)))
@@ -51,6 +65,48 @@ const weekdays = [
   { value: 5, label: 'Viernes' }, { value: 6, label: 'Sábado' },
   { value: 7, label: 'Domingo' },
 ]
+
+const promotionTypeOptions: { id: PromotionType; name: string }[] = [
+  { id: 'percentage', name: 'Porcentaje' },
+  { id: 'fixed', name: 'Monto fijo de descuento' },
+]
+
+const projectionFormatOptions: { id: ProjectionFormat; name: string }[] = [
+  { id: '2D', name: '2D' },
+  { id: '3D', name: '3D' },
+]
+
+const technologyOptions: { id: Technology; name: string }[] = [
+  { id: 'STANDARD', name: 'Estándar' },
+  { id: 'IMAX', name: 'IMAX' },
+  { id: '70MM', name: '70mm' },
+]
+
+const promotionTypeModel = computed<PromotionType | null>({
+  get: () => form.promotionType || null,
+  set: (value) => {
+    form.promotionType = value ?? ''
+    delete fieldErrors.promotionType
+    delete fieldErrors.amount
+  },
+})
+
+const projectionFormatModel = computed<ProjectionFormat | null>({
+  get: () => form.projectionFormat || null,
+  set: (value) => {
+    form.projectionFormat = value ?? ''
+    delete fieldErrors.projectionFormat
+    delete fieldErrors.technology
+  },
+})
+
+const technologyModel = computed<Technology | null>({
+  get: () => form.technology || null,
+  set: (value) => {
+    form.technology = value ?? ''
+    delete fieldErrors.technology
+  },
+})
 
 watch(endAtMidnight, (enabled) => {
   form.endHour = enabled ? '24:00' : ''
@@ -93,7 +149,7 @@ async function save() {
   saving.value = true
   try {
     if (selectedPoster.value) {
-      const uploaded = await uploadPoster(selectedPoster.value)
+      const uploaded = await uploadPromotionPoster(selectedPoster.value)
       if (typeof uploaded.path !== 'string' || !uploaded.path
         || uploaded.path.length > PROMOTION_POSTER_PATH_LIMIT) {
         fieldErrors.poster = 'No se recibió una ruta válida para el póster. Vuelve a seleccionarlo.'
@@ -143,17 +199,15 @@ async function save() {
                   <LimitedTextInput v-model="form.conditions" label="Condiciones (opcional)"
                     :limit="PROMOTION_TEXT_LIMIT" :error="fieldErrors.conditions" multiline :rows="3"
                     @update:model-value="delete fieldErrors.conditions" />
-                  <div class="field">
-                    <label for="promo-type">Tipo de promoción *</label>
-                    <select id="promo-type" v-model="form.promotionType" required :disabled="saving"
-                      :aria-invalid="!!fieldErrors.promotionType" aria-describedby="promo-type-error"
-                      @change="delete fieldErrors.promotionType; delete fieldErrors.amount">
-                      <option disabled value="">Seleccionar tipo</option>
-                      <option value="percentage">Porcentaje</option>
-                      <option value="fixed">Monto fijo de descuento</option>
-                    </select>
-                    <p v-if="fieldErrors.promotionType" id="promo-type-error" class="form-error">{{ fieldErrors.promotionType }}</p>
-                  </div>
+                  <SimpleDropdown
+                    v-model="promotionTypeModel"
+                    label="Tipo de promoción"
+                    placeholder="Seleccionar tipo"
+                    :options="promotionTypeOptions"
+                    :disabled="saving"
+                    :error="fieldErrors.promotionType"
+                    required
+                  />
                   <div>
                     <div class="selection-actions">
                       <span class="hint">Selecciona una o más sucursales.</span>
@@ -170,8 +224,12 @@ async function save() {
                   </div>
                 </div>
                 <aside class="poster-column">
-                  <ImageUpload v-model="selectedPoster" label="Póster de la promoción (opcional)"
-                    :existing-image-url="existingPosterUrl" :disabled="saving" />
+                 <PromotionImageUpload
+                    v-model="selectedPoster"
+                    label="Póster de la promoción (opcional)"
+                    :existing-image-url="existingPosterUrl"
+                    :disabled="saving"
+                  />
                   <p class="hint">JPEG, PNG o WebP. Máximo 5 MB.</p>
                   <p v-if="fieldErrors.poster" class="form-error" role="alert">{{ fieldErrors.poster }}</p>
                 </aside>
@@ -183,19 +241,57 @@ async function save() {
               <div class="form-grid">
                 <div class="field">
                   <label for="promo-begin-date">Fecha inicial *</label>
-                  <input id="promo-begin-date" v-model="form.beginDate" type="date" required
-                    min="0001-01-01" max="9999-12-31" :disabled="saving"
-                    :aria-invalid="!!fieldErrors.beginDate" aria-describedby="promo-begin-date-error"
-                    @input="delete fieldErrors.beginDate; delete fieldErrors.endDate" />
-                  <p v-if="fieldErrors.beginDate" id="promo-begin-date-error" class="form-error">{{ fieldErrors.beginDate }}</p>
+
+                  <DatePicker
+                    id="promo-begin-date"
+                    v-model="form.beginDate"
+                    min="0001-01-01"
+                    max="9999-12-31"
+                    required
+                    :disabled="saving"
+                    :aria-invalid="!!fieldErrors.beginDate"
+                    :aria-describedby="
+                      fieldErrors.beginDate ? 'promo-begin-date-error' : undefined
+                    "
+                    @update:model-value="
+                      delete fieldErrors.beginDate;
+                      delete fieldErrors.endDate
+                    "
+                  />
+
+                  <p
+                    v-if="fieldErrors.beginDate"
+                    id="promo-begin-date-error"
+                    class="form-error"
+                  >
+                    {{ fieldErrors.beginDate }}
+                  </p>
                 </div>
+
                 <div class="field">
                   <label for="promo-end-date">Fecha final *</label>
-                  <input id="promo-end-date" v-model="form.endDate" type="date" required
-                    :min="form.beginDate || '0001-01-01'" max="9999-12-31" :disabled="saving"
-                    :aria-invalid="!!fieldErrors.endDate" aria-describedby="promo-end-date-error"
-                    @input="delete fieldErrors.endDate" />
-                  <p v-if="fieldErrors.endDate" id="promo-end-date-error" class="form-error">{{ fieldErrors.endDate }}</p>
+
+                  <DatePicker
+                    id="promo-end-date"
+                    v-model="form.endDate"
+                    :min="form.beginDate || '0001-01-01'"
+                    max="9999-12-31"
+                    required
+                    :disabled="saving"
+                    :aria-invalid="!!fieldErrors.endDate"
+                    :aria-describedby="
+                      fieldErrors.endDate ? 'promo-end-date-error' : undefined
+                    "
+                    @update:model-value="delete fieldErrors.endDate"
+                  />
+
+                  <p
+                    v-if="fieldErrors.endDate"
+                    id="promo-end-date-error"
+                    class="form-error"
+                  >
+                    {{ fieldErrors.endDate }}
+                  </p>
                 </div>
                 <label class="check-label full-width">
                   <input v-model="form.allDay" type="checkbox" :disabled="saving" @change="clearHoursErrors" />
@@ -244,29 +340,22 @@ async function save() {
                   <p id="promo-amount-hint" class="hint">Mayor que cero, máximo {{ maxAmount }}. Hasta dos decimales.</p>
                   <p v-if="fieldErrors.amount" id="promo-amount-error" class="form-error">{{ fieldErrors.amount }}</p>
                 </div>
-                <div class="field">
-                  <label for="promo-format">Formato de proyección</label>
-                  <select id="promo-format" v-model="form.projectionFormat" :disabled="saving"
-                    :aria-invalid="!!fieldErrors.projectionFormat" aria-describedby="promo-format-error"
-                    @change="delete fieldErrors.projectionFormat; delete fieldErrors.technology">
-                    <option value="">Cualquier formato</option>
-                    <option value="2D">2D</option>
-                    <option value="3D" :disabled="form.technology === '70MM'">3D</option>
-                  </select>
-                  <p v-if="fieldErrors.projectionFormat" id="promo-format-error" class="form-error">{{ fieldErrors.projectionFormat }}</p>
-                </div>
-                <div class="field">
-                  <label for="promo-technology">Tecnología</label>
-                  <select id="promo-technology" v-model="form.technology" :disabled="saving"
-                    :aria-invalid="!!fieldErrors.technology" aria-describedby="promo-tech-error"
-                    @change="delete fieldErrors.technology">
-                    <option value="">Cualquier tecnología</option>
-                    <option value="STANDARD">Estándar</option>
-                    <option value="IMAX">IMAX</option>
-                    <option value="70MM" :disabled="form.projectionFormat === '3D'">70mm</option>
-                  </select>
-                  <p v-if="fieldErrors.technology" id="promo-tech-error" class="form-error">{{ fieldErrors.technology }}</p>
-                </div>
+                <SimpleDropdown
+                  v-model="projectionFormatModel"
+                  label="Formato de proyección"
+                  placeholder="Cualquier formato"
+                  :options="projectionFormatOptions"
+                  :disabled="saving"
+                  :error="fieldErrors.projectionFormat"
+                />
+                <SimpleDropdown
+                  v-model="technologyModel"
+                  label="Tecnología"
+                  placeholder="Cualquier tecnología"
+                  :options="technologyOptions"
+                  :disabled="saving"
+                  :error="fieldErrors.technology"
+                />
               </div>
             </DialogSection>
           </div>
@@ -291,7 +380,7 @@ async function save() {
 .promotion-create-content { padding: 24px; overflow-y: auto; }
 .create-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .dialog-sections, .general-fields { display: grid; gap: 20px; }
-.general-layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 24px; align-items: start; }
+.general-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .general-fields, .poster-column { min-width: 0; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
 .full-width { grid-column: 1 / -1; }
@@ -315,6 +404,6 @@ async function save() {
 .secondary { background: var(--content-background); color: var(--button-secondary-text); }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
-@media (max-width: 700px) { .general-layout { grid-template-columns: 1fr; } .poster-column { width: 100%; max-width: 240px; justify-self: center; } }
+@media (max-width: 700px) { .general-layout { grid-template-columns: 1fr; } .poster-column { width: 100%; max-width: none; justify-self: center; } }
 @media (max-width: 575px) { .form-grid { grid-template-columns: 1fr; } .promotion-create-content { padding: 16px; } }
 </style>

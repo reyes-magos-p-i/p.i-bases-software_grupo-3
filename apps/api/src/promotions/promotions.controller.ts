@@ -12,13 +12,13 @@ import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsService } from './promotions.service';
-/*
+
 @UseGuards(
   AuthGuard('jwt'),
   AdministratorGuard,
   PasswordStatusGuard,
 )
-*/
+
 @Controller('promotions')
 export class PromotionsController {
   constructor(

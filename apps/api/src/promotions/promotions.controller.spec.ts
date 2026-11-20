@@ -17,6 +17,7 @@ describe('PromotionsController', () => {
     endDate: '2026-12-31',
     promotionTitle: 'Afternoon discount',
     description: 'Discount description.',
+    branchIds: [1, 2]
   };
 
   beforeEach(() => {
