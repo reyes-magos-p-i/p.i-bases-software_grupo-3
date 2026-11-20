@@ -3,7 +3,7 @@ import type {
   CreatePromotionPayload,
   PromotionErrors,
   PromotionForm,
-} from '../types/promotion'
+} from '@/types/promotion'
 
 export const PROMOTION_TITLE_LIMIT = 150
 export const PROMOTION_TEXT_LIMIT = 4000
