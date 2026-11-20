@@ -13,3 +13,22 @@ export interface MoviePreferences {
 
 export interface MoviePreferenceCandidate
   extends PortalMovie, MoviePreferences {}
+
+export interface MoviePurchaseAffinity {
+  id: number;
+  purchaseCount: number;
+}
+
+export interface MoviePurchaseHistory {
+  purchasedMovieIds: number[];
+  genres: MoviePurchaseAffinity[];
+  languages: MoviePurchaseAffinity[];
+}
+
+export interface MovieRecommendation {
+  movie: MoviePreferenceCandidate;
+  preferenceScore: number;
+  purchaseScore: number;
+  score: number;
+  recommended: boolean;
+}

@@ -51,8 +51,24 @@ Las consultas de la API no nombran el esquema (`PRODUCTION.Tabla`): el esquema l
    Copia la estructura y todos los datos de `PRODUCTION` a `DEVELOPMENT` con Data Pump: tablas,
    índices, restricciones, columnas identidad, el procedimiento `REFRESH_MOVIE_FUNCTION_STATUS`,
    los triggers y el job `MOVIE_FUNCTION_STATUS_JOB`. Solo lee `PRODUCTION`.
+
+   La exportación queda fija en un SCN (`FLASHBACK_SCN`) tomado justo antes de empezar, así que
+   todas las tablas se copian del mismo instante aunque la app siga escribiendo. Cada trabajo se
+   sigue con `GET_STATUS`: la copia se rechaza con un error si el trabajo no termina en
+   `COMPLETED` o si reporta errores inesperados, y en la salida se ve cada error. En la
+   importación solo se tolera `ORA-31684` (el objeto ya existe), que aparece al refrescar
+   porque el procedimiento, los triggers y el job ya están. `05` usa el mismo bloque.
+   Con una cuenta de administración distinta de `ADMIN`, esa cuenta necesita
+   `EXECUTE` sobre `DBMS_FLASHBACK`.
 3. **Comparación.** Como `ADMIN`, ejecutar `04_admin_compare_schemas.sql`. Las consultas 1 a 4 no
    deben devolver filas. La 5 cuenta las filas reales de cada tabla en los dos esquemas.
+
+   La consulta 1 compara cada columna en los dos sentidos: tipo, `DATA_LENGTH`, `CHAR_LENGTH`,
+   precisión, escala, semántica de caracteres (`CHAR_USED`), nulabilidad y valor por defecto
+   (incluidos `DEFAULT ON NULL` e identidad). El valor por defecto de una columna identidad
+   nombra su propia secuencia (`"<esquema>"."ISEQ$$_<n>".nextval`), distinta en cada lado, así
+   que se compara como `IDENTITY ALWAYS` o `IDENTITY BY DEFAULT`. La columna `DIFFERENCES` dice
+   qué atributos no coinciden.
 4. **Permisos de la app.** Como `ADMIN`, ejecutar `03_admin_grant_app_user.sql`. Da a
    `CINETADEL_APP` `SELECT`, `INSERT`, `UPDATE` y `DELETE` sobre cada tabla.
 5. **Prueba del usuario de la app.** En SQL Developer, conectado como `CINETADEL_APP`:
@@ -117,3 +133,17 @@ volver a aplicar en `DEVELOPMENT`.
 
 Las pruebas automáticas están en `apps/api/src/database/database.service.spec.ts` (variables
 obligatorias y esquema de la sesión) y `apps/api/src/database/schema-agnostic-sql.spec.ts`.
+
+`apps/api/src/database/environment-scripts.spec.ts` revisa los scripts de esta carpeta, que el
+CI no puede ejecutar:
+
+- `02` y `05` comparten el mismo bloque de Data Pump.
+- Toda exportación se fija a un SCN antes de iniciar.
+- Los trabajos se siguen con `GET_STATUS` y se rechazan si hay errores.
+- La comparación de `04` cubre todos los atributos en los dos sentidos.
+- Ningún script usa comandos que el worksheet bloquea.
+
+La regresión de la comparación es `database/environments/tests/04_compare_columns_regression.sql`.
+Usa el mismo bloque de `04` (el spec comprueba que sean idénticos) sobre filas de prueba, entre
+ellas una columna `NUMBER(10,2)` contra `NUMBER(12,2)`. No necesita privilegios de `ADMIN` ni
+cambia datos: cualquier cuenta la ejecuta con Ctrl+Enter, y debe devolver `RESULT = PASS`.

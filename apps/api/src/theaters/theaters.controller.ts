@@ -5,6 +5,7 @@ import {
   Body,
   Patch,
   Param,
+  Req,
   Delete,
   UseGuards,
   ParseIntPipe,
@@ -17,6 +18,11 @@ import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { AuthGuard } from '@nestjs/passport';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 import { UpdateSeatsDto } from './dto/update-seats.dto';
+import type { Request } from 'express';
+import type { UserIdentity } from '../users/types/user-identity.type';
+import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
+import { ConfirmationEmailDto } from '../common/validation/confirmation-email.dto';
+import { requireEmailConfirmation } from '../common/security/email-confirmation';
 
 @UseGuards(AuthGuard('jwt'), AdministratorGuard, PasswordStatusGuard)
 @Controller('theaters')
@@ -59,8 +65,15 @@ export class TheatersController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.theatersService.remove(this.theaterId(id));
+  @UseGuards(SessionOriginGuard)
+  remove(
+    @Param('id') id: string,
+    @Body() data: ConfirmationEmailDto,
+    @Req() request: Request & { user: UserIdentity },
+  ) {
+    const theaterId = this.theaterId(id);
+    requireEmailConfirmation(data.email, request.user.email);
+    return this.theatersService.remove(theaterId);
   }
 
   @Get(':id/seats')

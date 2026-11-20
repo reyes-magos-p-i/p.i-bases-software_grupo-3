@@ -15,11 +15,19 @@ export class MovieFuctionsService {
   findAll() {
     return this.movieFunctionsRepository.getMovieFunctions();
   }
-  async findCatalog(preferences?: MoviePreferences): Promise<PortalMovie[]> {
+  async findCatalog(
+    preferences?: MoviePreferences,
+    clientId?: number,
+  ): Promise<PortalMovie[]> {
     const movies = await this.movieFunctionsRepository.getCatalogCandidates();
+    const history =
+      clientId !== undefined && movies.length > 0
+        ? await this.movieFunctionsRepository.getPurchaseHistory(clientId)
+        : undefined;
     return rankMoviesByPreferences(
       movies,
       preferences ?? { genreIds: [], languageIds: [] },
+      history,
     ).map(({ id, title, posterImage }) => ({ id, title, posterImage }));
   }
 }

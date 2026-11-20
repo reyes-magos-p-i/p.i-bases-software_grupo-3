@@ -8,6 +8,7 @@ withDefaults(
     confirmLabel?: string
     pending?: boolean
     danger?: boolean
+    surface?: 'light' | 'dark'
   }>(),
   { confirmLabel: 'Confirmar' },
 )
@@ -15,9 +16,16 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>()
 </script>
 
 <template>
-  <BaseModal :open="open" :title="title" :close-disabled="pending" @close="emit('cancel')">
+  <BaseModal
+    :open="open"
+    :title="title"
+    :surface="surface"
+    :close-disabled="pending"
+    @close="emit('cancel')"
+  >
     <div class="confirmation-content">
       <p>{{ message }}</p>
+      <slot />
       <div class="confirmation-actions">
         <button type="button" :disabled="pending" @click="emit('cancel')">Cancelar</button>
         <button

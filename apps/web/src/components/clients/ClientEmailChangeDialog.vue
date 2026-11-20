@@ -11,6 +11,7 @@ const props = defineProps<{
   currentEmail: string
   pending?: boolean
   error?: string
+  surface?: 'light' | 'dark'
 }>()
 const emit = defineEmits<{ request: [email: string]; close: [] }>()
 const email = ref('')
@@ -39,6 +40,7 @@ function submit() {
 
 <template>
   <BaseModal
+    :surface="surface"
     :open="open"
     title="Cambiar correo electrónico"
     :close-disabled="pending"

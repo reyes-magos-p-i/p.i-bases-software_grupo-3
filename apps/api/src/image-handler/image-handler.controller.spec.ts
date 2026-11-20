@@ -87,9 +87,7 @@ describe('ImageHandlerController', () => {
 
       service.savePoster.mockResolvedValue(savedPoster);
 
-      await expect(controller.uploadPoster(file)).resolves.toEqual(
-        savedPoster,
-      );
+      await expect(controller.uploadPoster(file)).resolves.toEqual(savedPoster);
 
       expect(service.savePoster).toHaveBeenCalledTimes(1);
       expect(service.savePoster).toHaveBeenCalledWith(file);

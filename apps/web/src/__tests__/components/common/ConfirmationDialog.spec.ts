@@ -15,6 +15,15 @@ describe('ConfirmationDialog', () => {
       },
     },
   }
+  it('places additional confirmation content before the actions', () => {
+    const wrapper = mount(ConfirmationDialog, {
+      ...options,
+      slots: { default: '<input type="email" aria-label="Confirmación" />' },
+    })
+    expect(wrapper.get('.confirmation-content').element.children[1]?.tagName).toBe('INPUT')
+    expect(wrapper.find('.confirmation-actions').exists()).toBe(true)
+    wrapper.unmount()
+  })
   it('confirms or cancels without performing any request', async () => {
     const wrapper = mount(ConfirmationDialog, options)
     expect(wrapper.text()).toContain('¿Continuar?')

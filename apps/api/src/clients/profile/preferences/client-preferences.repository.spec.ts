@@ -50,6 +50,7 @@ describe('ClientPreferencesRepository', () => {
   });
 
   function selectedAccount(genres: number[], languages: number[]) {
+    connection.execute.mockResolvedValueOnce({});
     connection.execute.mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE' }] });
     for (const ids of [genres, languages]) {
       if (ids.length)
@@ -108,6 +109,12 @@ describe('ClientPreferencesRepository', () => {
     expect(data).toEqual({ genreIds: [2, 1], languageIds: [4, 3] });
     expect(connection.execute).toHaveBeenNthCalledWith(
       1,
+      'ALTER SESSION DISABLE PARALLEL DML',
+      {},
+      { autoCommit: false },
+    );
+    expect(connection.execute).toHaveBeenNthCalledWith(
+      2,
       expect.stringContaining('FOR UPDATE'),
       { id: 7 },
       expect.anything(),
@@ -133,14 +140,79 @@ describe('ClientPreferencesRepository', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
   });
+  it('updates repeated selections on a fresh parallel-DML session without sibling row locks', async () => {
+    let parallelDml = true;
+    let stored = { genreIds: [1], languageIds: [2] };
+    let pending = structuredClone(stored);
+    const deleted = new Set<string>();
+    const group = (sql: string) =>
+      sql.includes('CLIENT_GENRE_PREFERENCES') ? 'genreIds' : 'languageIds';
+    connection.execute.mockImplementation(
+      (sql: string, binds: Record<string, unknown> = {}) => {
+        if (sql === 'ALTER SESSION DISABLE PARALLEL DML') {
+          parallelDml = false;
+          return Promise.resolve({});
+        }
+        if (sql.startsWith('SELECT STATUS'))
+          return Promise.resolve({ rows: [{ STATUS: 'ACTIVE' }] });
+        if (
+          sql.startsWith('SELECT GENRE_ID') ||
+          sql.startsWith('SELECT LANGUAGE_ID')
+        )
+          return Promise.resolve({
+            rows: Object.values(binds).map((id) => ({ ID: id })),
+          });
+        if (sql.startsWith('DELETE')) {
+          deleted.add(group(sql));
+          pending[group(sql)] = [];
+          return Promise.resolve({ rowsAffected: 1 });
+        }
+        throw new Error('Unexpected SQL in preference regression.');
+      },
+    );
+    connection.executeMany.mockImplementation(
+      (sql: string, rows: { clientId: number; optionId: number }[]) => {
+        if (parallelDml && deleted.has(group(sql)))
+          return Promise.reject({ errorNum: 12860, code: 'ORA-12860' });
+        pending[group(sql)] = rows.map((row) => row.optionId);
+        return Promise.resolve({ rowsAffected: rows.length });
+      },
+    );
+    connection.commit.mockImplementation(() => {
+      stored = structuredClone(pending);
+      deleted.clear();
+      return Promise.resolve();
+    });
+    connection.rollback.mockImplementation(() => {
+      pending = structuredClone(stored);
+      deleted.clear();
+      return Promise.resolve();
+    });
+
+    const selections = [
+      { genreIds: [1], languageIds: [2, 3] },
+      { genreIds: [1, 4], languageIds: [3] },
+      { genreIds: [], languageIds: [] },
+      { genreIds: [4], languageIds: [2, 3] },
+    ];
+    for (const selection of selections) {
+      parallelDml = true;
+      await expect(repository.savePreferences(7, selection)).resolves.toEqual(
+        selection,
+      );
+      expect(stored).toEqual(selection);
+    }
+    expect(connection.commit).toHaveBeenCalledTimes(selections.length);
+    expect(connection.rollback).not.toHaveBeenCalled();
+  });
   it('clears both collections without checking or inserting empty options', async () => {
     selectedAccount([], []);
     await expect(
       repository.savePreferences(7, { genreIds: [], languageIds: [] }),
     ).resolves.toEqual({ genreIds: [], languageIds: [] });
-    expect(connection.execute).toHaveBeenCalledTimes(3);
+    expect(connection.execute).toHaveBeenCalledTimes(4);
     expect(connection.execute).toHaveBeenNthCalledWith(
-      2,
+      3,
       'DELETE FROM CLIENT_GENRE_PREFERENCES WHERE CLIENT_ID = :clientId',
       { clientId: 7 },
       { autoCommit: false },
@@ -151,13 +223,14 @@ describe('ClientPreferencesRepository', () => {
   it.each([undefined, 'INACTIVE'])(
     'rejects client state %p before modifying preferences',
     async (status) => {
+      connection.execute.mockResolvedValueOnce({});
       connection.execute.mockResolvedValueOnce({
         rows: status ? [{ STATUS: status }] : [],
       });
       await expect(
         repository.savePreferences(7, { genreIds: [], languageIds: [] }),
       ).rejects.toMatchObject({ status: 401 });
-      expect(connection.execute).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenCalledTimes(2);
       expect(connection.commit).not.toHaveBeenCalled();
       expect(connection.rollback).toHaveBeenCalledTimes(1);
     },
@@ -166,6 +239,7 @@ describe('ClientPreferencesRepository', () => {
     'rejects unavailable %s before deleting the old selection',
     async (field) => {
       connection.execute
+        .mockResolvedValueOnce({})
         .mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE' }] })
         .mockResolvedValueOnce({ rows: [] });
       await expect(
@@ -175,20 +249,21 @@ describe('ClientPreferencesRepository', () => {
           [field]: [99],
         }),
       ).rejects.toMatchObject({ status: 400 });
-      expect(connection.execute).toHaveBeenCalledTimes(2);
+      expect(connection.execute).toHaveBeenCalledTimes(3);
       expect(connection.executeMany).not.toHaveBeenCalled();
       expect(connection.rollback).toHaveBeenCalledTimes(1);
     },
   );
   it('rejects an incomplete catalog response and binds option identifiers', async () => {
     connection.execute
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE' }] })
       .mockResolvedValueOnce({});
     await expect(
       repository.savePreferences(7, { genreIds: [12], languageIds: [] }),
     ).rejects.toMatchObject({ status: 400 });
     expect(connection.execute).toHaveBeenNthCalledWith(
-      2,
+      3,
       expect.stringContaining('IN (:option0)'),
       { option0: { val: 12, type: oracle.NUMBER } },
       expect.objectContaining({ autoCommit: false }),
@@ -234,13 +309,14 @@ describe('ClientPreferencesRepository', () => {
   });
   it('validates both collections before deleting either saved selection', async () => {
     connection.execute
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ rows: [{ STATUS: 'ACTIVE' }] })
       .mockResolvedValueOnce({ rows: [{ GENRE_ID: 1 }] })
       .mockResolvedValueOnce({ rows: [] });
     await expect(
       repository.savePreferences(7, { genreIds: [1], languageIds: [99] }),
     ).rejects.toMatchObject({ status: 400 });
-    expect(connection.execute).toHaveBeenCalledTimes(3);
+    expect(connection.execute).toHaveBeenCalledTimes(4);
     expect(
       connection.execute.mock.calls.some(([sql]: [string]) =>
         sql.startsWith('DELETE'),

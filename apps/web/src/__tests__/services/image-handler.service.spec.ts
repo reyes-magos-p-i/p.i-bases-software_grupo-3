@@ -36,10 +36,7 @@ describe('image-handler.service', () => {
       await expect(uploadPoster(file)).resolves.toEqual(response)
 
       expect(post).toHaveBeenCalledTimes(1)
-      expect(post).toHaveBeenCalledWith(
-        '/image-handler/posters',
-        expect.any(FormData),
-      )
+      expect(post).toHaveBeenCalledWith('/image-handler/posters', expect.any(FormData))
 
       const data = post.mock.calls[0]![1] as FormData
       expect(data.get('image')).toBe(file)
@@ -49,9 +46,7 @@ describe('image-handler.service', () => {
       const error = new Error('Upload failed')
       post.mockRejectedValue(error)
 
-      await expect(
-        uploadPoster(new File(['image'], 'poster.png')),
-      ).rejects.toBe(error)
+      await expect(uploadPoster(new File(['image'], 'poster.png'))).rejects.toBe(error)
     })
   })
 
@@ -88,27 +83,24 @@ describe('image-handler.service', () => {
       )
     })
 
-    it.each(['/api', '/api/'])(
-      'builds legacy URLs with the relative API base %s',
+    it.each(['/api', '/api/'])('builds legacy URLs with the relative API base %s', (base) => {
+      vi.stubEnv('VITE_API_BASE_URL', base)
+
+      expect(getPosterUrl('/uploads/poster.jpg', true)).toBe(
+        `${window.location.origin}/api/image/poster.jpg`,
+      )
+    })
+
+    it.each(['https://api.example.com/api', 'https://api.example.com/api/'])(
+      'builds legacy URLs with the absolute API base %s',
       (base) => {
         vi.stubEnv('VITE_API_BASE_URL', base)
 
-        expect(getPosterUrl('/uploads/poster.jpg', true)).toBe(
-          `${window.location.origin}/api/image/poster.jpg`,
+        expect(getPosterUrl('poster.jpg', true)).toBe(
+          'https://api.example.com/api/image/poster.jpg',
         )
       },
     )
-
-    it.each([
-      'https://api.example.com/api',
-      'https://api.example.com/api/',
-    ])('builds legacy URLs with the absolute API base %s', (base) => {
-      vi.stubEnv('VITE_API_BASE_URL', base)
-
-      expect(getPosterUrl('poster.jpg', true)).toBe(
-        'https://api.example.com/api/image/poster.jpg',
-      )
-    })
 
     it('encodes legacy filenames', () => {
       expect(getPosterUrl('uploads/my poster #1.jpg', true)).toBe(
@@ -116,31 +108,24 @@ describe('image-handler.service', () => {
       )
     })
 
-  it('trims whitespace around the API base URL', () => {
-    vi.stubEnv('VITE_API_BASE_URL', '  https://api.example.com/api  ')
+    it('trims whitespace around the API base URL', () => {
+      vi.stubEnv('VITE_API_BASE_URL', '  https://api.example.com/api  ')
 
-    expect(getPosterUrl('poster.webp')).toBe(
-      'https://api.example.com/api/image-handler/posters/poster.webp',
-    )
-  })
+      expect(getPosterUrl('poster.webp')).toBe(
+        'https://api.example.com/api/image-handler/posters/poster.webp',
+      )
+    })
 
-    it.each(['', '   '])(
-      'throws when the API base URL is blank: %j',
-      (base) => {
-        vi.stubEnv('VITE_API_BASE_URL', base)
+    it.each(['', '   '])('throws when the API base URL is blank: %j', (base) => {
+      vi.stubEnv('VITE_API_BASE_URL', base)
 
-        expect(() => getPosterUrl('poster.webp')).toThrow(
-          'Falta configurar VITE_API_BASE_URL.',
-        )
-      },
-    )
+      expect(() => getPosterUrl('poster.webp')).toThrow('Falta configurar VITE_API_BASE_URL.')
+    })
 
     it('throws when the API base URL is undefined', () => {
       vi.stubEnv('VITE_API_BASE_URL', undefined)
 
-      expect(() => getPosterUrl('poster.webp')).toThrow(
-        'Falta configurar VITE_API_BASE_URL.',
-      )
+      expect(() => getPosterUrl('poster.webp')).toThrow('Falta configurar VITE_API_BASE_URL.')
     })
 
     it('returns null for missing images even without an API base URL', () => {

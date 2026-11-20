@@ -19,6 +19,8 @@ import { EmployeeGuard } from './guards/employee.guard';
 import { UserIdParamsDto } from './dto/user-id-params.dto';
 import { UpdateClientDto, UpdateEmployeeDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
+import { ConfirmationEmailDto } from '../common/validation/confirmation-email.dto';
+import { requireEmailConfirmation } from '../common/security/email-confirmation';
 
 @Controller('users')
 @UseGuards(AuthGuard('jwt'), EmployeeGuard, PasswordStatusGuard)
@@ -33,8 +35,12 @@ export class UsersUpdateController {
   @Patch('clients/:id/deactivate')
   @HttpCode(204)
   @UseGuards(SessionOriginGuard)
-  deactivateClient(@Param() params: UserIdParamsDto, @Body() body: unknown) {
-    this.requireEmptyBody(body);
+  deactivateClient(
+    @Param() params: UserIdParamsDto,
+    @Body() body: ConfirmationEmailDto,
+    @Req() request: Request & { user: UserIdentity },
+  ) {
+    requireEmailConfirmation(body.email, request.user.email);
     return this.usersService.deactivateClient(params.id);
   }
 
@@ -44,9 +50,9 @@ export class UsersUpdateController {
   deactivateEmployee(
     @Param() params: UserIdParamsDto,
     @Req() request: Request & { user: UserIdentity },
-    @Body() body: unknown,
+    @Body() body: ConfirmationEmailDto,
   ) {
-    this.requireEmptyBody(body);
+    requireEmailConfirmation(body.email, request.user.email);
     return this.usersService.deactivateEmployee(params.id, request.user.id);
   }
 
