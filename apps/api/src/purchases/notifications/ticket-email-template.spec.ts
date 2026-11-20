@@ -41,9 +41,9 @@ describe('Ticket email content', () => {
     expect(body.html).toContain('&lt;Película &amp; cine&gt;');
     expect(body.html).not.toContain('<Película');
     expect(body.text).toContain('Boleto 1');
-    expect(body.text).toContain('Boleto 2 · Reprogramado');
-    expect(body.text).toContain('Sucursal nueva · Sala 8');
-    expect(body.text).toContain('Fila 3, asiento 4 · Niño');
+    expect(body.text).toContain('Boleto 2 - Reprogramado');
+    expect(body.text).toContain('Sucursal nueva - Sala 8');
+    expect(body.text).toContain('Fila 3, asiento 4 - Niño');
     expect(body.text).toContain('Esta función fue cancelada.');
     expect(body.text).toContain('20:00');
     expect(body.html).toContain('cid:purchase-qr');
