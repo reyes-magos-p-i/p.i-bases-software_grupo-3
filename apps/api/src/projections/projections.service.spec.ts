@@ -1,3 +1,4 @@
+import { CancelledProjectionNotifier } from './cancelled-projection-notifier';
 import {
   BadRequestException,
   ConflictException,
@@ -19,8 +20,10 @@ describe('ProjectionsService', () => {
     updateProjection: jest.fn(),
     cancelProjection: jest.fn(),
   };
+  const notifier = { notify: jest.fn() };
   const service = new ProjectionsService(
     repository as unknown as ProjectionsRepository,
+    notifier as unknown as CancelledProjectionNotifier,
   );
   const request = (
     overrides: Partial<CreateProjectionDto> = {},
