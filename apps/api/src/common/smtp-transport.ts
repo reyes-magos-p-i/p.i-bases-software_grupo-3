@@ -7,9 +7,18 @@ export interface SmtpTransportConfiguration {
   from: string;
 }
 
+// Only NODE_ENV=production delivers real mail. Any other value (or none) sends
+// everything to a local mail catcher (Mailpit) so test environments never reach clients.
+const CAPTURE_HOST = '127.0.0.1';
+const CAPTURE_PORT = 1025;
+
 export function createSmtpTransport(
   config: ConfigService,
 ): SmtpTransportConfiguration {
+  if (config.get<unknown>('NODE_ENV') !== 'production') {
+    return createCaptureTransport(config);
+  }
+
   const required = (key: string): string => {
     const value = config.get<unknown>(key);
     if (typeof value !== 'string' || !value.trim()) {
@@ -55,6 +64,31 @@ export function createSmtpTransport(
       greetingTimeout: 10000,
       socketTimeout: 30000,
       dnsTimeout: 10000,
+      logger: false,
+      debug: false,
+      disableFileAccess: true,
+      disableUrlAccess: true,
+    }),
+  };
+}
+
+function createCaptureTransport(
+  config: ConfigService,
+): SmtpTransportConfiguration {
+  const configuredFrom = config.get<unknown>('SMTP_FROM');
+  const from =
+    typeof configuredFrom === 'string' &&
+    isEmail(configuredFrom) &&
+    !/[\uD800-\uDFFF]/u.test(configuredFrom)
+      ? configuredFrom
+      : 'cinetadel-test@localhost.localdomain';
+  return {
+    from,
+    transport: nodemailer.createTransport({
+      host: CAPTURE_HOST,
+      port: CAPTURE_PORT,
+      secure: false,
+      ignoreTLS: true,
       logger: false,
       debug: false,
       disableFileAccess: true,

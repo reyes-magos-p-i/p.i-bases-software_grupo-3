@@ -1,4 +1,4 @@
-import type { NavigationGuard, Router } from 'vue-router'
+import type { NavigationGuard, RouteLocationNormalized, Router } from 'vue-router'
 import {
   clientSession,
   hasClientSession,
@@ -13,6 +13,13 @@ import { onPasswordBlocked } from '@/services/api'
 
 const PASSWORD_PATH = '/account/password'
 
+/** Only routes flagged `returnAfterLogin` come back to the requested URL after login. */
+function loginQuery(to: RouteLocationNormalized, reason: string) {
+  return to.meta.returnAfterLogin
+    ? { login: 'client', reason, redirect: to.fullPath }
+    : { login: 'client', reason }
+}
+
 export const requireClientSession: NavigationGuard = async (to) => {
   if (to.path === '/recover-password' || to.path === '/account/confirm-email') return true
   const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
@@ -22,10 +29,7 @@ export const requireClientSession: NavigationGuard = async (to) => {
     if (to.meta.requiresClient || (hasClientSession() && !clientSession.user.value)) {
       const identity = await restoreClientSession(getClientSession)
       if (to.meta.requiresClient && !identity) {
-        return {
-          path: '/',
-          query: { login: 'client', reason: 'required' },
-        }
+        return { path: '/', query: loginQuery(to, 'required') }
       }
     }
     if (!clientSession.user.value || !hasClientSession() || to.path === PASSWORD_PATH) return true
@@ -38,13 +42,10 @@ export const requireClientSession: NavigationGuard = async (to) => {
     reportClientSessionError(error)
     if (authErrorStatus(error) === 401) {
       clearClientSession()
-      return { path: '/', query: { login: 'client', reason: 'expired' } }
+      return { path: '/', query: loginQuery(to, 'expired') }
     }
     if (to.meta.requiresClient) {
-      return {
-        path: '/',
-        query: { login: 'client', reason: 'unavailable' },
-      }
+      return { path: '/', query: loginQuery(to, 'unavailable') }
     }
   }
   return true

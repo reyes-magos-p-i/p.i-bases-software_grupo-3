@@ -24,6 +24,7 @@ import {
   scheduledDurationMinutes,
 } from './projection-schedule';
 import { ProjectionsRepository } from './projections.repository';
+import { CancelledProjectionNotifier } from './cancelled-projection-notifier';
 import type { ListProjectionsQueryDto } from './dto/list-projections-query.dto';
 import type { UpdateProjectionDto } from './dto/update-projection.dto';
 import type {
@@ -36,7 +37,10 @@ import type {
 
 @Injectable()
 export class ProjectionsService {
-  constructor(private readonly repository: ProjectionsRepository) {}
+  constructor(
+    private readonly repository: ProjectionsRepository,
+    private readonly notifier: CancelledProjectionNotifier,
+  ) {}
 
   async getSchedulingOptions(): Promise<ProjectionSchedulingOptions> {
     return {
@@ -155,6 +159,7 @@ export class ProjectionsService {
 
   async cancel(id: number): Promise<ProjectionDetail> {
     await this.repository.cancelProjection(id);
+    await this.notifier.notify(id);
     return this.findOne(id);
   }
 

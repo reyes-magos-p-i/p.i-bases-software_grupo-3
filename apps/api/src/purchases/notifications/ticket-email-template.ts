@@ -35,11 +35,11 @@ export function ticketEmailTemplate(
 ) {
   const { receipt } = message;
   const tickets = receipt.tickets.map((ticket) => [
-    `Boleto ${ticket.id}${ticket.functionId !== receipt.function.id ? ' · Reprogramado' : ''}`,
+    `Boleto ${ticket.id}${ticket.functionId !== receipt.function.id ? ' - Reprogramado' : ''}`,
     ticket.title,
     date(ticket.startsAt),
-    `${ticket.branchName} · Sala ${ticket.theaterId}`,
-    `Fila ${ticket.rowNumber}, asiento ${ticket.columnNumber} · ${categories[ticket.category]}`,
+    `${ticket.branchName} - Sala ${ticket.theaterId}`,
+    `Fila ${ticket.rowNumber}, asiento ${ticket.columnNumber} - ${categories[ticket.category]}`,
     ...functionNotice(ticket.functionStatus),
   ]);
   const text = [
@@ -91,7 +91,7 @@ export function ticketEmailTemplate(
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:${theme['surface-background']};color:${theme['content-background']}">
         <tr><td align="center" style="padding:24px">
           <h1 style="font-size:26px">¡Nos vemos en el cine!</h1>
-          <p>Tus boletos · <strong style="color:${theme['accent-color']}">${escapeHtml(receipt.reference)}</strong></p>
+          <p>Tus boletos - <strong style="color:${theme['accent-color']}">${escapeHtml(receipt.reference)}</strong></p>
         </td></tr>
         ${cards}
         <tr><td align="center" style="padding:24px">
