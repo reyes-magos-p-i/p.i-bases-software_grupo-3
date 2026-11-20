@@ -18,6 +18,10 @@ describe('contrast helper', () => {
       191.25, 191.25, 191.25,
     ])
     expect(resolveColor('color-mix(in srgb, #000000, #ffffff 25%)')).toEqual([63.75, 63.75, 63.75])
+    // The weight of a nested color-mix is its last word, even with extra whitespace.
+    expect(
+      resolveColor('color-mix(in srgb, color-mix(in srgb, #000000, #ffffff)   50%, #ffffff)'),
+    ).toEqual([191.25, 191.25, 191.25])
     // 85% content background + 15% surface background.
     expect(resolveColor('var(--text-on-dark-secondary)').map(Math.round)).toEqual([213, 215, 219])
   })

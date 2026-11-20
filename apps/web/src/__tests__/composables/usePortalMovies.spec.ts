@@ -96,6 +96,32 @@ describe('usePortalMovies', () => {
     expect(state.movies.value).toEqual(movies)
     expect(state.error.value).toBe('')
   })
+  it('explains a failed history-based ranking without leaving earlier personalized results visible', async () => {
+    login()
+    render()
+    await flushPromises()
+    const general = [{ id: 9, title: 'Cartelera general', posterImage: '9.jpg' }]
+    vi.mocked(getPortalMovies)
+      .mockRejectedValueOnce(new Error('history unavailable'))
+      .mockResolvedValueOnce(general)
+    await state.reload()
+    expect(state.movies.value).toEqual(general)
+    expect(state.warning.value).toBe(
+      'No pudimos personalizar la cartelera. Se muestra la cartelera general.',
+    )
+    expect(state.error.value).toBe('')
+  })
+  it('uses the freshly ranked complete catalog on each authenticated reload', async () => {
+    login()
+    render()
+    await flushPromises()
+    const updated = [...movies].reverse()
+    vi.mocked(getPortalMovies).mockResolvedValueOnce(updated)
+    await state.reload()
+    expect(getPortalMovies).toHaveBeenLastCalledWith(true, expect.any(AbortSignal))
+    expect(state.movies.value).toEqual(updated)
+    expect(state.warning.value).toBe('')
+  })
   it('reports a failed fallback without retaining old personal content', async () => {
     login()
     vi.mocked(getPortalMovies).mockRejectedValue(new Error('offline'))
