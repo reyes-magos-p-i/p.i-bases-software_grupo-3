@@ -24,6 +24,14 @@ import type {
   ProjectionStatus,
 } from './types/projection.types';
 
+export interface CancellationRecipient {
+  ticketId: number;
+  email: string;
+  clientName: string;
+  movieTitle: string;
+  startsAt: string;
+}
+
 const LOCAL_FORMAT = `'YYYY-MM-DD"T"HH24:MI'`;
 const TRANSACTION = {
   outFormat: oracle.OUT_FORMAT_OBJECT,
@@ -254,6 +262,35 @@ export class ProjectionsRepository {
       price: ticketPrice(data).unitPrice,
       projections,
     };
+  }
+
+  /** Paid ticket holders of a projection, one row per ticket, for cancellation emails. */
+  async findCancellationRecipients(
+    id: number,
+  ): Promise<CancellationRecipient[]> {
+    const result = await this.db.query<{
+      ticketId: number;
+      email: string;
+      clientName: string;
+      movieTitle: string;
+      startsAt: string;
+    }>(
+      `SELECT t.TICKETS_ID AS "ticketId",
+              NVL(i.BUYER_EMAIL, c.EMAIL) AS "email",
+              NVL(TRIM(NVL(c.FIRST_NAME, '') || ' ' || NVL(c.FIRST_SURNAME, '')), 'Cliente') AS "clientName",
+              m.TITLE AS "movieTitle",
+              TO_CHAR(mf.START_TIME, 'YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "startsAt"
+         FROM TICKETS t
+         JOIN INVOICES i ON i.INVOICE_ID = t.INVOICE_ID
+         LEFT JOIN CLIENTS c ON c.CLIENT_ID = i.CLIENT_ID
+         JOIN MOVIE_FUNCTIONS mf ON mf.MOVIE_FUNCTION_ID = t.MOVIE_FUNCTION_ID
+         JOIN MOVIES m ON m.MOVIE_ID = mf.MOVIE_ID
+        WHERE t.MOVIE_FUNCTION_ID = :id
+          AND i.STATUS = 'PAID'`,
+      { id },
+      { outFormat: oracle.OUT_FORMAT_OBJECT },
+    );
+    return (result.rows ?? []).filter((row) => row.email);
   }
 
   /** Cancels a projection that has not finished; the theater becomes free for that slot. */
