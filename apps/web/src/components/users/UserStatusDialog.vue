@@ -5,6 +5,8 @@ import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { activateUser, deactivateUser } from '@/services/user.service'
 import type { UserStatusSelection } from '@/types/user'
+import EmailConfirmationField from '@/components/common/EmailConfirmationField.vue'
+import { employeeSession } from '@/services/employee-session.service'
 
 const props = defineProps<{ selection: UserStatusSelection | null }>()
 const emit = defineEmits<{
@@ -32,6 +34,7 @@ const action = computed(() =>
       },
 )
 const saving = ref(false)
+const confirmation = ref<InstanceType<typeof EmailConfirmationField> | null>(null)
 const blocked = ref(false)
 const error = ref('')
 const feedback = ref<HTMLElement | null>(null)
@@ -78,12 +81,14 @@ function describeFailure(failure: unknown): string {
 async function confirm() {
   const selection = props.selection
   if (!selection || saving.value || blocked.value) return
+  const email = activating.value ? undefined : confirmation.value?.validate()
+  if (!activating.value && !email) return
   saving.value = true
   error.value = ''
   try {
     const targetStatus = selection.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
     if (targetStatus === 'ACTIVE') await activateUser(selection)
-    else await deactivateUser(selection)
+    else await deactivateUser(selection, email!)
     if (!disposed) emit('status-changed', targetStatus)
   } catch (failure) {
     if (disposed) return
@@ -126,6 +131,13 @@ onBeforeUnmount(() => {
             relacionados se conservarán.
           </template>
         </p>
+        <EmailConfirmationField
+          v-if="!activating"
+          :key="selection.displayId"
+          ref="confirmation"
+          :expected-email="employeeSession.user.value?.email"
+          :disabled="saving"
+        />
         <div v-if="error" ref="feedback" class="status-error" tabindex="-1">
           <NotificationPopup type="error" :message="error" :duration="0" />
         </div>

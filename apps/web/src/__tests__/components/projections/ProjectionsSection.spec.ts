@@ -40,6 +40,7 @@ vi.mock('@/services/projection.service', () => ({
   cancelProjection,
 }))
 vi.mock('@/services/employee-session.service', () => ({
+  employeeSession: { user: { value: { email: 'admin@example.com' } } },
   invalidateEmployeeSession: vi.fn(),
   restoreEmployeeSession: vi.fn(),
 }))

@@ -52,7 +52,7 @@ describe('ClientPreferencesService', () => {
     await expect(service.getPortal(7)).resolves.toEqual([
       { id: 9, title: 'Preferida', posterImage: '9.jpg' },
     ]);
-    expect(portal.findCatalog).toHaveBeenCalledWith(preferences);
+    expect(portal.findCatalog).toHaveBeenCalledWith(preferences, 7);
   });
   it('does not personalize using another source after an account read failure', async () => {
     repository.getPreferences.mockRejectedValue(new Error('session ended'));

@@ -1,7 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import * as oracledb from 'oracledb';
-import { DatabaseService } from './database.service';
+import {
+  DatabaseService,
+  REQUIRED_DATABASE_VARIABLES,
+  missingDatabaseVariablesMessage,
+} from './database.service';
 
 // db service mock
 jest.mock('oracledb', () => ({
@@ -19,8 +23,11 @@ describe('DatabaseService', () => {
   };
   let mockPool: { getConnection: jest.Mock; close: jest.Mock };
 
-  // Arm testing module with arbitrary schema
-  async function initService(schema: string | undefined) {
+  // Arm testing module with an arbitrary schema; `overrides` replaces any other variable.
+  async function initService(
+    schema: string | undefined,
+    overrides: Record<string, string | undefined> = {},
+  ) {
     mockConnection = {
       execute: jest.fn(),
       close: jest.fn(),
@@ -39,8 +46,13 @@ describe('DatabaseService', () => {
         {
           provide: ConfigService,
           useValue: {
-            getOrThrow: jest.fn((key: string) => `mock-${key}`),
-            get: jest.fn(() => schema),
+            get: jest.fn((key: string) =>
+              key in overrides
+                ? overrides[key]
+                : key === 'DB_SCHEMA'
+                  ? schema
+                  : `mock-${key}`,
+            ),
           },
         },
       ],
@@ -50,9 +62,11 @@ describe('DatabaseService', () => {
   }
 
   beforeEach(async () => {
-    service = await initService(undefined); // DB_SCHEMA empty by default
+    service = await initService('MOCK_SCHEMA');
 
-    mockConnection.execute.mockResolvedValueOnce({ rows: [{ schema: 'MOCK_SCHEMA' }] });
+    mockConnection.execute.mockResolvedValueOnce({
+      rows: [{ schema: 'MOCK_SCHEMA' }],
+    });
     await service.onModuleInit();
     mockConnection.execute.mockReset();
   });
@@ -62,11 +76,11 @@ describe('DatabaseService', () => {
   });
 
   it('handles empty or undefined rows gracefully during onModuleInit schema check', async () => {
-    const svc1 = await initService(undefined);
+    const svc1 = await initService('MOCK_SCHEMA');
     mockConnection.execute.mockResolvedValueOnce({});
     await expect(svc1.onModuleInit()).resolves.not.toThrow();
 
-    const svc2 = await initService(undefined);
+    const svc2 = await initService('MOCK_SCHEMA');
     mockConnection.execute.mockResolvedValueOnce({ rows: [] });
     await expect(svc2.onModuleInit()).resolves.not.toThrow();
   });
@@ -121,6 +135,70 @@ describe('DatabaseService', () => {
     });
   });
 
+  describe('required database variables', () => {
+    it.each(REQUIRED_DATABASE_VARIABLES.filter((name) => name !== 'DB_SCHEMA'))(
+      'does not open the pool and names %s when it is missing',
+      async (name) => {
+        const incomplete = await initService('PRODUCTION', {
+          [name]: undefined,
+        });
+        (oracledb.createPool as jest.Mock).mockClear();
+
+        await expect(incomplete.onModuleInit()).rejects.toThrow(
+          `Falta la variable de entorno ${name}. Configúrala en apps/api/.env.`,
+        );
+        expect(oracledb.createPool).not.toHaveBeenCalled();
+      },
+    );
+
+    it('names every missing variable at once and never shows the values', async () => {
+      const incomplete = await initService(undefined, {
+        DB_PASSWORD: '  ',
+        DB_WALLET_PASSWORD: '',
+        DB_USER: 'CINETADEL_APP',
+      });
+      (oracledb.createPool as jest.Mock).mockClear();
+
+      const error = await incomplete.onModuleInit().catch((e: Error) => e);
+
+      expect(error).toEqual(
+        new Error(
+          'Faltan las variables de entorno DB_PASSWORD, DB_WALLET_PASSWORD, DB_SCHEMA. Configúralas en apps/api/.env.',
+        ),
+      );
+      expect((error as Error).message).not.toContain('CINETADEL_APP');
+      expect(oracledb.createPool).not.toHaveBeenCalled();
+    });
+
+    it('builds the singular and plural messages', () => {
+      expect(missingDatabaseVariablesMessage(['DB_USER'])).toBe(
+        'Falta la variable de entorno DB_USER. Configúrala en apps/api/.env.',
+      );
+      expect(missingDatabaseVariablesMessage(['DB_USER', 'DB_SCHEMA'])).toBe(
+        'Faltan las variables de entorno DB_USER, DB_SCHEMA. Configúralas en apps/api/.env.',
+      );
+    });
+
+    it('passes the configured credentials and wallet to the pool', async () => {
+      const configured = await initService('PRODUCTION');
+      (oracledb.createPool as jest.Mock).mockClear();
+      mockConnection.execute.mockResolvedValue({
+        rows: [{ schema: 'PRODUCTION' }],
+      });
+
+      await configured.onModuleInit();
+
+      expect(oracledb.createPool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user: 'mock-DB_USER',
+          password: 'mock-DB_PASSWORD',
+          connectString: 'mock-DB_CONNECT_STRING',
+          walletPassword: 'mock-DB_WALLET_PASSWORD',
+        }),
+      );
+    });
+  });
+
   describe('DB_SCHEMA validation', () => {
     it('rejects a schema with characters that could break the SQL', async () => {
       const badService = await initService("'; DROP TABLE users; --");
@@ -135,7 +213,9 @@ describe('DatabaseService', () => {
     it('sets CURRENT_SCHEMA via sessionCallback when DB_SCHEMA is valid', async () => {
       const schemaService = await initService('MY_SCHEMA');
       (oracledb.createPool as jest.Mock).mockClear();
-      mockConnection.execute.mockResolvedValue({ rows: [{ schema: 'MY_SCHEMA' }] });
+      mockConnection.execute.mockResolvedValue({
+        rows: [{ schema: 'MY_SCHEMA' }],
+      });
 
       await schemaService.onModuleInit();
 
@@ -150,24 +230,42 @@ describe('DatabaseService', () => {
       expect(done).toHaveBeenCalledWith();
     });
 
-    it('sessionCallback calls done() immediately when no schema is configured', async () => {
-      const noSchemaService = await initService(undefined);
+    it.each([undefined, '', '   '])(
+      'does not start without DB_SCHEMA (%p) instead of using the user schema',
+      async (schema) => {
+        const noSchemaService = await initService(schema);
+        (oracledb.createPool as jest.Mock).mockClear();
+
+        await expect(noSchemaService.onModuleInit()).rejects.toThrow(
+          'Falta la variable de entorno DB_SCHEMA. Configúrala en apps/api/.env.',
+        );
+        expect(oracledb.createPool).not.toHaveBeenCalled();
+      },
+    );
+
+    it('trims DB_SCHEMA before setting CURRENT_SCHEMA', async () => {
+      const schemaService = await initService(' DEVELOPMENT ');
       (oracledb.createPool as jest.Mock).mockClear();
-      mockConnection.execute.mockResolvedValue({ rows: [{ schema: 'MOCK' }] });
-      await noSchemaService.onModuleInit();
+      mockConnection.execute.mockResolvedValue({
+        rows: [{ schema: 'DEVELOPMENT' }],
+      });
+      await schemaService.onModuleInit();
 
       const poolOptions = (oracledb.createPool as jest.Mock).mock.calls[0][0];
-      const done = jest.fn();
+      const sessionConn = { execute: jest.fn().mockResolvedValue(undefined) };
+      await poolOptions.sessionCallback(sessionConn, null, jest.fn());
 
-      poolOptions.sessionCallback({}, null, done);
-
-      expect(done).toHaveBeenCalledWith();
+      expect(sessionConn.execute).toHaveBeenCalledWith(
+        'ALTER SESSION SET CURRENT_SCHEMA = DEVELOPMENT',
+      );
     });
 
     it('sessionCallback passes the error to done() when ALTER SESSION fails', async () => {
       const schemaService = await initService('GOOD_SCHEMA');
       (oracledb.createPool as jest.Mock).mockClear();
-      mockConnection.execute.mockResolvedValue({ rows: [{ schema: 'GOOD_SCHEMA' }] });
+      mockConnection.execute.mockResolvedValue({
+        rows: [{ schema: 'GOOD_SCHEMA' }],
+      });
       await schemaService.onModuleInit();
 
       const poolOptions = (oracledb.createPool as jest.Mock).mock.calls[0][0];
@@ -197,7 +295,7 @@ describe('DatabaseService', () => {
   });
 
   it('logs gracefully when the schema check returns no rows', async () => {
-    const svc = await initService(undefined);
+    const svc = await initService('MOCK_SCHEMA');
     mockConnection.execute.mockResolvedValueOnce({ rows: [] }); // no rows
     await expect(svc.onModuleInit()).resolves.not.toThrow();
   });

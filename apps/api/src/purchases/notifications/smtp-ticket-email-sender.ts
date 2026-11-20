@@ -39,10 +39,20 @@ export class SmtpTicketEmailSender extends TicketEmailSender {
   private readonly transport: Mail<SMTPSentMessageInfo>;
   private readonly from: string;
 
-  constructor(config: ConfigService) {
+  constructor(private readonly config: ConfigService) {
     super();
     ({ transport: this.transport, from: this.from } =
       createSmtpTransport(config));
+  }
+
+  private guestAccessUrl(accessCode?: string): string | undefined {
+    if (!accessCode) return undefined;
+    const url = new URL(
+      '/guest-purchases/receipt',
+      this.config.getOrThrow<string>('FRONTEND_URL'),
+    );
+    url.hash = accessCode;
+    return url.toString();
   }
 
   async send(message: TicketEmailMessage): Promise<void> {
@@ -59,7 +69,11 @@ export class SmtpTicketEmailSender extends TicketEmailSender {
           light: theme['content-background'],
         },
       });
-      const body = ticketEmailTemplate(message, theme);
+      const body = ticketEmailTemplate(
+        message,
+        theme,
+        this.guestAccessUrl(message.accessCode),
+      );
       submitted = true;
       const result = await this.transport.sendMail({
         from: { name: 'Cinetadel', address: this.from },

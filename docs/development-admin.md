@@ -315,9 +315,10 @@ original de la transacción.
    directamente en el archivo privado. Es la contraseña que protege `ewallet.pem`,
    no la contraseña SMTP, la de la cuenta Cinetadel ni necesariamente `DB_PASSWORD`.
    Si contiene `#` o espacios, escribir el valor entre comillas para conservarlo.
-7. Si `DB_USER` es el propietario `PRODUCTION`, no hace falta `DB_SCHEMA`. Si usas
-   otro usuario con permisos sobre esas tablas, configurar `DB_SCHEMA=PRODUCTION`.
-   Esta variable selecciona el esquema; no concede permisos.
+7. Configurar `DB_SCHEMA`, que es obligatoria: `DEVELOPMENT` en equipos locales y en la
+   rama `dev`, y `PRODUCTION` solo en el servidor. Esta variable selecciona el esquema; no
+   concede permisos. Los usuarios y el procedimiento están en
+   [Ambientes de base de datos](database-environments.md).
 8. Eliminar del entorno del backend las variables antiguas `DB_CONNECTION_STRING`
    y `ORACLE_CLIENT_LIB_DIR`, que ya no se utilizan. No es necesario desinstalar
    Instant Client ni cambiar SQL Developer.

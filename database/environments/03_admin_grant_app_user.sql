@@ -1,0 +1,30 @@
+-- SCRUM-435: gives CINETADEL_APP data access (no DDL) to every PRODUCTION table.
+-- Run as ADMIN (or the admin account used for 01 and 02) with Run Script (F5).
+-- Safe to run again: run it after every migration that adds a table to PRODUCTION,
+-- or the API gets ORA-00942 on the new table.
+
+BEGIN
+    FOR t IN (SELECT TABLE_NAME FROM ALL_TABLES
+               WHERE OWNER = 'PRODUCTION'
+                 AND TABLE_NAME NOT LIKE 'DBTOOLS$%' AND TABLE_NAME NOT LIKE 'BIN$%'
+               ORDER BY TABLE_NAME) LOOP
+        EXECUTE IMMEDIATE 'GRANT SELECT, INSERT, UPDATE, DELETE ON "PRODUCTION"."'
+                          || t.TABLE_NAME || '" TO CINETADEL_APP';
+    END LOOP;
+END;
+/
+
+-- Expected: one row per PRODUCTION table, each with DELETE, INSERT, SELECT, UPDATE.
+SELECT TABLE_NAME, LISTAGG(PRIVILEGE, ', ') WITHIN GROUP (ORDER BY PRIVILEGE) AS PRIVILEGES
+  FROM DBA_TAB_PRIVS
+ WHERE GRANTEE = 'CINETADEL_APP' AND OWNER = 'PRODUCTION'
+ GROUP BY TABLE_NAME
+ ORDER BY TABLE_NAME;
+
+-- Expected: no rows. Tables of PRODUCTION that CINETADEL_APP still cannot use.
+SELECT TABLE_NAME
+  FROM DBA_TABLES t
+ WHERE OWNER = 'PRODUCTION' AND TABLE_NAME NOT LIKE 'DBTOOLS$%' AND TABLE_NAME NOT LIKE 'BIN$%'
+   AND NOT EXISTS (SELECT 1 FROM DBA_TAB_PRIVS p
+                    WHERE p.GRANTEE = 'CINETADEL_APP' AND p.OWNER = 'PRODUCTION'
+                      AND p.TABLE_NAME = t.TABLE_NAME AND p.PRIVILEGE = 'DELETE');

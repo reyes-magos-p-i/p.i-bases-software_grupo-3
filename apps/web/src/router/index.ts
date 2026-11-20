@@ -87,9 +87,9 @@ const router = createRouter({
       meta: { requiresClient: true, returnAfterLogin: true },
     },
     {
-      path: '/guest-purchases',
-      name: 'guest-purchase-lookup',
-      component: () => import('@/views/GuestPurchaseLookupView.vue'),
+      path: '/guest-purchases/receipt',
+      name: 'guest-purchase-receipt',
+      component: () => import('@/views/GuestPurchaseReceiptView.vue'),
     },
     {
       path: '/:pathMatch(.*)*',

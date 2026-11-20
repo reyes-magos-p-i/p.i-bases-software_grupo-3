@@ -115,6 +115,7 @@ describe('User update and deactivation HTTP contracts', () => {
       id: 21,
       role: 'ADMINISTRATOR',
       firstName: 'Ana',
+      email: 'admin@example.com',
     });
     repository.findEmployeeCredentialsStatus.mockResolvedValue({
       setAt: new Date(),
@@ -167,6 +168,7 @@ describe('User update and deactivation HTTP contracts', () => {
       id: 21,
       role: 'EMPLOYEE',
       firstName: 'Ana',
+      email: 'admin@example.com',
     });
     await patch().send({ phoneNumber: null, address: null }).expect(200);
     await patch('employees').send({ email: 'ana@example.com' }).expect(403);
@@ -233,6 +235,7 @@ describe('User update and deactivation HTTP contracts', () => {
       id: 21,
       role: 'EMPLOYEE',
       firstName: 'Ana',
+      email: 'admin@example.com',
     });
     const response = await request(app.getHttpServer())
       .get('/api/users/edit-options')
@@ -336,8 +339,24 @@ describe('User update and deactivation HTTP contracts', () => {
   });
 
   describe.each(['deactivate', 'activate'])('%s HTTP contract', (action) => {
-    const deactivate = (section = 'clients', id = '42') =>
-      patch(section, id + '/' + action);
+    if (action === 'deactivate') {
+      it.each([
+        {},
+        { email: '' },
+        { email: 'invalid' },
+        { email: 'target@example.com' },
+      ])('requires the current actor email: %p', async (body) => {
+        await patch('clients', '42/deactivate').send(body).expect(400);
+        expect(clientsRepository.deactivateClient).not.toHaveBeenCalled();
+      });
+    }
+    const deactivate = (
+      section = 'clients',
+      id = '42',
+      body: unknown = action === 'deactivate'
+        ? { email: 'admin@example.com' }
+        : {},
+    ) => patch(section, id + '/' + action).send(body as object);
     it.each(['ADMINISTRATOR', 'EMPLOYEE'])(
       'allows %s to deactivate clients without changing credentials',
       async (role) => {
@@ -345,6 +364,7 @@ describe('User update and deactivation HTTP contracts', () => {
           id: 21,
           role,
           firstName: 'Ana',
+          email: 'admin@example.com',
         });
         const response = await deactivate().send({}).expect(204);
         expect(response.text).toBe('');
@@ -371,6 +391,7 @@ describe('User update and deactivation HTTP contracts', () => {
         id: 21,
         role: 'EMPLOYEE',
         firstName: 'Ana',
+        email: 'admin@example.com',
       });
       await deactivate('employees').expect(403);
       expect(
@@ -433,7 +454,7 @@ describe('User update and deactivation HTTP contracts', () => {
       { password: randomUUID() },
       [],
     ])('rejects a nonempty or invalid body %p', async (body) => {
-      await deactivate().send(body).expect(400);
+      await deactivate('clients', '42', body).expect(400);
       expect(
         clientsRepository[
           action === 'activate' ? 'activateClient' : 'deactivateClient'

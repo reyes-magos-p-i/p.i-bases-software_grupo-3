@@ -34,6 +34,9 @@ export class ClientPreferencesService {
   }
 
   async getPortal(id: number) {
-    return this.portal.findCatalog(await this.preferences.getPreferences(id));
+    return this.portal.findCatalog(
+      await this.preferences.getPreferences(id),
+      id,
+    );
   }
 }

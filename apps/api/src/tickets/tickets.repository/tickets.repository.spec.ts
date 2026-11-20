@@ -173,6 +173,15 @@ describe('TicketsRepository', () => {
       );
     });
 
+    it('uses the schema of the session instead of a fixed one (SCRUM-435)', async () => {
+      databaseService.query.mockResolvedValue({ rows: [] });
+
+      await repository.getAlternativeShowtimesByTicketId(42);
+
+      const sql = databaseService.query.mock.calls[0][0] as string;
+      expect(sql).not.toMatch(/PRODUCTION\./i);
+    });
+
     it.each([
       ['rows is empty', { rows: [] }],
       ['rows is undefined', {}],
