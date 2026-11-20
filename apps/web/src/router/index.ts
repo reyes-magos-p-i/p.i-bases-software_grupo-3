@@ -69,6 +69,24 @@ const router = createRouter({
       component: () => import('@/views/TicketPurchaseView.vue'),
     },
     {
+      path: '/cancelled-tickets/:ticketId',
+      name: 'cancelled-ticket',
+      component: () => import('@/views/CancelledTicketView.vue'),
+      meta: { requiresClient: true, returnAfterLogin: true },
+    },
+    {
+      path: '/cancelled-tickets/:ticketId/refund',
+      name: 'cancelled-ticket-refund',
+      component: () => import('@/views/RefundInProgressView.vue'),
+      meta: { requiresClient: true, returnAfterLogin: true },
+    },
+    {
+      path: '/cancelled-tickets/:ticketId/changed',
+      name: 'cancelled-ticket-changed',
+      component: () => import('@/views/TicketChangedView.vue'),
+      meta: { requiresClient: true, returnAfterLogin: true },
+    },
+    {
       path: '/guest-purchases',
       name: 'guest-purchase-lookup',
       component: () => import('@/views/GuestPurchaseLookupView.vue'),
