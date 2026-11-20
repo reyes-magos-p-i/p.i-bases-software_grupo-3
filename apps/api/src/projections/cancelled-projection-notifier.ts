@@ -19,22 +19,24 @@ export class CancelledProjectionNotifier {
       const recipients =
         await this.repository.findCancellationRecipients(projectionId);
       const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
-      for (const recipient of recipients) {
-        try {
-          await this.sender.send({
-            ...recipient,
-            changeUrl: new URL(
-              `/cancelled-tickets/${recipient.ticketId}`,
-              frontendUrl,
-            ).href,
-          });
-        } catch (error) {
-          this.logger.error(
-            `Cancellation email failed for ticket ${recipient.ticketId}`,
-            error as Error,
-          );
-        }
-      }
+      await Promise.all(
+        recipients.map(async (recipient) => {
+          try {
+            await this.sender.send({
+              ...recipient,
+              changeUrl: new URL(
+                `/cancelled-tickets/${recipient.ticketId}`,
+                frontendUrl,
+              ).href,
+            });
+          } catch (error) {
+            this.logger.error(
+              `Cancellation email failed for ticket ${recipient.ticketId}`,
+              error as Error,
+            );
+          }
+        }),
+      );
     } catch (error) {
       this.logger.error(
         `Cancellation notifications failed for projection ${projectionId}`,
