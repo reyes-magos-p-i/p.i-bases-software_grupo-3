@@ -5,6 +5,7 @@ import ProjectionsSection from '@/components/projections/ProjectionsSection.vue'
 import TicketsSection from '@/components/tickets/TicketsSection.vue'
 import BranchesSection from '@/components/branches/BranchesSection.vue'
 import TransactionsSection from '@/components/transactions/TransactionsSection.vue'
+import PromotionsSection from '../promotions/PromotionsSection.vue'
 
 export type DashboardSectionId =
   | 'dashboard'
@@ -16,6 +17,7 @@ export type DashboardSectionId =
   | 'tickets'
   | 'branches'
   | 'transactions'
+  | 'promotions'
   | 'password'
   | 'account'
   | 'help'
@@ -84,6 +86,15 @@ export const dashboardSections: readonly DashboardSectionDefinition[] = [
     adminOnly: true,
     roles: ['ADMINISTRATOR'],
     component: TransactionsSection,
+  },
+  {
+    id: 'promotions',
+    label: 'Promociones',
+    icon: 'bi-receipt',
+    adminOnly: true,
+    roles: ['ADMINISTRATOR'],
+    component: PromotionsSection,
+
   },
   {
     id: 'password',

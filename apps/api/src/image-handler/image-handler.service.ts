@@ -76,4 +76,56 @@ export class ImageHandlerService {
       path: `/uploads/posters/${filename}`,
     };
   }
+
+  async savePromotionPoster(file?: Express.Multer.File) {
+    if (!file || file.size === 0 || file.buffer.length === 0) {
+      throw new BadRequestException('Seleccione una imagen válida.');
+    }
+
+    if (
+      file.size > MAX_POSTER_SIZE
+      || file.buffer.length > MAX_POSTER_SIZE
+    ) {
+      throw new BadRequestException(
+        'La imagen debe pesar como máximo 5 MB.',
+      );
+    }
+
+    let output: Buffer;
+
+    try {
+      const image = sharp(file.buffer, {
+        limitInputPixels: 25_000_000,
+      });
+
+      const metadata = await image.metadata();
+
+      if (
+        !metadata.format
+        || !['jpeg', 'png', 'webp'].includes(metadata.format)
+      ) {
+        throw new Error('Unsupported image format');
+      }
+
+      output = await image
+        .rotate()
+        .webp({ quality: 85 })
+        .toBuffer();
+    } catch {
+      throw new BadRequestException(
+        'La imagen debe ser un archivo JPEG, PNG o WebP válido.',
+      );
+    }
+
+    const directory = join(IMAGES_DIRECTORY, 'promotions');
+    const filename = `${randomUUID()}.webp`;
+
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, filename), output);
+
+    return {
+      filename,
+      path: `/uploads/promotions/${filename}`,
+    };
+  }
 }
