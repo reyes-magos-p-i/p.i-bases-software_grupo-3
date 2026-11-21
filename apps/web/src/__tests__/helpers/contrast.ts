@@ -41,9 +41,13 @@ function topLevelArgs(value: string) {
   return args
 }
 
+// "a 85%" -> color "a", weight 0.85. The weight is the last word, so the part is
+// split on whitespace instead of a regex like /^(.*\S)\s+([\d.]+)%$/, which backtracks.
 function mixPart(part: string) {
-  const weighted = /^(.*\S)\s+([\d.]+)%$/.exec(part)
-  return weighted ? { color: weighted[1]!, weight: Number(weighted[2]) / 100 } : { color: part }
+  const words = part.split(/\s+/)
+  const last = words.pop()!
+  if (words.length === 0 || !/^[\d.]+%$/.test(last)) return { color: part }
+  return { color: words.join(' '), weight: Number(last.slice(0, -1)) / 100 }
 }
 
 /** Resolves a CSS color (hex, var(--token) or color-mix in srgb) to sRGB channels. */

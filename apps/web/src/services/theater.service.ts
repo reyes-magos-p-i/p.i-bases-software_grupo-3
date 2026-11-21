@@ -33,8 +33,8 @@ export async function updateTheater(id: number, data: UpdateTheaterRequest): Pro
   return response.data
 }
 
-export async function deleteTheater(id: number): Promise<void> {
-  await getApi().delete(`/theaters/${id}`, { timeout: 30000 })
+export async function deleteTheater(id: number, email: string): Promise<void> {
+  await getApi().delete(`/theaters/${id}`, { data: { email }, timeout: 30000 })
 }
 
 type DbSeatState = 'libre' | 'indisponible' | 'ocupado' | 'reservado'

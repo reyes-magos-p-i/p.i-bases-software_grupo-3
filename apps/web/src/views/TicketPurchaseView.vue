@@ -76,7 +76,7 @@ watch(
 </script>
 <template>
   <AppHeader />
-  <main class="purchase-flow">
+  <main class="purchase-flow surface-theme--dark">
     <RouterLink to="/" class="portal-return-link">← Volver al portal</RouterLink
     ><PurchaseStepper :step="step" :labels="labels" /><NotificationPopup
       v-if="error || notice"
@@ -202,7 +202,7 @@ watch(
   cursor: not-allowed;
 }
 .purchase-flow :deep(.purchase-select) {
-  background: var(--content-background);
+  background: var(--input-background);
   color: var(--text-primary);
 }
 .purchase-flow :deep(.purchase-action:focus-visible) {

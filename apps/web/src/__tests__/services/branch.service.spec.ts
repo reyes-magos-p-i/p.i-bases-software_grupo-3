@@ -86,8 +86,12 @@ describe('branch service', () => {
     patch.mockResolvedValue({ data: '' })
     const { deactivateBranch } = await import('@/services/branch.service')
 
-    await expect(deactivateBranch(21)).resolves.toBeUndefined()
-    expect(patch).toHaveBeenCalledWith('/cinemas/21/deactivate', undefined, { timeout: 10000 })
+    await expect(deactivateBranch(21, 'admin@example.com')).resolves.toBeUndefined()
+    expect(patch).toHaveBeenCalledWith(
+      '/cinemas/21/deactivate',
+      { email: 'admin@example.com' },
+      { timeout: 10000 },
+    )
   })
 
   it('propagates request failures', async () => {

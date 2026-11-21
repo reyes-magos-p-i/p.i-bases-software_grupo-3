@@ -20,6 +20,7 @@ describe('SmtpEmailVerificationSender', () => {
 
   beforeEach(() => {
     settings = {
+      NODE_ENV: 'production',
       SMTP_HOST: 'smtp.example.com',
       SMTP_PORT: '587',
       SMTP_SECURE: 'false',

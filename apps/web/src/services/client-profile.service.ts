@@ -26,8 +26,8 @@ export async function updateClientProfile(changes: ClientProfileUpdate): Promise
   await getApi().patch('/clients/me', changes, clientRequestOptions())
 }
 
-export async function deactivateClientProfile(): Promise<void> {
-  await getApi().patch('/clients/me/deactivate', {}, clientRequestOptions())
+export async function deactivateClientProfile(email: string): Promise<void> {
+  await getApi().patch('/clients/me/deactivate', { email }, clientRequestOptions())
 }
 
 export async function requestClientEmailChange(email: string): Promise<void> {

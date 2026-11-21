@@ -3,6 +3,10 @@ import { CinemasController } from './cinemas.controller';
 import { CinemasService } from './cinemas.service';
 import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
 
+const actor = { user: { id: 21, email: 'admin@example.com' } } as Parameters<
+  CinemasController['deactivateCinema']
+>[2];
+
 describe('CinemasController', () => {
   let controller: CinemasController;
   const service = {
@@ -63,8 +67,22 @@ describe('CinemasController', () => {
   it('deactivates a branch through the service', async () => {
     service.deactivateCinema.mockResolvedValue(undefined);
     await expect(
-      controller.deactivateCinema({ id: 21 }),
+      controller.deactivateCinema(
+        { id: 21 },
+        { email: 'admin@example.com' },
+        actor,
+      ),
     ).resolves.toBeUndefined();
     expect(service.deactivateCinema).toHaveBeenCalledWith(21);
+  });
+  it('rejects a confirmation email that does not belong to the actor', () => {
+    expect(() =>
+      controller.deactivateCinema(
+        { id: 21 },
+        { email: 'other@example.com' },
+        actor,
+      ),
+    ).toThrow('El correo debe coincidir');
+    expect(service.deactivateCinema).not.toHaveBeenCalled();
   });
 });

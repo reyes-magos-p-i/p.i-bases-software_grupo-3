@@ -95,6 +95,12 @@ describe('UsersModule (application HTTP integration)', () => {
       SMTP_USER: 'test-user',
       SMTP_PASSWORD: 'test-password',
       SMTP_FROM: 'cuentas@example.com',
+      DB_USER: 'test-user',
+      DB_PASSWORD: 'test-password',
+      DB_CONNECT_STRING: 'test-connect',
+      DB_WALLET_DIR: 'test-wallet',
+      DB_WALLET_PASSWORD: 'test-wallet-password',
+      DB_SCHEMA: 'TEST_SCHEMA',
     };
     (oracle.createPool as jest.Mock<Promise<oracle.Pool>>).mockResolvedValue(
       pool as unknown as oracle.Pool,
@@ -648,6 +654,8 @@ describe('UsersModule (application HTTP integration)', () => {
   });
 
   it('prevents module initialization when required SMTP configuration is missing', async () => {
+    // Only production sends real mail, so only production requires the SMTP settings.
+    settings.NODE_ENV = 'production';
     delete settings.SMTP_PASSWORD;
     await expect(buildModule()).rejects.toThrow(
       'Missing or invalid SMTP configuration: SMTP_PASSWORD.',
