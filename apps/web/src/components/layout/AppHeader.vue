@@ -26,6 +26,7 @@ import {
   clearClientSession,
 } from '@/services/client-session.service'
 import { authErrorMessage, authErrorStatus } from '@/utils/auth-errors'
+import { safeRedirectTarget } from '@/utils/safe-redirect'
 import {
   announcePasswordExpiry,
   dismissPasswordExpiry,
@@ -171,6 +172,11 @@ function changeLoginMode(mode: 'client' | 'employee') {
 }
 
 async function returnAfterClientLogin() {
+  const destination = safeRedirectTarget(route.query.redirect)
+  if (destination) {
+    await router.push(destination)
+    return
+  }
   if (route.path !== '/buy-tickets') {
     await router.push('/')
     return
@@ -189,6 +195,7 @@ function closeLogin() {
     const query = { ...route.query }
     delete query.login
     delete query.reason
+    delete query.redirect
     void router.replace({ path: route.path, query })
   }
 }

@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   source-branch:
@@ -184,7 +184,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Build and serve
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
@@ -196,6 +196,42 @@ jobs:
 
             git checkout main
             git reset --hard origin/main
+
+            cd apps/api
+            node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major !== 24 || minor < 15 || typeof require('node:crypto').argon2 !== 'function') { console.error('The API requires Node ^24.15.0 with crypto.argon2.'); process.exit(1); }"
+            npm ci
+            npm run build
+
+            cd ../web
+            npm ci
+            npm run build-only
+
+            sudo systemctl restart cinetadel-api.service
+            sudo systemctl --no-pager --full status cinetadel-api.service
+
+  deploy-dev:
+    name: Deploy (dev mirror)
+    needs: [sonarqube]
+    if: ${{ !cancelled() && needs.sonarqube.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    runs-on: ubuntu-latest
+    # Queue dev deploys instead of running them in parallel.
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    steps:
+      - name: Build and serve
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/app/p.i-bases-software_grupo-3
+            git fetch origin dev
+
+            git checkout -B dev origin/dev
+            git reset --hard origin/dev
 
             cd apps/api
             node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major !== 24 || minor < 15 || typeof require('node:crypto').argon2 !== 'function') { console.error('The API requires Node ^24.15.0 with crypto.argon2.'); process.exit(1); }"

@@ -78,7 +78,7 @@ export class SmtpTicketEmailSender extends TicketEmailSender {
       const result = await this.transport.sendMail({
         from: { name: 'Cinetadel', address: this.from },
         to: { name: '', address: message.email },
-        subject: 'Tus boletos de Cinetadel · ' + message.receipt.reference,
+        subject: 'Tus boletos de Cinetadel - ' + message.receipt.reference,
         ...body,
         attachments: [
           {
