@@ -67,13 +67,14 @@ describe('SalesStatisticsService', () => {
     expect(result.ageFilter).toBeNull();
   });
   it.each([
-    ['2026-11-01', '2026-11-01', 'day', '2026-11-01', 1],
-    ['2026-01-01', '2026-02-15', 'week', '2025-12-29', 7],
-    ['2024-02-29', '2025-02-28', 'month', '2024-02-01', 13],
-    ['2020-08-01', '2026-11-21', 'year', '2020-01-01', 7],
+    ['2026-11-01', '2026-11-01', 'day', '2026-11-01', '2026-11-01', 1],
+    ['2024-02-28', '2024-03-01', 'day', '2024-02-28', '2024-03-01', 3],
+    ['2026-01-01', '2026-02-15', 'week', '2025-12-29', '2026-02-09', 7],
+    ['2024-02-29', '2025-02-28', 'month', '2024-02-01', '2025-02-01', 13],
+    ['2020-08-01', '2026-11-21', 'year', '2020-01-01', '2026-01-01', 7],
   ])(
     'uses consistent %s–%s buckets (%s)',
-    async (dateFrom, dateTo, grouping, first, count) => {
+    async (dateFrom, dateTo, grouping, first, last, count) => {
       repository.read.mockResolvedValue([row('summary', 'summary')]);
       const result = await service.get({ dateFrom, dateTo });
       expect(repository.read).toHaveBeenCalledWith(
@@ -83,6 +84,10 @@ describe('SalesStatisticsService', () => {
       expect(result.period.grouping).toBe(grouping);
       expect(result.series).toHaveLength(count);
       expect(result.series[0].key).toBe(first);
+      expect(result.series.at(-1)?.key).toBe(last);
+      const keys = result.series.map((point) => point.key);
+      expect(new Set(keys).size).toBe(count);
+      expect(keys).toEqual([...keys].sort());
     },
   );
   it('keeps empty periods empty without creating sales or unrelated data', async () => {

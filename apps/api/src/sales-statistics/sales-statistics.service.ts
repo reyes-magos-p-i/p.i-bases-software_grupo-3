@@ -36,7 +36,7 @@ function bucket(value: Date, grouping: SalesGrouping) {
   if (grouping === 'year') value.setUTCMonth(0);
   return value;
 }
-function nextBucket(value: Date, grouping: SalesGrouping) {
+function nextBucket(value: Date, grouping: SalesGrouping): void {
   if (grouping === 'day' || grouping === 'week')
     value.setUTCDate(value.getUTCDate() + (grouping === 'day' ? 1 : 7));
   else value.setUTCMonth(value.getUTCMonth() + (grouping === 'month' ? 1 : 12));
@@ -49,13 +49,11 @@ function seriesFor(
   const found = new Map(points.map((point) => [point.key, point]));
   const result: SalesGroup[] = [];
   const last = date(query.dateTo);
-  for (
-    const current = bucket(date(query.dateFrom), grouping);
-    current <= last;
-    nextBucket(current, grouping)
-  ) {
+  const current = bucket(date(query.dateFrom), grouping);
+  while (current <= last) {
     const id = key(current);
     result.push(found.get(id) ?? { key: id, label: id, ...zero() });
+    nextBucket(current, grouping);
   }
   return result;
 }
