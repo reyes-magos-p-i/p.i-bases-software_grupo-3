@@ -4,6 +4,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import PromotionSection from '@/components/promotions/PromotionsSection.vue'
 import { getBranches } from '@/services/branch.service'
+import { getPromotions } from '@/services/promotion.service'
 import type { BranchListItem, BranchListResult } from '@/types/branch'
 
 // Mock only network access; keep the service's real formatBranchId implementation.
@@ -15,10 +16,29 @@ vi.mock('@/services/branch.service', async (importOriginal) => {
 vi.mock('@/components/promotions/PromotionCreate.vue', () => ({
   default: {
     name: 'PromotionCreate',
-    props: ['cinemas'],
+    props: ['cinemas', 'mode', 'promotionId'],
     emits: ['close', 'saved', 'session-expired', 'forbidden'],
     template: '<div data-testid="promotion-create" />',
   },
+}))
+
+vi.mock('@/services/promotion.service', () => ({ getPromotions: vi.fn() }))
+vi.mock('@/components/promotions/PromotionList.vue', () => ({
+  default: {
+    name: 'PromotionList', props: ['promotions', 'loading', 'error'], emits: ['view', 'retry'],
+    template: '<div data-testid="promotion-list" />',
+  },
+}))
+
+vi.mock('@/components/promotions/PromotionView.vue', () => ({
+  default: {
+    name: 'PromotionView', props: ['promotionId', 'cinemas'],
+    emits: ['close', 'sessionExpired', 'forbidden'],
+    template: '<div data-testid="promotion-view" />',
+  },
+}))
+vi.mock('@/components/common/LoadingState.vue', () => ({
+  default: { name: 'LoadingState', props: ['message'], template: '<p role="status">{{ message }}</p>' },
 }))
 
 function branch(id: number, overrides: Partial<BranchListItem> = {}): BranchListItem {
@@ -45,6 +65,9 @@ function render() {
   wrapper = mount(PromotionSection)
   return wrapper
 }
+function view() {
+  return wrapper.findComponent({ name: 'PromotionView' })
+}
 function modal() {
   return wrapper.findComponent({ name: 'PromotionCreate' })
 }
@@ -54,6 +77,7 @@ async function open() {
 }
 
 beforeEach(() => {
+  vi.mocked(getPromotions).mockReset().mockResolvedValue([])
   vi.mocked(getBranches).mockReset().mockResolvedValue(page([branch(1)]))
 })
 afterEach(() => { wrapper?.unmount() })
@@ -237,5 +261,125 @@ describe('PromotionSection', () => {
     await nextTick()
     expect(modal().exists()).toBe(false)
     expect(wrapper.get('[role="alert"]').text()).toBe(message)
+  })
+})
+
+
+describe('PromotionsSection: list and detail integration', () => {
+  const rows = [{
+    promotionId: 42, promotionTitle: 'Oferta', promotionType: 'fixed' as const,
+    technology: null, projectionFormat: null, beginDate: '2026-01-01', endDate: '2026-12-31',
+  }]
+  const list = () => wrapper.findComponent({ name: 'PromotionList' })
+
+  it('loads the list on mount and passes the response to PromotionList', async () => {
+    vi.mocked(getPromotions).mockResolvedValueOnce(rows)
+    render()
+    await flushPromises()
+    expect(getPromotions).toHaveBeenCalledTimes(1)
+    expect(getPromotions).toHaveBeenCalledWith(expect.any(AbortSignal))
+    expect(list().props('promotions')).toEqual(rows)
+    expect(list().props('loading')).toBe(false)
+  })
+
+  it('shows list loading state and enables retry after a failure', async () => {
+    const pending = deferred<typeof rows>()
+    vi.mocked(getPromotions).mockReturnValueOnce(pending.promise)
+    render()
+    await nextTick()
+    expect(list().props('loading')).toBe(true)
+    pending.reject(new Error('Offline'))
+    await flushPromises()
+    expect(list().props('loading')).toBe(false)
+    expect(list().props('error')).toContain('No se pudieron cargar las promociones')
+    list().vm.$emit('retry')
+    await flushPromises()
+    expect(getPromotions).toHaveBeenCalledTimes(2)
+    expect(list().props('error')).toBe('')
+  })
+
+  it('opens the dedicated view with the clicked promotion ID', async () => {
+    render()
+    await flushPromises()
+    list().vm.$emit('view', 42)
+    await nextTick()
+    expect(view().props('promotionId')).toBe(42)
+    expect(view().props('cinemas')).toEqual([])
+    expect(modal().exists()).toBe(false)
+    expect(getBranches).not.toHaveBeenCalled()
+    await open()
+    expect(getBranches).not.toHaveBeenCalled()
+    view().vm.$emit('close')
+    await nextTick()
+    expect(view().exists()).toBe(false)
+  })
+
+  it('refreshes the list when creation emits saved', async () => {
+    render()
+    await open()
+    vi.mocked(getPromotions).mockResolvedValueOnce(rows)
+    modal().vm.$emit('saved')
+    modal().vm.$emit('close')
+    await flushPromises()
+    expect(getPromotions).toHaveBeenCalledTimes(2)
+    expect(list().props('promotions')).toEqual(rows)
+    expect(modal().exists()).toBe(false)
+  })
+
+  it.each([
+    { status: 401, text: 'La sesión ha expirado.' },
+    { status: 403, text: 'No tienes permisos' },
+  ])('handles list HTTP $status', async ({ status, text }) => {
+    vi.mocked(getPromotions).mockRejectedValueOnce(apiError(status))
+    render()
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain(text)
+  })
+
+  it.each([
+    { event: 'sessionExpired', message: 'La sesión ha expirado.' },
+    { event: 'forbidden', message: 'No tienes permisos' },
+  ])('closes the dedicated view on $event', async ({ event, message }) => {
+    render()
+    await flushPromises()
+    list().vm.$emit('view', 42)
+    await nextTick()
+    view().vm.$emit(event)
+    await nextTick()
+    expect(view().exists()).toBe(false)
+    expect(wrapper.get('[role="alert"]').text()).toContain(message)
+  })
+
+  it('does not open a detail view while creation is open', async () => {
+    render()
+    await open()
+    list().vm.$emit('view', 42)
+    await nextTick()
+    expect(modal().exists()).toBe(true)
+    expect(view().exists()).toBe(false)
+  })
+
+  it('ignores a stale list response when a newer retry succeeds first', async () => {
+    const old = deferred<typeof rows>()
+    const latest = deferred<typeof rows>()
+    vi.mocked(getPromotions).mockReturnValueOnce(old.promise).mockReturnValueOnce(latest.promise)
+    render()
+    list().vm.$emit('retry')
+    await nextTick()
+    latest.resolve(rows)
+    await flushPromises()
+    old.resolve([])
+    await flushPromises()
+    expect(list().props('promotions')).toEqual(rows)
+  })
+
+  it('aborts the list request when unmounted', () => {
+    const pending = deferred<typeof rows>()
+    vi.mocked(getPromotions).mockReturnValueOnce(pending.promise)
+    render()
+    const signal = vi.mocked(getPromotions).mock.calls[0]![0]!
+    wrapper.unmount()
+    expect(signal.aborted).toBe(true)
+    pending.resolve([])
   })
 })

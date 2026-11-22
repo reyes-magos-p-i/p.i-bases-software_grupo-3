@@ -2,6 +2,9 @@
 import {
   Body,
   Controller,
+  Get,
+  Param,
+  ParseIntPipe,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -24,6 +27,16 @@ export class PromotionsController {
   constructor(
     private readonly promotionsService: PromotionsService,
   ) {}
+
+  @Get()
+  findAll() {
+    return this.promotionsService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.promotionsService.findOne(id);
+  }
 
   @Post()
   create(@Body() dto: CreatePromotionDto) {
