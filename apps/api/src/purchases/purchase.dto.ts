@@ -5,6 +5,7 @@ import {
   IsArray,
   IsDefined,
   IsHash,
+  IsIn,
   IsInt,
   IsISO8601,
   IsObject,
@@ -14,6 +15,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
   IsOptional,
 } from 'class-validator';
@@ -47,13 +49,27 @@ export class PurchaseSelectionDto {
   @Type(() => SeatSelectionDto)
   seats: SeatSelectionDto;
 }
-export class ConfirmPurchaseDto extends PurchaseSelectionDto {
+export class PurchaseIntentDto extends PurchaseSelectionDto {
   @IsUUID('4', {
     message: 'La referencia de la solicitud no es válida. Reinicia la compra.',
   })
   requestKey: string;
   @IsHash('sha256', { message: 'Actualiza el resumen antes de pagar.' })
   quoteVersion: string;
+}
+export class ConfirmPurchaseDto extends PurchaseIntentDto {
+  // Omitting the method keeps the original simulated flow.
+  @IsOptional()
+  @IsIn(['CARD', 'SIMULATED'], {
+    message: 'Selecciona un método de pago válido.',
+  })
+  paymentMethod?: 'CARD' | 'SIMULATED';
+  @ValidateIf((dto: ConfirmPurchaseDto) => dto.paymentMethod === 'CARD')
+  @IsDefined({ message: 'Confirma el pago con tu tarjeta antes de continuar.' })
+  @Matches(/^pi_[A-Za-z0-9_]{1,250}$/u, {
+    message: 'El pago no es válido. Intenta nuevamente.',
+  })
+  paymentIntentId?: string;
 }
 const DATE_MESSAGE = 'Introduce una fecha válida (AAAA-MM-DD).';
 export class ListPurchasesQueryDto {
