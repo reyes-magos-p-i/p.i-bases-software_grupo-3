@@ -323,7 +323,9 @@ async function resendVerificationEmail() {
               >
                 <i :class="showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'" aria-hidden="true"></i>
               </button>
-              <div id="password-error" class="invalid-feedback">{{ errors.password }}</div>
+            </div>
+            <div v-if="errors.password" id="password-error" class="invalid-feedback d-block">
+              {{ errors.password }}
             </div>
             <div class="form-text small">
               Mínimo 8 caracteres. Incluye mayúscula, minúscula, número y un carácter especial
@@ -355,9 +357,13 @@ async function resendVerificationEmail() {
                   aria-hidden="true"
                 ></i>
               </button>
-              <div id="confirm-password-error" class="invalid-feedback">
-                {{ errors.confirmPassword }}
-              </div>
+            </div>
+            <div
+              v-if="errors.confirmPassword"
+              id="confirm-password-error"
+              class="invalid-feedback d-block"
+            >
+              {{ errors.confirmPassword }}
             </div>
           </div>
 
@@ -439,6 +445,9 @@ async function resendVerificationEmail() {
 .password-control .form-control {
   padding-right: 2.75rem;
 }
+.password-control .form-control.is-invalid {
+  background-image: none;
+}
 .password-toggle {
   position: absolute;
   top: 0;
@@ -446,6 +455,7 @@ async function resendVerificationEmail() {
   display: grid;
   width: 2.75rem;
   height: 100%;
+  padding: 0;
   place-items: center;
   border: 0;
   background: transparent;

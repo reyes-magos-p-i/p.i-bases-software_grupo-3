@@ -132,6 +132,36 @@ describe('RegisterModal.vue', () => {
     expect(wrapper.get('#confirmPassword').attributes('type')).toBe('password')
   })
 
+  it('keeps password errors outside each visibility control and preserves one toggle per field', async () => {
+    const wrapper = createWrapper()
+    await wrapper.get('#password').setValue('simple')
+    await wrapper.get('#confirmPassword').setValue('different')
+    await wrapper.get('form').trigger('submit')
+
+    for (const id of ['password', 'confirmPassword']) {
+      const field = wrapper.get(`#${id}`)
+      const control = field.element.closest('.password-control')!
+      const error = wrapper.get(`#${field.attributes('aria-describedby')}`)
+      expect(error.isVisible()).toBe(true)
+      expect(control.contains(error.element)).toBe(false)
+      expect(control.querySelectorAll('button')).toHaveLength(1)
+      const toggle = wrapper.get(`button[aria-controls="${id}"]`)
+      await toggle.trigger('click')
+      expect(field.attributes('type')).toBe('text')
+      expect(toggle.attributes('aria-pressed')).toBe('true')
+      expect(error.isVisible()).toBe(true)
+      await toggle.trigger('click')
+      expect(field.attributes('type')).toBe('password')
+      expect(control.querySelectorAll('button')).toHaveLength(1)
+    }
+    expect(registerUser).not.toHaveBeenCalled()
+
+    await wrapper.get('#password').setValue('Password123!')
+    await wrapper.get('#confirmPassword').setValue('Password123!')
+    expect(wrapper.find('#password-error').exists()).toBe(false)
+    expect(wrapper.find('#confirm-password-error').exists()).toBe(false)
+  })
+
   function dateOneDayBeforeTurningEighteen(): string {
     const today = Object.fromEntries(
       new Intl.DateTimeFormat('en-CA', {
