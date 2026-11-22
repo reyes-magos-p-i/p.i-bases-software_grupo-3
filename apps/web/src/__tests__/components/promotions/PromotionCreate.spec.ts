@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, nextTick } from 'vue'
 
-// Place beside PromotionCreate.vue. Uses the real promotion-validation helper.
+// Uses the real promotion-validation helper.
 import type { PromotionDetail } from '@/types/promotion-read'
 import PromotionCreate from '@/components/promotions/PromotionCreate.vue'
 import { createPromotion, getPromotion } from '@/services/promotion.service'
@@ -18,6 +18,11 @@ vi.mock('@/services/image-handler.service', () => ({
   getPromotionPosterUrl: vi.fn((path: string | null) =>
     path ? `/api/image-handler/promotions/${path.split('/').pop()}` : null),
 }))
+
+const LoadingStub = defineComponent({
+  name: 'LoadingState', props: { message: String, compact: Boolean },
+  template: '<p role="status">{{ message }}</p>',
+})
 
 const BaseModalStub = defineComponent({
   name: 'BaseModal',
@@ -95,6 +100,7 @@ function render(options = cinemas, extra: { mode?: 'create' | 'view'; promotionI
     attachTo: document.body,
     global: {
       stubs: {
+        LoadingState: LoadingStub,
         BaseModal: BaseModalStub,
         DialogSection: DialogSectionStub,
         LimitedTextInput: TextStub,
@@ -523,7 +529,8 @@ describe('PromotionCreate: read-only view mode', () => {
 
   it('loads details into disabled fields and displays the stored poster', async () => {
     render(cinemas, { mode: 'view', promotionId: 42 })
-    expect(wrapper.text()).toContain('Cargando detalle')
+    expect(wrapper.getComponent({ name: 'LoadingState' }).props('message')).toBe('Cargando datos de la promocion…')
+    expect(wrapper.getComponent({ name: 'LoadingState' }).props('compact')).toBe(true)
     await flushPromises()
     expect(getPromotion).toHaveBeenCalledWith(42, expect.any(AbortSignal))
     expect(wrapper.findComponent({ name: 'BaseModal' }).props('title')).toBe('Detalle de promoción')

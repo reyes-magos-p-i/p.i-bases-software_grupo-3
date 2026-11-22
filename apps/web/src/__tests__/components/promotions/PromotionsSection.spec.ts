@@ -30,6 +30,17 @@ vi.mock('@/components/promotions/PromotionList.vue', () => ({
   },
 }))
 
+vi.mock('@/components/promotions/PromotionView.vue', () => ({
+  default: {
+    name: 'PromotionView', props: ['promotionId', 'cinemas'],
+    emits: ['close', 'sessionExpired', 'forbidden'],
+    template: '<div data-testid="promotion-view" />',
+  },
+}))
+vi.mock('@/components/common/LoadingState.vue', () => ({
+  default: { name: 'LoadingState', props: ['message'], template: '<p role="status">{{ message }}</p>' },
+}))
+
 function branch(id: number, overrides: Partial<BranchListItem> = {}): BranchListItem {
   return { id, name: `Cine ${id}`, companyId: 1, companyName: 'Empresa', ...overrides }
 }
@@ -53,6 +64,9 @@ let wrapper: VueWrapper
 function render() {
   wrapper = mount(PromotionSection)
   return wrapper
+}
+function view() {
+  return wrapper.findComponent({ name: 'PromotionView' })
 }
 function modal() {
   return wrapper.findComponent({ name: 'PromotionCreate' })
@@ -284,19 +298,20 @@ describe('PromotionsSection: list and detail integration', () => {
     expect(list().props('error')).toBe('')
   })
 
-  it('opens the same form in view mode with the clicked promotion ID', async () => {
+  it('opens the dedicated view with the clicked promotion ID', async () => {
     render()
     await flushPromises()
     list().vm.$emit('view', 42)
     await nextTick()
-    expect(modal().props('mode')).toBe('view')
-    expect(modal().props('promotionId')).toBe(42)
+    expect(view().props('promotionId')).toBe(42)
+    expect(view().props('cinemas')).toEqual([])
+    expect(modal().exists()).toBe(false)
     expect(getBranches).not.toHaveBeenCalled()
     await open()
     expect(getBranches).not.toHaveBeenCalled()
-    modal().vm.$emit('close')
+    view().vm.$emit('close')
     await nextTick()
-    expect(modal().exists()).toBe(false)
+    expect(view().exists()).toBe(false)
   })
 
   it('refreshes the list when creation emits saved', async () => {
@@ -321,15 +336,27 @@ describe('PromotionsSection: list and detail integration', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain(text)
   })
 
-  it('closes view mode on an authentication event', async () => {
+  it.each([
+    { event: 'sessionExpired', message: 'La sesión ha expirado.' },
+    { event: 'forbidden', message: 'No tienes permisos' },
+  ])('closes the dedicated view on $event', async ({ event, message }) => {
     render()
     await flushPromises()
     list().vm.$emit('view', 42)
     await nextTick()
-    modal().vm.$emit('session-expired')
+    view().vm.$emit(event)
     await nextTick()
-    expect(modal().exists()).toBe(false)
-    expect(wrapper.get('[role="alert"]').text()).toContain('La sesión ha expirado.')
+    expect(view().exists()).toBe(false)
+    expect(wrapper.get('[role="alert"]').text()).toContain(message)
+  })
+
+  it('does not open a detail view while creation is open', async () => {
+    render()
+    await open()
+    list().vm.$emit('view', 42)
+    await nextTick()
+    expect(modal().exists()).toBe(true)
+    expect(view().exists()).toBe(false)
   })
 
   it('ignores a stale list response when a newer retry succeeds first', async () => {

@@ -8,6 +8,8 @@ import PromotionCreate from '@/components/promotions/PromotionCreate.vue'
 import PromotionList from '@/components/promotions/PromotionList.vue'
 import { getPromotions } from '@/services/promotion.service'
 import type { PromotionListItem } from '@/types/promotion-read'
+import LoadingState from '../common/LoadingState.vue'
+import PromotionView from '@/components/promotions/PromotionView.vue'
 
 const cinemas = ref<CinemaOption[]>([])
 const loadingCinemas = ref(false)
@@ -147,6 +149,7 @@ function handleForbidden() {
 
       <PromotionList :promotions="promotions" :loading="loadingPromotions" :error="listError"
         @view="openPromotionView" @retry="refreshPromotions" />
+      <LoadingState v-if="loadingPromotions" message="Cargando películas…" />
 
       <PromotionCreate
         v-if="creatingPromotion"
@@ -156,10 +159,8 @@ function handleForbidden() {
         @session-expired="handleSessionExpired"
         @forbidden="handleForbidden"
       />
-      <PromotionCreate
+      <PromotionView
         v-if="viewingPromotionId !== null"
-        :key="viewingPromotionId"
-        mode="view"
         :promotion-id="viewingPromotionId"
         :cinemas="cinemas"
         @close="viewingPromotionId = null"

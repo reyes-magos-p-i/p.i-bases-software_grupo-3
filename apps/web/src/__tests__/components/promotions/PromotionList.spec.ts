@@ -4,10 +4,9 @@ import { mount, type VueWrapper } from '@vue/test-utils'
 import PromotionList from '@/components/promotions/PromotionList.vue'
 import type { PromotionListItem } from '@/types/promotion-read'
 
-// Use the actual CrudTable, LimitedTextInput and SimpleDropdown components.
+// Use the actual CrudTable and SimpleDropdown components.
 vi.mock('@/composables/useBlurValidation', () => ({ useBlurValidation: () => () => true }))
 vi.mock('@/utils/display-text', () => ({ displayText: (value: string) => value }))
-vi.mock('@/utils/user-validation', () => ({ characterCount: (value: string) => [...value].length }))
 
 const items: PromotionListItem[] = [
   { promotionId: 2, promotionTitle: 'Árbol', promotionType: 'percentage', technology: 'STANDARD', projectionFormat: '2D', beginDate: '2026-01-10', endDate: '2026-08-01' },
@@ -46,9 +45,44 @@ describe('PromotionList', () => {
 
   it('searches titles without case or accent sensitivity', async () => {
     render()
-    await wrapper.get('.limited-input input').setValue(' ARBOL ')
+    await wrapper.get('input[type="search"]').setValue(' ARBOL ')
+    expect(ids()).toEqual([10, 2, 1])
+    await wrapper.get('form.search-bar').trigger('submit')
     expect(ids()).toEqual([2])
     expect(wrapper.text()).toContain('1 de 3 promociones.')
+  })
+
+  it('places search and clear buttons in the search form and disables clear initially', () => {
+    render()
+    const form = wrapper.get('form.search-bar')
+    expect(form.attributes('novalidate')).toBeDefined()
+    expect(form.get('label').attributes('for')).toBe(form.get('input').attributes('id'))
+    expect(form.get('button[type="submit"]').text()).toBe('Buscar')
+    expect(form.get('.secondary-button').attributes('disabled')).toBeDefined()
+  })
+
+  it('rejects searches over 150 characters without changing the results', async () => {
+    render()
+    await wrapper.get('input[type="search"]').setValue('a'.repeat(151))
+    await wrapper.get('form.search-bar').trigger('submit')
+    expect(wrapper.get('input[type="search"]').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.get('[role="alert"]').text()).toContain('150')
+    expect(ids()).toEqual([10, 2, 1])
+    await wrapper.get('.secondary-button').trigger('click')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get('.secondary-button').attributes('disabled')).toBeDefined()
+  })
+
+  it('enables clear for dropdown changes and draft text', async () => {
+    render()
+    await select('Dirección', 'asc')
+    expect(wrapper.get('.secondary-button').attributes('disabled')).toBeUndefined()
+    await wrapper.get('.secondary-button').trigger('click')
+    await wrapper.get('input[type="search"]').setValue('Unsubmitted')
+    expect(wrapper.get('.secondary-button').attributes('disabled')).toBeUndefined()
+    await wrapper.get('.secondary-button').trigger('click')
+    expect(wrapper.get('input[type="search"]').element).toHaveProperty('value', '')
+    expect(ids()).toEqual([10, 2, 1])
   })
 
   it('combines type, technology and format filters', async () => {
@@ -100,13 +134,14 @@ describe('PromotionList', () => {
 
   it('resets search, filters and ordering', async () => {
     render()
-    await wrapper.get('.limited-input input').setValue('Bosque')
+    await wrapper.get('input[type="search"]').setValue('Bosque')
+    await wrapper.get('form.search-bar').trigger('submit')
     await select('Tipo de promoción', 'fixed')
     await select('Ordenar por', 'promotionTitle')
     await select('Dirección', 'asc')
-    await wrapper.get('.reset-filters').trigger('click')
+    await wrapper.get('.secondary-button').trigger('click')
     expect(ids()).toEqual([10, 2, 1])
-    expect(wrapper.get('.limited-input input').element).toHaveProperty('value', '')
+    expect(wrapper.get('input[type="search"]').element).toHaveProperty('value', '')
   })
 
   it('emits the numeric promotion ID when its view button is clicked', async () => {
@@ -133,7 +168,7 @@ describe('PromotionList', () => {
     render({ loading: true })
     expect(wrapper.text()).toContain('Cargando promociones...')
     expect(wrapper.find('table').exists()).toBe(false)
-    expect(wrapper.get('.limited-input input').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('input[type="search"]').attributes('disabled')).toBeDefined()
     expect(wrapper.findAll('select').every((input) => input.attributes('disabled') !== undefined)).toBe(true)
   })
 

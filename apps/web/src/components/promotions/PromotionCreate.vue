@@ -31,6 +31,7 @@ import {
 } from '@/utils/promotion-validation'
 import DatePicker from '@/components/common/DatePicker.vue'
 import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
+import LoadingState from '../common/LoadingState.vue'
 
 const props = withDefaults(defineProps<{
   cinemas: CinemaOption[]
@@ -278,7 +279,12 @@ onBeforeUnmount(() => { detailVersion++; detailRequest?.abort() })
 <template>
   <BaseModal :open="true" :title="isView ? 'Detalle de promoción' : 'Crear promoción'" :close-disabled="saving" @close="emit('close')">
     <div class="promotion-create-content dialog-content">
-      <p v-if="loadingDetails" role="status">Cargando detalle de la promoción...</p>
+       <LoadingState
+        v-if="loadingDetails"
+        class="detail-feedback"
+        message="Cargando datos de la promocion…"
+        compact
+      />
       <div v-if="detailError" class="detail-error">
         <p role="alert">{{ detailError }}</p>
         <button type="button" @click="loadDetails">Reintentar</button>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import CrudTable from '../crudTable/CrudTable.vue'
-import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
+
 import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 import type { PromotionListItem } from '@/types/promotion-read'
 import type { ProjectionFormat, PromotionType, Technology } from '@/types/promotion'
@@ -17,6 +17,9 @@ const emit = defineEmits<{ view: [id: number]; retry: [] }>()
 type SortColumn = keyof PromotionListItem
 type Direction = 'asc' | 'desc'
 const title = ref('')
+const id = useId()
+const searchDraft = ref('')
+const validationError = ref('')
 const type = ref<PromotionType | null>(null)
 const technology = ref<Technology | 'any' | null>(null)
 const format = ref<ProjectionFormat | 'any' | null>(null)
@@ -74,7 +77,31 @@ const rows = computed(() => {
   })
   return result.map((item) => ({ ...item, id: item.promotionId }))
 })
+const hasFilters = computed(
+  () =>
+    !!searchDraft.value ||
+    !!title.value ||
+    type.value !== null ||
+    technology.value !== null ||
+    format.value !== null ||
+    sortBy.value !== 'promotionId' ||
+    direction.value !== 'desc',
+)
+function search() {
+  if (props.loading) return
+
+  validationError.value =
+    searchDraft.value.length > 150
+      ? 'La búsqueda no puede superar 150 caracteres.'
+      : ''
+
+  if (validationError.value) return
+
+  title.value = searchDraft.value.trim()
+}
 function reset() {
+  searchDraft.value = ''
+  validationError.value = ''
   title.value = ''
   type.value = null
   technology.value = null
@@ -86,9 +113,52 @@ function reset() {
 
 <template>
   <section class="promotion-list" aria-label="Lista de promociones" :aria-busy="loading">
-    <form class="promotion-filters" @submit.prevent>
-      <LimitedTextInput v-model="title" label="Buscar por nombre" :limit="150"
-        placeholder="Escribe el nombre de la promoción..." :disabled="loading" />
+
+    <form class="search-bar" novalidate @submit.prevent="search">
+      <div class="search-field">
+        <label :for="id + '-search'">Buscar promociones</label>
+
+        <div class="search-input">
+          <i class="bi bi-search" aria-hidden="true"></i>
+
+          <input
+            :id="id + '-search'"
+            v-model="searchDraft"
+            type="search"
+            name="search"
+            placeholder="Nombre de la promoción"
+            :disabled="loading"
+            :aria-invalid="!!validationError"
+            :aria-describedby="validationError ? id + '-search-error' : undefined"
+            @input="validationError = ''"
+          />
+        </div>
+
+        <p
+          v-if="validationError"
+          :id="id + '-search-error'"
+          class="input-error"
+          role="alert"
+        >
+          {{ validationError }}
+        </p>
+      </div>
+
+      <button type="submit" class="primary-button" :disabled="loading">
+        Buscar
+      </button>
+
+      <button
+        type="button"
+        class="secondary-button"
+        :disabled="loading || !hasFilters"
+        @click="reset"
+      >
+        <i class="bi bi-x-circle" aria-hidden="true"></i>
+        Limpiar filtros
+      </button>
+    </form>
+    <fieldset class="filters" >
       <SimpleDropdown v-model="type" label="Tipo de promoción" :options="typeOptions"
         placeholder="Todos los tipos" :disabled="loading" />
       <SimpleDropdown v-model="technology" label="Tecnología" :options="technologyOptions"
@@ -99,8 +169,7 @@ function reset() {
         placeholder="ID" :disabled="loading" />
       <SimpleDropdown v-model="direction" label="Dirección" :options="directionOptions"
         placeholder="Descendente" :disabled="loading" />
-      <button type="button" class="reset-filters" :disabled="loading" @click="reset">Restablecer filtros</button>
-    </form>
+    </fieldset>
 
     <p v-if="loading" role="status">Cargando promociones...</p>
     <div v-else-if="error" class="list-error">
@@ -128,6 +197,16 @@ function reset() {
 
 <style scoped>
 .promotion-list { display: grid; gap: 16px; margin-top: 24px; }
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr));
+  align-items: end;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
 .promotion-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .reset-filters, .list-error button { min-height: 44px; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: var(--radius-small); background: var(--content-background); color: var(--text-primary); font: inherit; cursor: pointer; }
 .view-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; padding: 8px; border: 0; border-radius: var(--radius-small); background: transparent; color: var(--text-primary); font-size: 1.125rem; cursor: pointer; }
@@ -135,6 +214,17 @@ function reset() {
 .list-error { color: var(--error-color); }
 button:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+.search-bar,.pagination-bar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px;}
+.search-field { flex: 1; min-width: min(100%, 280px);}
+.search-input { position: relative;}
+.search-input i { position: absolute; top: 14px; left: 14px; color: var(--text-secondary);}
+.search-input input { width: 100%; padding-left: 40px;}
+button { padding: 10px 16px; border: 1px solid var(--primary-color); cursor: pointer;}
+.primary-button { color: var(--button-text); background: var(--button-background);}
+.secondary-button { color: var(--text-primary); background: var(--content-background);}
+input,select,button { min-height: 44px; border-radius: var(--radius-small); font: inherit;}
+input, select { padding: 10px 12px; border: 1px solid var(--border-color); color: var(--text-primary); background: var(--content-background);}
+input[aria-invalid='true'] { border-color: var(--error-color);}
 @media (max-width: 850px) { .promotion-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 575px) { .promotion-filters { grid-template-columns: 1fr; } }
 </style>
