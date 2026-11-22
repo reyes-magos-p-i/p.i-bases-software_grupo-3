@@ -12,6 +12,7 @@ import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
 import GuestBuyerStep from '@/components/purchases/GuestBuyerStep.vue'
 import GuestPurchaseAccess from '@/components/purchases/GuestPurchaseAccess.vue'
 import PurchaseEmailStatus from '@/components/purchases/PurchaseEmailStatus.vue'
+import CardPaymentStep from '@/components/purchases/CardPaymentStep.vue'
 import { usePurchaseEmail } from '@/composables/usePurchaseEmail'
 import { useTicketPurchase } from '@/composables/useTicketPurchase'
 import { clearClientSession } from '@/services/client-session.service'
@@ -31,8 +32,10 @@ const {
   buyerError,
   loginRequired,
   summaryStep,
+  paymentStep,
   finalStep,
   labels,
+  cardIntent,
   movie,
   functions,
   availability,
@@ -133,11 +136,31 @@ watch(
             @click="flow.back"
           >
             {{ guest ? 'Volver al correo' : 'Volver a los asientos' }}</button
-          ><button type="button" class="purchase-action primary" :disabled="busy" @click="flow.pay">
-            {{ busy ? 'Registrando compra...' : uncertain ? 'Reintentar pago' : 'Pagar' }}
+          ><button
+            type="button"
+            class="purchase-action primary"
+            :disabled="busy"
+            @click="flow.continuePayment"
+          >
+            {{
+              busy
+                ? uncertain
+                  ? 'Registrando compra...'
+                  : 'Preparando pago...'
+                : uncertain
+                  ? 'Reintentar pago'
+                  : 'Pagar'
+            }}
           </button>
         </div>
       </section>
+      <CardPaymentStep
+        v-if="step === paymentStep && cardIntent"
+        :intent="cardIntent"
+        :disabled="busy"
+        @paid="flow.pay"
+        @cancel="flow.cancelCardPayment"
+      />
       <section v-if="receipt && step === finalStep" aria-live="polite">
         <h1>¡Compra exitosa!</h1>
         <p>
