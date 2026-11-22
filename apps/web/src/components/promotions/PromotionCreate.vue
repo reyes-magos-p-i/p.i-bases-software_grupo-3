@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, useTemplateRef, watch } from 'vue'
 import { isAxiosError } from 'axios'
 
 import BaseModal from '@/components/common/BaseModal.vue'
@@ -12,7 +12,8 @@ import {
   uploadPromotionPoster,
   getPromotionPosterUrl,
  } from '@/services/image-handler.service'
-import { createPromotion } from '@/services/promotion.service'
+import { createPromotion, getPromotion } from '@/services/promotion.service'
+import type { PromotionDetail } from '@/types/promotion-read'
 import type {
   CinemaOption,
   PromotionErrors,
@@ -31,7 +32,12 @@ import {
 import DatePicker from '@/components/common/DatePicker.vue'
 import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 
-const props = defineProps<{ cinemas: CinemaOption[] }>()
+const props = withDefaults(defineProps<{
+  cinemas: CinemaOption[]
+  mode?: 'create' | 'view'
+  promotionId?: number | null
+}>(), { mode: 'create', promotionId: null })
+const isView = computed(() => props.mode === 'view')
 const emit = defineEmits<{
   close: []
   saved: []
@@ -39,13 +45,21 @@ const emit = defineEmits<{
   forbidden: []
 }>()
 
-const form = reactive<PromotionForm>({
+function emptyForm(): PromotionForm { return {
   promotionType: '', amount: '', beginDate: '', endDate: '',
   allDay: true, beginHour: '', endHour: '', projectionFormat: '', technology: '',
   promotionTitle: '', description: '', conditions: '', posterPath: null,
   weekdays: [], branchIds: [],
-})
+} }
+const form = reactive<PromotionForm>(emptyForm())
 const saving = ref(false)
+const loadingDetails = ref(false)
+const detailLoaded = ref(false)
+const detailError = ref('')
+const posterFailed = ref(false)
+const inputsDisabled = computed(() => saving.value || isView.value || loadingDetails.value)
+let detailRequest: AbortController | undefined
+let detailVersion = 0
 const error = ref('')
 const validationNotice = ref('')
 const fieldErrors = reactive<PromotionErrors>({})
@@ -55,7 +69,17 @@ const endAtMidnight = ref(false)
 const existingPosterUrl = computed(() =>
   getPromotionPosterUrl(form.posterPath),
 )
-const cinemaOptions = computed(() => props.cinemas.map((item) => ({ value: item.id, label: item.name })))
+const cinemaOptions = computed(() => {
+  const options = props.cinemas.map((item) => ({ value: item.id, label: item.name }))
+  // Details must still identify associations not present in the active cinema catalog.
+  if (isView.value) {
+    const known = new Set(options.map((item) => item.value))
+    for (const id of form.branchIds) {
+      if (!known.has(id)) options.push({ value: id, label: `Sucursal #${id}` })
+    }
+  }
+  return options
+})
 const allCinemasSelected = computed(() => props.cinemas.length > 0
   && props.cinemas.every((cinema) => form.branchIds.includes(cinema.id)))
 const maxAmount = computed(() => form.promotionType === 'percentage' ? 100 : 4000)
@@ -109,6 +133,7 @@ const technologyModel = computed<Technology | null>({
 })
 
 watch(endAtMidnight, (enabled) => {
+  if (isView.value) return
   form.endHour = enabled ? '24:00' : ''
   delete fieldErrors.endHour
 })
@@ -135,7 +160,7 @@ function apiMessages(value: unknown): string {
   return ''
 }
 async function save() {
-  if (saving.value) return
+  if (saving.value || isView.value) return
   error.value = ''
   validationNotice.value = ''
   for (const key of Object.keys(fieldErrors)) delete fieldErrors[key as keyof PromotionErrors]
@@ -178,59 +203,145 @@ async function save() {
     saving.value = false
   }
 }
+
+function populateDetails(detail: PromotionDetail) {
+  Object.assign(form, {
+    promotionType: detail.promotionType,
+    amount: String(detail.promotionAmount),
+    beginDate: detail.beginDate,
+    endDate: detail.endDate,
+    allDay: detail.beginHour === null && detail.endHour === null,
+    beginHour: detail.beginHour ?? '',
+    endHour: detail.endHour ?? '',
+    projectionFormat: detail.projectionFormat ?? '',
+    technology: detail.technology ?? '',
+    promotionTitle: detail.promotionTitle,
+    description: detail.description,
+    conditions: detail.conditions ?? '',
+    posterPath: detail.posterPath,
+    weekdays: [...detail.weekdays],
+    branchIds: [...detail.branchIds],
+  })
+  endAtMidnight.value = detail.endHour === '24:00'
+}
+
+async function loadDetails() {
+  detailRequest?.abort()
+  const version = ++detailVersion
+  detailLoaded.value = false
+  detailError.value = ''
+  posterFailed.value = false
+  loadingDetails.value = false
+  if (!isView.value) return
+  if (!props.promotionId || !Number.isSafeInteger(props.promotionId) || props.promotionId < 1) {
+    detailError.value = 'Selecciona una promoción válida.'
+    return
+  }
+  const request = new AbortController()
+  detailRequest = request
+  loadingDetails.value = true
+  try {
+    const detail = await getPromotion(props.promotionId, request.signal)
+    if (request.signal.aborted || version !== detailVersion) return
+    populateDetails(detail)
+    detailLoaded.value = true
+  } catch (failure: unknown) {
+    if (request.signal.aborted || version !== detailVersion) return
+    if (isAxiosError(failure)) {
+      if (failure.response?.status === 401) { emit('session-expired'); return }
+      if (failure.response?.status === 403) { emit('forbidden'); return }
+      if (failure.response?.status === 404) {
+        detailError.value = 'La promoción no existe o ya no está disponible.'
+        return
+      }
+    }
+    detailError.value = 'No se pudo cargar la promoción. Vuelve a intentarlo.'
+  } finally {
+    if (version === detailVersion) loadingDetails.value = false
+  }
+}
+
+watch(() => [props.mode, props.promotionId] as const, () => {
+  if (!isView.value) {
+    Object.assign(form, emptyForm())
+    selectedPoster.value = null
+    endAtMidnight.value = false
+    error.value = ''
+    validationNotice.value = ''
+    for (const key of Object.keys(fieldErrors)) delete fieldErrors[key as keyof PromotionErrors]
+  }
+  void loadDetails()
+}, { immediate: true })
+onBeforeUnmount(() => { detailVersion++; detailRequest?.abort() })
 </script>
 
 <template>
-  <BaseModal :open="true" title="Crear promoción" :close-disabled="saving" @close="emit('close')">
+  <BaseModal :open="true" :title="isView ? 'Detalle de promoción' : 'Crear promoción'" :close-disabled="saving" @close="emit('close')">
     <div class="promotion-create-content dialog-content">
+      <p v-if="loadingDetails" role="status">Cargando detalle de la promoción...</p>
+      <div v-if="detailError" class="detail-error">
+        <p role="alert">{{ detailError }}</p>
+        <button type="button" @click="loadDetails">Reintentar</button>
+      </div>
       <form ref="form-element" novalidate @submit.prevent="save"
         @input="validationNotice = ''" @change="validationNotice = ''">
-        <fieldset class="create-fieldset" :disabled="saving">
+        <fieldset v-if="!isView || detailLoaded" class="create-fieldset" :disabled="inputsDisabled">
           <div class="dialog-sections">
             <DialogSection title="Información general">
               <div class="general-layout">
                 <div class="general-fields">
+                  <div v-if="isView" class="field">
+                    <label for="promotion-detail-id">ID de la promoción</label>
+                    <input id="promotion-detail-id" :value="promotionId" disabled />
+                  </div>
                   <LimitedTextInput v-model="form.promotionTitle" label="Nombre de la promoción"
-                    :limit="PROMOTION_TITLE_LIMIT" :error="fieldErrors.promotionTitle" required
+                    :limit="PROMOTION_TITLE_LIMIT" :error="fieldErrors.promotionTitle" :disabled="inputsDisabled" required
                     @update:model-value="delete fieldErrors.promotionTitle" />
                   <LimitedTextInput v-model="form.description" label="Descripción"
-                    :limit="PROMOTION_TEXT_LIMIT" :error="fieldErrors.description" multiline :rows="4" required
+                    :limit="PROMOTION_TEXT_LIMIT" :error="fieldErrors.description" :disabled="inputsDisabled" multiline :rows="4" required
                     @update:model-value="delete fieldErrors.description" />
                   <LimitedTextInput v-model="form.conditions" label="Condiciones (opcional)"
-                    :limit="PROMOTION_TEXT_LIMIT" :error="fieldErrors.conditions" multiline :rows="3"
+                    :limit="PROMOTION_TEXT_LIMIT" :error="fieldErrors.conditions" :disabled="inputsDisabled" multiline :rows="3"
                     @update:model-value="delete fieldErrors.conditions" />
                   <SimpleDropdown
                     v-model="promotionTypeModel"
                     label="Tipo de promoción"
                     placeholder="Seleccionar tipo"
                     :options="promotionTypeOptions"
-                    :disabled="saving"
+                    :disabled="inputsDisabled"
                     :error="fieldErrors.promotionType"
                     required
                   />
                   <div>
-                    <div class="selection-actions">
+                    <div v-if="!isView" class="selection-actions">
                       <span class="hint">Selecciona una o más sucursales.</span>
-                      <button type="button" class="small-action" :disabled="saving || !cinemas.length || allCinemasSelected"
+                      <button type="button" class="small-action" :disabled="inputsDisabled || !cinemas.length || allCinemasSelected"
                         @click="selectAllCinemas">Seleccionar todas</button>
-                      <button type="button" class="small-action" :disabled="saving || !form.branchIds.length"
+                      <button type="button" class="small-action" :disabled="inputsDisabled || !form.branchIds.length"
                         @click="form.branchIds = []; delete fieldErrors.branchIds">Limpiar</button>
                     </div>
                     <ReusableSearchDropdown v-model="form.branchIds" label="Sucursales"
-                      placeholder="Buscar sucursales..." :options="cinemaOptions" required
+                      placeholder="Buscar sucursales..." :options="cinemaOptions" :disabled="inputsDisabled" required
                       :error="fieldErrors.branchIds" @update:model-value="delete fieldErrors.branchIds" />
-                    <p class="hint" role="status">{{ form.branchIds.length }} de {{ cinemas.length }} sucursales seleccionadas.</p>
-                    <p v-if="!cinemas.length" class="form-error">No hay sucursales disponibles. Carga el catálogo antes de crear la promoción.</p>
+                    <p v-if="!isView" class="hint" role="status">{{ form.branchIds.length }} de {{ cinemas.length }} sucursales seleccionadas.</p>
+                    <p v-if="isView" class="hint" role="status">{{ form.branchIds.length }} sucursales asociadas.</p>
+                    <p v-if="!isView && !cinemas.length" class="form-error">No hay sucursales disponibles. Carga el catálogo antes de crear la promoción.</p>
                   </div>
                 </div>
                 <aside class="poster-column">
-                 <PromotionImageUpload
+                  <template v-if="isView">
+                    <p>Póster de la promoción</p>
+                    <img v-if="existingPosterUrl && !posterFailed" :src="existingPosterUrl"
+                      alt="Póster de la promoción" class="detail-poster" @error="posterFailed = true" />
+                    <p v-else class="hint">{{ posterFailed ? 'No se pudo cargar el póster.' : 'Sin póster.' }}</p>
+                  </template>
+                 <PromotionImageUpload v-else
                     v-model="selectedPoster"
                     label="Póster de la promoción (opcional)"
                     :existing-image-url="existingPosterUrl"
-                    :disabled="saving"
+                    :disabled="inputsDisabled"
                   />
-                  <p class="hint">JPEG, PNG o WebP. Máximo 5 MB.</p>
+                  <p v-if="!isView" class="hint">JPEG, PNG o WebP. Máximo 5 MB.</p>
                   <p v-if="fieldErrors.poster" class="form-error" role="alert">{{ fieldErrors.poster }}</p>
                 </aside>
               </div>
@@ -248,7 +359,7 @@ async function save() {
                     min="0001-01-01"
                     max="9999-12-31"
                     required
-                    :disabled="saving"
+                    :disabled="inputsDisabled"
                     :aria-invalid="!!fieldErrors.beginDate"
                     :aria-describedby="
                       fieldErrors.beginDate ? 'promo-begin-date-error' : undefined
@@ -277,7 +388,7 @@ async function save() {
                     :min="form.beginDate || '0001-01-01'"
                     max="9999-12-31"
                     required
-                    :disabled="saving"
+                    :disabled="inputsDisabled"
                     :aria-invalid="!!fieldErrors.endDate"
                     :aria-describedby="
                       fieldErrors.endDate ? 'promo-end-date-error' : undefined
@@ -294,13 +405,13 @@ async function save() {
                   </p>
                 </div>
                 <label class="check-label full-width">
-                  <input v-model="form.allDay" type="checkbox" :disabled="saving" @change="clearHoursErrors" />
+                  <input v-model="form.allDay" type="checkbox" :disabled="inputsDisabled" @change="clearHoursErrors" />
                   Válida todo el día
                 </label>
                 <template v-if="!form.allDay">
                   <div class="field">
                     <label for="promo-begin-hour">Hora inicial *</label>
-                    <input id="promo-begin-hour" v-model="form.beginHour" type="time" step="60" required :disabled="saving"
+                    <input id="promo-begin-hour" v-model="form.beginHour" type="time" step="60" required :disabled="inputsDisabled"
                       :aria-invalid="!!fieldErrors.beginHour" aria-describedby="promo-begin-hour-error"
                       @input="clearHoursErrors" />
                     <p v-if="fieldErrors.beginHour" id="promo-begin-hour-error" class="form-error">{{ fieldErrors.beginHour }}</p>
@@ -308,11 +419,11 @@ async function save() {
                   <div class="field">
                     <label for="promo-end-hour">Hora final *</label>
                     <input v-if="!endAtMidnight" id="promo-end-hour" v-model="form.endHour" type="time" step="60" required
-                      :disabled="saving" :aria-invalid="!!fieldErrors.endHour" aria-describedby="promo-end-hour-error"
+                      :disabled="inputsDisabled" :aria-invalid="!!fieldErrors.endHour" aria-describedby="promo-end-hour-error"
                       @input="delete fieldErrors.endHour" />
-                    <input v-else id="promo-end-hour" value="24:00" readonly aria-label="Hora final: fin del día, 24:00" />
+                    <input v-else id="promo-end-hour" value="24:00" readonly :disabled="inputsDisabled" aria-label="Hora final: fin del día, 24:00" />
                     <label class="check-label">
-                      <input v-model="endAtMidnight" type="checkbox" :disabled="saving" /> Hasta el final del día (24:00)
+                      <input v-model="endAtMidnight" type="checkbox" :disabled="inputsDisabled" /> Hasta el final del día (24:00)
                     </label>
                     <p v-if="fieldErrors.endHour" id="promo-end-hour-error" class="form-error">{{ fieldErrors.endHour }}</p>
                   </div>
@@ -323,7 +434,7 @@ async function save() {
                   <legend>Días de la semana</legend>
                   <div class="day-options">
                     <label v-for="day in weekdays" :key="day.value" class="check-label day-option">
-                      <input v-model="form.weekdays" type="checkbox" :value="day.value" :disabled="saving"
+                      <input v-model="form.weekdays" type="checkbox" :value="day.value" :disabled="inputsDisabled"
                         @change="delete fieldErrors.weekdays" /> {{ day.label }}
                     </label>
                   </div>
@@ -334,7 +445,7 @@ async function save() {
                 <div class="field">
                   <label for="promo-amount">{{ form.promotionType === 'percentage' ? 'Porcentaje de descuento (%)' : 'Monto de descuento' }} *</label>
                   <input id="promo-amount" v-model="form.amount" type="text" inputmode="decimal" maxlength="16"
-                    required :disabled="saving" placeholder="Ej.: 25,50"
+                    required :disabled="inputsDisabled" placeholder="Ej.: 25,50"
                     :aria-invalid="!!fieldErrors.amount" aria-describedby="promo-amount-hint promo-amount-error"
                     @input="delete fieldErrors.amount" />
                   <p id="promo-amount-hint" class="hint">Mayor que cero, máximo {{ maxAmount }}. Hasta dos decimales.</p>
@@ -345,7 +456,7 @@ async function save() {
                   label="Formato de proyección"
                   placeholder="Cualquier formato"
                   :options="projectionFormatOptions"
-                  :disabled="saving"
+                  :disabled="inputsDisabled"
                   :error="fieldErrors.projectionFormat"
                 />
                 <SimpleDropdown
@@ -353,7 +464,7 @@ async function save() {
                   label="Tecnología"
                   placeholder="Cualquier tecnología"
                   :options="technologyOptions"
-                  :disabled="saving"
+                  :disabled="inputsDisabled"
                   :error="fieldErrors.technology"
                 />
               </div>
@@ -365,8 +476,8 @@ async function save() {
         <NotificationPopup v-if="error" type="error" :message="error" :duration="0"
           placement="bottom-right" @close="error = ''" />
         <footer class="form-footer">
-          <button type="button" class="secondary" :disabled="saving" @click="emit('close')">Cancelar</button>
-          <button type="submit" class="primary" :disabled="saving || !cinemas.length">
+          <button type="button" class="secondary" :disabled="saving" @click="emit('close')">{{ isView ? 'Cerrar' : 'Cancelar' }}</button>
+          <button v-if="!isView" type="submit" class="primary" :disabled="saving || !cinemas.length">
             {{ saving ? 'Creando...' : 'Crear promoción' }}
           </button>
         </footer>
@@ -381,6 +492,8 @@ async function save() {
 .create-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .dialog-sections, .general-fields { display: grid; gap: 20px; }
 .general-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.detail-poster { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; }
+.detail-error { color: var(--error-color); }
 .general-fields, .poster-column { min-width: 0; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
 .full-width { grid-column: 1 / -1; }

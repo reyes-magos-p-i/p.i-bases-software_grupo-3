@@ -1,18 +1,28 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { isAxiosError } from 'axios'
 
 import { getBranches, formatBranchId } from '@/services/branch.service'
 import type { CinemaOption } from '@/types/promotion'
 import PromotionCreate from '@/components/promotions/PromotionCreate.vue'
+import PromotionList from '@/components/promotions/PromotionList.vue'
+import { getPromotions } from '@/services/promotion.service'
+import type { PromotionListItem } from '@/types/promotion-read'
 
 const cinemas = ref<CinemaOption[]>([])
 const loadingCinemas = ref(false)
 const cinemaError = ref('')
 const creatingPromotion = ref(false)
+const viewingPromotionId = ref<number | null>(null)
+const promotions = ref<PromotionListItem[]>([])
+const loadingPromotions = ref(false)
+const listError = ref('')
+let listRequest: AbortController | undefined
+let listVersion = 0
+let disposed = false
 
 async function openPromotionCreate() {
-   if (loadingCinemas.value || creatingPromotion.value) return
+   if (loadingCinemas.value || creatingPromotion.value || viewingPromotionId.value !== null) return
 
   loadingCinemas.value = true
   cinemaError.value = ''
@@ -29,6 +39,7 @@ async function openPromotionCreate() {
         pageSize: 50,
       })
 
+      if (disposed) return
       for (const branch of result.items) {
         const name = branch.name?.trim() || 'Sin nombre'
         const company = branch.companyName?.trim()
@@ -56,6 +67,7 @@ async function openPromotionCreate() {
 
     creatingPromotion.value = true
   } catch (failure: unknown) {
+    if (disposed) return
     if (isAxiosError(failure)) {
     if (failure.response?.status === 401) {
       handleSessionExpired()
@@ -76,15 +88,44 @@ async function openPromotionCreate() {
 }
 
 
-function refreshPromotions() {
-  // Reload your promotion list here.
+async function refreshPromotions() {
+  listRequest?.abort()
+  const version = ++listVersion
+  const request = new AbortController()
+  listRequest = request
+  listError.value = ''
+  loadingPromotions.value = true
+  try {
+    const result = await getPromotions(request.signal)
+    if (disposed || request.signal.aborted || version !== listVersion) return
+    promotions.value = result
+  } catch (failure: unknown) {
+    if (disposed || request.signal.aborted || version !== listVersion) return
+    if (isAxiosError(failure)) {
+      if (failure.response?.status === 401) { handleSessionExpired(); return }
+      if (failure.response?.status === 403) { handleForbidden(); return }
+    }
+    listError.value = 'No se pudieron cargar las promociones. Vuelve a intentarlo.'
+  } finally {
+    if (version === listVersion) loadingPromotions.value = false
+  }
 }
+function openPromotionView(id: number) {
+  if (creatingPromotion.value || loadingCinemas.value || viewingPromotionId.value !== null) return
+  cinemaError.value = ''
+  viewingPromotionId.value = id
+}
+
+onMounted(() => { void refreshPromotions() })
+onBeforeUnmount(() => { disposed = true; listVersion++; listRequest?.abort() })
 function handleSessionExpired() {
   creatingPromotion.value = false
+  viewingPromotionId.value = null
   cinemaError.value = 'La sesión ha expirado. Inicia sesión nuevamente.'
 }
 function handleForbidden() {
   creatingPromotion.value = false
+  viewingPromotionId.value = null
   cinemaError.value = 'No tienes permisos para crear promociones.'
 }
 
@@ -104,6 +145,9 @@ function handleForbidden() {
         {{ cinemaError }}
       </p>
 
+      <PromotionList :promotions="promotions" :loading="loadingPromotions" :error="listError"
+        @view="openPromotionView" @retry="refreshPromotions" />
+
       <PromotionCreate
         v-if="creatingPromotion"
         :cinemas="cinemas"
@@ -112,7 +156,15 @@ function handleForbidden() {
         @session-expired="handleSessionExpired"
         @forbidden="handleForbidden"
       />
+      <PromotionCreate
+        v-if="viewingPromotionId !== null"
+        :key="viewingPromotionId"
+        mode="view"
+        :promotion-id="viewingPromotionId"
+        :cinemas="cinemas"
+        @close="viewingPromotionId = null"
+        @session-expired="handleSessionExpired"
+        @forbidden="handleForbidden"
+      />
   </div>
-
-
 </template>

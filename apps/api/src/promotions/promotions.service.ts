@@ -2,16 +2,35 @@
 import {
   BadRequestException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsRepository } from './promotions.repository';
+import type { PromotionDetail, PromotionListItem } from './promotion-response.types';
 
 @Injectable()
 export class PromotionsService {
   constructor(
     private readonly repository: PromotionsRepository,
   ) {}
+
+  async findAll(): Promise<PromotionListItem[]> {
+    return this.repository.findAll();
+  }
+
+  async findOne(id: number): Promise<PromotionDetail> {
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new BadRequestException('Promotion ID must be a positive safe integer.');
+    }
+
+    const promotion = await this.repository.findOne(id);
+    if (!promotion) {
+      throw new NotFoundException('Promotion not found.');
+    }
+
+    return promotion;
+  }
 
   async create(dto: CreatePromotionDto) {
     if (

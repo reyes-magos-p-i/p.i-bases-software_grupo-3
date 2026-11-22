@@ -4,14 +4,15 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, nextTick } from 'vue'
 
 // Place beside PromotionCreate.vue. Uses the real promotion-validation helper.
+import type { PromotionDetail } from '@/types/promotion-read'
 import PromotionCreate from '@/components/promotions/PromotionCreate.vue'
-import { createPromotion } from '@/services/promotion.service'
+import { createPromotion, getPromotion } from '@/services/promotion.service'
 import {
   getPromotionPosterUrl,
   uploadPromotionPoster,
 } from '@/services/image-handler.service'
 
-vi.mock('@/services/promotion.service', () => ({ createPromotion: vi.fn() }))
+vi.mock('@/services/promotion.service', () => ({ createPromotion: vi.fn(), getPromotion: vi.fn() }))
 vi.mock('@/services/image-handler.service', () => ({
   uploadPromotionPoster: vi.fn(),
   getPromotionPosterUrl: vi.fn((path: string | null) =>
@@ -31,10 +32,10 @@ const DialogSectionStub = defineComponent({
 })
 const TextStub = defineComponent({
   name: 'LimitedTextInput',
-  props: ['modelValue', 'label', 'limit', 'error', 'required', 'multiline', 'rows'],
+  props: ['modelValue', 'label', 'limit', 'error', 'required', 'multiline', 'rows', 'disabled'],
   emits: ['update:modelValue'],
   template: `<div><label>{{ label }}
-    <input :value="modelValue" :aria-invalid="!!error" />
+    <input :value="modelValue" :disabled="disabled" :aria-invalid="!!error" />
     </label><p v-if="error" role="alert">{{ error }}</p></div>`,
 })
 const DropdownStub = defineComponent({
@@ -88,9 +89,9 @@ function apiError(status: number, message?: unknown) {
 }
 
 let wrapper: VueWrapper
-function render(options = cinemas) {
+function render(options = cinemas, extra: { mode?: 'create' | 'view'; promotionId?: number | null } = {}) {
   wrapper = mount(PromotionCreate, {
-    props: { cinemas: options },
+    props: { cinemas: options, ...extra },
     attachTo: document.body,
     global: {
       stubs: {
@@ -149,6 +150,7 @@ async function selectPoster(file = new File(['image bytes'], 'banner.png', { typ
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(getPromotion).mockReset().mockResolvedValue(detail())
   vi.mocked(createPromotion).mockReset().mockResolvedValue({ promotionId: 42 })
   vi.mocked(uploadPromotionPoster).mockReset().mockResolvedValue({
     filename: 'banner.webp', path: '/uploads/promotions/banner.webp',
@@ -498,5 +500,140 @@ describe('PromotionCreate: API errors', () => {
     notification.vm.$emit('close')
     await nextTick()
     expect(wrapper.findComponent({ name: 'NotificationPopup' }).exists()).toBe(false)
+  })
+})
+
+
+function detail(overrides: Partial<PromotionDetail> = {}): PromotionDetail {
+  return {
+    promotionId: 42, promotionType: 'fixed', promotionAmount: 3500.5,
+    promotionTitle: 'Promoción guardada', description: 'Descripción guardada',
+    conditions: 'Condiciones guardadas', posterPath: '/uploads/promotions/banner.webp',
+    beginDate: '2026-11-17', endDate: '2026-12-31', beginHour: '22:00', endHour: '24:00',
+    projectionFormat: '2D', technology: 'IMAX', weekdays: [2, 4], branchIds: [1, 99],
+    ...overrides,
+  }
+}
+
+describe('PromotionCreate: read-only view mode', () => {
+  it('does not fetch details in the default create mode', () => {
+    render()
+    expect(getPromotion).not.toHaveBeenCalled()
+  })
+
+  it('loads details into disabled fields and displays the stored poster', async () => {
+    render(cinemas, { mode: 'view', promotionId: 42 })
+    expect(wrapper.text()).toContain('Cargando detalle')
+    await flushPromises()
+    expect(getPromotion).toHaveBeenCalledWith(42, expect.any(AbortSignal))
+    expect(wrapper.findComponent({ name: 'BaseModal' }).props('title')).toBe('Detalle de promoción')
+    expect(control('LimitedTextInput', 'Nombre de la promoción').props('modelValue')).toBe('Promoción guardada')
+    expect(control('LimitedTextInput', 'Descripción').props('modelValue')).toBe('Descripción guardada')
+    expect(control('LimitedTextInput', 'Condiciones (opcional)').props('modelValue')).toBe('Condiciones guardadas')
+    expect(control('SimpleDropdown', 'Tipo de promoción').props('modelValue')).toBe('fixed')
+    expect(control('SimpleDropdown', 'Formato de proyección').props('modelValue')).toBe('2D')
+    expect(control('SimpleDropdown', 'Tecnología').props('modelValue')).toBe('IMAX')
+    expect(wrapper.get('#promotion-detail-id').element).toHaveProperty('value', '42')
+    expect(wrapper.get('#promo-amount').element).toHaveProperty('value', '3500.5')
+    expect(wrapper.get('#promo-begin-hour').element).toHaveProperty('value', '22:00')
+    expect(wrapper.get('#promo-end-hour').element).toHaveProperty('value', '24:00')
+    expect(control('ReusableSearchDropdown', 'Sucursales').props('modelValue')).toEqual([1, 99])
+    expect(control('ReusableSearchDropdown', 'Sucursales').props('options')).toContainEqual({ value: 99, label: 'Sucursal #99' })
+    expect(wrapper.get('.day-option input[value="2"]').element).toHaveProperty('checked', true)
+    expect(wrapper.get('.day-option input[value="4"]').element).toHaveProperty('checked', true)
+    expect(wrapper.get('.create-fieldset').attributes('disabled')).toBeDefined()
+    expect(wrapper.findAllComponents({ name: 'LimitedTextInput' }).every((item) => item.props('disabled'))).toBe(true)
+    expect(wrapper.findAllComponents({ name: 'SimpleDropdown' }).every((item) => item.props('disabled'))).toBe(true)
+    expect(wrapper.findAllComponents({ name: 'DatePicker' }).every((item) => item.props('disabled'))).toBe(true)
+    expect(wrapper.findComponent({ name: 'PromotionImageUpload' }).exists()).toBe(false)
+    expect(wrapper.get('img.detail-poster').attributes('src')).toBe('/api/image-handler/promotions/banner.webp')
+    expect(wrapper.find('button[type="submit"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Seleccionar todas')
+    await submit()
+    expect(createPromotion).not.toHaveBeenCalled()
+    expect(uploadPromotionPoster).not.toHaveBeenCalled()
+    await button('Cerrar').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
+  it('shows null restrictions and no poster without enabling creation', async () => {
+    vi.mocked(getPromotion).mockResolvedValueOnce(detail({
+      beginHour: null, endHour: null, posterPath: null, conditions: null,
+      projectionFormat: null, technology: null, weekdays: [], branchIds: [],
+    }))
+    render([], { mode: 'view', promotionId: 42 })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Sin póster.')
+    expect(wrapper.text()).toContain('0 sucursales asociadas.')
+    expect(wrapper.find('#promo-begin-hour').exists()).toBe(false)
+    expect(control('SimpleDropdown', 'Formato de proyección').props('modelValue')).toBeNull()
+    expect(control('SimpleDropdown', 'Tecnología').props('modelValue')).toBeNull()
+    expect(wrapper.findAll('input[type="checkbox"]').slice(1).every((item) => !(item.element as HTMLInputElement).checked)).toBe(true)
+  })
+
+  it('shows a poster fallback when image loading fails', async () => {
+    render(cinemas, { mode: 'view', promotionId: 42 })
+    await flushPromises()
+    await wrapper.get('img.detail-poster').trigger('error')
+    expect(wrapper.text()).toContain('No se pudo cargar el póster.')
+  })
+
+  it('shows a not-found message and permits retry', async () => {
+    vi.mocked(getPromotion).mockRejectedValueOnce(apiError(404))
+    render(cinemas, { mode: 'view', promotionId: 42 })
+    await flushPromises()
+    expect(wrapper.text()).toContain('La promoción no existe')
+    expect(wrapper.find('.create-fieldset').exists()).toBe(false)
+    await button('Reintentar').trigger('click')
+    await flushPromises()
+    expect(getPromotion).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.create-fieldset').exists()).toBe(true)
+  })
+
+  it.each([
+    { status: 401, event: 'session-expired' }, { status: 403, event: 'forbidden' },
+  ])('forwards authentication errors in view mode: $status', async ({ status, event }) => {
+    vi.mocked(getPromotion).mockRejectedValueOnce(apiError(status))
+    render(cinemas, { mode: 'view', promotionId: 42 })
+    await flushPromises()
+    expect(wrapper.emitted(event)).toHaveLength(1)
+    expect(createPromotion).not.toHaveBeenCalled()
+  })
+
+  it('shows a generic detail load error for unexpected failures', async () => {
+    vi.mocked(getPromotion).mockRejectedValueOnce(new Error('Offline'))
+    render(cinemas, { mode: 'view', promotionId: 42 })
+    await flushPromises()
+    expect(wrapper.text()).toContain('No se pudo cargar la promoción.')
+  })
+
+  it('rejects view mode without a valid ID', async () => {
+    render(cinemas, { mode: 'view' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Selecciona una promoción válida.')
+    expect(getPromotion).not.toHaveBeenCalled()
+  })
+
+  it('ignores a stale detail response after the requested ID changes', async () => {
+    const old = deferred<PromotionDetail>()
+    vi.mocked(getPromotion).mockReturnValueOnce(old.promise).mockResolvedValueOnce(detail({ promotionId: 7, promotionTitle: 'Nueva' }))
+    render(cinemas, { mode: 'view', promotionId: 42 })
+    const signal = vi.mocked(getPromotion).mock.calls[0]![1]!
+    await wrapper.setProps({ promotionId: 7 })
+    await flushPromises()
+    expect(signal.aborted).toBe(true)
+    old.resolve(detail())
+    await flushPromises()
+    expect(control('LimitedTextInput', 'Nombre de la promoción').props('modelValue')).toBe('Nueva')
+  })
+
+  it('aborts pending detail fetches when unmounted', () => {
+    const pending = deferred<PromotionDetail>()
+    vi.mocked(getPromotion).mockReturnValueOnce(pending.promise)
+    render(cinemas, { mode: 'view', promotionId: 42 })
+    const signal = vi.mocked(getPromotion).mock.calls[0]![1]!
+    wrapper.unmount()
+    expect(signal.aborted).toBe(true)
+    pending.resolve(detail())
   })
 })
