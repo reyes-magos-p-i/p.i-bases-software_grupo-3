@@ -183,12 +183,16 @@ describe('Atomic purchase storage', () => {
     const invoiceCall = execute.mock.calls.find(([sql]) =>
       String(sql).includes('INSERT INTO INVOICES'),
     );
-    expect(invoiceCall?.[0]).toContain("'PAID','SIMULATED'");
+    expect(invoiceCall?.[0]).toContain("'PAID',:paymentMethod");
     expect(invoiceCall?.[1]).toMatchObject({
       clientId: 8,
       email: 'client@example.com',
       total: 3000,
       key: valid.requestKey,
+      paymentMethod: 'SIMULATED',
+      intentId: null,
+      brand: null,
+      last4: null,
     });
     expect(
       execute.mock.calls.some(([sql]) =>

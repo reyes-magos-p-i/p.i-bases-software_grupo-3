@@ -19,6 +19,7 @@ import { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import { PurchaseThrottlerGuard } from './purchase-throttler.guard';
 import { guestPurchaseCode } from './guest-purchase-access';
 import { TicketEmailService } from './ticket-email.service';
+import { CardPaymentGateway } from './payments/card-payment.gateway';
 
 describe('Guest purchase HTTP with mocked persistence', () => {
   let app: INestApplication, server: Server;
@@ -94,6 +95,10 @@ describe('Guest purchase HTTP with mocked persistence', () => {
         { provide: PurchasesRepository, useValue: repository },
         { provide: PurchaseCatalogRepository, useValue: catalog },
         { provide: TicketEmailService, useValue: emails },
+        {
+          provide: CardPaymentGateway,
+          useValue: { createIntent: jest.fn(), settled: jest.fn() },
+        },
       ],
     }).compile();
     app = module.createNestApplication({ logger: false });
@@ -165,6 +170,7 @@ describe('Guest purchase HTTP with mocked persistence', () => {
     expect(repository.confirmGuest).toHaveBeenCalledWith(
       buyer.email,
       expect.objectContaining(data),
+      undefined,
     );
     const code = guestPurchaseCode(12, data.requestKey);
     const lookup = await post('/lookup', { accessCode: code });

@@ -192,6 +192,7 @@ describe('Purchase HTTP with mocked persistence', () => {
     expect(storage.confirm).toHaveBeenCalledWith(
       8,
       expect.objectContaining(body),
+      undefined,
     );
     const list = await request(server)
       .get(
