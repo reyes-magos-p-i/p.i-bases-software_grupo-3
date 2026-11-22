@@ -30,10 +30,19 @@ import {
   establishClientSession,
 } from '@/services/client-session.service'
 import { CLIENT_PROFILE_SECTIONS, type ClientProfile } from '@/types/client-profile'
+import {
+  getClientPromotionalEmailSetting,
+  saveClientPromotionalEmailSetting,
+} from '@/services/client-promotional-emails.service'
 
 vi.mock('@/services/client-preferences.service', () => ({
   getClientPreferenceSettings: vi.fn(),
   saveClientPreferences: vi.fn(),
+}))
+
+vi.mock('@/services/client-promotional-emails.service', () => ({
+  getClientPromotionalEmailSetting: vi.fn(),
+  saveClientPromotionalEmailSetting: vi.fn(),
 }))
 
 const navigation = vi.hoisted(() => ({
@@ -114,6 +123,8 @@ describe('ClientProfileView', () => {
     navigation.replace.mockImplementation(navigate)
     vi.mocked(getClientPreferenceSettings).mockResolvedValue(structuredClone(preferences))
     vi.mocked(saveClientPreferences).mockResolvedValue({ genreIds: [], languageIds: [] })
+    vi.mocked(getClientPromotionalEmailSetting).mockResolvedValue({ enabled: false })
+    vi.mocked(saveClientPromotionalEmailSetting).mockResolvedValue({ enabled: false })
     establishClientSession(
       { id: 7, email: data.email, firstName: 'Ana', lastName: 'Rojas' },
       'token',
@@ -292,7 +303,7 @@ describe('ClientProfileView', () => {
     await choose(wrapper, 'preferences')
     expect(wrapper.text()).toContain('Inglés')
     expect(wrapper.getComponent(ClientPreferencesForm).props('settings')).toEqual(preferences)
-    expect(wrapper.find('input').exists()).toBe(false)
+    expect(wrapper.find('dl input').exists()).toBe(false)
   })
   it('retries profile loading after an unavailable service', async () => {
     vi.mocked(getClientProfile).mockRejectedValueOnce(new Error('offline'))
