@@ -8,6 +8,7 @@ import type {
   ConfirmGuestPurchaseDto,
   GuestBuyerDto,
 } from './guest-purchase.dto';
+import type { PurchaseIntentDto } from './purchase.dto';
 
 @Injectable()
 export class GuestPurchasesService {
@@ -39,9 +40,17 @@ export class GuestPurchasesService {
     return { email: data.email };
   }
 
+  cardIntent(data: PurchaseIntentDto) {
+    return this.purchases.cardIntent(data);
+  }
+
   confirm(data: ConfirmGuestPurchaseDto) {
     this.matchingEmail(data.buyer);
-    return this.repository.confirmGuest(data.buyer.email, data);
+    return this.purchases
+      .cardSettlement(data)
+      .then((settlement) =>
+        this.repository.confirmGuest(data.buyer.email, data, settlement),
+      );
   }
 
   lookup(code: string) {
