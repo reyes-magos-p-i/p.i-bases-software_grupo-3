@@ -377,7 +377,7 @@ onBeforeUnmount(() => {
         Tu cuenta ya no está disponible para iniciar sesión. Si necesitas reactivarla, contacta con
         asistencia.
       </p>
-      <RouterLink to="/">Volver al portal</RouterLink>
+      <RouterLink to="/" class="portal-return-link">Volver al portal</RouterLink>
     </section>
     <LoadingState v-else-if="loading" message="Cargando perfil..." surface="dark" />
     <section v-else-if="loadError" class="profile-card surface-theme--dark">
@@ -658,8 +658,7 @@ dd {
 .address-data {
   grid-column: 1 / -1;
 }
-button,
-.completed a {
+button {
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -672,11 +671,20 @@ button,
   font-weight: 600;
   text-decoration: none;
 }
-.primary,
-.completed a {
+.primary {
   background: var(--button-background);
   color: var(--button-text);
   border-color: transparent;
+}
+.completed .portal-return-link {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-small);
+  background: var(--surface-background);
+  font-weight: 600;
 }
 .danger {
   background: var(--error-color);
@@ -687,8 +695,7 @@ button,
 :disabled {
   opacity: 0.65;
 }
-button:focus-visible,
-a:focus-visible {
+button:focus-visible {
   outline: 2px solid var(--focus-color);
   outline-offset: 2px;
 }

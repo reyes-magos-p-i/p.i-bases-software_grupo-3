@@ -93,6 +93,11 @@ describe('AppHeader authentication navigation', () => {
         },
         { path: '/account/confirm-email', component: { template: '<p>Confirmar correo</p>' } },
         { path: '/account/password', component: { template: '<p>Cambiar contraseña</p>' } },
+        ...['/terms-and-conditions', '/refund-policy', '/privacy-policy'].map((path) => ({
+          path,
+          meta: { publicLegal: true },
+          component: { template: '<p>Información legal</p>' },
+        })),
       ],
     })
     await router.push('/')
@@ -129,6 +134,59 @@ describe('AppHeader authentication navigation', () => {
     }
     vi.restoreAllMocks()
   })
+
+  it.each(['/terms-and-conditions', '/refund-policy', '/privacy-policy'])(
+    'restores the account menu on %s without enforcing a password change',
+    async (path) => {
+      await flushPromises()
+      wrapper.unmount()
+      const identity = { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' }
+      establishClientSession(identity, 'client-token')
+      vi.mocked(getClientSession).mockResolvedValue(identity)
+      vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))
+      await router.push(path)
+      wrapper = renderHeader()
+      await flushPromises()
+
+      expect(router.currentRoute.value.path).toBe(path)
+      expect(wrapper.getComponent(AccountMenu).props('user')).toEqual(identity)
+      expect(getClientPasswordStatus).not.toHaveBeenCalled()
+      expect(localStorage.getItem('accessToken')).toBe('client-token')
+    },
+  )
+
+  it.each(['expired', 'unauthorized'] as const)(
+    'ignores a late %s password result after navigating to a legal page',
+    async (outcome) => {
+      await flushPromises()
+      wrapper.unmount()
+      const identity = { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' }
+      establishClientSession(identity, 'client-token')
+      vi.mocked(getClientSession).mockResolvedValue(identity)
+      let resolveStatus!: (value: PasswordExpiry) => void
+      let rejectStatus!: (error: Error) => void
+      vi.mocked(getClientPasswordStatus).mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            resolveStatus = resolve
+            rejectStatus = reject
+          }),
+      )
+      wrapper = renderHeader()
+      await flushPromises()
+      expect(getClientPasswordStatus).toHaveBeenCalledTimes(1)
+
+      await router.push('/privacy-policy')
+      if (outcome === 'expired') resolveStatus(expiry('expired'))
+      else rejectStatus(new ClientAuthError('Sesión no disponible', 401))
+      await flushPromises()
+
+      expect(router.currentRoute.value.path).toBe('/privacy-policy')
+      expect(localStorage.getItem('accessToken')).toBe('client-token')
+      expect(wrapper.getComponent(AccountMenu).props('user')).toEqual(identity)
+      expect(wrapper.text()).not.toContain('Sesión no disponible')
+    },
+  )
 
   it('navigates from the portal through both login modes and restores focus on close', async () => {
     const opener = wrapper.get<HTMLButtonElement>('.login-button')

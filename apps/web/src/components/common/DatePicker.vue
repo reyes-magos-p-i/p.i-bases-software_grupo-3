@@ -24,7 +24,8 @@ const input = ref<HTMLInputElement>()
 const panel = ref<HTMLElement>()
 const open = ref(false)
 const floating = typeof HTMLElement.prototype.showPopover === 'function'
-const placement = ref({ left: '0px', top: '0px' })
+const placement = ref({ left: '0px', top: '0px', height: 'auto' })
+let naturalHeight = 0
 const choosingYear = ref(false)
 const focusedDate = ref('')
 const initial = todayInCostaRica()
@@ -48,7 +49,7 @@ const cells = computed(() => {
   const offset = (first.getUTCDay() + 6) % 7
   const last = new Date(first)
   last.setUTCMonth(last.getUTCMonth() + 1, 0)
-  return Array.from({ length: Math.ceil((offset + last.getUTCDate()) / 7) * 7 }, (_, i) => {
+  return Array.from({ length: 42 }, (_, i) => {
     const day = i - offset + 1
     return day > 0 && day <= last.getUTCDate() ? dateParts(year.value, month.value, day) : ''
   })
@@ -67,13 +68,16 @@ function positionPanel() {
   const width = document.documentElement.clientWidth || window.innerWidth
   const height = document.documentElement.clientHeight || window.innerHeight
   const left = Math.max(8, Math.min(anchor.left, width - panel.value.offsetWidth - 8))
+  const panelHeight = Math.min(naturalHeight, Math.max(0, height - 16))
   const below = anchor.bottom + 8
-  const top =
-    below + panel.value.offsetHeight <= height - 8
-      ? below
-      : Math.max(8, anchor.top - panel.value.offsetHeight - 8)
+  const preferredTop = below + panelHeight <= height - 8 ? below : anchor.top - panelHeight - 8
+  const top = Math.max(8, Math.min(preferredTop, height - panelHeight - 8))
   const origin = floating ? { left: 0, top: 0 } : root.value.getBoundingClientRect()
-  placement.value = { left: `${left - origin.left}px`, top: `${top - origin.top}px` }
+  placement.value = {
+    left: `${left - origin.left}px`,
+    top: `${top - origin.top}px`,
+    height: `${panelHeight}px`,
+  }
 }
 async function focusDay(value?: string) {
   await nextTick()
@@ -92,6 +96,7 @@ async function toggle() {
     close()
     return
   }
+  placement.value.height = 'auto'
   open.value = true
   let value = validDate(props.modelValue) ? props.modelValue : todayInCostaRica()
   if (props.max && value > props.max) value = props.max
@@ -101,6 +106,10 @@ async function toggle() {
   choosingYear.value = false
   await nextTick()
   panel.value?.showPopover?.()
+  if (panel.value) {
+    // Keep both calendar views the same size, including when the viewport clips the content.
+    naturalHeight = panel.value.scrollHeight + panel.value.offsetHeight - panel.value.clientHeight
+  }
   positionPanel()
   await focusDay(value)
 }
@@ -174,7 +183,6 @@ async function leave(event: FocusEvent) {
   close()
   emit('blur', event)
 }
-watch([year, month, choosingYear], positionPanel, { flush: 'post' })
 watch(
   () => props.disabled,
   (value) => {
@@ -341,6 +349,8 @@ select:focus-visible {
 }
 .calendar-panel {
   position: absolute;
+  display: flex;
+  flex-direction: column;
   inset: auto;
   margin: 0;
   z-index: 10;
@@ -361,6 +371,7 @@ select:focus-visible {
 .calendar-heading,
 .calendar-footer {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -399,7 +410,9 @@ button[aria-pressed='true'] {
 }
 .day-grid {
   display: grid;
+  flex-shrink: 0;
   grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: auto repeat(6, minmax(44px, auto));
   gap: 2px;
 }
 .weekday {
@@ -415,7 +428,8 @@ button[aria-pressed='true'] {
   padding: 8px 0;
 }
 .calendar-footer {
-  margin-top: 8px;
+  margin-top: auto;
+  padding-top: 8px;
   border-top: 1px solid var(--border-color);
 }
 .calendar-enter-active,
