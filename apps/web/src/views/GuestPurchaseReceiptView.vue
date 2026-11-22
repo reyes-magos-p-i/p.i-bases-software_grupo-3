@@ -51,7 +51,7 @@ onBeforeUnmount(() => controller?.abort())
 <template>
   <AppHeader />
   <main class="guest-receipt surface-theme--dark" :aria-busy="loading">
-    <RouterLink to="/">← Volver al portal</RouterLink>
+    <RouterLink to="/" class="portal-return-link">← Volver al portal</RouterLink>
     <h1>Tu compra</h1>
     <p v-if="!accessCode">
       Abre el enlace completo que recibiste al terminar la compra o por correo.
@@ -76,9 +76,6 @@ onBeforeUnmount(() => controller?.abort())
   min-height: 70vh;
   margin: auto;
   padding: 28px 24px 48px;
-  color: var(--text-on-dark);
-}
-a {
   color: var(--text-on-dark);
 }
 h1 {

@@ -9,7 +9,7 @@ import AppFooter from '@/components/layout/AppFooter.vue'
     <div class="landing-container home-content">
       <h1>No encontramos esta página</h1>
       <p>Revisa la dirección o vuelve al portal para continuar.</p>
-      <RouterLink to="/">Volver al portal</RouterLink>
+      <RouterLink to="/" class="portal-return-link">Volver al portal</RouterLink>
     </div>
   </main>
   <AppFooter />

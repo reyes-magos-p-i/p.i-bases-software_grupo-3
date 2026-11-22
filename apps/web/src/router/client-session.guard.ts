@@ -21,7 +21,12 @@ function loginQuery(to: RouteLocationNormalized, reason: string) {
 }
 
 export const requireClientSession: NavigationGuard = async (to) => {
-  if (to.path === '/recover-password' || to.path === '/account/confirm-email') return true
+  if (
+    to.meta.publicLegal === true ||
+    to.path === '/recover-password' ||
+    to.path === '/account/confirm-email'
+  )
+    return true
   const token = localStorage.getItem(CLIENT_ACCESS_TOKEN_KEY)
   try {
     // A stored session is restored before any route (not only client routes), so an
@@ -54,7 +59,12 @@ export const requireClientSession: NavigationGuard = async (to) => {
 /** Sends a client to the password change when any endpoint rejects an expired password. */
 export function redirectClientWhenPasswordBlocked(router: Router): () => void {
   return onPasswordBlocked((reason) => {
-    if (!hasClientSession() || router.currentRoute.value.path === PASSWORD_PATH) return
+    if (
+      !hasClientSession() ||
+      router.currentRoute.value.path === PASSWORD_PATH ||
+      router.currentRoute.value.meta?.publicLegal === true
+    )
+      return
     void router.replace({ path: PASSWORD_PATH, query: { reason } })
   })
 }

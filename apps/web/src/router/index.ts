@@ -100,16 +100,19 @@ const router = createRouter({
       path: '/terms-and-conditions',
       name: 'terms',
       component: TermsConditions,
+      meta: { publicLegal: true },
     },
     {
       path: '/refund-policy',
       name: 'refund-policy',
       component: RefundPolicy,
+      meta: { publicLegal: true },
     },
     {
       path: '/privacy-policy',
       name: 'privacy-policy',
       component: PrivacyPolicy,
+      meta: { publicLegal: true },
     },
   ],
 })
