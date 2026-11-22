@@ -91,6 +91,26 @@ describe('CardPaymentStep', () => {
     expect(wrapper.emitted('paid')).toBeUndefined()
   })
 
+  it('shows Stripe validation messages instead of a generic error', async () => {
+    confirmPayment.mockResolvedValue({
+      error: {
+        type: 'validation_error',
+        code: 'invalid_zip',
+        message: 'El código postal no es válido.',
+      },
+    })
+    const wrapper = await mounted()
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Pagar')!
+      .trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('El código postal no es válido.')
+    expect(wrapper.emitted('paid')).toBeUndefined()
+  })
+
   it('cancels locally without asking Stripe to confirm anything', async () => {
     const wrapper = await mounted()
 

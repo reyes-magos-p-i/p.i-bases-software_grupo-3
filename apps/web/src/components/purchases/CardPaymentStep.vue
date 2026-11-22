@@ -21,6 +21,7 @@ function declineMessage(failure: StripeError) {
     return 'Fondos insuficientes en la tarjeta. Intenta con otra tarjeta.'
   if (failure.type === 'card_error')
     return 'La tarjeta no es válida o fue rechazada. Revisa los datos o usa otra tarjeta.'
+  if (failure.type === 'validation_error' && failure.message) return failure.message
   return 'No se pudo confirmar el pago. Intenta nuevamente.'
 }
 
@@ -29,7 +30,7 @@ onMounted(async () => {
     stripe = await loadStripe(props.intent.publishableKey)
     if (!stripe) throw new Error('Stripe.js did not load.')
     elements = stripe.elements({ clientSecret: props.intent.clientSecret, locale: 'es' })
-    element = elements.create('payment', { layout: 'tabs' })
+    element = elements.create('payment', { layout: 'tabs', wallets: { link: 'never' } })
     element.on('ready', () => (ready.value = true))
     element.mount(container.value!)
   } catch {
