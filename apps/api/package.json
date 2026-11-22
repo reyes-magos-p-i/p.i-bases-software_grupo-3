@@ -49,6 +49,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sharp": "^0.35.5",
+    "stripe": "^22.6.2",
     "vue3-google-login": "^2.1.4"
   },
   "devDependencies": {
