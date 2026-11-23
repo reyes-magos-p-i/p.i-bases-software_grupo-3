@@ -24,6 +24,7 @@ describe('SmtpPasswordRecoverySender', () => {
       .mocked(nodemailer.createTransport)
       .mockReturnValue({ sendMail } as unknown as Mail<SMTPSentMessageInfo>);
     const settings: Record<string, string> = {
+      NODE_ENV: 'production',
       SMTP_HOST: 'smtp.example.com',
       SMTP_PORT: '587',
       SMTP_SECURE: 'false',

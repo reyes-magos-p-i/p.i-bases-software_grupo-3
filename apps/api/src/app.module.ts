@@ -17,6 +17,7 @@ import { TicketsModule } from './tickets/tickets.module';
 import { TransactionsModule } from './transactions/transactions.module';
 //import { ImagesModule } from './images/images.module';
 import { ImageHandlerModule } from './image-handler/image-handler.module';
+import { PromotionsModule } from './promotions/promotions.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ImageHandlerModule } from './image-handler/image-handler.module';
     //ImagesModule,
     ImageHandlerModule,
     PurchasesModule,
+    PromotionsModule,
   ],
   controllers: [ImageController],
 })

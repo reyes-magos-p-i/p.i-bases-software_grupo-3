@@ -56,4 +56,46 @@ export class ImageHandlerController {
   uploadPoster(@UploadedFile() file?: Express.Multer.File) {
     return this.imagesService.savePoster(file);
   }
+
+  @Post('promotions')
+    @UseGuards(
+      AuthGuard('jwt'),
+      AdministratorGuard,
+      PasswordStatusGuard,
+    )
+    @UseInterceptors(
+      FileInterceptor('image', {
+        storage: memoryStorage(),
+        limits: {
+          fileSize: MAX_POSTER_SIZE,
+          files: 1,
+          fields: 0,
+        },
+      }),
+    )
+    uploadPromotionPoster(
+      @UploadedFile() file?: Express.Multer.File,
+    ) {
+      return this.imagesService.savePromotionPoster(file);
+    }
+
+    @Get('promotions/:filename')
+      getPromotionPoster(
+        @Param('filename') filename: string,
+        @Res() res: Response,
+      ) {
+        if (
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.webp$/i
+            .test(filename)
+        ) {
+          throw new NotFoundException('Póster no encontrado.');
+        }
+
+        return res.sendFile(
+          filename,
+          {
+            root: join(IMAGES_DIRECTORY, 'promotions'),
+          },
+        );
+      }
 }
