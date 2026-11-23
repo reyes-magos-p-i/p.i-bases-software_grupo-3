@@ -28,6 +28,8 @@ describe('dashboard sections registry', () => {
     expect(employeeIds).not.toContain('tickets')
     // SCRUM-17 (UT-047): employees do not see Transacciones.
     expect(employeeIds).not.toContain('transactions')
+    expect(employeeIds).not.toContain('dashboard')
+    expect(availableSectionsFor('ADMINISTRATOR')).toContain('dashboard')
     expect(employeeIds).toContain('clients')
     expect(visibleSectionsFor('ADMINISTRATOR')).toHaveLength(dashboardSections.length)
   })
