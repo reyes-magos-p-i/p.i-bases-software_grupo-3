@@ -17,6 +17,9 @@ import {
 import type { UserCreationOptions } from '@/types/user'
 import type { PasswordExpiry } from '@/services/authService'
 import { notifyPasswordBlocked } from '@/services/api'
+import { getSalesStatistics } from '@/services/sales-statistics.service'
+import { salesStatistics } from './helpers/sales-statistics'
+vi.mock('@/services/sales-statistics.service', () => ({ getSalesStatistics: vi.fn() }))
 import {
   dismissPasswordExpiry,
   expectPasswordExpiryNotice,
@@ -130,6 +133,7 @@ const originalShowModal = Object.getOwnPropertyDescriptor(dialogPrototype, 'show
 const originalClose = Object.getOwnPropertyDescriptor(dialogPrototype, 'close')
 
 beforeEach(() => {
+  vi.mocked(getSalesStatistics).mockReset().mockResolvedValue(salesStatistics())
   getUsers
     .mockReset()
     .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 })
@@ -590,7 +594,7 @@ describe('DashboardView', () => {
     expect(view.get('h1').text()).toBe('Clientes')
     expect(view.get('[aria-current="page"]').attributes('aria-label')).toBe('Clientes')
     expect(view.get('nav').text()).not.toContain('Empleados')
-    expect(view.get('nav').text()).not.toContain('Tablero')
+    expect(view.get('nav').text()).not.toContain('Estadísticas')
     expect(view.get('nav').text()).not.toContain('Sucursales')
     expect(view.get('nav').findAll('button')).toHaveLength(6)
   })
@@ -604,14 +608,14 @@ describe('DashboardView', () => {
 
     expect(view.get('h1').text()).toBe('Clientes')
     expect(view.find('[aria-label="Empleados"]').exists()).toBe(true)
-    expect(view.find('[aria-label="Tablero (Pendiente)"]').exists()).toBe(true)
+    expect(view.find('[aria-label="Estadísticas"]').exists()).toBe(true)
   })
 
   it('leaves unimplemented features disabled', async () => {
     const view = await renderDashboard()
     const pending = view.findAll('.sidebar-navigation button:disabled')
 
-    expect(pending).toHaveLength(3)
+    expect(pending).toHaveLength(2)
     for (const button of pending) {
       expect(button.attributes('disabled')).toBeDefined()
       expect(button.text()).toContain('Pendiente')
@@ -621,13 +625,15 @@ describe('DashboardView', () => {
     expect(router.currentRoute.value.path).toBe('/dashboard')
   })
 
-  it('ignores navigation outside the available dashboard sections', async () => {
+  it('opens statistics for administrators and rejects unavailable employee navigation', async () => {
     const view = await renderDashboard()
     const layout = view.getComponent(DashboardLayout)
 
     layout.vm.$emit('navigate', 'dashboard')
     await flushPromises()
-    expect(view.get('h1').text()).toBe('Empleados')
+    expect(view.get('h1').text()).toBe('Estadísticas de ventas')
+    expect(view.text()).toContain('Estadísticas de ventas')
+    expect(getSalesStatistics).toHaveBeenCalledTimes(1)
 
     await setRole('EMPLOYEE')
     layout.vm.$emit('navigate', 'employees')
