@@ -1,0 +1,117 @@
+openapi: 3.0.3
+info:
+  title: Estadísticas de ventas de Cinetadel
+  version: 1.0.0
+servers:
+  - url: /api
+paths:
+  /sales-statistics:
+    get:
+      summary: Consultar estadísticas de ventas pagadas
+      description: Solo administradores con sesión y contraseña vigentes. Datos agregados, sin identidades de compradores. Las edades se calculan desde la fecha de nacimiento hasta hoy en Costa Rica. El rango de edad solo afecta a ages y ageRanges; la interfaz lo aplica localmente a los grupos ya recibidos.
+      security:
+        - employeeSession: []
+      parameters:
+        - name: dateFrom
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Primera fecha de compra, inclusive, en Costa Rica.
+        - name: dateTo
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: Última fecha de compra, inclusive, en Costa Rica; no puede ser anterior a dateFrom.
+        - name: minAge
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 9999 }
+          description: Edad mínima inclusiva; requiere maxAge.
+        - name: maxAge
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 9999 }
+          description: Edad máxima inclusiva; requiere minAge y debe ser mayor o igual.
+      responses:
+        "200":
+          description: Indicadores del periodo. Un periodo sin ventas devuelve ceros y series vacías.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesStatistics"
+        "400":
+          description: Fechas o edades inválidas, incompletas o invertidas; filtro no admitido.
+        "401":
+          description: Sesión ausente, vencida o revocada.
+        "403":
+          description: Rol sin acceso o contraseña bloqueada por el control existente.
+        "500":
+          description: No se pudieron obtener estadísticas confiables; no se devuelven datos parciales.
+components:
+  securitySchemes:
+    employeeSession:
+      type: apiKey
+      in: cookie
+      name: cinetadel_employee_session
+  schemas:
+    SalesValues:
+      type: object
+      required: [revenue, tickets, purchases]
+      properties:
+        revenue:
+          { type: number, minimum: 0, description: Importe facturado en CRC. }
+        tickets: { type: integer, minimum: 0 }
+        purchases: { type: integer, minimum: 0 }
+    SalesGroup:
+      allOf:
+        - $ref: "#/components/schemas/SalesValues"
+        - type: object
+          required: [key, label]
+          properties:
+            key: { type: string }
+            label: { type: string }
+    SalesStatistics:
+      type: object
+      required: [period, ageFilter, summary, series, rankings]
+      properties:
+        period:
+          type: object
+          required: [dateFrom, dateTo, grouping]
+          properties:
+            dateFrom: { type: string, format: date }
+            dateTo: { type: string, format: date }
+            grouping: { type: string, enum: [day, week, month, year] }
+        ageFilter:
+          type: object
+          nullable: true
+          required: [min, max]
+          properties:
+            min: { type: integer }
+            max: { type: integer }
+        summary:
+          allOf:
+            - $ref: "#/components/schemas/SalesValues"
+            - type: object
+              required: [averagePurchase]
+              properties:
+                averagePurchase: { type: number, minimum: 0 }
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/SalesGroup"
+          description: Claves cronológicas YYYY-MM-DD; los intervalos sin ventas se completan con cero.
+        rankings:
+          type: object
+          required:
+            [
+              movies,
+              genres,
+              languages,
+              provinces,
+              branches,
+              ages,
+              ageRanges,
+              genders,
+            ]
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/SalesGroup"
