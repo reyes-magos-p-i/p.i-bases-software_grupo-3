@@ -4,6 +4,20 @@ import { Ticket } from '../entities/ticket.entity';
 import { AlternativeShowtimes } from '../entities/AlternativeShowtimes.entity';
 import oracledb from 'oracledb';
 
+export interface ClientTicket {
+  id: number;
+  movieFunctionId: number;
+  title: string;
+  branchName: string;
+  theaterId: number;
+  startsAt: string;
+  functionStatus: string;
+  seatRow: number;
+  seatColumn: number;
+}
+
+type ClientTicketRow = ClientTicket;
+
 @Injectable()
 export class TicketsRepository {
   private readonly logger = new Logger(TicketsRepository.name);
@@ -126,6 +140,48 @@ ORDER BY a.start_time`,
       throw error;
     }
   }
+  /** The ticket with its current projection, only when it belongs to the client. */
+  async findClientTicket(
+    ticketId: number,
+    clientId: number,
+  ): Promise<ClientTicket | null> {
+    const result = await this.db.query<ClientTicketRow>(
+      `SELECT t.TICKETS_ID AS "id",
+              mf.MOVIE_FUNCTION_ID AS "movieFunctionId",
+              m.TITLE AS "title",
+              TRIM(cn.NAME) AS "branchName",
+              t.THEATER_ID AS "theaterId",
+              TO_CHAR(mf.START_TIME, 'YYYY-MM-DD"T"HH24:MI:SS') || '-06:00' AS "startsAt",
+              mf.STATUS AS "functionStatus",
+              t.SEAT_ROW AS "seatRow",
+              t.SEAT_COLUMN AS "seatColumn"
+         FROM TICKETS t
+         JOIN INVOICES i ON i.INVOICE_ID = t.INVOICE_ID
+         JOIN MOVIE_FUNCTIONS mf ON mf.MOVIE_FUNCTION_ID = t.MOVIE_FUNCTION_ID
+         JOIN MOVIES m ON m.MOVIE_ID = mf.MOVIE_ID
+         JOIN THEATERS th ON th.THEATER_ID = t.THEATER_ID
+         JOIN CINEMAS cn ON cn.BRANCH_ID = th.BRANCH_ID
+        WHERE t.TICKETS_ID = :ticket_id
+          AND i.CLIENT_ID = :client_id`,
+      { ticket_id: ticketId, client_id: clientId },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
+    );
+    const row = result.rows?.[0];
+    return row ? { ...row } : null;
+  }
+
+  /** Records a refund request once per ticket; repeated requests change nothing. */
+  async requestRefund(ticketId: number): Promise<void> {
+    await this.db.query(
+      `MERGE INTO TICKET_REFUND_REQUESTS r
+       USING (SELECT :ticket_id AS TICKET_ID FROM DUAL) s
+          ON (r.TICKET_ID = s.TICKET_ID)
+        WHEN NOT MATCHED THEN
+          INSERT (TICKET_ID) VALUES (s.TICKET_ID)`,
+      { ticket_id: ticketId },
+    );
+  }
+
   async updateMovieFunction(
     ticketId: number,
     movieFunctionId: number,

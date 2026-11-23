@@ -69,6 +69,24 @@ const router = createRouter({
       component: () => import('@/views/TicketPurchaseView.vue'),
     },
     {
+      path: '/cancelled-tickets/:ticketId',
+      name: 'cancelled-ticket',
+      component: () => import('@/views/CancelledTicketView.vue'),
+      meta: { requiresClient: true, returnAfterLogin: true },
+    },
+    {
+      path: '/cancelled-tickets/:ticketId/refund',
+      name: 'cancelled-ticket-refund',
+      component: () => import('@/views/RefundInProgressView.vue'),
+      meta: { requiresClient: true, returnAfterLogin: true },
+    },
+    {
+      path: '/cancelled-tickets/:ticketId/changed',
+      name: 'cancelled-ticket-changed',
+      component: () => import('@/views/TicketChangedView.vue'),
+      meta: { requiresClient: true, returnAfterLogin: true },
+    },
+    {
       path: '/guest-purchases/receipt',
       name: 'guest-purchase-receipt',
       component: () => import('@/views/GuestPurchaseReceiptView.vue'),
@@ -82,16 +100,19 @@ const router = createRouter({
       path: '/terms-and-conditions',
       name: 'terms',
       component: TermsConditions,
+      meta: { publicLegal: true },
     },
     {
       path: '/refund-policy',
       name: 'refund-policy',
       component: RefundPolicy,
+      meta: { publicLegal: true },
     },
     {
       path: '/privacy-policy',
       name: 'privacy-policy',
       component: PrivacyPolicy,
+      meta: { publicLegal: true },
     },
   ],
 })

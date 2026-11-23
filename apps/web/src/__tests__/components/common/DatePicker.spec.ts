@@ -119,6 +119,73 @@ describe('DatePicker', () => {
     expect(resized).toHaveBeenCalledWith('resize', expect.any(Function))
   })
 
+  it.each([
+    { floating: true, anchorTop: 100 },
+    { floating: true, anchorTop: 550 },
+    { floating: false, anchorTop: 100 },
+    { floating: false, anchorTop: 550 },
+  ])(
+    'keeps calendar geometry while choosing years and months (floating: $floating, field: $anchorTop)',
+    async ({ floating, anchorTop }) => {
+      if (floating) {
+        Object.defineProperties(HTMLElement.prototype, {
+          showPopover: { configurable: true, value: vi.fn() },
+          hidePopover: { configurable: true, value: vi.fn() },
+        })
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'showPopover')
+        Reflect.deleteProperty(HTMLElement.prototype, 'hidePopover')
+      }
+      vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(390)
+      const viewportHeight = vi
+        .spyOn(document.documentElement, 'clientHeight', 'get')
+        .mockReturnValue(844)
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(300)
+      vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        return (
+          Number.parseFloat(this.style.height) || (this.querySelector('.year-grid') ? 200 : 400)
+        )
+      })
+      const view = render({ modelValue: '2026-10-18' })
+      const anchor = vi.spyOn(view.get('input').element, 'getBoundingClientRect')
+      const bounds = new DOMRect(20, anchorTop, 300, 44)
+      anchor.mockReturnValue(bounds)
+      vi.spyOn(view.element, 'getBoundingClientRect').mockReturnValue(bounds)
+      await view.get('input').trigger('click')
+      const calendar = view.get<HTMLElement>('.calendar-panel')
+      const viewportTop = anchorTop === 100 ? 152 : 142
+      const initialTop = viewportTop - (floating ? 0 : anchorTop)
+      expect(calendar.element.style.top).toBe(`${initialTop}px`)
+
+      await view.get('.year-toggle').trigger('click')
+      expect(calendar.element.style.top).toBe(`${initialTop}px`)
+      expect(calendar.element.offsetHeight).toBe(400)
+      await view.get('[aria-label="Anterior"]').trigger('click')
+      await view.get('.year-grid button').trigger('click')
+      await view.get('.month-select').setValue('3')
+      expect(calendar.element.style.top).toBe(`${initialTop}px`)
+      expect(calendar.element.offsetHeight).toBe(400)
+      expect(view.emitted('blur')).toBeUndefined()
+
+      viewportHeight.mockReturnValue(240)
+      anchor.mockReturnValue(new DOMRect(20, 550, 300, 44))
+      window.dispatchEvent(new Event('resize'))
+      await nextTick()
+      expect(calendar.element.style.height).toBe('224px')
+      expect(calendar.element.style.top).toBe(`${floating ? 8 : 8 - anchorTop}px`)
+
+      await view.get('.calendar-footer button:last-child').trigger('click')
+      viewportHeight.mockReturnValue(844)
+      anchor.mockReturnValue(new DOMRect(20, 20, 300, 44))
+      await view.get('input').trigger('click')
+      expect(view.get<HTMLElement>('.calendar-panel').element.style.top).toBe(
+        `${floating ? 72 : 72 - anchorTop}px`,
+      )
+    },
+  )
+
   it('shows a read-only date, forwards field attributes and emits an ISO date when selecting', async () => {
     const view = render({ modelValue: '2000-02-29' })
     expect(view.get<HTMLInputElement>('input').element.value).toBe('29/02/2000')

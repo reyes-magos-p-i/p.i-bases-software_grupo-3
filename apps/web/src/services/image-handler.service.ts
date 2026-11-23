@@ -41,3 +41,32 @@ export function getPosterUrl(storedValue?: string | null, legacy = false): strin
 
   return new URL(path, base).href
 }
+
+export async function uploadPromotionPoster(
+  file: File,
+): Promise<{ filename: string; path: string }> {
+  const data = new FormData()
+  data.append('image', file)
+
+  const response = await getApi().post<{
+    filename: string
+    path: string
+  }>('/image-handler/promotions', data, {
+    withCredentials: true,
+  })
+
+  return response.data
+}
+
+export function getPromotionPosterUrl(
+  stored?: string | null,
+): string | null {
+  if (!stored) return null
+
+  const filename = stored.split('/').pop()
+  if (!filename) return null
+
+  const baseURL = getApi().defaults.baseURL!.replace(/\/+$/, '')
+
+  return `${baseURL}/image-handler/promotions/${encodeURIComponent(filename)}`
+}

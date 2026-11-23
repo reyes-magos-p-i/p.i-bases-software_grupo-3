@@ -89,6 +89,24 @@ describe('RegisterModal.vue', () => {
     return realWrapper
   }
 
+  it('opens the legal documents separately while preserving the registration fields', async () => {
+    const wrapper = createWrapper()
+    await wrapper.get('#email').setValue('ana@example.com')
+    await wrapper.get('#terms').setValue(true)
+
+    for (const path of ['terms-and-conditions', 'privacy-policy']) {
+      const link = wrapper.get(`a[href="${import.meta.env.BASE_URL}${path}"]`)
+      expect(link.attributes('target')).toBe('_blank')
+      expect(link.attributes('rel')).toBe('noopener noreferrer')
+      await link.trigger('click')
+    }
+
+    expect(wrapper.get<HTMLInputElement>('#email').element.value).toBe('ana@example.com')
+    expect(wrapper.get<HTMLInputElement>('#terms').element.checked).toBe(true)
+    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(registerUser).not.toHaveBeenCalled()
+  })
+
   it('shows independent controls to reveal and hide both password fields', async () => {
     const wrapper = createWrapper()
     const password = wrapper.get('#password')
@@ -112,6 +130,36 @@ describe('RegisterModal.vue', () => {
     await wrapper.setProps({ open: true })
     expect(wrapper.get('#password').attributes('type')).toBe('password')
     expect(wrapper.get('#confirmPassword').attributes('type')).toBe('password')
+  })
+
+  it('keeps password errors outside each visibility control and preserves one toggle per field', async () => {
+    const wrapper = createWrapper()
+    await wrapper.get('#password').setValue('simple')
+    await wrapper.get('#confirmPassword').setValue('different')
+    await wrapper.get('form').trigger('submit')
+
+    for (const id of ['password', 'confirmPassword']) {
+      const field = wrapper.get(`#${id}`)
+      const control = field.element.closest('.password-control')!
+      const error = wrapper.get(`#${field.attributes('aria-describedby')}`)
+      expect(error.isVisible()).toBe(true)
+      expect(control.contains(error.element)).toBe(false)
+      expect(control.querySelectorAll('button')).toHaveLength(1)
+      const toggle = wrapper.get(`button[aria-controls="${id}"]`)
+      await toggle.trigger('click')
+      expect(field.attributes('type')).toBe('text')
+      expect(toggle.attributes('aria-pressed')).toBe('true')
+      expect(error.isVisible()).toBe(true)
+      await toggle.trigger('click')
+      expect(field.attributes('type')).toBe('password')
+      expect(control.querySelectorAll('button')).toHaveLength(1)
+    }
+    expect(registerUser).not.toHaveBeenCalled()
+
+    await wrapper.get('#password').setValue('Password123!')
+    await wrapper.get('#confirmPassword').setValue('Password123!')
+    expect(wrapper.find('#password-error').exists()).toBe(false)
+    expect(wrapper.find('#confirm-password-error').exists()).toBe(false)
   })
 
   function dateOneDayBeforeTurningEighteen(): string {

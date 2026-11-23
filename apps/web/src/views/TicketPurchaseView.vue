@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
@@ -52,7 +52,9 @@ const {
   error,
   notice,
 } = flow
-watch(step, () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }), { flush: 'post' })
+const scrollToTop = () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+onMounted(scrollToTop)
+watch(step, scrollToTop, { flush: 'post' })
 const emailNotice = ref(false)
 const ticketEmail = usePurchaseEmail(receipt, guestReceipt, (message, failed) => {
   emailNotice.value = !failed
@@ -78,7 +80,7 @@ watch(
 <template>
   <AppHeader />
   <main class="purchase-flow surface-theme--dark">
-    <RouterLink to="/">← Volver al portal</RouterLink
+    <RouterLink to="/" class="portal-return-link">← Volver al portal</RouterLink
     ><PurchaseStepper :step="step" :labels="labels" /><NotificationPopup
       v-if="error || notice"
       :type="error ? 'error' : emailNotice ? 'success' : 'alert'"
@@ -198,7 +200,6 @@ watch(
   color: var(--text-on-dark);
 }
 .purchase-flow a {
-  color: var(--text-on-dark);
   text-underline-offset: 4px;
 }
 .purchase-flow :deep(.purchase-action),
