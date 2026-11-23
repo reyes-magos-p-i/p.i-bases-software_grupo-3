@@ -408,4 +408,94 @@ describe('PromotionsRepository', () => {
       await expect(repository.findOne(42)).rejects.toBe(error);
     });
   });
+  describe('update', () => {
+    beforeEach(() => { connection.execute.mockResolvedValue({ rowsAffected: 1 }); });
+    it('updates the parent and replaces both association sets in one transaction', async () => {
+      await expect(repository.update(42, validDto())).resolves.toBe(true);
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenNthCalledWith(
+        1,
+        'ALTER SESSION DISABLE PARALLEL DML',
+      );
+      expect(connection.execute).toHaveBeenNthCalledWith(2,
+        expect.stringContaining('UPDATE promotions SET'),
+        expect.objectContaining({
+          id: 42, promotionType: 'percentage', promotionAmount: 25,
+          beginDate: '2026-11-17', endDate: '2026-12-31',
+          beginSeconds: { val: 52200, type: oracledb.NUMBER },
+          endSeconds: { val: 64800, type: oracledb.NUMBER },
+          projectionFormat: '2D', technology: 'STANDARD',
+          promotionTitle: 'Afternoon discount', description: 'Discount description.',
+          conditions: 'Subject to availability.', posterPath: '/uploads/posters/promotion.webp',
+        }), { autoCommit: false });
+      const sql = connection.execute.mock.calls[1][0] as string;
+      expect(sql).toContain('WHERE promotion_id = :id');
+      expect(sql).toContain("NUMTODSINTERVAL(:endSeconds, 'SECOND')");
+      expect(connection.execute).toHaveBeenNthCalledWith(3,
+        'DELETE FROM promotion_weekdays WHERE promotion_id = :id', { id: 42 }, { autoCommit: false });
+      expect(connection.execute).toHaveBeenNthCalledWith(4,
+        'DELETE FROM promotion_cinemas WHERE promotion_id = :id', { id: 42 }, { autoCommit: false });
+      expect(connection.executeMany).toHaveBeenNthCalledWith(1,
+        expect.stringContaining('INSERT INTO promotion_weekdays'),
+        [{ promotionId: 42, dayOfWeek: 2 }, { promotionId: 42, dayOfWeek: 4 }],
+        { autoCommit: false, bindDefs: { promotionId: { type: oracledb.NUMBER }, dayOfWeek: { type: oracledb.NUMBER } } });
+      expect(connection.executeMany).toHaveBeenNthCalledWith(2,
+        expect.stringContaining('INSERT INTO promotion_cinemas'),
+        [{ promotionId: 42, branchId: 1 }, { promotionId: 42, branchId: 2 }],
+        { autoCommit: false, bindDefs: { promotionId: { type: oracledb.NUMBER }, branchId: { type: oracledb.NUMBER } } });
+      expect(connection.execute.mock.invocationCallOrder[3]).toBeLessThan(connection.executeMany.mock.invocationCallOrder[0]);
+    });
+    it('does not touch associations if the promotion does not exist', async () => {
+      connection.execute
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rowsAffected: 0 });
+      await expect(repository.update(999, validDto())).resolves.toBe(false);
+      expect(connection.execute).toHaveBeenCalledTimes(2);
+      expect(connection.executeMany).not.toHaveBeenCalled();
+    });
+    it.each([undefined, null, []])('clears old weekdays without reinserting when weekdays is %p', async (weekdays) => {
+      await repository.update(42, { ...validDto(), weekdays });
+      expect(connection.execute).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM promotion_weekdays'), { id: 42 }, { autoCommit: false });
+      expect(connection.executeMany).toHaveBeenCalledTimes(1);
+      expect(connection.executeMany).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO promotion_cinemas'), expect.any(Array), expect.any(Object));
+    });
+    it.each([undefined, null])('clears absent optional fields: %p', async (value) => {
+      await repository.update(42, { ...validDto(), beginHour: value, endHour: value, projectionFormat: value, technology: value, conditions: value, posterPath: value });
+      expect(connection.execute).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+        beginSeconds: { val: null, type: oracledb.NUMBER }, endSeconds: { val: null, type: oracledb.NUMBER },
+        projectionFormat: null, technology: null, conditions: null, posterPath: null,
+      }), { autoCommit: false });
+    });
+    it('preserves midnight and 24:00 interval boundaries', async () => {
+      await repository.update(42, { ...validDto(), beginHour: '00:00', endHour: '24:00' });
+      expect(connection.execute).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+        beginSeconds: { val: 0, type: oracledb.NUMBER }, endSeconds: { val: 86400, type: oracledb.NUMBER },
+      }), { autoCommit: false });
+    });
+    it.each([1, 2, 3,4])('propagates failure at SQL statement %s for transaction rollback', async (stage) => {
+      const error = new Error('SQL failed');
+      connection.execute.mockReset();
+      for (let index = 1; index < stage; index++) connection.execute.mockResolvedValueOnce({ rowsAffected: 1 });
+      connection.execute.mockRejectedValueOnce(error);
+      await expect(repository.update(42, validDto())).rejects.toBe(error);
+      expect(connection.execute).toHaveBeenCalledTimes(stage);
+      expect(connection.executeMany).not.toHaveBeenCalled();
+    });
+    it('stops before cinema insertion if weekday insertion fails', async () => {
+      const error = new Error('Weekday insert failed');
+      connection.executeMany.mockRejectedValueOnce(error);
+      await expect(repository.update(42, validDto())).rejects.toBe(error);
+      expect(connection.executeMany).toHaveBeenCalledTimes(1);
+    });
+    it('maps the cinema FK failure to a bad request for transaction rollback', async () => {
+      connection.executeMany.mockResolvedValueOnce({ rowsAffected: 2 }).mockRejectedValueOnce({ errorNum: 2291, message: 'ORA-02291: DEVELOPMENT.FK_PROMO_CINEMAS_CINEMA' });
+      await expect(repository.update(42, validDto())).rejects.toThrow(BadRequestException);
+    });
+    it('preserves unrelated cinema insert failures', async () => {
+      const error = { errorNum: 2291, message: 'OTHER_CONSTRAINT' };
+      connection.executeMany.mockResolvedValueOnce({ rowsAffected: 2 }).mockRejectedValueOnce(error);
+      await expect(repository.update(42, validDto())).rejects.toBe(error);
+    });
+  });
+
 });

@@ -8,6 +8,7 @@ describe('PromotionsService', () => {
   let service: PromotionsService;
   let repository: {
     create: jest.Mock;
+    update: jest.Mock;
     findAll: jest.Mock;
     findOne: jest.Mock;
   };
@@ -51,6 +52,7 @@ describe('PromotionsService', () => {
   beforeEach(() => {
     repository = {
       create: jest.fn().mockResolvedValue(42),
+      update: jest.fn().mockResolvedValue(true),
       findAll: jest.fn(),
       findOne: jest.fn(),
     };
@@ -295,4 +297,57 @@ describe('PromotionsService', () => {
       await expect(service.findOne(42)).rejects.toBe(error);
     });
   });
+  describe('update', () => {
+    it('passes the complete edit and returns the existing ID', async () => {
+      const dto = validDto();
+      await expect(service.update(42, dto)).resolves.toEqual({ promotionId: 42 });
+      expect(repository.update).toHaveBeenCalledWith(42, dto);
+      expect(repository.update).toHaveBeenCalledTimes(1);
+      expect(repository.create).not.toHaveBeenCalled();
+      expect(repository.findOne).not.toHaveBeenCalled();
+    });
+    it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects invalid ID %s before updating', async (id) => {
+        await expect(service.update(id, validDto())).rejects.toThrow(BadRequestException);
+        expect(repository.update).not.toHaveBeenCalled();
+      },
+    );
+    it('returns 404 when no row was updated', async () => {
+      repository.update.mockResolvedValueOnce(false);
+      await expect(service.update(999, validDto())).rejects.toThrow(NotFoundException);
+    });
+    it.each([
+      { promotionAmount: 100.01 },
+      { beginDate: '2026-02-30' },
+      { endDate: '2026-13-01' },
+      { beginDate: '0000-01-01' },
+      { endDate: '2026-01-01' },
+      { beginHour: null, endHour: '18:00' },
+      { beginHour: '14:30', endHour: null },
+      { beginHour: '18:00', endHour: '18:00' },
+      { beginHour: '22:00', endHour: '02:00' },
+      { technology: '70MM' as const, projectionFormat: '3D' as const },
+    ])('enforces creation business rules for edits: %p', async (changes) => {
+      await expect(service.update(42, { ...validDto(), ...changes }))
+        .rejects.toThrow(BadRequestException);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+    it.each([
+      { promotionType: 'fixed' as const, promotionAmount: 4000 },
+      { promotionType: 'percentage' as const, promotionAmount: 100 },
+      { beginHour: null, endHour: null, weekdays: [] },
+      { beginHour: '00:00', endHour: '24:00' },
+      { beginDate: '2028-02-29', endDate: '2028-02-29' },
+      { technology: '70MM' as const, projectionFormat: '2D' as const },
+    ])('accepts valid edited boundaries: %p', async (changes) => {
+      await expect(service.update(42, { ...validDto(), ...changes }))
+        .resolves.toEqual({ promotionId: 42 });
+    });
+    it('preserves repository exceptions', async () => {
+      const error = new BadRequestException('One or more selected cinemas do not exist.');
+      repository.update.mockRejectedValueOnce(error);
+      await expect(service.update(42, validDto())).rejects.toBe(error);
+    });
+  });
+
 });
