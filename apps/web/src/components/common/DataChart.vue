@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useId, useTemplateRef, watch } from 'vue'
 import FloatingPopover from './FloatingPopover.vue'
+import {
+  cartesianLayout,
+  chartLabelIndexes,
+  chartMaximum,
+  chartRatio,
+  donutSegments,
+} from '@/utils/chart-geometry'
 
 const props = withDefaults(
   defineProps<{
@@ -88,34 +95,36 @@ onMounted(() => {
   observer.observe(chart.value!)
 })
 onBeforeUnmount(() => observer?.disconnect())
-const maximum = computed(() => Math.max(1, ...props.points.map((point) => point.value)))
+const maximum = computed(() => chartMaximum(props.points.map((point) => point.value)))
 const total = computed(() => props.points.reduce((sum, point) => sum + point.value, 0))
-const x = (index: number) =>
-  plotLeft.value + (index * plotWidth.value) / Math.max(1, props.points.length - 1)
-const y = (value: number) => 260 - (value / maximum.value) * 220
-const coordinates = computed(() =>
-  props.points.map((point, index) => `${x(index)},${y(point.value)}`).join(' '),
+const layout = computed(() =>
+  cartesianLayout(
+    props.points.map((point) => point.value),
+    {
+      left: plotLeft.value,
+      width: plotWidth.value,
+      top: 40,
+      bottom: 260,
+    },
+  ),
 )
+const x = (index: number) => layout.value.x(index)
+const y = (value: number) => layout.value.y(value)
+const coordinates = computed(() => layout.value.coordinates)
 const area = computed(
   () => `${plotLeft.value},260 ${coordinates.value} ${x(props.points.length - 1)},260`,
 )
-const ticks = computed(() => Array.from({ length: 5 }, (_, index) => (maximum.value * index) / 4))
+const ticks = computed(() => layout.value.ticks)
 const labelIndexes = computed(() => {
   if (props.type === 'columns') return props.points.map((_, index) => index)
-  const count = Math.min(props.points.length, Math.max(2, Math.floor(width.value / 140)))
-  return Array.from({ length: count }, (_, index) =>
-    Math.round((index * (props.points.length - 1)) / Math.max(1, count - 1)),
-  )
+  return chartLabelIndexes(props.points.length, width.value)
 })
-const segments = computed(() => {
-  let offset = 0
-  return props.points.map((point, index) => {
-    const size = total.value ? (point.value / total.value) * 100 : 0
-    const segment = { ...point, size, offset, color: `var(--chart-color-${(index % 8) + 1})` }
-    offset += size
-    return segment
-  })
-})
+const segments = computed(() =>
+  donutSegments(props.points).map((point, index) => ({
+    ...point,
+    color: `var(--chart-color-${(index % 8) + 1})`,
+  })),
+)
 const columnWidth = computed(() =>
   Math.min(48, (plotWidth.value * 0.75) / Math.max(1, props.points.length)),
 )
@@ -144,7 +153,7 @@ const columnX = (index: number) =>
               <div
                 class="bar-fill"
                 :style="{
-                  width: `${(point.value / maximum) * 100}%`,
+                  width: `${chartRatio(point.value, maximum) * 100}%`,
                   background: `var(--chart-color-${(index % 2) + 1})`,
                 }"
               />

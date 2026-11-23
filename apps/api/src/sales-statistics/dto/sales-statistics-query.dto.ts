@@ -6,10 +6,21 @@ const toInteger = ({ value }: { value: unknown }) =>
   typeof value === 'string' && /^\d+$/u.test(value) ? Number(value) : value;
 
 export class SalesStatisticsQueryDto {
-  @DateOnly({}, { message: 'Selecciona una fecha de inicio válida.' })
+  @DateOnly(
+    { notFuture: true },
+    {
+      message:
+        'Selecciona una fecha de inicio válida que no sea posterior a hoy.',
+    },
+  )
   dateFrom: string;
 
-  @DateOnly({}, { message: 'Selecciona una fecha de fin válida.' })
+  @DateOnly(
+    { notFuture: true },
+    {
+      message: 'Selecciona una fecha de fin válida que no sea posterior a hoy.',
+    },
+  )
   dateTo: string;
 
   @IsOptional()

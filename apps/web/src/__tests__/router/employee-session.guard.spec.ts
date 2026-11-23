@@ -4,7 +4,7 @@ import { requireEmployeeSession } from '@/router/employee-session.guard'
 import { employeeSession, restoreEmployeeSession } from '@/services/employee-session.service'
 
 vi.mock('@/services/employee-session.service', () => ({
-  employeeSession: { user: { value: null } },
+  employeeSession: { user: { value: null }, status: { value: 'unknown' } },
   restoreEmployeeSession: vi.fn(),
 }))
 
@@ -13,6 +13,7 @@ describe('employee route guard', () => {
   beforeEach(() => {
     vi.mocked(restoreEmployeeSession).mockReset().mockResolvedValue(null)
     Object.assign(employeeSession.user, { value: null })
+    Object.assign(employeeSession.status, { value: 'unknown' })
     router = createRouter({
       history: createMemoryHistory(),
       routes: [
@@ -23,15 +24,60 @@ describe('employee route guard', () => {
           meta: { requiresEmployee: true },
         },
         { path: '/dev/dashboard', redirect: '/dashboard' },
+        {
+          path: '/privacy-policy',
+          component: { template: '<p>Privacidad</p>' },
+          meta: { publicLegal: true },
+        },
+        { path: '/recover-password', component: { template: '<p>Recuperación</p>' } },
       ],
     })
     router.beforeEach(requireEmployeeSession)
   })
   afterEach(() => router.options.history.destroy())
 
-  it('does not require session recovery for public routes', async () => {
+  it('checks a guest session before showing the portal', async () => {
     await router.push('/')
-    expect(restoreEmployeeSession).not.toHaveBeenCalled()
+    expect(restoreEmployeeSession).toHaveBeenCalledExactlyOnceWith(false)
+    expect(router.currentRoute.value.path).toBe('/')
+  })
+
+  it.each(['ADMINISTRATOR', 'EMPLOYEE'] as const)(
+    'redirects a restored %s from the portal before confirming navigation',
+    async (role) => {
+      vi.mocked(restoreEmployeeSession).mockResolvedValue({ id: 21, role, firstName: 'Ana' })
+      await router.push('/')
+      expect(router.currentRoute.value.path).toBe('/dashboard')
+      expect(restoreEmployeeSession).toHaveBeenNthCalledWith(1, false)
+      expect(restoreEmployeeSession).toHaveBeenNthCalledWith(2, true)
+    },
+  )
+
+  it.each(['/privacy-policy', '/recover-password'])(
+    'keeps %s accessible without redirecting staff',
+    async (path) => {
+      vi.mocked(restoreEmployeeSession).mockResolvedValue({
+        id: 21,
+        role: 'EMPLOYEE',
+        firstName: 'Ana',
+      })
+      await router.push(path)
+      expect(router.currentRoute.value.path).toBe(path)
+      expect(restoreEmployeeSession).not.toHaveBeenCalled()
+    },
+  )
+
+  it('keeps a public session failure recoverable without looping back to the dashboard', async () => {
+    vi.mocked(restoreEmployeeSession).mockImplementation(async () => {
+      Object.assign(employeeSession.status, { value: 'error' })
+      throw new Error('Offline')
+    })
+    await router.push('/dashboard')
+    expect(router.currentRoute.value.query).toEqual({ login: 'employee', reason: 'unavailable' })
+    expect(restoreEmployeeSession).toHaveBeenCalledTimes(1)
+    await router.push('/')
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(restoreEmployeeSession).toHaveBeenCalledTimes(2)
   })
 
   it.each(['ADMINISTRATOR', 'EMPLOYEE'] as const)('accepts a verified %s session', async (role) => {
@@ -51,13 +97,13 @@ describe('employee route guard', () => {
   )
 
   it('does not render a protected page before recovery finishes', async () => {
+    await router.push('/')
     let resolve!: (value: null) => void
-    vi.mocked(restoreEmployeeSession).mockReturnValue(
+    vi.mocked(restoreEmployeeSession).mockReturnValueOnce(
       new Promise((res) => {
         resolve = res
       }),
     )
-    await router.push('/')
     const navigation = router.push('/dashboard')
     await Promise.resolve()
     expect(router.currentRoute.value.path).toBe('/')

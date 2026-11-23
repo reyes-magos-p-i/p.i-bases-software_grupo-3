@@ -43,6 +43,17 @@ describe('requireClientSession', () => {
     expect(result).toEqual({ path: '/', query: { login: 'client', reason: 'required' } })
   })
 
+  it('leaves staff routes to the employee guard even with an expired client session stored', async () => {
+    clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
+    vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))
+    const dashboard = route('/dashboard')
+    dashboard.meta.requiresEmployee = true
+    await expect(requireClientSession(dashboard, route('/'), vi.fn())).resolves.toBe(true)
+    expect(getClientSession).not.toHaveBeenCalled()
+    expect(getClientPasswordStatus).not.toHaveBeenCalled()
+    expect(localStorage.getItem('accessToken')).toBe('saved-token')
+  })
+
   it('keeps recovery accessible even when an existing session has an expired password', async () => {
     clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
     vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))

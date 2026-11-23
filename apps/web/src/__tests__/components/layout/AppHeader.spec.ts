@@ -481,6 +481,41 @@ describe('AppHeader authentication navigation', () => {
     expect(page.findAll('dialog[open]')).toHaveLength(0)
   })
 
+  it('keeps staff login open and busy until dashboard navigation has completed', async () => {
+    let finish!: (allowed: boolean) => void
+    router.beforeEach((to) =>
+      to.path === '/dashboard'
+        ? new Promise<boolean>((resolve) => {
+            finish = resolve
+          })
+        : true,
+    )
+    await employeeForm()
+    await page.get('form').trigger('submit')
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    expect(page.findAll('dialog[open]')).toHaveLength(1)
+    expect(page.get<HTMLButtonElement>('.app-modal-close').element.disabled).toBe(true)
+    finish(true)
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+    expect(page.findAll('dialog[open]')).toHaveLength(0)
+  })
+
+  it('keeps a cancelled staff navigation recoverable in the login dialog', async () => {
+    const remove = router.beforeEach((to) => to.path !== '/dashboard')
+    await employeeForm()
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(page.findAll('dialog[open]')).toHaveLength(1)
+    expect(page.get('[role="alert"]').text()).toContain('No se pudo abrir el panel del personal')
+    expect(page.get<HTMLButtonElement>('.login-submit').element.disabled).toBe(false)
+    remove()
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+  })
+
   it('blocks closing, switching and repeated submission while login is pending', async () => {
     let resolve!: (value: null) => void
     vi.mocked(authenticateEmployee).mockReturnValueOnce(
@@ -554,11 +589,58 @@ describe('AppHeader authentication navigation', () => {
     expect(router.currentRoute.value.query.login).toBeUndefined()
   })
 
-  it('offers the dashboard when a session is recovered', async () => {
+  it('keeps a dashboard link available on legal pages for recovered staff', async () => {
+    await router.push('/privacy-policy')
     Object.assign(employeeSession.user, { value: { id: 21, role: 'EMPLOYEE', firstName: 'Ana' } })
     await nextTick()
     expect(wrapper.get('.dashboard-link').text()).toBe('Ir al dashboard')
     expect(wrapper.find('.login-button[type="button"]').exists()).toBe(false)
+  })
+
+  it.each(['ADMINISTRATOR', 'EMPLOYEE'] as const)(
+    'redirects a recovered %s from the portal automatically',
+    async (role) => {
+      wrapper.unmount()
+      vi.mocked(restoreEmployeeSession).mockResolvedValueOnce({ id: 21, role, firstName: 'Ana' })
+      wrapper = renderHeader()
+      await flushPromises()
+      expect(router.currentRoute.value.path).toBe('/dashboard')
+      expect(restoreEmployeeSession).toHaveBeenLastCalledWith(false)
+    },
+  )
+
+  it('does not let an older recovery start a second navigation after staff login', async () => {
+    wrapper.unmount()
+    let finish!: (identity: { id: number; role: 'EMPLOYEE'; firstName: string }) => void
+    vi.mocked(restoreEmployeeSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    wrapper = renderHeader()
+    const replace = vi.spyOn(router, 'replace')
+    await employeeForm()
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+    finish({ id: 21, role: 'EMPLOYEE', firstName: 'Ana' })
+    await flushPromises()
+    expect(replace).toHaveBeenCalledExactlyOnceWith('/dashboard')
+  })
+
+  it('ignores session recovery after the header is unmounted', async () => {
+    wrapper.unmount()
+    let finish!: (identity: { id: number; role: 'EMPLOYEE'; firstName: string }) => void
+    vi.mocked(restoreEmployeeSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    wrapper = renderHeader()
+    wrapper.unmount()
+    finish({ id: 21, role: 'EMPLOYEE', firstName: 'Ana' })
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/')
   })
 
   it('allows retrying session recovery without showing a false login failure', async () => {
@@ -567,9 +649,11 @@ describe('AppHeader authentication navigation', () => {
     wrapper = renderHeader()
     await flushPromises()
     expect(wrapper.get('.session-feedback').text()).toContain('No se pudo comprobar')
+    expect(restoreEmployeeSession).toHaveBeenLastCalledWith(false)
     await wrapper.get('.session-feedback button').trigger('click')
     await flushPromises()
     expect(wrapper.find('.session-feedback').exists()).toBe(false)
+    expect(restoreEmployeeSession).toHaveBeenLastCalledWith(true)
   })
   it('does not force a password-status redirect away from the recovery link', async () => {
     wrapper.unmount()

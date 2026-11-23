@@ -26,9 +26,14 @@ export function statisticsPeriod(
   return { dateFrom: start.toISOString().slice(0, 10), dateTo: today }
 }
 
-export function statisticsPeriodError(from: string, to: string): string {
+export function statisticsPeriodError(
+  from: string,
+  to: string,
+  today = todayInCostaRica(),
+): string {
   if (!from || !to) return 'Selecciona la fecha de inicio y la fecha de fin.'
   if (!validDate(from) || !validDate(to)) return 'Selecciona fechas válidas.'
+  if (from > today || to > today) return 'Las fechas del periodo no pueden ser posteriores a hoy.'
   return from > to ? 'La fecha de inicio no puede ser posterior a la fecha de fin.' : ''
 }
 
