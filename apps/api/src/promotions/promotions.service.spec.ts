@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsRepository } from './promotions.repository';
@@ -8,6 +8,8 @@ describe('PromotionsService', () => {
   let service: PromotionsService;
   let repository: {
     create: jest.Mock;
+    findAll: jest.Mock;
+    findOne: jest.Mock;
   };
 
   const validDto = (): CreatePromotionDto => ({
@@ -25,9 +27,32 @@ describe('PromotionsService', () => {
     branchIds: [1, 2]
   });
 
+  const listItem = {
+    promotionId: 42,
+    promotionType: 'percentage' as const,
+    technology: 'IMAX' as const,
+    promotionTitle: 'Afternoon discount',
+    projectionFormat: '2D' as const,
+    beginDate: '2026-11-17',
+    endDate: '2026-12-31',
+  };
+  const detail = {
+    ...listItem,
+    promotionAmount: 25,
+    description: 'Discount description.',
+    conditions: null,
+    posterPath: '/uploads/promotions/banner.webp',
+    beginHour: '14:30',
+    endHour: '24:00',
+    weekdays: [2, 4],
+    branchIds: [1, 2],
+  };
+
   beforeEach(() => {
     repository = {
       create: jest.fn().mockResolvedValue(42),
+      findAll: jest.fn(),
+      findOne: jest.fn(),
     };
 
     service = new PromotionsService(
@@ -217,5 +242,57 @@ describe('PromotionsService', () => {
     repository.create.mockRejectedValueOnce(error);
 
     await expect(service.create(validDto())).rejects.toBe(error);
+  });
+
+  describe('findAll', () => {
+    it('returns every catalog item, including past and future promotions', async () => {
+      const items = [
+        { ...listItem, promotionId: 1, beginDate: '2000-01-01', endDate: '2000-12-31' },
+        { ...listItem, promotionId: 2, beginDate: '2099-01-01', endDate: '2099-12-31' },
+      ];
+      repository.findAll.mockResolvedValue(items);
+      await expect(service.findAll()).resolves.toBe(items);
+      expect(repository.findAll).toHaveBeenCalledTimes(1);
+      expect(repository.findAll).toHaveBeenCalledWith();
+    });
+
+    it('returns an empty array when the catalog is empty', async () => {
+      repository.findAll.mockResolvedValue([]);
+      await expect(service.findAll()).resolves.toEqual([]);
+    });
+
+    it('propagates database failures', async () => {
+      const error = new Error('Database unavailable');
+      repository.findAll.mockRejectedValueOnce(error);
+      await expect(service.findAll()).rejects.toBe(error);
+    });
+  });
+
+  describe('findOne', () => {
+    it('returns all fields and associations for an existing promotion', async () => {
+      repository.findOne.mockResolvedValue(detail);
+      await expect(service.findOne(42)).resolves.toBe(detail);
+      expect(repository.findOne).toHaveBeenCalledTimes(1);
+      expect(repository.findOne).toHaveBeenCalledWith(42);
+    });
+
+    it('throws HTTP 404 when the repository returns null', async () => {
+      repository.findOne.mockResolvedValue(null);
+      await expect(service.findOne(999))
+        .rejects.toThrow(new NotFoundException('Promotion not found.'));
+    });
+
+    it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects an invalid ID without querying the repository: %s', async (id) => {
+        await expect(service.findOne(id)).rejects.toThrow(BadRequestException);
+        expect(repository.findOne).not.toHaveBeenCalled();
+      },
+    );
+
+    it('propagates database failures instead of converting them to 404', async () => {
+      const error = new Error('Database unavailable');
+      repository.findOne.mockRejectedValueOnce(error);
+      await expect(service.findOne(42)).rejects.toBe(error);
+    });
   });
 });

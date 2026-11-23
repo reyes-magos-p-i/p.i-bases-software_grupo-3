@@ -1,15 +1,106 @@
 // promotions.repository.ts
-import { Injectable, BadRequestException, } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import * as oracledb from 'oracledb';
 
 import { DatabaseService } from '../database/database.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
+import type { PromotionDetail, PromotionListItem } from './promotion-response.types';
 
 @Injectable()
 export class PromotionsRepository {
   constructor(
     private readonly db: DatabaseService,
   ) {}
+
+  /** Administrative catalog: includes future, current, and expired promotions. */
+  async findAll(): Promise<PromotionListItem[]> {
+    return this.db.transaction(async (connection) => {
+      const result = await connection.execute<PromotionListItem>(
+        `
+          SELECT p.promotion_id AS "promotionId",
+                 p.promotion_type AS "promotionType",
+                 p.technology AS "technology",
+                 p.promotion_title AS "promotionTitle",
+                 p.projection_format AS "projectionFormat",
+                 TO_CHAR(p.begin_date, 'YYYY-MM-DD') AS "beginDate",
+                 TO_CHAR(p.end_date, 'YYYY-MM-DD') AS "endDate"
+          FROM promotions p
+          ORDER BY p.promotion_id DESC
+        `,
+        {},
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+
+      return result.rows ?? [];
+    });
+  }
+
+  async findOne(id: number): Promise<PromotionDetail | null> {
+    return this.db.transaction(async (connection) => {
+      const result = await connection.execute<Omit<PromotionDetail, 'weekdays' | 'branchIds'>>(
+        `
+          SELECT p.promotion_id AS "promotionId",
+                 p.promotion_type AS "promotionType",
+                 p.promotion_amount AS "promotionAmount",
+                 p.promotion_title AS "promotionTitle",
+                 p.promotion_description AS "description",
+                 p.conditions AS "conditions",
+                 p.poster_path AS "posterPath",
+                 p.projection_format AS "projectionFormat",
+                 p.technology AS "technology",
+                 TO_CHAR(p.begin_date, 'YYYY-MM-DD') AS "beginDate",
+                 TO_CHAR(p.end_date, 'YYYY-MM-DD') AS "endDate",
+                 CASE WHEN p.begin_hour IS NULL THEN NULL ELSE
+                   TO_CHAR(EXTRACT(DAY FROM p.begin_hour) * 24
+                           + EXTRACT(HOUR FROM p.begin_hour), 'FM00')
+                   || ':' || TO_CHAR(EXTRACT(MINUTE FROM p.begin_hour), 'FM00')
+                 END AS "beginHour",
+                 CASE WHEN p.end_hour IS NULL THEN NULL ELSE
+                   TO_CHAR(EXTRACT(DAY FROM p.end_hour) * 24
+                           + EXTRACT(HOUR FROM p.end_hour), 'FM00')
+                   || ':' || TO_CHAR(EXTRACT(MINUTE FROM p.end_hour), 'FM00')
+                 END AS "endHour"
+          FROM promotions p
+          WHERE p.promotion_id = :id
+        `,
+        { id },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+
+      const promotion = result.rows?.[0];
+      if (!promotion) return null;
+
+      // Separate queries avoid multiplying cinema rows by weekday rows.
+      // Use the same connection sequentially for all three reads.
+      const weekdays = await connection.execute<{ dayOfWeek: number }>(
+        `
+          SELECT day_of_week AS "dayOfWeek"
+          FROM promotion_weekdays
+          WHERE promotion_id = :id
+          ORDER BY day_of_week
+        `,
+        { id },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+
+      const cinemas = await connection.execute<{ branchId: number }>(
+        `
+          SELECT branch_id AS "branchId"
+          FROM promotion_cinemas
+          WHERE promotion_id = :id
+          ORDER BY branch_id
+        `,
+        { id },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+
+      return {
+        ...promotion,
+        weekdays: (weekdays.rows ?? []).map((row) => row.dayOfWeek),
+        branchIds: (cinemas.rows ?? []).map((row) => row.branchId),
+      };
+    });
+  }
 
   async create(dto: CreatePromotionDto): Promise<number> {
     return this.db.transaction(async (connection) => {
