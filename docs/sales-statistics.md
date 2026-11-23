@@ -110,7 +110,8 @@ filtros de edades para consumidores que necesiten solicitar ese subconjunto.
   periodo». No se rellenan gráficos con datos ajenos al periodo.
 - Los errores dejan los gráficos sin datos y permiten reintentar. Las sesiones
   vencidas llevan al acceso del personal. Los errores de la base no se exponen.
-- Descargar reporte permanece deshabilitado: la generación pertenece a otra historia.
+- **Generar reporte** abre el modal de la historia SCRUM-25. La descarga incluye
+  todas las vistas y medidas; su alcance se describe en [Reportes de ventas](sales-reports.md).
 
 ## Verificación
 
