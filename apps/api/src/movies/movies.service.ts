@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ export class MoviesService {
   ) {}
 
   async create(dto: CreateMovieDto) {
+    assertPresaleBeforeRelease(dto.releaseDate ?? null, dto.presaleStart ?? null);
     return this.moviesRepository.create(dto);
   }
 
@@ -41,6 +43,12 @@ export class MoviesService {
         `Movie with ID ${id} was not found`,
       );
     }
+
+    // The rule applies to the dates the movie will have: the new ones, or the stored ones.
+    assertPresaleBeforeRelease(
+      dto.releaseDate === undefined ? movie.releaseDate : dto.releaseDate,
+      dto.presaleStart === undefined ? movie.presaleStart : dto.presaleStart,
+    );
 
     await this.moviesRepository.update(id, dto);
 
@@ -74,4 +82,21 @@ export class MoviesService {
   findLanguages() {
     return this.moviesRepository.findLanguages();
   }
+}
+
+// SCRUM-437: a presale needs a release date and must start before it (YYYY-MM-DD strings
+// compare as dates). The database enforces the same rule (CK_MOVIES_PRESALE_BEFORE_RELEASE).
+export function assertPresaleBeforeRelease(
+  releaseDate: string | null,
+  presaleStart: string | null,
+): void {
+  if (!presaleStart) return;
+  if (!releaseDate)
+    throw new BadRequestException(
+      'Indica la fecha de estreno para programar la preventa.',
+    );
+  if (presaleStart >= releaseDate)
+    throw new BadRequestException(
+      'La preventa debe empezar antes de la fecha de estreno.',
+    );
 }

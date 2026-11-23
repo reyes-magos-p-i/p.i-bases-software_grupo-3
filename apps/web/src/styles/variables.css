@@ -1,5 +1,6 @@
 :root {
   --font-family: Helvetica, Arial, sans-serif;
+  --font-display: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
   /* Palette */
   --primary-color: #8a2be2;
   --accent-color: #ffd700;

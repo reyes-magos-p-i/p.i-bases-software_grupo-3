@@ -11,6 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { DateOnly } from '../../../common/validation/date-only.decorator';
 import { MaxUtf8Bytes } from '../../../common/validation/max-utf8-bytes.decorator';
 
 export class CreateMovieDto {
@@ -48,6 +49,19 @@ export class CreateMovieDto {
   @Min(1888, { message: 'El año de estreno debe ser 1888 o posterior.' })
   @Max(2077, { message: 'El año de estreno no puede ser posterior a 2077.' })
   releaseYear: number;
+
+  // SCRUM-437: optional. Without a release date the movie counts as already showing; null on an
+  // update clears it. The presale needs a release date and must start before it (MoviesService).
+  @IsOptional()
+  @DateOnly({}, { message: 'Selecciona una fecha de estreno válida.' })
+  releaseDate?: string | null;
+
+  @IsOptional()
+  @DateOnly(
+    {},
+    { message: 'Selecciona una fecha de inicio de preventa válida.' },
+  )
+  presaleStart?: string | null;
 
   @IsInt({ message: 'Selecciona una clasificación válida.' })
   @Min(1, { message: 'Selecciona una clasificación válida.' })

@@ -114,39 +114,28 @@ describe('getMovieFunctions', () => {
 
     await expect(getMovieFunctions()).rejects.toThrow('Failed to load movie functions: 500')
   })
-  it('fetches the complete general catalog without credentials', async () => {
-    vi.stubEnv('VITE_API_BASE_URL', API_BASE_URL)
-    apiGet.mockResolvedValue({ data: [{ id: 1, title: 'General', posterImage: '1.jpg' }] })
-    const signal = new AbortController().signal
-    const { getPortalMovies } = await loadService()
-    await expect(getPortalMovies(false, signal)).resolves.toEqual([
-      { id: 1, title: 'General', posterImage: '1.jpg' },
-    ])
-    expect(apiGet).toHaveBeenCalledExactlyOnceWith('/movie-fuctions/catalog', {
-      adapter: 'fetch',
-      withCredentials: false,
-      timeout: 10000,
-      signal,
-    })
-  })
-  it('uses the current client bearer token for personalized movies', async () => {
-    localStorage.setItem('accessToken', 'client-token')
-    apiGet.mockResolvedValue({ data: [] })
-    const { getPortalMovies } = await loadService()
-    await expect(getPortalMovies(true)).resolves.toEqual([])
-    expect(apiGet).toHaveBeenCalledExactlyOnceWith('/clients/me/preferences/portal', {
-      adapter: 'fetch',
-      withCredentials: false,
-      timeout: 10000,
-      headers: { Authorization: 'Bearer client-token' },
-      signal: undefined,
-    })
-  })
-  it('rejects personalized requests without a token and propagates service failures', async () => {
-    const { getPortalMovies } = await loadService()
-    await expect(getPortalMovies(true)).rejects.toMatchObject({ status: 401 })
-    expect(apiGet).not.toHaveBeenCalled()
+  // SCRUM-437: one public request per portal section.
+  it.each(['cartelera', 'preventas', 'estrenos'] as const)(
+    'fetches the %s section without credentials',
+    async (section) => {
+      vi.stubEnv('VITE_API_BASE_URL', API_BASE_URL)
+      apiGet.mockResolvedValue({ data: [{ id: 1, title: 'General' }] })
+      const signal = new AbortController().signal
+      const { getPortalSection } = await loadService()
+      await expect(getPortalSection(section, signal)).resolves.toEqual([
+        { id: 1, title: 'General' },
+      ])
+      expect(apiGet).toHaveBeenCalledExactlyOnceWith(`/movie-fuctions/sections/${section}`, {
+        adapter: 'fetch',
+        withCredentials: false,
+        timeout: 10000,
+        signal,
+      })
+    },
+  )
+  it('propagates section failures', async () => {
     apiGet.mockRejectedValue(new Error('offline'))
-    await expect(getPortalMovies()).rejects.toThrow('offline')
+    const { getPortalSection } = await loadService()
+    await expect(getPortalSection('preventas')).rejects.toThrow('offline')
   })
 })

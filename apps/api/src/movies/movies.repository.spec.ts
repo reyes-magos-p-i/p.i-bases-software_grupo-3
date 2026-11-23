@@ -110,6 +110,8 @@ describe('MoviesRepository', () => {
         title: 'Interstellar',
         synopsis: 'Space adventure',
         posterImage: null,
+        releaseDate: null,
+        presaleStart: null,
         runningTime: 169,
         releaseYear: 2014,
         classification: { id: 1, name: 'TP' },
@@ -121,6 +123,31 @@ describe('MoviesRepository', () => {
           { id: 3, name: 'Aventura' },
           { id: 4, name: 'Drama' }
         ]
+      });
+    });
+
+    it('returns the release and presale dates as YYYY-MM-DD', async () => {
+      query.mockResolvedValue({
+        rows: [
+          {
+            MOVIE_ID: 24,
+            TITLE: 'Interstellar',
+            CLASSIFICATION_ID: 1,
+            CLASSIFICATION: 'TP',
+            RELEASE_DATE: '2026-12-04',
+            PRESALE_START: '2026-11-15',
+          },
+        ],
+      });
+
+      const result = await repository.findOne(24);
+
+      expect(query.mock.calls[0][0]).toContain(
+        "TO_CHAR(m.RELEASE_DATE, 'YYYY-MM-DD') AS RELEASE_DATE",
+      );
+      expect(result).toMatchObject({
+        releaseDate: '2026-12-04',
+        presaleStart: '2026-11-15',
       });
     });
 
@@ -164,6 +191,29 @@ describe('MoviesRepository', () => {
         expect.stringContaining('INSERT INTO MOVIE_GENRES'),
         [{ movieId: 24, genreId: 3 }]
       );
+    });
+
+    it('stores the release and presale dates, or NULL when they are absent', async () => {
+      execute.mockResolvedValue({ outBinds: { movieId: [24] } });
+
+      await repository.create(createDto);
+      await repository.create({
+        ...createDto,
+        releaseDate: '2026-12-04',
+        presaleStart: '2026-11-15',
+      });
+
+      expect(execute.mock.calls[0][0]).toContain(
+        "TO_DATE(:releaseDate, 'YYYY-MM-DD')",
+      );
+      expect(execute.mock.calls[0][1]).toMatchObject({
+        releaseDate: null,
+        presaleStart: null,
+      });
+      expect(execute.mock.calls[1][1]).toMatchObject({
+        releaseDate: '2026-12-04',
+        presaleStart: '2026-11-15',
+      });
     });
 
     it('creates a movie without relationships', async () => {
@@ -241,6 +291,35 @@ describe('MoviesRepository', () => {
       );
 
       expect(executeMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps absent dates, clears null dates and replaces given dates', async () => {
+      await repository.update(24, { title: 'Updated title' });
+      await repository.update(24, { releaseDate: null, presaleStart: null });
+      await repository.update(24, {
+        releaseDate: '2026-12-04',
+        presaleStart: '2026-11-15',
+      });
+
+      const binds = execute.mock.calls
+        .filter(([sql]) => String(sql).includes('UPDATE MOVIES'))
+        .map(([, values]) => values as Record<string, unknown>);
+      expect(binds[0]).toMatchObject({
+        releaseDateSent: 0,
+        presaleStartSent: 0,
+      });
+      expect(binds[1]).toMatchObject({
+        releaseDateSent: 1,
+        releaseDate: null,
+        presaleStartSent: 1,
+        presaleStart: null,
+      });
+      expect(binds[2]).toMatchObject({
+        releaseDateSent: 1,
+        releaseDate: '2026-12-04',
+        presaleStartSent: 1,
+        presaleStart: '2026-11-15',
+      });
     });
 
     it('updates languages and genres without duplicates', async () => {

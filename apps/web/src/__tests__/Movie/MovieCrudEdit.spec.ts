@@ -4,6 +4,7 @@ import { AxiosError } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import MovieCrudEdit from '@/components/Movies/MovieCrudEdit.vue'
+import MovieScheduleFields from '@/components/Movies/MovieScheduleFields.vue'
 import { getMovie, updateMovie } from '@/services/movie.service'
 
 vi.mock('@/services/movie.service', () => ({
@@ -386,6 +387,52 @@ describe('MovieCrudEdit', () => {
     expect(wrapper.emitted('saved')).toHaveLength(1)
     expect(wrapper.emitted('close')).toHaveLength(1)
 
+    wrapper.unmount()
+  })
+
+  // SCRUM-437: release and presale dates.
+  it('loads the dates and clears the presale with null', async () => {
+    getMovieMock.mockResolvedValue({
+      ...movie,
+      releaseDate: '2026-12-04',
+      presaleStart: '2026-11-15',
+    })
+    const wrapper = mountModal()
+    await flushPromises()
+    const schedule = wrapper.getComponent(MovieScheduleFields)
+
+    expect(schedule.props('releaseDate')).toBe('2026-12-04')
+    expect(schedule.props('presaleStart')).toBe('2026-11-15')
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+
+    schedule.vm.$emit('update:presaleStart', '')
+    await flushPromises()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(updateMovieMock).toHaveBeenCalledWith(
+      24,
+      expect.objectContaining({ releaseDate: '2026-12-04', presaleStart: null }),
+      expect.any(AbortSignal),
+    )
+    wrapper.unmount()
+  })
+
+  it('does not save a presale that starts on or after the release', async () => {
+    const wrapper = mountModal()
+    await flushPromises()
+    const schedule = wrapper.getComponent(MovieScheduleFields)
+
+    schedule.vm.$emit('update:releaseDate', '2026-12-04')
+    schedule.vm.$emit('update:presaleStart', '2026-12-10')
+    await flushPromises()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(updateMovieMock).not.toHaveBeenCalled()
+    expect(schedule.props('presaleStartError')).toBe(
+      'La preventa debe empezar antes de la fecha de estreno.',
+    )
     wrapper.unmount()
   })
 

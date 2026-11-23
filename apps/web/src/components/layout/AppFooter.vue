@@ -24,8 +24,8 @@
         <h2>CARTELERA</h2>
 
         <RouterLink :to="{ path: '/', hash: '#cartelera' }">Ver cartelera</RouterLink>
-        <span class="pending-option">Preventas · Próximamente</span>
-        <span class="pending-option">Estrenos · Próximamente</span>
+        <RouterLink :to="{ path: '/', hash: '#preventas' }">Preventas</RouterLink>
+        <RouterLink :to="{ path: '/', hash: '#estrenos' }">Estrenos</RouterLink>
       </section>
 
       <section>
@@ -72,16 +72,12 @@
 }
 
 .footer-grid p,
-.footer-grid a,
-.pending-option {
+.footer-grid a {
   margin: 0;
 
   color: var(--text-on-dark-secondary);
 
   font-size: 0.9rem;
-}
-.pending-option {
-  color: var(--sidebar-disabled-text);
 }
 .footer-grid a {
   display: inline-flex;
