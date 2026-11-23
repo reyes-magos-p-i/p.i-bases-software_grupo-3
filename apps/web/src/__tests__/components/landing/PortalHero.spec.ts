@@ -2,6 +2,9 @@ import { mount, RouterLinkStub } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PortalHero from '@/components/landing/PortalHero.vue'
 import type { PortalSectionMovie } from '@/types/portal'
+import { posterEdgeColors } from '@/utils/poster-edge-colors'
+
+vi.mock('@/utils/poster-edge-colors', () => ({ posterEdgeColors: vi.fn() }))
 
 // SCRUM-438: featured movies of Cartelera ("Destacada" in the prototype).
 const movie = (id: number, title: string): PortalSectionMovie => ({
@@ -51,19 +54,39 @@ describe('PortalHero', () => {
     expect(buy!.props('to')).toEqual({ name: 'buy-tickets', query: { movieId: 1 } })
     expect(buy!.attributes('aria-label')).toBe('Comprar boletos para Película 1')
     expect(cartelera!.props('to')).toEqual({ path: '/', hash: '#cartelera' })
-    expect(wrapper.findAll('.thumb')).toHaveLength(5)
+    const dots = wrapper.findAll('.dot')
+    expect(dots).toHaveLength(5)
+    expect(dots[0]!.attributes('aria-label')).toBe('Película 1')
+    expect(wrapper.find('.thumb').exists()).toBe(false)
   })
 
-  it('changes the featured movie from the thumbnails and the arrows', async () => {
+  it('paints the background with the edge colors of the current poster', async () => {
+    const edges = { top: 'rgb(1 2 3)', right: 'rgb(4 5 6)', bottom: 'rgb(7 8 9)', left: 'rgb(10 11 12)' }
+    vi.mocked(posterEdgeColors).mockReturnValueOnce(edges).mockReturnValueOnce(null)
+    const wrapper = mountHero()
+    const ambient = () => wrapper.get('.hero-ambient').attributes('style') ?? ''
+    expect(ambient()).toBe('')
+
+    await wrapper.get('.hero-poster movie-poster-stub').trigger('load')
+    expect(ambient()).toContain('--edge-top: rgb(1 2 3)')
+    expect(ambient()).toContain('--edge-left: rgb(10 11 12)')
+
+    // A poster whose pixels cannot be read keeps the previous colors.
+    await wrapper.get('[aria-label="Siguiente película"]').trigger('click')
+    await wrapper.get('.hero-poster movie-poster-stub').trigger('load')
+    expect(ambient()).toContain('--edge-bottom: rgb(7 8 9)')
+  })
+
+  it('changes the featured movie from the dots and the arrows', async () => {
     const wrapper = mountHero()
 
-    await wrapper.findAll('.thumb')[2]!.trigger('click')
+    await wrapper.findAll('.dot')[2]!.trigger('click')
     expect(title(wrapper)).toBe('Película 3')
-    expect(wrapper.findAll('.thumb')[2]!.attributes('aria-current')).toBe('true')
+    expect(wrapper.findAll('.dot')[2]!.attributes('aria-current')).toBe('true')
 
     await wrapper.get('[aria-label="Siguiente película"]').trigger('click')
     expect(title(wrapper)).toBe('Película 4')
-    await wrapper.findAll('.thumb')[0]!.trigger('click')
+    await wrapper.findAll('.dot')[0]!.trigger('click')
     await wrapper.get('[aria-label="Película anterior"]').trigger('click')
     expect(title(wrapper)).toBe('Película 5')
   })
@@ -93,10 +116,10 @@ describe('PortalHero', () => {
 
   it('keeps rotating only while the focus stays outside', async () => {
     const wrapper = mountHero()
-    const thumb = wrapper.findAll('.thumb')[1]!.element
+    const dot = wrapper.findAll('.dot')[1]!.element
 
     await wrapper.trigger('focusin')
-    await wrapper.trigger('focusout', { relatedTarget: thumb })
+    await wrapper.trigger('focusout', { relatedTarget: dot })
     vi.advanceTimersByTime(7000)
     await wrapper.vm.$nextTick()
     expect(title(wrapper)).toBe('Película 1')
@@ -119,17 +142,17 @@ describe('PortalHero', () => {
 
   it('goes back to the first movie when Cartelera changes', async () => {
     const wrapper = mountHero()
-    await wrapper.findAll('.thumb')[3]!.trigger('click')
+    await wrapper.findAll('.dot')[3]!.trigger('click')
 
     await wrapper.setProps({ movies: [movie(9, 'Nueva'), movie(10, 'Otra')] })
 
     expect(title(wrapper)).toBe('Nueva')
   })
 
-  it('shows a single movie without the thumbnail bar', () => {
+  it('shows a single movie without the controls', () => {
     const wrapper = mountHero([{ ...movie(1, 'Sola'), classification: null, genres: [] }])
 
-    expect(wrapper.find('.thumbs-bar').exists()).toBe(false)
+    expect(wrapper.find('.controls').exists()).toBe(false)
     expect(wrapper.find('.separator').exists()).toBe(false)
     expect(wrapper.get('.meta').text()).toBe('2 h 8 min')
   })

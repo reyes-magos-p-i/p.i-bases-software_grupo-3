@@ -3,10 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import MoviePoster from '@/components/common/MoviePoster.vue'
 import type { PortalSectionMovie } from '@/types/portal'
 import { formatRunningTime } from '@/utils/portal-format'
+import { posterEdgeColors, type EdgeColors } from '@/utils/poster-edge-colors'
 
-// SCRUM-438: featured movies of Cartelera (prototype "Destacada", option A). The real poster
-// takes the place of the prototype's gradients. It rotates every 7 s unless the visitor pauses
-// it, points at it, focuses it or prefers reduced motion.
+// SCRUM-438: featured movies of Cartelera (prototype "Destacada", option A). The background is a
+// gradient made from the edge colors of the current poster. It rotates every 7 s unless the
+// visitor pauses it, points at it, focuses it or prefers reduced motion. Dots pick the movie.
 const ROTATION_MS = 7000
 const props = defineProps<{ movies: readonly PortalSectionMovie[] }>()
 
@@ -15,6 +16,17 @@ const index = ref(0)
 const paused = ref(false)
 const holding = ref(false)
 const current = computed(() => featured.value[index.value])
+const edges = ref<EdgeColors | null>(null)
+const ambient = computed(() =>
+  edges.value
+    ? {
+        '--edge-top': edges.value.top,
+        '--edge-right': edges.value.right,
+        '--edge-bottom': edges.value.bottom,
+        '--edge-left': edges.value.left,
+      }
+    : undefined,
+)
 let timer: ReturnType<typeof setInterval> | undefined
 
 watch(featured, () => {
@@ -26,8 +38,9 @@ function step(delta: 1 | -1) {
   if (count) index.value = (index.value + delta + count) % count
 }
 
-function details(movie: PortalSectionMovie) {
-  return [movie.classification, formatRunningTime(movie.runningTime)].filter(Boolean).join(' · ')
+// The previous colors stay until the new poster loads, so the gradient fades between them.
+function readEdges(event: Event) {
+  edges.value = posterEdgeColors(event.target as HTMLImageElement) ?? edges.value
 }
 
 function leave(event: FocusEvent) {
@@ -54,15 +67,7 @@ onBeforeUnmount(() => clearInterval(timer))
     @focusin="holding = true"
     @focusout="leave"
   >
-    <div class="hero-bg" aria-hidden="true">
-      <MoviePoster
-        v-if="current"
-        :key="current.id"
-        :poster-image="current.posterImage"
-        :title="current.title"
-        class="hero-backdrop"
-      />
-    </div>
+    <div class="hero-ambient" :style="ambient" aria-hidden="true"></div>
     <div class="hero-orb" aria-hidden="true"></div>
     <div class="hero-orb two" aria-hidden="true"></div>
     <div class="hero-shade" aria-hidden="true"></div>
@@ -107,11 +112,12 @@ onBeforeUnmount(() => clearInterval(timer))
             :key="current.id"
             :poster-image="current.posterImage"
             :title="current.title"
+            @load="readEdges"
           />
         </div>
       </div>
 
-      <div v-if="featured.length > 1" class="thumbs-bar">
+      <div v-if="featured.length > 1" class="controls">
         <button
           type="button"
           class="circle-button"
@@ -127,23 +133,16 @@ onBeforeUnmount(() => clearInterval(timer))
             />
           </svg>
         </button>
-        <ul class="thumbs" aria-label="Elegir película destacada">
+        <ul class="dots" aria-label="Elegir película destacada">
           <li v-for="(movie, position) in featured" :key="movie.id">
             <button
               type="button"
-              class="thumb"
+              class="dot"
               :class="{ active: position === index }"
+              :aria-label="movie.title"
               :aria-current="position === index"
               @click="index = position"
-            >
-              <span class="thumb-art" aria-hidden="true">
-                <MoviePoster :poster-image="movie.posterImage" :title="movie.title" />
-              </span>
-              <span class="thumb-text">
-                <span class="thumb-title">{{ movie.title }}</span>
-                <span class="thumb-meta">{{ details(movie) }}</span>
-              </span>
-            </button>
+            ></button>
           </li>
         </ul>
         <button
@@ -191,18 +190,49 @@ onBeforeUnmount(() => clearInterval(timer))
   color: var(--text-on-dark);
 }
 
-.hero-bg {
-  position: absolute;
-  inset: 0;
+/* Edge colors of the current poster, registered so they can fade from one movie to the next. */
+@property --edge-top {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
 }
 
-.hero-backdrop {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 20%;
-  filter: blur(2px) saturate(1.1);
-  transform: scale(1.04);
+@property --edge-right {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+@property --edge-bottom {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+@property --edge-left {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+/* Until a poster loads, the background uses the surface color. */
+.hero-ambient {
+  --edge-top: var(--surface-background);
+  --edge-right: var(--surface-background);
+  --edge-bottom: var(--surface-background);
+  --edge-left: var(--surface-background);
+
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(55% 75% at 82% 0%, var(--edge-top), transparent 75%),
+    radial-gradient(55% 75% at 82% 100%, var(--edge-bottom), transparent 75%),
+    linear-gradient(90deg, var(--edge-left) 30%, var(--edge-right) 100%);
+  transition:
+    --edge-top 900ms ease,
+    --edge-right 900ms ease,
+    --edge-bottom 900ms ease,
+    --edge-left 900ms ease;
 }
 
 .hero-orb {
@@ -222,7 +252,8 @@ onBeforeUnmount(() => clearInterval(timer))
   border-color: color-mix(in srgb, var(--text-on-dark) 8%, transparent);
 }
 
-/* Solid page background behind the text, so it keeps its contrast over any poster. */
+/* Solid page background behind the text, so it keeps its contrast over any poster. The right side,
+   without text, lets the poster colors show. */
 .hero-shade {
   position: absolute;
   inset: 0;
@@ -230,9 +261,9 @@ onBeforeUnmount(() => clearInterval(timer))
     linear-gradient(
       90deg,
       var(--page-background) 0%,
-      color-mix(in srgb, var(--page-background) 88%, transparent) 36%,
-      color-mix(in srgb, var(--page-background) 30%, transparent) 72%,
-      color-mix(in srgb, var(--page-background) 55%, transparent) 100%
+      color-mix(in srgb, var(--page-background) 85%, transparent) 34%,
+      color-mix(in srgb, var(--page-background) 10%, transparent) 70%,
+      transparent 100%
     ),
     linear-gradient(0deg, var(--page-background) 0%, transparent 42%),
     linear-gradient(
@@ -385,7 +416,7 @@ onBeforeUnmount(() => clearInterval(timer))
   object-fit: cover;
 }
 
-.thumbs-bar {
+.controls {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -393,80 +424,44 @@ onBeforeUnmount(() => clearInterval(timer))
   padding-bottom: 36px;
 }
 
-.thumbs {
-  display: grid;
-  min-width: 0;
-  flex: 1;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+.dots {
+  display: flex;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.thumb {
-  display: flex;
-  width: 100%;
-  min-height: 76px;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 10px 8px 8px;
-  border: 1px solid color-mix(in srgb, var(--text-on-dark) 12%, transparent);
-  border-bottom: 3px solid transparent;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-background) 78%, transparent);
-  color: var(--text-on-dark);
+/* 24 px target with a small visible dot; the current one stretches into a bar. */
+.dot {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
   cursor: pointer;
-  text-align: left;
+}
+
+.dot::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-on-dark) 45%, transparent);
+  content: '';
   transition:
-    background var(--transition-normal),
-    border-color var(--transition-normal);
+    width var(--transition-normal),
+    background var(--transition-normal);
 }
 
-.thumb:hover {
-  border-color: color-mix(in srgb, var(--text-on-dark) 30%, transparent);
-  background: var(--surface-background);
+.dot:hover::before {
+  background: var(--text-on-dark);
 }
 
-.thumb.active {
-  border-bottom-color: var(--primary-color);
-  background: var(--surface-background);
-}
-
-.thumb-art {
-  overflow: hidden;
-  width: 38px;
-  height: 57px;
-  flex: none;
-  border-radius: 5px;
-}
-
-.thumb-art :deep(img) {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.thumb-text {
-  min-width: 0;
-}
-
-.thumb-title {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.thumb-meta {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-on-dark-secondary);
-  font-size: 0.75rem;
+.dot.active::before {
+  width: 22px;
+  background: var(--primary-color);
 }
 
 .circle-button {
@@ -489,7 +484,7 @@ onBeforeUnmount(() => clearInterval(timer))
 
 .buy-button:focus-visible,
 .ghost-button:focus-visible,
-.thumb:focus-visible,
+.dot:focus-visible,
 .circle-button:focus-visible {
   outline: 3px solid var(--focus-on-dark);
   outline-offset: 3px;
@@ -506,16 +501,6 @@ onBeforeUnmount(() => clearInterval(timer))
 
   .hero-title {
     font-size: 5.75rem;
-  }
-
-  .thumbs {
-    display: flex;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .thumbs li {
-    flex: 0 0 210px;
   }
 }
 
@@ -540,23 +525,14 @@ onBeforeUnmount(() => clearInterval(timer))
     flex-direction: column;
   }
 
-  .thumbs-bar {
-    flex-wrap: wrap;
+  .controls {
     margin-top: 28px;
-  }
-
-  .thumbs {
-    flex: 1 0 100%;
-    order: -1;
-  }
-
-  .thumbs li {
-    flex: 0 0 180px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .thumb {
+  .hero-ambient,
+  .dot::before {
     transition: none;
   }
 }

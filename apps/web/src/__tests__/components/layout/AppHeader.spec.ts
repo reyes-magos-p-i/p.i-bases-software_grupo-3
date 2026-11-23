@@ -188,24 +188,19 @@ describe('AppHeader authentication navigation', () => {
     },
   )
 
-  // SCRUM-438: the portal header links to its sections; "Para ti" only for a client.
-  it('links the portal sections only in the portal header', async () => {
-    expect(wrapper.find('.portal-nav').exists()).toBe(false)
+  // SCRUM-438: the portal header stays clean, with only the logo and the account.
+  it('keeps the portal header to the logo and the account', async () => {
     wrapper.unmount()
     wrapper = mount(AppHeader, {
       props: { overlay: true },
       attachTo: document.body,
       global: { plugins: [router] },
     })
-    const links = () =>
-      wrapper.findAll('.portal-nav a').map((link) => [link.text(), link.attributes('href')])
+    const sectionLinks = () =>
+      wrapper.findAll('a').filter((link) => link.attributes('href')?.startsWith('/#'))
 
-    expect(wrapper.get('.portal-nav').attributes('aria-label')).toBe('Secciones del portal')
-    expect(links()).toEqual([
-      ['Cartelera', '/#cartelera'],
-      ['Preventas', '/#preventas'],
-      ['Estrenos', '/#estrenos'],
-    ])
+    expect(wrapper.find('nav').exists()).toBe(false)
+    expect(sectionLinks()).toHaveLength(0)
 
     establishClientSession(
       { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' },
@@ -213,8 +208,8 @@ describe('AppHeader authentication navigation', () => {
     )
     await flushPromises()
 
-    expect(links()[0]).toEqual(['Para ti', '/#recomendaciones'])
-    expect(links()).toHaveLength(4)
+    expect(sectionLinks()).toHaveLength(0)
+    expect(wrapper.text()).not.toContain('Para ti')
   })
 
   it('navigates from the portal through both login modes and restores focus on close', async () => {

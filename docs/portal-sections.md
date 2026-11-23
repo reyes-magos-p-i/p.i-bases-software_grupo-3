@@ -74,15 +74,19 @@ muestra todas las películas en cuadrícula. También tiene sus propios estados:
 Sigue la opción A del prototipo de Figma. Los valores salen de su HTML, y los colores, de los tokens
 de `variables.css`.
 
-- **Encabezado**: logo, enlaces a las secciones (**Para ti** solo con sesión de cliente,
-  **Cartelera**, **Preventas**, **Estrenos**) y la cuenta o **Iniciar sesión** / **Registrarse**. En
-  el celular los enlaces bajan a una segunda fila que se desliza de lado.
+- **Encabezado**: solo el logo y la cuenta, o **Iniciar sesión** / **Registrarse**. Para que se vea
+  más limpio, no lleva enlaces a las secciones.
 - **Destacada** (`PortalHero`, reemplaza al carrusel): las primeras cinco películas de Cartelera,
-  con título, clasificación, duración, géneros, sinopsis, **Comprar boletos** y **Ver cartelera**. El
-  fondo y el póster de la derecha son el póster real (el prototipo usa degradados de ejemplo).
-  Cambia cada 7 s, salvo que el visitante la pause, tenga el cursor o el foco encima, o prefiera
-  movimiento reducido. Las miniaturas y las flechas eligen la película. Sin Cartelera muestra
-  "Cartelera, preventas y estrenos".
+  con título, clasificación, duración, géneros, sinopsis, **Comprar boletos** (abre la compra de esa
+  película, `/buy-tickets?movieId=<id>`) y **Ver cartelera**. A la derecha va el póster real.
+  - El fondo es un degradado con los colores de los bordes del póster actual: arriba, abajo y a
+    los lados. Los colores muy claros se oscurecen para que el texto mantenga su contraste, y al
+    cambiar de película el degradado pasa suavemente de unos colores a otros.
+  - Cambia cada 7 s, salvo que el visitante la pause, tenga el cursor o el foco encima, o prefiera
+    movimiento reducido.
+  - Se navega con las flechas y con puntos, uno por película. No hay tarjetas de miniaturas, para
+    no recargar la vista.
+  - Sin Cartelera muestra "Cartelera, preventas y estrenos".
 - **Pie de página**: marca, **Contáctanos** (teléfono y correo enlazados), **Cartelera** (un enlace
   por sección) y **Sobre Cinetadel**. Cada fila mide 44 px con la misma separación; son 4 columnas,
   2 hasta 1100 px y 1 en el celular.

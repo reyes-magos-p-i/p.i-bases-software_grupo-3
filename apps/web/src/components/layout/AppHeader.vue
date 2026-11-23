@@ -285,15 +285,6 @@ function goToProfileSection(section: string) {
       <RouterLink to="/" class="brand" aria-label="Ir a la página principal de Cinetadel">
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
       </RouterLink>
-      <!-- SCRUM-438: the portal header links to its sections, as in the prototype. -->
-      <nav v-if="overlay" class="portal-nav" aria-label="Secciones del portal">
-        <RouterLink v-if="clientUser" :to="{ path: '/', hash: '#recomendaciones' }">
-          Para ti
-        </RouterLink>
-        <RouterLink :to="{ path: '/', hash: '#cartelera' }">Cartelera</RouterLink>
-        <RouterLink :to="{ path: '/', hash: '#preventas' }">Preventas</RouterLink>
-        <RouterLink :to="{ path: '/', hash: '#estrenos' }">Estrenos</RouterLink>
-      </nav>
       <div class="navbar-actions">
         <AccountMenu v-if="clientUser" :user="clientUser" @logout="logoutClient">
           <template #navigation="{ close }">
@@ -449,47 +440,16 @@ function goToProfileSection(section: string) {
   outline-offset: -4px;
 }
 
-/* SCRUM-438: portal header of the prototype (option A). */
+/* SCRUM-438: portal header, kept to the logo and the account (option A without section links). */
 .site-header-overlay .navbar-content {
   min-height: 88px;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px 28px;
+  gap: 12px;
 }
 
 .site-header-overlay .brand-logo {
   width: 56px;
   height: 56px;
-}
-
-.portal-nav {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  gap: 4px;
-}
-
-.portal-nav a {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  padding: 0 14px;
-  border-radius: 999px;
-  color: var(--text-on-dark);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.portal-nav a:hover {
-  background: var(--surface-on-dark-hover);
-  color: var(--text-on-dark);
-}
-
-.portal-nav a:focus-visible {
-  outline: 2px solid var(--focus-on-dark);
-  outline-offset: 2px;
 }
 
 .site-header-overlay .navbar-actions {
@@ -526,22 +486,12 @@ function goToProfileSection(section: string) {
 
 @media (max-width: 640px) {
   .site-header-overlay .navbar-content {
-    min-height: 0;
-    gap: 8px 12px;
-    padding: 12px 0 4px;
+    min-height: 68px;
   }
 
   .site-header-overlay .brand-logo {
     width: 44px;
     height: 44px;
-  }
-
-  .portal-nav {
-    flex: 1 0 100%;
-    order: 3;
-    overflow-x: auto;
-    margin: 0 -8px;
-    scrollbar-width: none;
   }
 
   .site-header-overlay .login-button,

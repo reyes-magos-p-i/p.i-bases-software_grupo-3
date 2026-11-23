@@ -3,7 +3,6 @@ import { contrastRatio, cssValue } from '../../helpers/contrast'
 import hero from '@/components/landing/PortalHero.vue?raw'
 import section from '@/components/landing/PortalSection.vue?raw'
 import card from '@/components/landing/PortalMovieCard.vue?raw'
-import header from '@/components/layout/AppHeader.vue?raw'
 import footer from '@/components/layout/AppFooter.vue?raw'
 import accountMenu from '@/components/common/AccountMenu.vue?raw'
 import sectionNavigation from '@/components/common/SectionNavigation.vue?raw'
@@ -23,7 +22,6 @@ describe('Portal contrast', () => {
     ['hero synopsis', color(hero, '.synopsis'), PAGE],
     ['hero buy button', color(hero, '.buy-button'), background(hero, '.buy-button')],
     ['hero ghost button', color(hero, '.ghost-button'), PAGE],
-    ['featured thumbnail details', color(hero, '.thumb-meta'), background(hero, '.thumb:hover')],
     ['section title', color(section, '.portal-section'), PAGE],
     ['section subtitle', color(section, '.section-subtitle'), PAGE],
     ['see all', color(section, '.see-all'), PAGE],
@@ -37,7 +35,6 @@ describe('Portal contrast', () => {
     ['card genres and notes', color(card, '.card-genres,\n.card-note'), PAGE],
     ['card buy button', color(card, '.buy-button'), background(card, '.buy-button')],
     ['presale badge', color(card, '.badge-presale'), background(card, '.badge-presale')],
-    ['portal navigation', color(header, '.portal-nav a'), PAGE],
     ['footer heading', color(footer, '.footer-grid h2'), background(footer, '.site-footer')],
     [
       'footer texts',
