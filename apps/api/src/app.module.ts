@@ -18,6 +18,7 @@ import { TransactionsModule } from './transactions/transactions.module';
 //import { ImagesModule } from './images/images.module';
 import { ImageHandlerModule } from './image-handler/image-handler.module';
 import { PromotionsModule } from './promotions/promotions.module';
+import { SalesStatisticsModule } from './sales-statistics/sales-statistics.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { PromotionsModule } from './promotions/promotions.module';
     ImageHandlerModule,
     PurchasesModule,
     PromotionsModule,
+    SalesStatisticsModule,
   ],
   controllers: [ImageController],
 })
