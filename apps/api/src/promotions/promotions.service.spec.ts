@@ -9,6 +9,7 @@ describe('PromotionsService', () => {
   let repository: {
     create: jest.Mock;
     update: jest.Mock;
+    remove: jest.Mock;
     findAll: jest.Mock;
     findOne: jest.Mock;
   };
@@ -53,6 +54,7 @@ describe('PromotionsService', () => {
     repository = {
       create: jest.fn().mockResolvedValue(42),
       update: jest.fn().mockResolvedValue(true),
+      remove: jest.fn().mockResolvedValue(true),
       findAll: jest.fn(),
       findOne: jest.fn(),
     };
@@ -347,6 +349,34 @@ describe('PromotionsService', () => {
       const error = new BadRequestException('One or more selected cinemas do not exist.');
       repository.update.mockRejectedValueOnce(error);
       await expect(service.update(42, validDto())).rejects.toBe(error);
+    });
+  });
+
+  describe('remove', () => {
+    it('deletes an existing promotion and returns no body', async () => {
+      await expect(service.remove(42)).resolves.toBeUndefined();
+      expect(repository.remove).toHaveBeenCalledTimes(1);
+      expect(repository.remove).toHaveBeenCalledWith(42);
+      expect(repository.findOne).not.toHaveBeenCalled();
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+    it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects invalid ID %s without querying the repository', async (id) => {
+        await expect(service.remove(id)).rejects.toThrow(BadRequestException);
+        expect(repository.remove).not.toHaveBeenCalled();
+      },
+    );
+    it('returns 404 when the promotion is absent', async () => {
+      repository.remove.mockResolvedValueOnce(false);
+      await expect(service.remove(999)).rejects.toThrow(
+        new NotFoundException('Promotion not found.'),
+      );
+      expect(repository.remove).toHaveBeenCalledWith(999);
+    });
+    it('preserves database failures instead of converting them to 404', async () => {
+      const error = new Error('Database unavailable');
+      repository.remove.mockRejectedValueOnce(error);
+      await expect(service.remove(42)).rejects.toBe(error);
     });
   });
 

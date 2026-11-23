@@ -107,6 +107,20 @@ export class PromotionsService {
 
   }
 
+  async remove(id: number): Promise<void> {
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new BadRequestException(
+        'Promotion ID must be a positive safe integer.',
+      );
+    }
+
+    const removed = await this.repository.remove(id);
+
+    if (!removed) {
+      throw new NotFoundException('Promotion not found.');
+    }
+  }
+
   private isValidDate(value: string): boolean {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
       return false;
