@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import DatePicker from '@/components/common/DatePicker.vue'
+import { todayInCostaRica } from '@/utils/date-only'
 import {
   STATISTICS_PERIODS,
   statisticsPeriod,
@@ -67,6 +68,7 @@ function changePreset() {
         <DatePicker
           :id="idPrefix + '-date-from'"
           v-model="dateFrom"
+          :max="todayInCostaRica()"
           required
           :disabled="disabled"
           :aria-invalid="!!error"
@@ -78,6 +80,7 @@ function changePreset() {
         <DatePicker
           :id="idPrefix + '-date-to'"
           v-model="dateTo"
+          :max="todayInCostaRica()"
           required
           :disabled="disabled"
           :aria-invalid="!!error"

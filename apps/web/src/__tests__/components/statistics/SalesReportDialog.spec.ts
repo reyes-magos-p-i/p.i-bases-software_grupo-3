@@ -15,6 +15,7 @@ const initialPeriod = { dateFrom: '2026-11-01', dateTo: '2026-11-21' }
 const originalShow = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal')
 const originalClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close')
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] }).setSystemTime(new Date('2026-11-24T02:00:00Z'))
   Object.defineProperties(HTMLDialogElement.prototype, {
     showModal: {
       configurable: true,
@@ -41,6 +42,7 @@ afterEach(() => {
     else Reflect.deleteProperty(HTMLDialogElement.prototype, key)
   }
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 const render = () => {
   view = mount(SalesReportDialog, { props: { initialPeriod } })
@@ -89,6 +91,19 @@ describe('SalesReportDialog', () => {
     pickers[0]!.vm.$emit('update:modelValue', '')
     await page.get('form').trigger('submit')
     expect(page.get('.filter-error').text()).toContain('fecha de inicio y la fecha de fin')
+    expect(downloadSalesReport).not.toHaveBeenCalled()
+    await page.get('.secondary-button').trigger('click')
+    expect(view.emitted('close')).toHaveLength(1)
+  })
+  it.each([0, 1])('blocks report generation when date field %i is in the future', async (index) => {
+    render()
+    const pickers = view.getComponent(SalesPeriodFilter).findAllComponents({ name: 'DatePicker' })
+    expect(pickers[index]!.props('max')).toBe('2026-11-23')
+    pickers[index]!.vm.$emit('update:modelValue', '2026-11-24')
+    await page.get('form').trigger('submit')
+    expect(page.get('.filter-error').text()).toBe(
+      'Las fechas del periodo no pueden ser posteriores a hoy.',
+    )
     expect(downloadSalesReport).not.toHaveBeenCalled()
     await page.get('.secondary-button').trigger('click')
     expect(view.emitted('close')).toHaveLength(1)

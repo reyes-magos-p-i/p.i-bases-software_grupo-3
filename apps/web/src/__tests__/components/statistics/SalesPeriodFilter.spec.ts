@@ -1,10 +1,16 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import SalesPeriodFilter from '@/components/statistics/SalesPeriodFilter.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
 
 let view: VueWrapper
-afterEach(() => view?.unmount())
+beforeEach(() =>
+  vi.useFakeTimers({ toFake: ['Date'] }).setSystemTime(new Date('2026-11-24T02:00:00Z')),
+)
+afterEach(() => {
+  view?.unmount()
+  vi.useRealTimers()
+})
 describe('SalesPeriodFilter', () => {
   it('applies presets immediately and offers a custom range', async () => {
     view = mount(SalesPeriodFilter)
@@ -41,6 +47,35 @@ describe('SalesPeriodFilter', () => {
     await view.get('select').setValue('last7days')
     expect(view.find('[role="alert"]').exists()).toBe(false)
     expect(view.emitted('apply')).toHaveLength(1)
+  })
+  it.each([0, 1])(
+    'disables future calendar days in field %i while keeping today selectable',
+    async (index) => {
+      view = mount(SalesPeriodFilter, {
+        props: { initialPeriod: { dateFrom: '2026-11-23', dateTo: '2026-11-23' } },
+      })
+      const picker = view.findAllComponents(DatePicker)[index]!
+      expect(picker.props('max')).toBe('2026-11-23')
+      await picker.get('input').trigger('click')
+      expect(picker.get('[data-date="2026-11-23"]').attributes('disabled')).toBeUndefined()
+      expect(picker.get('[data-date="2026-11-24"]').attributes('disabled')).toBeDefined()
+      await picker.get('.calendar-footer button').trigger('click')
+    },
+  )
+  it.each([0, 1])('rejects a future date in field %i before applying the period', async (index) => {
+    view = mount(SalesPeriodFilter)
+    await view.get('select').setValue('custom')
+    const pickers = view.findAllComponents(DatePicker)
+    await pickers[index]!.vm.$emit('update:modelValue', '2026-11-24')
+    await view.get('form').trigger('submit')
+    expect(view.get('[role="alert"]').text()).toBe(
+      'Las fechas del periodo no pueden ser posteriores a hoy.',
+    )
+    expect(view.emitted('apply')).toBeUndefined()
+    await pickers[index]!.vm.$emit('update:modelValue', '2026-11-23')
+    await view.get('form').trigger('submit')
+    expect(view.emitted('apply')).toHaveLength(1)
+    expect(view.find('[role="alert"]').exists()).toBe(false)
   })
   it('supports isolated identifiers and explicit submission without changing dashboard defaults', async () => {
     view = mount(SalesPeriodFilter, {

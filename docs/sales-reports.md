@@ -45,9 +45,10 @@ del modal y del transporte. `pdfmake` y sus fuentes se cargan en un worker al
 generar el archivo, sin bloquear la interfaz ni recurrir a servicios externos.
 Los colores proceden de `variables.css`.
 
-Las fechas incompletas, inválidas o invertidas se rechazan antes de solicitar
-datos; la API conserva su validación. Un periodo sin compras pagadas muestra un
-aviso y no genera un PDF. Los fallos de consulta o construcción muestran
+Las fechas incompletas, inválidas, invertidas o posteriores al día actual en Costa Rica
+se rechazan antes de solicitar datos. Ambos calendarios impiden seleccionar días futuros
+y la API aplica el mismo límite; hoy sigue siendo una fecha válida. Un periodo sin
+compras pagadas muestra un aviso y no genera un PDF. Los fallos de consulta o construcción muestran
 «No se pudo generar el reporte, intenta de nuevo», conservan la configuración y
 permiten reintentar. La descarga solo se inicia cuando se recibió el PDF completo.
 
