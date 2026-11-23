@@ -43,3 +43,6 @@ export interface PromotionForm {
 }
 
 export type PromotionErrors = Partial<Record<keyof PromotionForm | 'poster', string>>
+
+/** PUT uses the same complete editable payload as POST. */
+export type UpdatePromotionPayload = CreatePromotionPayload

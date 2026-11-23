@@ -25,7 +25,7 @@ vi.mock('@/components/promotions/PromotionCreate.vue', () => ({
 vi.mock('@/services/promotion.service', () => ({ getPromotions: vi.fn() }))
 vi.mock('@/components/promotions/PromotionList.vue', () => ({
   default: {
-    name: 'PromotionList', props: ['promotions', 'loading', 'error'], emits: ['view', 'retry'],
+    name: 'PromotionList', props: ['promotions', 'loading', 'error'], emits: ['view', 'edit', 'retry'],
     template: '<div data-testid="promotion-list" />',
   },
 }))
@@ -381,5 +381,58 @@ describe('PromotionsSection: list and detail integration', () => {
     wrapper.unmount()
     expect(signal.aborted).toBe(true)
     pending.resolve([])
+  })
+})
+
+
+describe('PromotionsSection: editing', () => {
+  const list = () => wrapper.findComponent({ name: 'PromotionList' })
+  async function edit() {
+    list().vm.$emit('edit', 42)
+    await flushPromises()
+  }
+  it('loads the cinema catalog before opening the form in edit mode', async () => {
+    render(); await flushPromises(); await edit()
+    expect(getBranches).toHaveBeenCalledWith({ page: 1, pageSize: 50 })
+    expect(modal().props('mode')).toBe('edit')
+    expect(modal().props('promotionId')).toBe(42)
+    expect(modal().props('cinemas')).toHaveLength(1)
+    expect(view().exists()).toBe(false)
+  })
+  it('reloads the list after a successful edit and closes the editor', async () => {
+    render(); await flushPromises(); await edit()
+    modal().vm.$emit('saved'); modal().vm.$emit('close'); await flushPromises()
+    expect(getPromotions).toHaveBeenCalledTimes(2)
+    expect(modal().exists()).toBe(false)
+  })
+  it('blocks other dialogs and duplicate catalog loads while editing', async () => {
+    render(); await flushPromises(); await edit()
+    list().vm.$emit('view', 43); list().vm.$emit('edit', 43); await open()
+    expect(getBranches).toHaveBeenCalledTimes(1)
+    expect(view().exists()).toBe(false)
+    expect(modal().props('promotionId')).toBe(42)
+  })
+  it('does not open editing during creation', async () => {
+    render(); await open(); await edit()
+    expect(getBranches).toHaveBeenCalledTimes(1)
+    expect(modal().props('mode')).not.toBe('edit')
+  })
+  it('allows editing with an empty catalog so stored cinema associations can load', async () => {
+    vi.mocked(getBranches).mockResolvedValueOnce(page([]))
+    render(); await flushPromises(); await edit()
+    expect(modal().props('mode')).toBe('edit')
+    expect(modal().props('cinemas')).toEqual([])
+  })
+  it('keeps the editor closed when catalog loading fails', async () => {
+    vi.mocked(getBranches).mockRejectedValueOnce(new Error('Offline'))
+    render(); await flushPromises(); await edit()
+    expect(modal().exists()).toBe(false)
+    expect(wrapper.get('[role="alert"]').text()).toContain('No se pudieron cargar las sucursales')
+  })
+  it.each(['session-expired', 'forbidden'])('closes the edit form on %s', async (event) => {
+    render(); await flushPromises(); await edit()
+    modal().vm.$emit(event); await nextTick()
+    expect(modal().exists()).toBe(false)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
   })
 })

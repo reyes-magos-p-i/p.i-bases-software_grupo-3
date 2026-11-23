@@ -1,4 +1,5 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import 'reflect-metadata';
+import { BadRequestException, NotFoundException, RequestMethod } from '@nestjs/common';
 
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsController } from './promotions.controller';
@@ -8,6 +9,7 @@ describe('PromotionsController', () => {
   let controller: PromotionsController;
   let service: {
     create: jest.Mock;
+    update: jest.Mock;
     findAll: jest.Mock;
     findOne: jest.Mock;
   };
@@ -46,6 +48,7 @@ describe('PromotionsController', () => {
   beforeEach(() => {
     service = {
       create: jest.fn(),
+      update: jest.fn(),
       findAll: jest.fn(),
       findOne: jest.fn(),
     };
@@ -113,4 +116,24 @@ describe('PromotionsController', () => {
       await expect(controller.findOne(42)).rejects.toBe(error);
     });
   });
+  describe('update', () => {
+    it('passes the ID and body and returns the service response', async () => {
+      service.update.mockResolvedValueOnce({ promotionId: 42 });
+      await expect(controller.update(42, dto)).resolves.toEqual({ promotionId: 42 });
+      expect(service.update).toHaveBeenCalledWith(42, dto);
+      expect(service.update).toHaveBeenCalledTimes(1);
+    });
+    it.each([new BadRequestException('Invalid promotion'), new NotFoundException('Promotion not found.'), new Error('Database unavailable')])(
+      'preserves update failures: %p', async (error) => {
+        service.update.mockRejectedValueOnce(error);
+        await expect(controller.update(42, dto)).rejects.toBe(error);
+      },
+    );
+    it('registers PUT :id behind the existing controller guards', () => {
+      expect(Reflect.getMetadata('path', controller.update)).toBe(':id');
+      expect(Reflect.getMetadata('method', controller.update)).toBe(RequestMethod.PUT);
+      expect(Reflect.getMetadata('__guards__', PromotionsController)).toHaveLength(3);
+    });
+  });
+
 });
