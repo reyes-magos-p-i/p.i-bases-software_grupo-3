@@ -90,6 +90,44 @@ describe('Portal sections', () => {
     });
   });
 
+  // SCRUM-439: Cartelera and Preventas movies with a favorite genre of the client.
+  describe('recommendations', () => {
+    const query = jest.fn();
+    const repository = new MovieFunctionsRepository({
+      query,
+    } as unknown as DatabaseService);
+
+    beforeEach(() => query.mockReset());
+
+    it('matches the client favorite genres in Cartelera and Preventas only', async () => {
+      const recommended = { ...row, section: 'cartelera', matchedGenre: 'Aventura' };
+      query.mockResolvedValue({ rows: [recommended] });
+
+      await expect(repository.getRecommendedMovies(7)).resolves.toEqual([
+        { ...recommended, genres: ['Acción', 'Aventura'] },
+      ]);
+      const [sql, binds] = query.mock.calls[0] as [string, object];
+      const text = sql.replace(/\s+/g, ' ');
+      expect(binds).toEqual({ clientId: 7 });
+      expect(text).toContain('WHERE p.client_id = :clientId');
+      expect(text).toContain('JOIN upcoming u ON u.movie_id = m.movie_id JOIN liked l');
+      expect(text).toContain('((m.RELEASE_DATE IS NULL OR m.RELEASE_DATE <=');
+      expect(text).toContain(') OR (m.PRESALE_START <=');
+      expect(text).toContain("THEN 'preventas' ELSE 'cartelera' END AS \"section\"");
+      expect(text).toContain('ORDER BY l.matches DESC, u.next_start, m.movie_id');
+    });
+
+    it('the service asks the repository for the client', async () => {
+      const getRecommendedMovies = jest.fn().mockResolvedValue([]);
+      const service = new MovieFuctionsService({
+        getRecommendedMovies,
+      } as unknown as MovieFunctionsRepository);
+
+      await expect(service.findRecommendations(7)).resolves.toEqual([]);
+      expect(getRecommendedMovies).toHaveBeenCalledWith(7);
+    });
+  });
+
   it('the service returns the section from the repository', async () => {
     const getSectionMovies = jest.fn().mockResolvedValue([row]);
     const service = new MovieFuctionsService({

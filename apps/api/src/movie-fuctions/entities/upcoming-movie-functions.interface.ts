@@ -50,3 +50,16 @@ export interface PortalSectionMovie {
   /** YYYY-MM-DD; null when it has no presale. */
   presaleStart: string | null;
 }
+
+// SCRUM-439: movies of Cartelera and Preventas that match the client's favorite genres.
+export interface RecommendedMovie extends PortalSectionMovie {
+  section: Exclude<PortalSection, 'estrenos'>;
+  /** The favorite genre it matches, shown as "Te gusta <género>". */
+  matchedGenre: string;
+}
+
+export interface PortalRecommendations {
+  /** Names of the client's favorite genres; empty when the client has none. */
+  genres: string[];
+  movies: RecommendedMovie[];
+}

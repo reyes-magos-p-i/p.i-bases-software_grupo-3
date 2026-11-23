@@ -6,8 +6,19 @@ import type {
   MoviePurchaseHistory,
   PortalSection,
   PortalSectionMovie,
+  RecommendedMovie,
   UpcomingMovieFunction,
 } from '../entities/upcoming-movie-functions.interface';
+
+interface PortalMoviesSql {
+  /** More CTEs after `upcoming`, starting with a comma. */
+  with?: string;
+  /** More columns, starting with a comma. */
+  select?: string;
+  join: string;
+  where: string;
+  order: string;
+}
 
 const COSTA_RICA_NOW = `CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP)`;
 const COSTA_RICA_TODAY = `TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS DATE))`;
@@ -26,7 +37,7 @@ const UPCOMING_FUNCTIONS = `
   GROUP BY mf.movie_id`;
 
 // SCRUM-437 section rules. Each movie matches at most one of them.
-const SECTION_SQL: Record<PortalSection, { join: string; where: string; order: string }> = {
+const SECTION_SQL: Record<PortalSection, PortalMoviesSql> = {
   // Already released (no release date means it was showing before the dates existed).
   cartelera: {
     join: 'JOIN upcoming u ON u.movie_id = m.movie_id',
@@ -126,13 +137,46 @@ export class MovieFunctionsRepository {
   }
 
   /** SCRUM-437: the movies of one portal section, with what their cards show. */
-  async getSectionMovies(section: PortalSection): Promise<PortalSectionMovie[]> {
-    const { join, where, order } = SECTION_SQL[section];
+  getSectionMovies(section: PortalSection): Promise<PortalSectionMovie[]> {
+    return this.queryPortalMovies(SECTION_SQL[section]);
+  }
+
+  /**
+   * SCRUM-439: the Cartelera and Preventas movies with a favorite genre of the client, the ones
+   * that match more genres first. matchedGenre is the first matching genre by name.
+   */
+  getRecommendedMovies(clientId: number): Promise<RecommendedMovie[]> {
+    const { cartelera, preventas } = SECTION_SQL;
+    return this.queryPortalMovies<Pick<RecommendedMovie, 'section' | 'matchedGenre'>>(
+      {
+        with: `, liked AS (
+          SELECT mg.movie_id, MIN(g.name) AS genre, COUNT(*) AS matches
+          FROM Movie_genres mg
+          JOIN Client_genre_preferences p ON p.genre_id = mg.genre_id
+          JOIN Genres g ON g.genre_id = mg.genre_id
+          WHERE p.client_id = :clientId
+          GROUP BY mg.movie_id
+        )`,
+        select: `, l.genre AS "matchedGenre",
+             CASE WHEN m.RELEASE_DATE > ${COSTA_RICA_TODAY} THEN 'preventas' ELSE 'cartelera' END AS "section"`,
+        join: `${cartelera.join} JOIN liked l ON l.movie_id = m.movie_id`,
+        where: `((${cartelera.where}) OR (${preventas.where}))`,
+        order: `l.matches DESC, ${cartelera.order}`,
+      },
+      { clientId },
+    );
+  }
+
+  private async queryPortalMovies<Extra extends object = object>(
+    { with: extraWith = '', select = '', join, where, order }: PortalMoviesSql,
+    binds: Record<string, string | number> = {},
+  ): Promise<(PortalSectionMovie & Extra)[]> {
     const result = await this.db.query<
-      Omit<PortalSectionMovie, 'genres'> & { genres: string | null }
-    >(`
+      Omit<PortalSectionMovie, 'genres'> & Extra & { genres: string | null }
+    >(
+      `
       WITH upcoming AS (${UPCOMING_FUNCTIONS}
-      )
+      )${extraWith}
       SELECT m.movie_id AS "id", m.title AS "title", m.poster_image AS "posterImage",
              m.synopsis AS "synopsis", c.classification_name AS "classification",
              m.running_time AS "runningTime",
@@ -140,13 +184,15 @@ export class MovieFunctionsRepository {
                 FROM Movie_genres mg JOIN Genres g ON g.genre_id = mg.genre_id
                WHERE mg.movie_id = m.movie_id) AS "genres",
              TO_CHAR(m.RELEASE_DATE, 'YYYY-MM-DD') AS "releaseDate",
-             TO_CHAR(m.PRESALE_START, 'YYYY-MM-DD') AS "presaleStart"
+             TO_CHAR(m.PRESALE_START, 'YYYY-MM-DD') AS "presaleStart"${select}
       FROM Movies m
       ${join}
       LEFT JOIN Classifications c ON c.classification_id = m.classification_id
       WHERE ${where}
       ORDER BY ${order}
-    `);
+    `,
+      binds,
+    );
     return (result.rows ?? []).map((row) => ({
       ...row,
       genres: row.genres ? row.genres.split('|') : [],

@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import MoviePoster from '@/components/common/MoviePoster.vue'
-import type { PortalSection, PortalSectionMovie } from '@/types/portal'
+import type { PortalSection, PortalSectionMovie, RecommendedMovie } from '@/types/portal'
 import { formatRunningTime, formatShortDate } from '@/utils/portal-format'
 
 // SCRUM-437: a movie card of the portal (prototype, option A).
 // Cartelera and Preventas sell tickets; Estrenos only announces the release date.
-const props = defineProps<{ movie: PortalSectionMovie; section: PortalSection }>()
+// SCRUM-439: a recommended movie also says which favorite genre it matches.
+const props = defineProps<{
+  movie: PortalSectionMovie & Partial<Pick<RecommendedMovie, 'matchedGenre'>>
+  section: PortalSection
+}>()
 
 const runningTime = computed(() => formatRunningTime(props.movie.runningTime))
 const releaseDate = computed(() => formatShortDate(props.movie.releaseDate))
@@ -20,6 +24,7 @@ const presaleStart = computed(() => formatShortDate(props.movie.presaleStart))
       <span v-if="section === 'preventas'" class="badge-presale">Preventa</span>
     </div>
 
+    <span v-if="movie.matchedGenre" class="reason">Te gusta {{ movie.matchedGenre }}</span>
     <h3 class="card-title">{{ movie.title }}</h3>
     <p class="card-meta">
       <span v-if="movie.classification" class="classification">{{ movie.classification }}</span>
@@ -103,6 +108,18 @@ const presaleStart = computed(() => formatShortDate(props.movie.presaleStart))
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.02em;
+}
+
+.reason {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--primary-color);
+  color: var(--text-on-dark);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .card-title {

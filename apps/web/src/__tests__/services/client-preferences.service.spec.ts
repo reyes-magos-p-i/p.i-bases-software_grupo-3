@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getClientPreferenceSettings,
+  getPortalRecommendations,
   saveClientPreferences,
 } from '@/services/client-preferences.service'
 
@@ -40,6 +41,17 @@ describe('Client preference API', () => {
     put.mockResolvedValue({ data: selected })
     await expect(saveClientPreferences(selected)).resolves.toEqual(selected)
     expect(put).toHaveBeenCalledExactlyOnceWith('/clients/me/preferences', selected, options)
+  })
+  // SCRUM-439
+  it('fetches the portal recommendations of the signed-in client', async () => {
+    const data = { genres: ['Aventura'], movies: [] }
+    get.mockResolvedValue({ data })
+    const signal = new AbortController().signal
+    await expect(getPortalRecommendations(signal)).resolves.toEqual(data)
+    expect(get).toHaveBeenCalledExactlyOnceWith('/clients/me/preferences/recommendations', {
+      ...options,
+      signal,
+    })
   })
   it('propagates HTTP errors for the shared profile feedback handler', async () => {
     put.mockRejectedValue(new Error('offline'))

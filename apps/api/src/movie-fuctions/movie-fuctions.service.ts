@@ -4,6 +4,7 @@ import type {
   PortalMovie,
   PortalSection,
   PortalSectionMovie,
+  RecommendedMovie,
 } from './entities/upcoming-movie-functions.interface';
 import { Injectable } from '@nestjs/common';
 import { MovieFunctionsRepository } from './movie-functions.repository/movie-functions.repository';
@@ -22,6 +23,12 @@ export class MovieFuctionsService {
   findSection(section: PortalSection): Promise<PortalSectionMovie[]> {
     return this.movieFunctionsRepository.getSectionMovies(section);
   }
+
+  /** SCRUM-439: Cartelera and Preventas movies that match the client's favorite genres. */
+  findRecommendations(clientId: number): Promise<RecommendedMovie[]> {
+    return this.movieFunctionsRepository.getRecommendedMovies(clientId);
+  }
+
   async findCatalog(
     preferences?: MoviePreferences,
     clientId?: number,

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { PortalRecommendations } from '../../../movie-fuctions/entities/upcoming-movie-functions.interface';
 import { MoviesRepository } from '../../../movies/movies.repository';
 import { MovieFuctionsService } from '../../../movie-fuctions/movie-fuctions.service';
 import { ClientPreferencesRepository } from './client-preferences.repository';
@@ -31,6 +32,23 @@ export class ClientPreferencesService {
 
   save(id: number, data: UpdateClientPreferencesDto) {
     return this.preferences.savePreferences(id, data);
+  }
+
+  /** SCRUM-439: without favorite genres there is nothing to recommend, so it skips the query. */
+  async getRecommendations(id: number): Promise<PortalRecommendations> {
+    const { genreIds } = await this.preferences.getPreferences(id);
+    if (!genreIds.length) return { genres: [], movies: [] };
+    const [genres, movies] = await Promise.all([
+      this.movies.findGenres(),
+      this.portal.findRecommendations(id),
+    ]);
+    const favorite = new Set(genreIds);
+    return {
+      genres: genres
+        .filter((genre) => favorite.has(genre.id))
+        .map((genre) => genre.name),
+      movies,
+    };
   }
 
   async getPortal(id: number) {
