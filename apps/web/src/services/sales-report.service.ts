@@ -67,7 +67,7 @@ function buildPdf(request: SalesReportRequest, signal: AbortSignal): Promise<Arr
         return
       }
       const signature = Array.from(new Uint8Array(result.buffer, 0, 5))
-        .map((byte) => String.fromCharCode(byte))
+        .map((byte) => String.fromCodePoint(byte))
         .join('')
       if (signature !== '%PDF-') {
         fail(new Error(SALES_REPORT_ERROR))
