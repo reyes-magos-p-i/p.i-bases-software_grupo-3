@@ -1,8 +1,8 @@
 -- SCRUM-434: copies every table that 03 changes to BKP434_<table>, before the cleanup.
 -- Run as the schema owner (DEVELOPMENT or PRODUCTION) with Run Script (F5).
 -- It refuses to run if a backup already exists, so a second run never overwrites the first copy.
--- Restore one table: DELETE FROM <table>; INSERT INTO <table> SELECT * FROM BKP434_<table>;
--- (identity columns: use the ALWAYS-to-BY DEFAULT note in docs/database-cleanup.md).
+-- To undo the cleanup from these backups, run 04_restore_from_backups.sql (never DELETE and
+-- re-insert whole tables: other rows still reference them).
 SET SERVEROUTPUT ON
 
 DECLARE
