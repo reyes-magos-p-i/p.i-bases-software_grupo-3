@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
+import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsRepository } from './promotions.repository';
 import type { PromotionDetail, PromotionListItem } from './promotion-response.types';
@@ -33,6 +34,24 @@ export class PromotionsService {
   }
 
   async create(dto: CreatePromotionDto) {
+    this.validatePromotion(dto);
+
+    const promotionId = await this.repository.create(dto);
+
+    return { promotionId };
+  }
+
+  async update(id: number, dto: UpdatePromotionDto): Promise<{ promotionId: number }> {
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw new BadRequestException('Promotion ID must be a positive safe integer.');
+    }
+    this.validatePromotion(dto);
+    const updated = await this.repository.update(id, dto);
+    if (!updated) throw new NotFoundException('Promotion not found.');
+    return { promotionId: id };
+  }
+
+  private validatePromotion(dto: CreatePromotionDto): void {
     if (
       dto.promotionType === 'percentage'
       && dto.promotionAmount > 100
@@ -86,9 +105,6 @@ export class PromotionsService {
       );
     }
 
-    const promotionId = await this.repository.create(dto);
-
-    return { promotionId };
   }
 
   private isValidDate(value: string): boolean {

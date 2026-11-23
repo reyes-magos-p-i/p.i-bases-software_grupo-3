@@ -1,8 +1,12 @@
 import { validate } from 'class-validator';
 
+import { UpdatePromotionDto } from './update-promotion.dto';
 import { CreatePromotionDto } from './create-promotion.dto';
 
-describe('CreatePromotionDto', () => {
+describe.each([
+  ['CreatePromotionDto', CreatePromotionDto],
+  ['UpdatePromotionDto', UpdatePromotionDto],
+] as const)('%s', (_name, Dto) => {
   const validPayload = (): CreatePromotionDto => ({
     promotionType: 'percentage',
     promotionAmount: 25,
@@ -19,7 +23,7 @@ describe('CreatePromotionDto', () => {
   });
 
   async function errorsFor(payload: object) {
-    const dto = Object.assign(new CreatePromotionDto(), payload);
+    const dto = Object.assign(new Dto(), payload);
     return validate(dto);
   }
 
