@@ -11,6 +11,7 @@ import { EmailVerificationSender } from '../auth/notifications/email-verificatio
 import { PasswordRecoverySender } from '../auth/notifications/password-recovery-sender';
 import { PasswordRecoveryRepository } from '../auth/password-recovery.repository';
 import { ClientsService } from '../clients/clients.service';
+import { todayInCostaRica } from '../common/validation/date-only.decorator';
 import { DatabaseService } from '../database/database.service';
 import { UsersRepository } from '../users/users.repository';
 import { SalesStatisticsModule } from './sales-statistics.module';
@@ -121,6 +122,42 @@ describe('Sales statistics HTTP access and validation', () => {
       'day',
     );
   });
+  it('accepts the current Costa Rica day as both period boundaries', async () => {
+    const today = todayInCostaRica();
+    const response = await get(
+      `/api/sales-statistics?dateFrom=${today}&dateTo=${today}`,
+    ).expect(200);
+    expect(response.body.period).toMatchObject({
+      dateFrom: today,
+      dateTo: today,
+    });
+    expect(repository.read).toHaveBeenCalledWith(
+      { dateFrom: today, dateTo: today },
+      'day',
+    );
+  });
+  it.each(['dateFrom', 'dateTo'] as const)(
+    'rejects future %s without consulting the database',
+    async (field) => {
+      const today = todayInCostaRica();
+      const nextDay = new Date(today + 'T00:00:00Z');
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      const dates = {
+        dateFrom: today,
+        dateTo: today,
+        [field]: nextDay.toISOString().slice(0, 10),
+      };
+      const response = await get(
+        `/api/sales-statistics?dateFrom=${dates.dateFrom}&dateTo=${dates.dateTo}`,
+      ).expect(400);
+      expect(response.body.message).toContain(
+        field === 'dateFrom'
+          ? 'Selecciona una fecha de inicio válida que no sea posterior a hoy.'
+          : 'Selecciona una fecha de fin válida que no sea posterior a hoy.',
+      );
+      expect(repository.read).not.toHaveBeenCalled();
+    },
+  );
   it.each([
     '/api/sales-statistics',
     '/api/sales-statistics?dateFrom=2026-11-01',

@@ -11,6 +11,15 @@ afterEach(() => vi.unstubAllGlobals())
 enableAutoUnmount(afterEach)
 const body = new DOMWrapper(document.body)
 describe('DataChart', () => {
+  it('retains paid zero-value points without invalid coordinates after sharing the plot geometry', () => {
+    const view = mount(DataChart, {
+      props: { title: 'Ingresos', type: 'line', points: [{ key: 'zero', label: 'Hoy', value: 0 }] },
+    })
+    expect(view.get('polyline').attributes('points')).toBe('65,260')
+    expect(view.get('.series-point').attributes('cy')).toBe('260')
+    expect(view.get('.series-point').attributes('aria-label')).toBe('Hoy: 0')
+    view.unmount()
+  })
   it('renders ordered bars with values without a report data section', () => {
     const view = mount(DataChart, { props: { title: 'Géneros', type: 'bar', points } })
     expect(view.get('ol').attributes('aria-label')).toBe('Géneros')

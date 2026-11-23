@@ -22,6 +22,7 @@ function loginQuery(to: RouteLocationNormalized, reason: string) {
 
 export const requireClientSession: NavigationGuard = async (to) => {
   if (
+    to.meta.requiresEmployee === true ||
     to.meta.publicLegal === true ||
     to.path === '/recover-password' ||
     to.path === '/account/confirm-email'

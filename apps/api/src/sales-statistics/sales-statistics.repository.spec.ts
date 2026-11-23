@@ -74,4 +74,36 @@ describe('SalesStatisticsRepository', () => {
       repository.read({ dateFrom: '2026-11-01', dateTo: '2026-11-21' }, 'day'),
     ).rejects.toBe(failure);
   });
+  it('isolates category attribution from the unique invoice cohort and never sums distinct amounts', async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    await repository.read(
+      { dateFrom: '2026-11-01', dateTo: '2026-11-30' },
+      'day',
+    );
+    const [sql] = db.query.mock.calls[0] as [string];
+    const [cohort, projections] = sql.split("SELECT 'summary'");
+    expect(cohort).toContain('GROUP BY ip.INVOICE_ID');
+    expect(cohort).not.toContain('MOVIE_GENRES');
+    expect(cohort).not.toContain('MOVIE_LANGUAGES');
+    const branches = projections.split('UNION ALL');
+    expect(branches).toHaveLength(9);
+    expect(
+      branches
+        .slice(0, -2)
+        .every(
+          (branch) =>
+            !branch.includes('MOVIE_GENRES') &&
+            !branch.includes('MOVIE_LANGUAGES'),
+        ),
+    ).toBe(true);
+    expect(branches.at(-2)).toContain(
+      'MOVIE_GENRES mg ON mg.MOVIE_ID=s.MOVIE_ID',
+    );
+    expect(branches.at(-2)).not.toContain('MOVIE_LANGUAGES');
+    expect(branches.at(-1)).toContain(
+      'MOVIE_LANGUAGES ml ON ml.MOVIE_ID=s.MOVIE_ID',
+    );
+    expect(branches.at(-1)).not.toContain('MOVIE_GENRES');
+    expect(sql).not.toMatch(/SUM\s*\(\s*DISTINCT/iu);
+  });
 });

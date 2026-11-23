@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   statisticsAgeError,
   statisticsPeriod,
   statisticsPeriodError,
   statisticsPeriodCaption,
 } from '@/utils/statistics-period'
+
+afterEach(() => vi.useRealTimers())
 
 describe('statistics periods and age ranges', () => {
   it.each([
@@ -58,6 +60,25 @@ describe('statistics periods and age ranges', () => {
     expect(statisticsPeriodError('2026-11-21', '2026-11-21')).toBe('')
     expect(statisticsAgeError('0', '17')).toBe('')
     expect(statisticsAgeError('25', '25')).toBe('')
+  })
+  it.each([
+    ['2026-11-24', '2026-11-24'],
+    ['2026-11-01', '2026-11-24'],
+    ['2026-11-24', '2026-11-23'],
+  ])('rejects future dates in the period %s to %s', (from, to) => {
+    expect(statisticsPeriodError(from, to, '2026-11-23')).toBe(
+      'Las fechas del periodo no pueden ser posteriores a hoy.',
+    )
+  })
+  it('accepts historical periods and today, using the current day in Costa Rica', () => {
+    vi.useFakeTimers().setSystemTime(new Date('2026-11-24T02:00:00Z'))
+    expect(statisticsPeriodError('2026-11-01', '2026-11-23')).toBe('')
+    expect(statisticsPeriodError('2026-11-23', '2026-11-23')).toBe('')
+    expect(statisticsPeriodError('2026-11-23', '2026-11-24')).toBe(
+      'Las fechas del periodo no pueden ser posteriores a hoy.',
+    )
+    vi.setSystemTime(new Date('2026-11-24T06:00:00Z'))
+    expect(statisticsPeriodError('2026-11-23', '2026-11-24')).toBe('')
   })
   it.each([
     ['', '17'],
