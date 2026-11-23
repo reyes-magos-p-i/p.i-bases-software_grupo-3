@@ -8,6 +8,17 @@
   --surface-background: #0f172a;
   --content-background: #f8f9fa;
 
+  /* Chart colors derive from the system palette. */
+  --chart-color-1: var(--accent-color);
+  --chart-color-2: color-mix(in srgb, var(--primary-color) 75%, var(--content-background));
+  --chart-color-3: var(--content-background);
+  --chart-color-4: color-mix(in srgb, var(--primary-color) 50%, var(--surface-background));
+  --chart-color-5: color-mix(in srgb, var(--accent-color) 55%, var(--content-background));
+  --chart-color-6: color-mix(in srgb, var(--primary-color) 35%, var(--content-background));
+  --chart-color-7: color-mix(in srgb, var(--accent-color) 55%, var(--surface-background));
+  --chart-color-8: color-mix(in srgb, var(--content-background) 50%, var(--surface-background));
+  --chart-grid-color: color-mix(in srgb, var(--content-background) 12%, transparent);
+
   /* Feedback is independent of the brand palette. */
   --error-color: #b42318;
   --success-color: #198754;
