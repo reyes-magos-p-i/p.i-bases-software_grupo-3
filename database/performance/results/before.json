@@ -1,0 +1,1294 @@
+{
+  "measuredAt": "2026-11-23T06:21:07.589Z",
+  "runs": 10,
+  "statements": [
+    {
+      "module": "Transacciones",
+      "scenario": "Listado de transacciones",
+      "index": 1,
+      "sql": "SELECT COUNT(*) AS TOTAL FROM INVOICES i\n       LEFT JOIN CLIENTS c ON c.CLIENT_ID = i.CLIENT_ID\n       JOIN MOVIE_FUNCTIONS f ON f.MOVIE_FUNCTION_ID = i.MOVIE_FUNCTION_ID\n       JOIN MOVIES m ON m.MOVIE_ID = f.MOVIE_ID\n       JOIN THEATERS t ON t.THEATER_ID = f.THEATER_ID\n       JOIN CINEMAS b ON b.BRANCH_ID = t.BRANCH_ID\n       WHERE i.STATUS IN ('PAID', 'CANCELLED')",
+      "binds": {},
+      "rowCount": 1,
+      "rowsHash": "5c161298e5ac79f1430fbd05c7c2f7c4caf010922773b5e36bafc1e34dfa71c3",
+      "sortedRowsHash": "0060824abfebb86838fde17ce17ed054e6958c1e6f3aec50f77b44b0e91fc8a6",
+      "times": [
+        0.058,
+        0.056,
+        0.048,
+        0.049,
+        0.047,
+        0.047,
+        0.043,
+        0.081,
+        0.055,
+        0.046
+      ],
+      "median": 0.0485,
+      "fetched": 1,
+      "plan": "Plan hash value: 3006676382\n \n------------------------------------------------------------\n| Id  | Operation          | Name     | Rows  | Cost (%CPU)|\n------------------------------------------------------------\n|   0 | SELECT STATEMENT   |          |     1 |     6   (0)|\n|   1 |  SORT AGGREGATE    |          |     1 |            |\n|*  2 |   TABLE ACCESS FULL| INVOICES |    32 |     6   (0)|\n------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   2 - filter(\"I\".\"STATUS\"='CANCELLED' OR \"I\".\"STATUS\"='PAID')"
+    },
+    {
+      "module": "Transacciones",
+      "scenario": "Listado de transacciones",
+      "index": 2,
+      "sql": "SELECT i.INVOICE_ID AS ID,\n       TO_CHAR(i.CREATED_AT AT TIME ZONE 'America/Costa_Rica', 'YYYY-MM-DD\"T\"HH24:MI') AS PURCHASED_AT,\n       CASE WHEN i.CLIENT_ID IS NULL THEN 'Invitado' ELSE TRIM(REGEXP_REPLACE(c.FIRST_NAME || ' ' || c.SECOND_NAME || ' ' || c.FIRST_SURNAME || ' ' || c.SECOND_SURNAME, ' +', ' ')) END AS CLIENT_NAME, COALESCE(i.BUYER_EMAIL,c.EMAIL) AS CLIENT_EMAIL,\n       COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.title'),m.TITLE) AS MOVIE_TITLE, COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.branchName'),TRIM(b.NAME)) AS BRANCH_NAME, COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.theaterId' RETURNING NUMBER),f.THEATER_ID) AS THEATER_ID,\n       COALESCE(SUBSTR(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.startsAt'),1,16),TO_CHAR(f.START_TIME, 'YYYY-MM-DD\"T\"HH24:MI')) AS FUNCTION_START,\n       (SELECT NVL(SUM(l.QUANTITY), 0)\n          FROM INVOICE_PRODUCTS l\n          JOIN PRODUCTS p ON p.PRODUCT_ID = l.PRODUCT_ID\n         WHERE l.INVOICE_ID = i.INVOICE_ID AND p.PRODUCT_TYPE = 'TICKET') AS TICKETS,\n       i.TOTAL, i.STATUS\n       FROM INVOICES i\n       LEFT JOIN CLIENTS c ON c.CLIENT_ID = i.CLIENT_ID\n       JOIN MOVIE_FUNCTIONS f ON f.MOVIE_FUNCTION_ID = i.MOVIE_FUNCTION_ID\n       JOIN MOVIES m ON m.MOVIE_ID = f.MOVIE_ID\n       JOIN THEATERS t ON t.THEATER_ID = f.THEATER_ID\n       JOIN CINEMAS b ON b.BRANCH_ID = t.BRANCH_ID\n       WHERE i.STATUS IN ('PAID', 'CANCELLED')\n       ORDER BY i.CREATED_AT DESC, i.INVOICE_ID DESC\n       OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY",
+      "binds": {
+        "offset": {
+          "val": 0,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        },
+        "pageSize": {
+          "val": 10,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 10,
+      "rowsHash": "03287af34b19a2aaddae2169a39c9f9081f1cf0ef14fb564f802ec978274dd4d",
+      "sortedRowsHash": "84125c2aca067553788ed6189c4697955c5614ac236c1a3c114183b7e89c75e7",
+      "times": [
+        1.58,
+        1.428,
+        1.139,
+        1.104,
+        1.098,
+        1.094,
+        1.097,
+        1.087,
+        1.093,
+        1.089
+      ],
+      "median": 1.0975000000000001,
+      "fetched": 10,
+      "plan": "Plan hash value: 3401262881\n \n-------------------------------------------------------------------------------------------\n| Id  | Operation                              | Name                | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                       |                     |    32 |    83   (2)|\n|   1 |  SORT AGGREGATE                        |                     |     1 |            |\n|   2 |   NESTED LOOPS                         |                     |     1 |     3   (0)|\n|   3 |    NESTED LOOPS                        |                     |     1 |     3   (0)|\n|   4 |     TABLE ACCESS BY INDEX ROWID BATCHED| INVOICE_PRODUCTS    |     1 |     2   (0)|\n|*  5 |      INDEX RANGE SCAN                  | PK_INVOICE_PRODUCTS |     1 |     1   (0)|\n|*  6 |     INDEX UNIQUE SCAN                  | SYS_C0038213        |     1 |     0   (0)|\n|*  7 |    TABLE ACCESS BY INDEX ROWID         | PRODUCTS            |     1 |     1   (0)|\n|*  8 |  VIEW                                  |                     |    32 |    83   (2)|\n|*  9 |   WINDOW SORT PUSHED RANK              |                     |    32 |    83   (2)|\n|* 10 |    FILTER                              |                     |       |            |\n|* 11 |     HASH JOIN                          |                     |    32 |    31   (0)|\n|  12 |      TABLE ACCESS FULL                 | CINEMAS             |     9 |     5   (0)|\n|* 13 |      HASH JOIN                         |                     |    32 |    26   (0)|\n|* 14 |       HASH JOIN                        |                     |    32 |    21   (0)|\n|  15 |        TABLE ACCESS FULL               | MOVIES              |     8 |     5   (0)|\n|* 16 |        HASH JOIN                       |                     |    32 |    16   (0)|\n|* 17 |         HASH JOIN OUTER                |                     |    32 |    11   (0)|\n|* 18 |          TABLE ACCESS FULL             | INVOICES            |    32 |     6   (0)|\n|  19 |          TABLE ACCESS FULL             | CLIENTS             |    17 |     5   (0)|\n|  20 |         TABLE ACCESS FULL              | MOVIE_FUNCTIONS     |   102 |     5   (0)|\n|  21 |       TABLE ACCESS FULL                | THEATERS            |    25 |     5   (0)|\n-------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   5 - access(\"L\".\"INVOICE_ID\"=:B1)\n   6 - access(\"P\".\"PRODUCT_ID\"=\"L\".\"PRODUCT_ID\")\n   7 - filter(\"P\".\"PRODUCT_TYPE\"='TICKET')\n   8 - filter(\"from$_subquery$_015\".\"rowlimit_$$_rownumber\"<=TO_NUMBER(GREATEST(TO_\n              CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OFFSET)))),'0'))+:PAGESIZE AND \n              \"from$_subquery$_015\".\"rowlimit_$$_rownumber\">:OFFSET)\n   9 - filter(ROW_NUMBER() OVER ( ORDER BY \"I\".\"CREATED_AT\" DESC ,\"I\".\"INVOICE_ID\" \n              DESC )<=TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OFFSET)))),'0'))+:PAGES\n              IZE)\n  10 - filter(:OFFSET<TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OFFSET)))\n              ),'0'))+:PAGESIZE)\n  11 - access(\"B\".\"BRANCH_ID\"=\"T\".\"BRANCH_ID\")\n  13 - access(\"T\".\"THEATER_ID\"=\"F\".\"THEATER_ID\")\n  14 - access(\"M\".\"MOVIE_ID\"=\"F\".\"MOVIE_ID\")\n  16 - access(\"F\".\"MOVIE_FUNCTION_ID\"=\"I\".\"MOVIE_FUNCTION_ID\")\n  17 - access(\"C\".\"CLIENT_ID\"(+)=\"I\".\"CLIENT_ID\")\n  18 - filter(\"I\".\"STATUS\"='CANCELLED' OR \"I\".\"STATUS\"='PAID')"
+    },
+    {
+      "module": "Transacciones",
+      "scenario": "Detalle de transacción",
+      "index": 1,
+      "sql": "SELECT i.INVOICE_ID AS ID,\n       TO_CHAR(i.CREATED_AT AT TIME ZONE 'America/Costa_Rica', 'YYYY-MM-DD\"T\"HH24:MI') AS PURCHASED_AT,\n       CASE WHEN i.CLIENT_ID IS NULL THEN 'Invitado' ELSE TRIM(REGEXP_REPLACE(c.FIRST_NAME || ' ' || c.SECOND_NAME || ' ' || c.FIRST_SURNAME || ' ' || c.SECOND_SURNAME, ' +', ' ')) END AS CLIENT_NAME, COALESCE(i.BUYER_EMAIL,c.EMAIL) AS CLIENT_EMAIL,\n       COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.title'),m.TITLE) AS MOVIE_TITLE, COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.branchName'),TRIM(b.NAME)) AS BRANCH_NAME, COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.theaterId' RETURNING NUMBER),f.THEATER_ID) AS THEATER_ID,\n       COALESCE(SUBSTR(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.startsAt'),1,16),TO_CHAR(f.START_TIME, 'YYYY-MM-DD\"T\"HH24:MI')) AS FUNCTION_START,\n       (SELECT NVL(SUM(l.QUANTITY), 0)\n          FROM INVOICE_PRODUCTS l\n          JOIN PRODUCTS p ON p.PRODUCT_ID = l.PRODUCT_ID\n         WHERE l.INVOICE_ID = i.INVOICE_ID AND p.PRODUCT_TYPE = 'TICKET') AS TICKETS,\n       i.TOTAL, i.STATUS,\n              i.PAYMENT_METHOD, i.CARD_BRAND, i.CARD_LAST4\n       FROM INVOICES i\n       LEFT JOIN CLIENTS c ON c.CLIENT_ID = i.CLIENT_ID\n       JOIN MOVIE_FUNCTIONS f ON f.MOVIE_FUNCTION_ID = i.MOVIE_FUNCTION_ID\n       JOIN MOVIES m ON m.MOVIE_ID = f.MOVIE_ID\n       JOIN THEATERS t ON t.THEATER_ID = f.THEATER_ID\n       JOIN CINEMAS b ON b.BRANCH_ID = t.BRANCH_ID\n       WHERE i.STATUS IN ('PAID', 'CANCELLED')\n       AND i.INVOICE_ID = :id",
+      "binds": {
+        "id": {
+          "val": 186,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 1,
+      "rowsHash": "d4284f37832edf43dc971e6ae592efd983d15bd806b8adf382ee2a82608b9716",
+      "sortedRowsHash": "68a54e52601857c5b5457e7e3af5adf611a2d82a169f93b5f2470f9ae3cef46c",
+      "times": [
+        0.163,
+        0.124,
+        0.114,
+        0.108,
+        0.106,
+        0.101,
+        0.147,
+        0.111,
+        0.101,
+        0.101
+      ],
+      "median": 0.1095,
+      "fetched": 1,
+      "plan": "Plan hash value: 1534239883\n \n-------------------------------------------------------------------------------------------\n| Id  | Operation                              | Name                | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                       |                     |     1 |    38   (0)|\n|   1 |  SORT AGGREGATE                        |                     |     1 |            |\n|   2 |   NESTED LOOPS                         |                     |     1 |     3   (0)|\n|   3 |    NESTED LOOPS                        |                     |     1 |     3   (0)|\n|   4 |     TABLE ACCESS BY INDEX ROWID BATCHED| INVOICE_PRODUCTS    |     1 |     2   (0)|\n|*  5 |      INDEX RANGE SCAN                  | PK_INVOICE_PRODUCTS |     1 |     1   (0)|\n|*  6 |     INDEX UNIQUE SCAN                  | SYS_C0038213        |     1 |     0   (0)|\n|*  7 |    TABLE ACCESS BY INDEX ROWID         | PRODUCTS            |     1 |     1   (0)|\n|   8 |  NESTED LOOPS                          |                     |     1 |    35   (0)|\n|   9 |   NESTED LOOPS                         |                     |     1 |     6   (0)|\n|  10 |    NESTED LOOPS                        |                     |     1 |     5   (0)|\n|  11 |     NESTED LOOPS                       |                     |     1 |     4   (0)|\n|  12 |      NESTED LOOPS OUTER                |                     |     1 |     3   (0)|\n|  13 |       NESTED LOOPS                     |                     |     1 |     2   (0)|\n|* 14 |        TABLE ACCESS BY INDEX ROWID     | INVOICES            |     1 |     1   (0)|\n|* 15 |         INDEX UNIQUE SCAN              | SYS_C0038134        |     1 |     0   (0)|\n|  16 |        TABLE ACCESS BY INDEX ROWID     | MOVIE_FUNCTIONS     |     1 |     1   (0)|\n|* 17 |         INDEX UNIQUE SCAN              | SYS_C0038137        |     1 |     0   (0)|\n|  18 |       TABLE ACCESS BY INDEX ROWID      | CLIENTS             |     1 |     1   (0)|\n|* 19 |        INDEX UNIQUE SCAN               | SYS_C0038196        |     1 |     0   (0)|\n|  20 |      TABLE ACCESS BY INDEX ROWID       | THEATERS            |     1 |     1   (0)|\n|* 21 |       INDEX UNIQUE SCAN                | SYS_C0038216        |     1 |     0   (0)|\n|  22 |     TABLE ACCESS BY INDEX ROWID        | MOVIES              |     1 |     1   (0)|\n|* 23 |      INDEX UNIQUE SCAN                 | SYS_C0038159        |     1 |     0   (0)|\n|  24 |    TABLE ACCESS BY INDEX ROWID         | CINEMAS             |     1 |     1   (0)|\n|* 25 |     INDEX UNIQUE SCAN                  | PK_CINEMAS          |     1 |     0   (0)|\n|  26 |   JSONTABLE EVALUATION                 |                     |     1 |    29   (0)|\n-------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   5 - access(\"L\".\"INVOICE_ID\"=:B1)\n   6 - access(\"P\".\"PRODUCT_ID\"=\"L\".\"PRODUCT_ID\")\n   7 - filter(\"P\".\"PRODUCT_TYPE\"='TICKET')\n  14 - filter(\"I\".\"STATUS\"='CANCELLED' OR \"I\".\"STATUS\"='PAID')\n  15 - access(\"I\".\"INVOICE_ID\"=:ID)\n  17 - access(\"F\".\"MOVIE_FUNCTION_ID\"=\"I\".\"MOVIE_FUNCTION_ID\")\n  19 - access(\"C\".\"CLIENT_ID\"(+)=\"I\".\"CLIENT_ID\")\n  21 - access(\"T\".\"THEATER_ID\"=\"F\".\"THEATER_ID\")\n  23 - access(\"M\".\"MOVIE_ID\"=\"F\".\"MOVIE_ID\")\n  25 - access(\"B\".\"BRANCH_ID\"=\"T\".\"BRANCH_ID\")"
+    },
+    {
+      "module": "Transacciones",
+      "scenario": "Detalle de transacción",
+      "index": 2,
+      "sql": "SELECT l.PRODUCT_ID, p.NAME, p.PRODUCT_TYPE, l.QUANTITY, l.UNIT_PRICE\n       FROM INVOICE_PRODUCTS l\n       JOIN PRODUCTS p ON p.PRODUCT_ID = l.PRODUCT_ID\n       WHERE l.INVOICE_ID = :id\n       ORDER BY CASE p.PRODUCT_TYPE WHEN 'TICKET' THEN 0 ELSE 1 END, p.NAME",
+      "binds": {
+        "id": {
+          "val": 186,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 3,
+      "rowsHash": "f00f142c9c5e759bc0014f1490cfe4c1bf03c66b2c20df3948b2269e889b299f",
+      "sortedRowsHash": "38391fc75770cc7bfaa4e3dd994939e686a0851038fd7c43c479f3176726d954",
+      "times": [
+        10.891,
+        10.53,
+        10.523,
+        10.435,
+        10.246,
+        10.114,
+        10.47,
+        10.261,
+        10.704,
+        13.899
+      ],
+      "median": 10.496500000000001,
+      "fetched": 3,
+      "plan": "Plan hash value: 3700586672\n \n-----------------------------------------------------------------------------------------------\n| Id  | Operation                                  | Name                | Rows  | Cost (%CPU)|\n-----------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                           |                     |     1 |     4  (25)|\n|   1 |  PX COORDINATOR                            |                     |       |            |\n|   2 |   PX SEND QC (ORDER)                       | :TQ10002            |     1 |     4  (25)|\n|   3 |    SORT ORDER BY                           |                     |     1 |     4  (25)|\n|   4 |     PX RECEIVE                             |                     |     1 |     3   (0)|\n|   5 |      PX SEND RANGE                         | :TQ10001            |     1 |     3   (0)|\n|   6 |       NESTED LOOPS                         |                     |     1 |     3   (0)|\n|   7 |        NESTED LOOPS                        |                     |     1 |     3   (0)|\n|   8 |         TABLE ACCESS BY INDEX ROWID BATCHED| INVOICE_PRODUCTS    |     1 |     2   (0)|\n|   9 |          BUFFER SORT                       |                     |       |            |\n|  10 |           PX RECEIVE                       |                     |     1 |     1   (0)|\n|  11 |            PX SEND HASH (BLOCK ADDRESS)    | :TQ10000            |     1 |     1   (0)|\n|  12 |             PX SELECTOR                    |                     |       |            |\n|* 13 |              INDEX RANGE SCAN              | PK_INVOICE_PRODUCTS |     1 |     1   (0)|\n|* 14 |         INDEX UNIQUE SCAN                  | SYS_C0038213        |     1 |     0   (0)|\n|  15 |        TABLE ACCESS BY INDEX ROWID         | PRODUCTS            |     1 |     1   (0)|\n-----------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n  13 - access(\"L\".\"INVOICE_ID\"=:ID)\n  14 - access(\"P\".\"PRODUCT_ID\"=\"L\".\"PRODUCT_ID\")"
+    },
+    {
+      "module": "Transacciones",
+      "scenario": "Opciones de filtros",
+      "index": 1,
+      "sql": "SELECT DISTINCT b.BRANCH_ID AS ID, TRIM(b.NAME) AS NAME\n       FROM INVOICES i\n       LEFT JOIN CLIENTS c ON c.CLIENT_ID = i.CLIENT_ID\n       JOIN MOVIE_FUNCTIONS f ON f.MOVIE_FUNCTION_ID = i.MOVIE_FUNCTION_ID\n       JOIN MOVIES m ON m.MOVIE_ID = f.MOVIE_ID\n       JOIN THEATERS t ON t.THEATER_ID = f.THEATER_ID\n       JOIN CINEMAS b ON b.BRANCH_ID = t.BRANCH_ID\n       WHERE i.STATUS IN ('PAID', 'CANCELLED')\n       ORDER BY NAME NULLS LAST, ID",
+      "binds": {},
+      "rowCount": 4,
+      "rowsHash": "9c77c4f9cac67fb028ba3d912fc9be490331f8e965996f7173cbb40fc2089155",
+      "sortedRowsHash": "60f6fddf97a51a9b522e4916b4c1080f7093e061962716ea6ae65b6180490c10",
+      "times": [
+        15.103,
+        14.232,
+        14.007,
+        13.48,
+        12.285,
+        12.244,
+        12.372,
+        12.095,
+        12.114,
+        12.71
+      ],
+      "median": 12.541,
+      "fetched": 4,
+      "plan": "Plan hash value: 884309324\n \n-------------------------------------------------------------------------------------------------\n| Id  | Operation                          | Name                          | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                   |                               |    25 |    12  (17)|\n|   1 |  PX COORDINATOR                    |                               |       |            |\n|   2 |   PX SEND QC (ORDER)               | :TQ10003                      |    25 |    11  (10)|\n|   3 |    SORT UNIQUE                     |                               |    25 |    11  (10)|\n|   4 |     PX RECEIVE                     |                               |    25 |    11  (10)|\n|   5 |      PX SEND RANGE                 | :TQ10002                      |    25 |    11  (10)|\n|   6 |       HASH UNIQUE                  |                               |    25 |    11  (10)|\n|*  7 |        HASH JOIN                   |                               |    25 |    10   (0)|\n|*  8 |         HASH JOIN                  |                               |    25 |     7   (0)|\n|   9 |          JOIN CONSOLIDATOR         |                               |       |            |\n|* 10 |           HASH JOIN SEMI           |                               |    25 |     4   (0)|\n|  11 |            BUFFER SORT             |                               |       |            |\n|  12 |             PX RECEIVE             |                               |   102 |     1   (0)|\n|  13 |              PX SEND HYBRID HASH   | :TQ10000                      |   102 |     1   (0)|\n|  14 |               STATISTICS COLLECTOR |                               |       |            |\n|  15 |                INDEX FULL SCAN     | UQ_MOVIE_FUNCTIONS_ID_THEATER |   102 |     1   (0)|\n|  16 |            PX RECEIVE              |                               |    32 |     3   (0)|\n|  17 |             PX SEND HYBRID HASH    | :TQ10001                      |    32 |     3   (0)|\n|  18 |              PX BLOCK ITERATOR     |                               |    32 |     3   (0)|\n|* 19 |               TABLE ACCESS FULL    | INVOICES                      |    32 |     3   (0)|\n|  20 |          TABLE ACCESS FULL         | THEATERS                      |    25 |     3   (0)|\n|  21 |         TABLE ACCESS FULL          | CINEMAS                       |     9 |     3   (0)|\n-------------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   7 - access(\"B\".\"BRANCH_ID\"=\"T\".\"BRANCH_ID\")\n   8 - access(\"T\".\"THEATER_ID\"=\"F\".\"THEATER_ID\")\n  10 - access(\"F\".\"MOVIE_FUNCTION_ID\"=\"I\".\"MOVIE_FUNCTION_ID\")\n  19 - filter(\"I\".\"STATUS\"='CANCELLED' OR \"I\".\"STATUS\"='PAID')"
+    },
+    {
+      "module": "Transacciones",
+      "scenario": "Opciones de filtros",
+      "index": 2,
+      "sql": "SELECT DISTINCT m.MOVIE_ID AS ID, m.TITLE\n       FROM INVOICES i\n       LEFT JOIN CLIENTS c ON c.CLIENT_ID = i.CLIENT_ID\n       JOIN MOVIE_FUNCTIONS f ON f.MOVIE_FUNCTION_ID = i.MOVIE_FUNCTION_ID\n       JOIN MOVIES m ON m.MOVIE_ID = f.MOVIE_ID\n       JOIN THEATERS t ON t.THEATER_ID = f.THEATER_ID\n       JOIN CINEMAS b ON b.BRANCH_ID = t.BRANCH_ID\n       WHERE i.STATUS IN ('PAID', 'CANCELLED')\n       ORDER BY TITLE, ID",
+      "binds": {},
+      "rowCount": 7,
+      "rowsHash": "b8decd3a32ee23a62e6d76376b2a5b4dcfb79201c325c69412f0604dcb6caddb",
+      "sortedRowsHash": "778f64128215b74878f141d5b59a4b899bec9d4c34814b7f018006315339c439",
+      "times": [
+        0.877,
+        0.371,
+        0.311,
+        0.298,
+        0.329,
+        0.284,
+        0.276,
+        0.313,
+        0.284,
+        0.268
+      ],
+      "median": 0.3045,
+      "fetched": 7,
+      "plan": "Plan hash value: 3569421033\n \n----------------------------------------------------------------------------\n| Id  | Operation                 | Name              | Rows  | Cost (%CPU)|\n----------------------------------------------------------------------------\n|   0 | SELECT STATEMENT          |                   |    30 |    15  (14)|\n|   1 |  SORT UNIQUE              |                   |    30 |    14   (8)|\n|*  2 |   HASH JOIN               |                   |    32 |    13   (0)|\n|*  3 |    HASH JOIN              |                   |    32 |     8   (0)|\n|*  4 |     TABLE ACCESS FULL     | INVOICES          |    32 |     6   (0)|\n|   5 |     VIEW                  | index$_join$_004  |   102 |     2   (0)|\n|*  6 |      HASH JOIN            |                   |       |            |\n|   7 |       INDEX FAST FULL SCAN| SYS_C0038137      |   102 |     1   (0)|\n|   8 |       INDEX FAST FULL SCAN| UQ_MOVIE_FUNCTION |   102 |     1   (0)|\n|   9 |    TABLE ACCESS FULL      | MOVIES            |     8 |     5   (0)|\n----------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   2 - access(\"M\".\"MOVIE_ID\"=\"F\".\"MOVIE_ID\")\n   3 - access(\"F\".\"MOVIE_FUNCTION_ID\"=\"I\".\"MOVIE_FUNCTION_ID\")\n   4 - filter(\"I\".\"STATUS\"='CANCELLED' OR \"I\".\"STATUS\"='PAID')\n   6 - access(ROWID=ROWID)"
+    },
+    {
+      "module": "Historial de compras",
+      "scenario": "Historial del cliente",
+      "index": 1,
+      "sql": "SELECT COUNT(*) AS TOTAL FROM INVOICES i WHERE i.CLIENT_ID=:clientId AND i.STATUS IN ('PAID','CANCELLED')",
+      "binds": {
+        "clientId": 141
+      },
+      "rowCount": 1,
+      "rowsHash": "b46fac40f7d5f0cb4223e415613e7061f70edbf98978f80356dd31168cbf6313",
+      "sortedRowsHash": "a74157cfe1c1146a9f51ac6e5f679ca6fcb914f3ec26e594eb0ef6f1e9828227",
+      "times": [
+        10.541,
+        10.01,
+        9.593,
+        9.571,
+        9.439,
+        9.516,
+        9.633,
+        9.659,
+        9.539,
+        9.745
+      ],
+      "median": 9.613,
+      "fetched": 1,
+      "plan": "Plan hash value: 2691357911\n \n---------------------------------------------------------------------------------------------------\n| Id  | Operation                               | Name                       | Rows  | Cost (%CPU)|\n---------------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                        |                            |     1 |     4   (0)|\n|   1 |  SORT AGGREGATE                         |                            |     1 |            |\n|   2 |   PX COORDINATOR                        |                            |       |            |\n|   3 |    PX SEND QC (RANDOM)                  | :TQ10001                   |     1 |            |\n|   4 |     SORT AGGREGATE                      |                            |     1 |            |\n|*  5 |      TABLE ACCESS BY INDEX ROWID BATCHED| INVOICES                   |     3 |     4   (0)|\n|   6 |       PX RECEIVE                        |                            |     3 |     1   (0)|\n|   7 |        PX SEND HASH (BLOCK ADDRESS)     | :TQ10000                   |     3 |     1   (0)|\n|   8 |         PX SELECTOR                     |                            |       |            |\n|*  9 |          INDEX RANGE SCAN               | IX_INVOICES_CLIENT_CREATED |     3 |     1   (0)|\n---------------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   5 - filter(\"I\".\"STATUS\"='CANCELLED' OR \"I\".\"STATUS\"='PAID')\n   9 - access(\"I\".\"CLIENT_ID\"=:CLIENTID)"
+    },
+    {
+      "module": "Historial de compras",
+      "scenario": "Historial del cliente",
+      "index": 2,
+      "sql": "SELECT i.INVOICE_ID AS \"id\",TO_CHAR(i.CREATED_AT AT TIME ZONE 'America/Costa_Rica','YYYY-MM-DD\"T\"HH24:MI:SS') || '-06:00' AS \"purchasedAt\",i.STATUS AS \"status\",i.TOTAL AS \"total\",CASE WHEN mf.STATUS='CANCELLED' AND (EXISTS (SELECT 1 FROM TICKETS rt JOIN MOVIE_FUNCTIONS cur ON cur.MOVIE_FUNCTION_ID=rt.MOVIE_FUNCTION_ID WHERE rt.INVOICE_ID=i.INVOICE_ID AND cur.STATUS='CANCELLED') OR NOT EXISTS (SELECT 1 FROM TICKETS rt WHERE rt.INVOICE_ID=i.INVOICE_ID)) THEN 1 ELSE 0 END AS \"functionCancelled\",COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.title'),m.TITLE) AS \"title\",COALESCE(JSON_VALUE(i.PURCHASE_CONTEXT,'$.function.startsAt'),TO_CHAR(mf.START_TIME,'YYYY-MM-DD\"T\"HH24:MI:SS') || '-06:00') AS \"startsAt\",(SELECT NVL(SUM(ip.QUANTITY),0) FROM INVOICE_PRODUCTS ip JOIN PRODUCTS p ON p.PRODUCT_ID=ip.PRODUCT_ID WHERE ip.INVOICE_ID=i.INVOICE_ID AND p.PRODUCT_TYPE='TICKET') AS \"quantity\" FROM INVOICES i JOIN MOVIE_FUNCTIONS mf ON mf.MOVIE_FUNCTION_ID=i.MOVIE_FUNCTION_ID JOIN MOVIES m ON m.MOVIE_ID=mf.MOVIE_ID WHERE i.CLIENT_ID=:clientId AND i.STATUS IN ('PAID','CANCELLED') ORDER BY i.CREATED_AT DESC,i.INVOICE_ID DESC OFFSET :offset ROWS FETCH NEXT 10 ROWS ONLY",
+      "binds": {
+        "clientId": 141,
+        "offset": 0
+      },
+      "rowCount": 5,
+      "rowsHash": "2e29f5b0eae4d18094bc98faf901407e368a67de2ac6338b922d8e3156c5441b",
+      "sortedRowsHash": "1dec6adb978ca821ac8ed251e02a7b5ab6064899301996a1ebd4c8e17ea5f2fe",
+      "times": [
+        0.609,
+        0.501,
+        0.647,
+        0.536,
+        0.548,
+        0.579,
+        0.483,
+        0.62,
+        0.489,
+        0.52
+      ],
+      "median": 0.542,
+      "fetched": 5,
+      "plan": "Plan hash value: 3487521190\n \n-------------------------------------------------------------------------------------------------------\n| Id  | Operation                               | Name                           | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                        |                                |     3 |    29   (7)|\n|   1 |  NESTED LOOPS SEMI                      |                                |     1 |     4   (0)|\n|   2 |   TABLE ACCESS BY INDEX ROWID BATCHED   | TICKETS                        |     2 |     2   (0)|\n|*  3 |    INDEX RANGE SCAN                     | IX_TICKET_INVOICE_PRODUCT      |     2 |     1   (0)|\n|*  4 |   TABLE ACCESS BY INDEX ROWID           | MOVIE_FUNCTIONS                |     1 |     1   (0)|\n|*  5 |    INDEX UNIQUE SCAN                    | SYS_C0038137                   |     1 |     0   (0)|\n|*  6 |  INDEX RANGE SCAN                       | IX_TICKET_INVOICE_PRODUCT      |     1 |     1   (0)|\n|   7 |  SORT AGGREGATE                         |                                |     1 |            |\n|   8 |   NESTED LOOPS                          |                                |     1 |     3   (0)|\n|   9 |    NESTED LOOPS                         |                                |     1 |     3   (0)|\n|  10 |     TABLE ACCESS BY INDEX ROWID BATCHED | INVOICE_PRODUCTS               |     1 |     2   (0)|\n|* 11 |      INDEX RANGE SCAN                   | PK_INVOICE_PRODUCTS            |     1 |     1   (0)|\n|* 12 |     INDEX UNIQUE SCAN                   | SYS_C0038213                   |     1 |     0   (0)|\n|* 13 |    TABLE ACCESS BY INDEX ROWID          | PRODUCTS                       |     1 |     1   (0)|\n|* 14 |  VIEW                                   |                                |     3 |    29   (7)|\n|* 15 |   WINDOW SORT PUSHED RANK               |                                |     3 |    29   (7)|\n|* 16 |    FILTER                               |                                |       |            |\n|* 17 |     HASH JOIN                           |                                |     3 |    11  (10)|\n|  18 |      MERGE JOIN                         |                                |   102 |     7  (15)|\n|  19 |       TABLE ACCESS BY INDEX ROWID       | MOVIES                         |     8 |     2   (0)|\n|  20 |        INDEX FULL SCAN                  | SYS_C0038159                   |     8 |     1   (0)|\n|* 21 |       SORT JOIN                         |                                |   102 |     5  (20)|\n|  22 |        VIEW                             | index$_join$_009               |   102 |     4   (0)|\n|* 23 |         HASH JOIN                       |                                |       |            |\n|* 24 |          HASH JOIN                      |                                |       |            |\n|  25 |           INDEX FAST FULL SCAN          | IX_MOVIE_FUNCTIONS_STATUS_TIME |   102 |     1   (0)|\n|  26 |           INDEX FAST FULL SCAN          | SYS_C0038137                   |   102 |     1   (0)|\n|  27 |          INDEX FAST FULL SCAN           | UQ_MOVIE_FUNCTION              |   102 |     1   (0)|\n|* 28 |      TABLE ACCESS BY INDEX ROWID BATCHED| INVOICES                       |     3 |     4   (0)|\n|* 29 |       INDEX RANGE SCAN                  | IX_INVOICES_CLIENT_CREATED     |     3 |     1   (0)|\n-------------------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   3 - access(\"RT\".\"INVOICE_ID\"=:B1)\n   4 - filter(\"CUR\".\"STATUS\"='CANCELLED')\n   5 - access(\"CUR\".\"MOVIE_FUNCTION_ID\"=\"RT\".\"MOVIE_FUNCTION_ID\")\n   6 - access(\"RT\".\"INVOICE_ID\"=:B1)\n  11 - access(\"IP\".\"INVOICE_ID\"=:B1)\n  12 - access(\"P\".\"PRODUCT_ID\"=\"IP\".\"PRODUCT_ID\")\n  13 - filter(\"P\".\"PRODUCT_TYPE\"='TICKET')\n  14 - filter(\"from$_subquery$_013\".\"rowlimit_$$_rownumber\"<=TO_NUMBER(GREATEST(TO_CHAR(FLOOR(T\n              O_NUMBER(TO_CHAR(:OFFSET)))),'0'))+10 AND \"from$_subquery$_013\".\"rowlimit_$$_rownumber\">:OFFSET\n              )\n  15 - filter(ROW_NUMBER() OVER ( ORDER BY \"I\".\"CREATED_AT\" DESC ,\"I\".\"INVOICE_ID\" DESC \n              )<=TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OFFSET)))),'0'))+10)\n  16 - filter(:OFFSET<TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OFFSET)))),'0'))+10)\n  17 - access(\"MF\".\"MOVIE_FUNCTION_ID\"=\"I\".\"MOVIE_FUNCTION_ID\")\n  21 - access(\"M\".\"MOVIE_ID\"=\"MF\".\"MOVIE_ID\")\n       filter(\"M\".\"MOVIE_ID\"=\"MF\".\"MOVIE_ID\")\n  23 - access(ROWID=ROWID)\n  24 - access(ROWID=ROWID)\n  28 - filter(\"I\".\"STATUS\"='CANCELLED' OR \"I\".\"STATUS\"='PAID')\n  29 - access(\"I\".\"CLIENT_ID\"=:CLIENTID)"
+    },
+    {
+      "module": "Historial de compras",
+      "scenario": "Detalle de compra",
+      "index": 1,
+      "sql": "SELECT i.INVOICE_ID AS \"id\", i.MOVIE_FUNCTION_ID AS \"functionId\", TO_CHAR(i.CREATED_AT AT TIME ZONE 'America/Costa_Rica','YYYY-MM-DD\"T\"HH24:MI:SS') || '-06:00' AS \"purchasedAt\", i.STATUS AS \"status\", NVL(i.BUYER_EMAIL,c.EMAIL) AS \"buyerEmail\", CASE WHEN mf.STATUS='CANCELLED' AND (EXISTS (SELECT 1 FROM TICKETS rt JOIN MOVIE_FUNCTIONS cur ON cur.MOVIE_FUNCTION_ID=rt.MOVIE_FUNCTION_ID WHERE rt.INVOICE_ID=i.INVOICE_ID AND cur.STATUS='CANCELLED') OR NOT EXISTS (SELECT 1 FROM TICKETS rt WHERE rt.INVOICE_ID=i.INVOICE_ID)) THEN 1 ELSE 0 END AS \"functionCancelled\", i.PAYMENT_METHOD AS \"paymentMethod\", i.CARD_BRAND AS \"cardBrand\", i.CARD_LAST4 AS \"cardLast4\", i.TOTAL AS \"total\", i.PURCHASE_CONTEXT AS \"contextJson\" FROM INVOICES i LEFT JOIN CLIENTS c ON c.CLIENT_ID=i.CLIENT_ID JOIN MOVIE_FUNCTIONS mf ON mf.MOVIE_FUNCTION_ID=i.MOVIE_FUNCTION_ID WHERE i.INVOICE_ID=:id AND i.CLIENT_ID=:clientId AND i.STATUS IN ('PAID','CANCELLED')",
+      "binds": {
+        "id": 146,
+        "clientId": 141
+      },
+      "rowCount": 1,
+      "rowsHash": "d3d7af046947ba2aea6d343f8965fd4f88b76b48b57c74119365e9294e873ac8",
+      "sortedRowsHash": "74cbf1aebc13e0c39ce5164abe65adafc33610d3632d17c280b319d012c07811",
+      "times": [
+        0.096,
+        0.106,
+        0.085,
+        0.075,
+        0.08,
+        0.073,
+        0.071,
+        0.071,
+        0.07,
+        0.072
+      ],
+      "median": 0.074,
+      "fetched": 1,
+      "plan": "Plan hash value: 2251439030\n \n-----------------------------------------------------------------------------------------------\n| Id  | Operation                            | Name                      | Rows  | Cost (%CPU)|\n-----------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                     |                           |     1 |     8   (0)|\n|   1 |  NESTED LOOPS SEMI                   |                           |     1 |     4   (0)|\n|   2 |   TABLE ACCESS BY INDEX ROWID BATCHED| TICKETS                   |     2 |     2   (0)|\n|*  3 |    INDEX RANGE SCAN                  | IX_TICKET_INVOICE_PRODUCT |     2 |     1   (0)|\n|*  4 |   TABLE ACCESS BY INDEX ROWID        | MOVIE_FUNCTIONS           |     1 |     1   (0)|\n|*  5 |    INDEX UNIQUE SCAN                 | SYS_C0038137              |     1 |     0   (0)|\n|*  6 |  INDEX RANGE SCAN                    | IX_TICKET_INVOICE_PRODUCT |     1 |     1   (0)|\n|   7 |  NESTED LOOPS OUTER                  |                           |     1 |     3   (0)|\n|   8 |   NESTED LOOPS                       |                           |     1 |     2   (0)|\n|*  9 |    TABLE ACCESS BY INDEX ROWID       | INVOICES                  |     1 |     1   (0)|\n|* 10 |     INDEX UNIQUE SCAN                | SYS_C0038134              |     1 |     0   (0)|\n|  11 |    TABLE ACCESS BY INDEX ROWID       | MOVIE_FUNCTIONS           |     1 |     1   (0)|\n|* 12 |     INDEX UNIQUE SCAN                | SYS_C0038137              |     1 |     0   (0)|\n|  13 |   TABLE ACCESS BY INDEX ROWID        | CLIENTS                   |     1 |     1   (0)|\n|* 14 |    INDEX UNIQUE SCAN                 | SYS_C0038196              |     1 |     0   (0)|\n-----------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   3 - access(\"RT\".\"INVOICE_ID\"=:B1)\n   4 - filter(\"CUR\".\"STATUS\"='CANCELLED')\n   5 - access(\"CUR\".\"MOVIE_FUNCTION_ID\"=\"RT\".\"MOVIE_FUNCTION_ID\")\n   6 - access(\"RT\".\"INVOICE_ID\"=:B1)\n   9 - filter(\"I\".\"CLIENT_ID\"=:CLIENTID AND (\"I\".\"STATUS\"='CANCELLED' OR \n              \"I\".\"STATUS\"='PAID'))\n  10 - access(\"I\".\"INVOICE_ID\"=:ID)\n  12 - access(\"MF\".\"MOVIE_FUNCTION_ID\"=\"I\".\"MOVIE_FUNCTION_ID\")\n  14 - access(\"C\".\"CLIENT_ID\"(+)=:CLIENTID)"
+    },
+    {
+      "module": "Historial de compras",
+      "scenario": "Detalle de compra",
+      "index": 2,
+      "sql": "SELECT tk.TICKETS_ID AS \"id\",tk.SEAT_ROW AS \"rowNumber\",tk.SEAT_COLUMN AS \"columnNumber\",tk.THEATER_ID AS \"theaterId\",tk.MOVIE_FUNCTION_ID AS \"functionId\",m.TITLE AS \"title\",c.NAME AS \"branchName\",TO_CHAR(mf.START_TIME,'YYYY-MM-DD\"T\"HH24:MI:SS') || '-06:00' AS \"startsAt\",mf.STATUS AS \"functionStatus\",ip.UNIT_PRICE AS \"unitPrice\",CASE WHEN p.CODE LIKE 'TICKET_CHILD_%' THEN 'CHILD' WHEN p.CODE LIKE 'TICKET_SENIOR_%' THEN 'SENIOR' ELSE 'GENERAL' END AS \"category\" FROM TICKETS tk JOIN MOVIE_FUNCTIONS mf ON mf.MOVIE_FUNCTION_ID=tk.MOVIE_FUNCTION_ID JOIN MOVIES m ON m.MOVIE_ID=mf.MOVIE_ID JOIN THEATERS th ON th.THEATER_ID=tk.THEATER_ID JOIN CINEMAS c ON c.BRANCH_ID=th.BRANCH_ID JOIN INVOICE_PRODUCTS ip ON ip.INVOICE_ID=tk.INVOICE_ID AND ip.PRODUCT_ID=tk.PRODUCT_ID JOIN PRODUCTS p ON p.PRODUCT_ID=tk.PRODUCT_ID WHERE tk.INVOICE_ID=:id ORDER BY tk.SEAT_ROW,tk.SEAT_COLUMN,tk.TICKETS_ID",
+      "binds": {
+        "id": 146
+      },
+      "rowCount": 2,
+      "rowsHash": "fb7937d0a90f65779dc52afa941fd92667e6c66736a64071066e4b3421e5d5b2",
+      "sortedRowsHash": "1172c778deced98a74b139b345335e60dd89a057f72496233895f845ac1c24be",
+      "times": [
+        0.117,
+        0.095,
+        0.073,
+        0.069,
+        0.066,
+        0.068,
+        0.072,
+        0.069,
+        0.071,
+        0.094
+      ],
+      "median": 0.0715,
+      "fetched": 2,
+      "plan": "Plan hash value: 409400720\n \n------------------------------------------------------------------------------------------------------\n| Id  | Operation                                   | Name                      | Rows  | Cost (%CPU)|\n------------------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                            |                           |     1 |     9  (12)|\n|   1 |  SORT ORDER BY                              |                           |     1 |     9  (12)|\n|   2 |   NESTED LOOPS                              |                           |     1 |     8   (0)|\n|   3 |    NESTED LOOPS                             |                           |     1 |     8   (0)|\n|   4 |     NESTED LOOPS                            |                           |     1 |     7   (0)|\n|   5 |      NESTED LOOPS                           |                           |     1 |     6   (0)|\n|   6 |       NESTED LOOPS                          |                           |     1 |     5   (0)|\n|   7 |        NESTED LOOPS                         |                           |     1 |     4   (0)|\n|   8 |         NESTED LOOPS                        |                           |     1 |     3   (0)|\n|   9 |          TABLE ACCESS BY INDEX ROWID BATCHED| INVOICE_PRODUCTS          |     1 |     2   (0)|\n|* 10 |           INDEX RANGE SCAN                  | PK_INVOICE_PRODUCTS       |     1 |     1   (0)|\n|  11 |          TABLE ACCESS BY INDEX ROWID BATCHED| TICKETS                   |     1 |     1   (0)|\n|* 12 |           INDEX RANGE SCAN                  | IX_TICKET_INVOICE_PRODUCT |     1 |     0   (0)|\n|  13 |         TABLE ACCESS BY INDEX ROWID         | MOVIE_FUNCTIONS           |     1 |     1   (0)|\n|* 14 |          INDEX UNIQUE SCAN                  | SYS_C0038137              |     1 |     0   (0)|\n|  15 |        TABLE ACCESS BY INDEX ROWID          | THEATERS                  |     1 |     1   (0)|\n|* 16 |         INDEX UNIQUE SCAN                   | SYS_C0038216              |     1 |     0   (0)|\n|  17 |       TABLE ACCESS BY INDEX ROWID           | MOVIES                    |     1 |     1   (0)|\n|* 18 |        INDEX UNIQUE SCAN                    | SYS_C0038159              |     1 |     0   (0)|\n|  19 |      TABLE ACCESS BY INDEX ROWID            | CINEMAS                   |     1 |     1   (0)|\n|* 20 |       INDEX UNIQUE SCAN                     | PK_CINEMAS                |     1 |     0   (0)|\n|* 21 |     INDEX UNIQUE SCAN                       | SYS_C0038213              |     1 |     0   (0)|\n|  22 |    TABLE ACCESS BY INDEX ROWID              | PRODUCTS                  |     1 |     1   (0)|\n------------------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n  10 - access(\"IP\".\"INVOICE_ID\"=:ID)\n  12 - access(\"TK\".\"INVOICE_ID\"=:ID AND \"IP\".\"PRODUCT_ID\"=\"TK\".\"PRODUCT_ID\")\n  14 - access(\"MF\".\"MOVIE_FUNCTION_ID\"=\"TK\".\"MOVIE_FUNCTION_ID\")\n  16 - access(\"TH\".\"THEATER_ID\"=\"TK\".\"THEATER_ID\")\n  18 - access(\"M\".\"MOVIE_ID\"=\"MF\".\"MOVIE_ID\")\n  20 - access(\"C\".\"BRANCH_ID\"=\"TH\".\"BRANCH_ID\")\n  21 - access(\"P\".\"PRODUCT_ID\"=\"TK\".\"PRODUCT_ID\")"
+    },
+    {
+      "module": "Compra de entradas",
+      "scenario": "Película",
+      "index": 1,
+      "sql": "SELECT MOVIE_ID AS \"id\", TITLE AS \"title\", SYNOPSIS AS \"synopsis\", NVL(POSTER_IMAGE,'') AS \"posterImage\" FROM MOVIES WHERE MOVIE_ID=:id",
+      "binds": {
+        "id": 1
+      },
+      "rowCount": 1,
+      "rowsHash": "04c238b9ef73482a304cdc7e8fda3c5130bc4b389cdf1fa68016ea09ebc1ffc0",
+      "sortedRowsHash": "5ace583f6c0d6a3e8eb69d185d1ead9f314df2f9f9925f79ad92fdfe4b61ddac",
+      "times": [
+        0.028,
+        0.024,
+        0.023,
+        0.021,
+        0.02,
+        0.021,
+        0.02,
+        0.02,
+        0.02,
+        0.019
+      ],
+      "median": 0.0205,
+      "fetched": 1,
+      "plan": "Plan hash value: 917033991\n \n-------------------------------------------------------------------------\n| Id  | Operation                   | Name         | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------\n|   0 | SELECT STATEMENT            |              |     1 |     1   (0)|\n|   1 |  TABLE ACCESS BY INDEX ROWID| MOVIES       |     1 |     1   (0)|\n|*  2 |   INDEX UNIQUE SCAN         | SYS_C0038159 |     1 |     0   (0)|\n-------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   2 - access(\"MOVIE_ID\"=:ID)"
+    },
+    {
+      "module": "Compra de entradas",
+      "scenario": "Funciones de la película",
+      "index": 1,
+      "sql": "SELECT mf.MOVIE_FUNCTION_ID AS \"id\", m.MOVIE_ID AS \"movieId\", m.TITLE AS \"title\", m.SYNOPSIS AS \"synopsis\", NVL(m.POSTER_IMAGE, '') AS \"posterImage\", c.BRANCH_ID AS \"branchId\", TRIM(c.NAME) AS \"branchName\", t.THEATER_ID AS \"theaterId\", t.DIMENSION_X AS \"rows\", t.DIMENSION_Y AS \"columns\", TO_CHAR(mf.START_TIME, 'YYYY-MM-DD\"T\"HH24:MI:SS') || '-06:00' AS \"startsAt\", TO_CHAR(mf.END_TIME, 'YYYY-MM-DD\"T\"HH24:MI:SS') || '-06:00' AS \"endsAt\", mf.STATUS AS \"status\", mf.PROJECTION_FORMAT AS \"format\", mf.TECHNOLOGY AS \"technology\", mf.IS_PREMIERE AS \"isPremiere\", CASE WHEN mf.STATUS='ACTIVE' AND mf.START_TIME>CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP) AND t.IS_ACTIVE=1 AND c.STATUS='ACTIVE' AND EXISTS(SELECT 1 FROM CINEMA_MOVIES cm WHERE cm.MOVIE_ID=mf.MOVIE_ID AND cm.BRANCH_ID=t.BRANCH_ID AND cm.IS_AVAILABLE=1) THEN 1 ELSE 0 END AS \"available\" FROM MOVIE_FUNCTIONS mf JOIN MOVIES m ON m.MOVIE_ID=mf.MOVIE_ID JOIN THEATERS t ON t.THEATER_ID=mf.THEATER_ID JOIN CINEMAS c ON c.BRANCH_ID=t.BRANCH_ID WHERE mf.MOVIE_ID=:movieId AND EXISTS(SELECT 1 FROM SEATS s WHERE s.THEATER_ID=t.THEATER_ID AND s.ROW_NUMBER BETWEEN 1 AND t.DIMENSION_X AND s.COLUMN_NUMBER BETWEEN 1 AND t.DIMENSION_Y AND s.SEAT_STATE='libre' AND NOT EXISTS(SELECT 1 FROM TICKETS tk WHERE tk.MOVIE_FUNCTION_ID=mf.MOVIE_FUNCTION_ID AND tk.THEATER_ID=s.THEATER_ID AND tk.SEAT_ROW=s.ROW_NUMBER AND tk.SEAT_COLUMN=s.COLUMN_NUMBER)) ORDER BY mf.START_TIME,mf.MOVIE_FUNCTION_ID",
+      "binds": {
+        "movieId": 1
+      },
+      "rowCount": 20,
+      "rowsHash": "4eb0ec6210f0e3d8d316af39873c5dfc5639f47e9c1512f4b8b757053a006e90",
+      "sortedRowsHash": "40d7e1b30b58d6d80560af828dfe1e51baf92f728da1759f463535d448fe2d33",
+      "times": [
+        11.348,
+        11.348,
+        11.221,
+        11.227,
+        11.341,
+        11.632,
+        11.406,
+        11.347,
+        11.983,
+        11.606
+      ],
+      "median": 11.348,
+      "fetched": 20,
+      "plan": "Plan hash value: 2550953298\n \n------------------------------------------------------------------------------------------------------\n| Id  | Operation                                    | Name                     | Rows  | Cost (%CPU)|\n------------------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                             |                          |     1 |    42   (3)|\n|   1 |  PX COORDINATOR                              |                          |       |            |\n|   2 |   PX SEND QC (ORDER)                         | :TQ10003                 |     1 |    42   (3)|\n|   3 |    EXPRESSION EVALUATION                     |                          |       |            |\n|   4 |     SORT ORDER BY                            |                          |     1 |    42   (3)|\n|   5 |      PX RECEIVE                              |                          |    15 |     9   (0)|\n|   6 |       PX SEND RANGE                          | :TQ10002                 |    15 |     9   (0)|\n|   7 |        BUFFER SORT                           |                          |     1 |            |\n|*  8 |         FILTER                               |                          |       |            |\n|   9 |          PX RECEIVE                          |                          |    15 |     9   (0)|\n|  10 |           PX SEND HASH                       | :TQ10001                 |    15 |     9   (0)|\n|* 11 |            HASH JOIN                         |                          |    15 |     9   (0)|\n|* 12 |             HASH JOIN                        |                          |    15 |     7   (0)|\n|  13 |              NESTED LOOPS                    |                          |    25 |     4   (0)|\n|  14 |               BUFFER SORT                    |                          |       |            |\n|  15 |                PX RECEIVE                    |                          |       |            |\n|  16 |                 PX SEND BROADCAST            | :TQ10000                 |       |            |\n|  17 |                  TABLE ACCESS BY INDEX ROWID | MOVIES                   |     1 |     1   (0)|\n|* 18 |                   INDEX UNIQUE SCAN          | SYS_C0038159             |     1 |     0   (0)|\n|  19 |               PX BLOCK ITERATOR              |                          |    25 |     3   (0)|\n|  20 |                TABLE ACCESS FULL             | THEATERS                 |    25 |     3   (0)|\n|* 21 |              TABLE ACCESS FULL               | MOVIE_FUNCTIONS          |    15 |     3   (0)|\n|  22 |             TABLE ACCESS FULL                | CINEMAS                  |     9 |     3   (0)|\n|* 23 |          FILTER                              |                          |       |            |\n|* 24 |           TABLE ACCESS BY INDEX ROWID BATCHED| SEATS                    |     1 |     3   (0)|\n|* 25 |            INDEX RANGE SCAN                  | PK_SEATS                 |     1 |     2   (0)|\n|* 26 |             TABLE ACCESS BY INDEX ROWID      | TICKETS                  |     1 |     1   (0)|\n|* 27 |              INDEX UNIQUE SCAN               | UQ_TICKETS_FUNCTION_SEAT |     1 |     0   (0)|\n|* 28 |     TABLE ACCESS BY INDEX ROWID              | CINEMA_MOVIES            |     1 |     1   (0)|\n|* 29 |      INDEX UNIQUE SCAN                       | PK_CINEMA_MOVIES         |     1 |     0   (0)|\n------------------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   8 - filter( EXISTS (SELECT 0 FROM \"SEATS\" \"S\" WHERE :B1>=1 AND :B2>=1 AND \n              \"S\".\"ROW_NUMBER\"<=:B3 AND \"S\".\"ROW_NUMBER\">=1 AND \"S\".\"THEATER_ID\"=:B4 AND \n              \"S\".\"SEAT_STATE\"='libre' AND \"S\".\"COLUMN_NUMBER\"<=:B5 AND \"S\".\"COLUMN_NUMBER\">=1 AND  NOT \n              EXISTS (SELECT 0 FROM \"TICKETS\" \"TK\" WHERE \"TK\".\"SEAT_COLUMN\"=:B6 AND \"TK\".\"SEAT_ROW\"=:B7 AND \n              \"TK\".\"MOVIE_FUNCTION_ID\"=:B8 AND \"TK\".\"THEATER_ID\"=:B9)))\n  11 - access(\"C\".\"BRANCH_ID\"=\"T\".\"BRANCH_ID\")\n  12 - access(\"T\".\"THEATER_ID\"=\"MF\".\"THEATER_ID\" AND \"M\".\"MOVIE_ID\"=\"MF\".\"MOVIE_ID\")\n  18 - access(\"M\".\"MOVIE_ID\"=:MOVIEID)\n  21 - filter(\"MF\".\"MOVIE_ID\"=:MOVIEID)\n  23 - filter(:B1>=1 AND :B2>=1)\n  24 - filter(\"S\".\"SEAT_STATE\"='libre')\n  25 - access(\"S\".\"THEATER_ID\"=:B1 AND \"S\".\"ROW_NUMBER\">=1 AND \"S\".\"COLUMN_NUMBER\">=1 AND \n              \"S\".\"ROW_NUMBER\"<=:B2 AND \"S\".\"COLUMN_NUMBER\"<=:B3)\n       filter(\"S\".\"COLUMN_NUMBER\"<=:B1 AND \"S\".\"COLUMN_NUMBER\">=1 AND  NOT EXISTS (SELECT 0 \n              FROM \"TICKETS\" \"TK\" WHERE \"TK\".\"SEAT_COLUMN\"=:B2 AND \"TK\".\"SEAT_ROW\"=:B3 AND \n              \"TK\".\"MOVIE_FUNCTION_ID\"=:B4 AND \"TK\".\"THEATER_ID\"=:B5))\n  26 - filter(\"TK\".\"THEATER_ID\"=:B1)\n  27 - access(\"TK\".\"MOVIE_FUNCTION_ID\"=:B1 AND \"TK\".\"SEAT_ROW\"=:B2 AND \"TK\".\"SEAT_COLUMN\"=:B3)\n  28 - filter(\"CM\".\"IS_AVAILABLE\"=1)\n  29 - access(\"CM\".\"BRANCH_ID\"=:B1 AND \"CM\".\"MOVIE_ID\"=:B2)"
+    },
+    {
+      "module": "Compra de entradas",
+      "scenario": "Función",
+      "index": 1,
+      "sql": "SELECT mf.MOVIE_FUNCTION_ID AS \"id\", m.MOVIE_ID AS \"movieId\", m.TITLE AS \"title\", m.SYNOPSIS AS \"synopsis\", NVL(m.POSTER_IMAGE, '') AS \"posterImage\", c.BRANCH_ID AS \"branchId\", TRIM(c.NAME) AS \"branchName\", t.THEATER_ID AS \"theaterId\", t.DIMENSION_X AS \"rows\", t.DIMENSION_Y AS \"columns\", TO_CHAR(mf.START_TIME, 'YYYY-MM-DD\"T\"HH24:MI:SS') || '-06:00' AS \"startsAt\", TO_CHAR(mf.END_TIME, 'YYYY-MM-DD\"T\"HH24:MI:SS') || '-06:00' AS \"endsAt\", mf.STATUS AS \"status\", mf.PROJECTION_FORMAT AS \"format\", mf.TECHNOLOGY AS \"technology\", mf.IS_PREMIERE AS \"isPremiere\", CASE WHEN mf.STATUS='ACTIVE' AND mf.START_TIME>CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP) AND t.IS_ACTIVE=1 AND c.STATUS='ACTIVE' AND EXISTS(SELECT 1 FROM CINEMA_MOVIES cm WHERE cm.MOVIE_ID=mf.MOVIE_ID AND cm.BRANCH_ID=t.BRANCH_ID AND cm.IS_AVAILABLE=1) THEN 1 ELSE 0 END AS \"available\" FROM MOVIE_FUNCTIONS mf JOIN MOVIES m ON m.MOVIE_ID=mf.MOVIE_ID JOIN THEATERS t ON t.THEATER_ID=mf.THEATER_ID JOIN CINEMAS c ON c.BRANCH_ID=t.BRANCH_ID WHERE mf.MOVIE_FUNCTION_ID=:id",
+      "binds": {
+        "id": 183
+      },
+      "rowCount": 1,
+      "rowsHash": "35e0155175fb1a7fe103ecd431c92e0f6c502d01f8076b00510bb6dac6c05ecb",
+      "sortedRowsHash": "66d12638cda54625edeff2fff06ac8cad0d6b2c773b6eef4d1dac888b5b0ec35",
+      "times": [
+        0.061,
+        0.085,
+        0.041,
+        0.038,
+        0.035,
+        0.036,
+        0.034,
+        0.034,
+        0.034,
+        0.034
+      ],
+      "median": 0.035500000000000004,
+      "fetched": 1,
+      "plan": "Plan hash value: 237781381\n \n--------------------------------------------------------------------------------\n| Id  | Operation                      | Name             | Rows  | Cost (%CPU)|\n--------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT               |                  |     1 |     5   (0)|\n|*  1 |  TABLE ACCESS BY INDEX ROWID   | CINEMA_MOVIES    |     1 |     1   (0)|\n|*  2 |   INDEX UNIQUE SCAN            | PK_CINEMA_MOVIES |     1 |     0   (0)|\n|   3 |  NESTED LOOPS                  |                  |     1 |     4   (0)|\n|   4 |   NESTED LOOPS                 |                  |     1 |     3   (0)|\n|   5 |    NESTED LOOPS                |                  |     1 |     2   (0)|\n|   6 |     TABLE ACCESS BY INDEX ROWID| MOVIE_FUNCTIONS  |     1 |     1   (0)|\n|*  7 |      INDEX UNIQUE SCAN         | SYS_C0038137     |     1 |     0   (0)|\n|   8 |     TABLE ACCESS BY INDEX ROWID| THEATERS         |     1 |     1   (0)|\n|*  9 |      INDEX UNIQUE SCAN         | SYS_C0038216     |     1 |     0   (0)|\n|  10 |    TABLE ACCESS BY INDEX ROWID | MOVIES           |     1 |     1   (0)|\n|* 11 |     INDEX UNIQUE SCAN          | SYS_C0038159     |     1 |     0   (0)|\n|  12 |   TABLE ACCESS BY INDEX ROWID  | CINEMAS          |     1 |     1   (0)|\n|* 13 |    INDEX UNIQUE SCAN           | PK_CINEMAS       |     1 |     0   (0)|\n--------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - filter(\"CM\".\"IS_AVAILABLE\"=1)\n   2 - access(\"CM\".\"BRANCH_ID\"=:B1 AND \"CM\".\"MOVIE_ID\"=:B2)\n   7 - access(\"MF\".\"MOVIE_FUNCTION_ID\"=:ID)\n   9 - access(\"T\".\"THEATER_ID\"=\"MF\".\"THEATER_ID\")\n  11 - access(\"M\".\"MOVIE_ID\"=\"MF\".\"MOVIE_ID\")\n  13 - access(\"C\".\"BRANCH_ID\"=\"T\".\"BRANCH_ID\")"
+    },
+    {
+      "module": "Compra de entradas",
+      "scenario": "Límites de compra",
+      "index": 1,
+      "sql": "SELECT SETTING_KEY AS \"key\", SETTING_VALUE AS \"value\" FROM GLOBAL_SETTINGS WHERE SETTING_KEY IN ('MAX_TICKETS_PER_FUNCTION','MAX_GUEST_PURCHASES_PER_HOUR')",
+      "binds": {},
+      "rowCount": 2,
+      "rowsHash": "b9d4d6a1cbf23db1cfe819b9b5a80746ef2c1b3586138b4c2ef50204ae19ead6",
+      "sortedRowsHash": "b3d5733fabbf0482f6f0e13e087bdfd063a7bfbb937af4124d379118936c1441",
+      "times": [
+        0.032,
+        0.03,
+        0.028,
+        0.026,
+        0.028,
+        0.025,
+        0.027,
+        0.026,
+        0.026,
+        0.027
+      ],
+      "median": 0.027,
+      "fetched": 2,
+      "plan": "Plan hash value: 4196324348\n \n--------------------------------------------------------------------------------\n| Id  | Operation                    | Name               | Rows  | Cost (%CPU)|\n--------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT             |                    |     2 |     2   (0)|\n|   1 |  INLIST ITERATOR             |                    |       |            |\n|   2 |   TABLE ACCESS BY INDEX ROWID| GLOBAL_SETTINGS    |     2 |     2   (0)|\n|*  3 |    INDEX UNIQUE SCAN         | PK_GLOBAL_SETTINGS |     2 |     1   (0)|\n--------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   3 - access(\"SETTING_KEY\"='MAX_GUEST_PURCHASES_PER_HOUR' OR \n              \"SETTING_KEY\"='MAX_TICKETS_PER_FUNCTION')"
+    },
+    {
+      "module": "Compra de entradas",
+      "scenario": "Mapa de asientos",
+      "index": 1,
+      "sql": "SELECT mf.MOVIE_FUNCTION_ID AS \"id\", m.MOVIE_ID AS \"movieId\", m.TITLE AS \"title\", m.SYNOPSIS AS \"synopsis\", NVL(m.POSTER_IMAGE, '') AS \"posterImage\", c.BRANCH_ID AS \"branchId\", TRIM(c.NAME) AS \"branchName\", t.THEATER_ID AS \"theaterId\", t.DIMENSION_X AS \"rows\", t.DIMENSION_Y AS \"columns\", TO_CHAR(mf.START_TIME, 'YYYY-MM-DD\"T\"HH24:MI:SS') || '-06:00' AS \"startsAt\", TO_CHAR(mf.END_TIME, 'YYYY-MM-DD\"T\"HH24:MI:SS') || '-06:00' AS \"endsAt\", mf.STATUS AS \"status\", mf.PROJECTION_FORMAT AS \"format\", mf.TECHNOLOGY AS \"technology\", mf.IS_PREMIERE AS \"isPremiere\", CASE WHEN mf.STATUS='ACTIVE' AND mf.START_TIME>CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP) AND t.IS_ACTIVE=1 AND c.STATUS='ACTIVE' AND EXISTS(SELECT 1 FROM CINEMA_MOVIES cm WHERE cm.MOVIE_ID=mf.MOVIE_ID AND cm.BRANCH_ID=t.BRANCH_ID AND cm.IS_AVAILABLE=1) THEN 1 ELSE 0 END AS \"available\" FROM MOVIE_FUNCTIONS mf JOIN MOVIES m ON m.MOVIE_ID=mf.MOVIE_ID JOIN THEATERS t ON t.THEATER_ID=mf.THEATER_ID JOIN CINEMAS c ON c.BRANCH_ID=t.BRANCH_ID WHERE mf.MOVIE_FUNCTION_ID=:id",
+      "binds": {
+        "id": 183
+      },
+      "rowCount": 1,
+      "rowsHash": "35e0155175fb1a7fe103ecd431c92e0f6c502d01f8076b00510bb6dac6c05ecb",
+      "sortedRowsHash": "66d12638cda54625edeff2fff06ac8cad0d6b2c773b6eef4d1dac888b5b0ec35",
+      "times": [
+        0.047,
+        0.039,
+        0.067,
+        0.042,
+        0.036,
+        0.036,
+        0.034,
+        0.032,
+        0.04,
+        0.035
+      ],
+      "median": 0.0375,
+      "fetched": 1,
+      "plan": "Plan hash value: 237781381\n \n--------------------------------------------------------------------------------\n| Id  | Operation                      | Name             | Rows  | Cost (%CPU)|\n--------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT               |                  |     1 |     5   (0)|\n|*  1 |  TABLE ACCESS BY INDEX ROWID   | CINEMA_MOVIES    |     1 |     1   (0)|\n|*  2 |   INDEX UNIQUE SCAN            | PK_CINEMA_MOVIES |     1 |     0   (0)|\n|   3 |  NESTED LOOPS                  |                  |     1 |     4   (0)|\n|   4 |   NESTED LOOPS                 |                  |     1 |     3   (0)|\n|   5 |    NESTED LOOPS                |                  |     1 |     2   (0)|\n|   6 |     TABLE ACCESS BY INDEX ROWID| MOVIE_FUNCTIONS  |     1 |     1   (0)|\n|*  7 |      INDEX UNIQUE SCAN         | SYS_C0038137     |     1 |     0   (0)|\n|   8 |     TABLE ACCESS BY INDEX ROWID| THEATERS         |     1 |     1   (0)|\n|*  9 |      INDEX UNIQUE SCAN         | SYS_C0038216     |     1 |     0   (0)|\n|  10 |    TABLE ACCESS BY INDEX ROWID | MOVIES           |     1 |     1   (0)|\n|* 11 |     INDEX UNIQUE SCAN          | SYS_C0038159     |     1 |     0   (0)|\n|  12 |   TABLE ACCESS BY INDEX ROWID  | CINEMAS          |     1 |     1   (0)|\n|* 13 |    INDEX UNIQUE SCAN           | PK_CINEMAS       |     1 |     0   (0)|\n--------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - filter(\"CM\".\"IS_AVAILABLE\"=1)\n   2 - access(\"CM\".\"BRANCH_ID\"=:B1 AND \"CM\".\"MOVIE_ID\"=:B2)\n   7 - access(\"MF\".\"MOVIE_FUNCTION_ID\"=:ID)\n   9 - access(\"T\".\"THEATER_ID\"=\"MF\".\"THEATER_ID\")\n  11 - access(\"M\".\"MOVIE_ID\"=\"MF\".\"MOVIE_ID\")\n  13 - access(\"C\".\"BRANCH_ID\"=\"T\".\"BRANCH_ID\")"
+    },
+    {
+      "module": "Compra de entradas",
+      "scenario": "Mapa de asientos",
+      "index": 2,
+      "sql": "SELECT ((s.ROW_NUMBER-1)*:columns+s.COLUMN_NUMBER) AS \"positionId\", s.THEATER_ID AS \"theaterId\", s.ROW_NUMBER AS \"rowNumber\", s.COLUMN_NUMBER AS \"columnNumber\", CASE s.SEAT_TYPE WHEN 'accesibilidad' THEN 'accessibility' ELSE s.SEAT_TYPE END AS \"type\", CASE WHEN EXISTS(SELECT 1 FROM TICKETS tk WHERE tk.MOVIE_FUNCTION_ID=:functionId AND tk.THEATER_ID=s.THEATER_ID AND tk.SEAT_ROW=s.ROW_NUMBER AND tk.SEAT_COLUMN=s.COLUMN_NUMBER) THEN 'in-use' WHEN s.SEAT_STATE='libre' THEN 'free' WHEN s.SEAT_STATE='ocupado' THEN 'in-use' WHEN s.SEAT_STATE='reservado' THEN 'reserved' ELSE 'unavailable' END AS \"state\" FROM SEATS s JOIN THEATERS t ON t.THEATER_ID=s.THEATER_ID WHERE s.THEATER_ID=:theaterId AND s.ROW_NUMBER BETWEEN 1 AND t.DIMENSION_X AND s.COLUMN_NUMBER BETWEEN 1 AND t.DIMENSION_Y ORDER BY s.ROW_NUMBER,s.COLUMN_NUMBER",
+      "binds": {
+        "columns": 30,
+        "theaterId": 222,
+        "functionId": 183
+      },
+      "rowCount": 600,
+      "rowsHash": "4076529a822a27950edba061dce17394aa02ca0493c4c5be0734b9a4246526ad",
+      "sortedRowsHash": "f92b5662b7c00e56d293f6f1013ebf7cf637a4c077a28f13a20bbdeb04c6d262",
+      "times": [
+        3.691,
+        3.832,
+        3.634,
+        3.623,
+        3.626,
+        3.644,
+        3.575,
+        3.603,
+        3.675,
+        3.64
+      ],
+      "median": 3.637,
+      "fetched": 600,
+      "plan": "Plan hash value: 3294195830\n \n--------------------------------------------------------------------------------------\n| Id  | Operation                    | Name                     | Rows  | Cost (%CPU)|\n--------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT             |                          |    50 |    28   (0)|\n|*  1 |  TABLE ACCESS BY INDEX ROWID | TICKETS                  |     1 |     1   (0)|\n|*  2 |   INDEX UNIQUE SCAN          | UQ_TICKETS_FUNCTION_SEAT |     1 |     0   (0)|\n|   3 |  NESTED LOOPS                |                          |    50 |     3   (0)|\n|*  4 |   TABLE ACCESS BY INDEX ROWID| THEATERS                 |     1 |     1   (0)|\n|*  5 |    INDEX UNIQUE SCAN         | SYS_C0038216             |     1 |     0   (0)|\n|   6 |   TABLE ACCESS BY INDEX ROWID| SEATS                    |    50 |     1   (0)|\n|*  7 |    INDEX RANGE SCAN          | PK_SEATS                 |    50 |     1   (0)|\n--------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - filter(\"TK\".\"THEATER_ID\"=:B1)\n   2 - access(\"TK\".\"MOVIE_FUNCTION_ID\"=:FUNCTIONID AND \"TK\".\"SEAT_ROW\"=:B1 \n              AND \"TK\".\"SEAT_COLUMN\"=:B2)\n   4 - filter(\"T\".\"DIMENSION_X\">=1 AND \"T\".\"DIMENSION_Y\">=1)\n   5 - access(\"T\".\"THEATER_ID\"=:THEATERID)\n   7 - access(\"S\".\"THEATER_ID\"=:THEATERID AND \"S\".\"ROW_NUMBER\">=1 AND \n              \"S\".\"COLUMN_NUMBER\">=1 AND \"S\".\"ROW_NUMBER\"<=\"T\".\"DIMENSION_X\" AND \n              \"S\".\"COLUMN_NUMBER\"<=\"T\".\"DIMENSION_Y\")\n       filter(\"S\".\"COLUMN_NUMBER\"<=\"T\".\"DIMENSION_Y\" AND \n              \"S\".\"COLUMN_NUMBER\">=1)"
+    },
+    {
+      "module": "Compra de entradas",
+      "scenario": "Mapa de asientos",
+      "index": 3,
+      "sql": "SELECT SETTING_KEY AS \"key\", SETTING_VALUE AS \"value\" FROM GLOBAL_SETTINGS WHERE SETTING_KEY IN ('MAX_TICKETS_PER_FUNCTION','MAX_GUEST_PURCHASES_PER_HOUR')",
+      "binds": {},
+      "rowCount": 2,
+      "rowsHash": "b9d4d6a1cbf23db1cfe819b9b5a80746ef2c1b3586138b4c2ef50204ae19ead6",
+      "sortedRowsHash": "b3d5733fabbf0482f6f0e13e087bdfd063a7bfbb937af4124d379118936c1441",
+      "times": [
+        0.033,
+        0.028,
+        0.029,
+        0.051,
+        0.095,
+        0.033,
+        0.026,
+        0.025,
+        0.026,
+        0.025
+      ],
+      "median": 0.0285,
+      "fetched": 2,
+      "plan": "Plan hash value: 4196324348\n \n--------------------------------------------------------------------------------\n| Id  | Operation                    | Name               | Rows  | Cost (%CPU)|\n--------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT             |                    |     2 |     2   (0)|\n|   1 |  INLIST ITERATOR             |                    |       |            |\n|   2 |   TABLE ACCESS BY INDEX ROWID| GLOBAL_SETTINGS    |     2 |     2   (0)|\n|*  3 |    INDEX UNIQUE SCAN         | PK_GLOBAL_SETTINGS |     2 |     1   (0)|\n--------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   3 - access(\"SETTING_KEY\"='MAX_GUEST_PURCHASES_PER_HOUR' OR \n              \"SETTING_KEY\"='MAX_TICKETS_PER_FUNCTION')"
+    },
+    {
+      "module": "Cartelera",
+      "scenario": "Boleto",
+      "index": 1,
+      "sql": "SELECT m.title, mf.theater_id, TO_CHAR(mf.start_time, 'YYYY/MM/DD HH24:MI') START_TIME, TO_CHAR(mf.end_time, 'YYYY/MM/DD HH24:MI') END_TIME, t.seat_row || '-' || t.seat_column AS SEAT\n        FROM TICKETS t\n        JOIN Movie_functions mf\n        ON t.movie_function_id = mf.movie_function_id\n        JOIN Movies m\n        ON mf.movie_id = m.movie_id\n        WHERE t.tickets_id = :id",
+      "binds": {
+        "id": 521
+      },
+      "rowCount": 1,
+      "rowsHash": "ed5f79329e67304bc65544cbca836e1119c4924af81daecdb65009a261a3bbae",
+      "sortedRowsHash": "9799b9e4e3b6fa2df86805ae9bdefa46bb214d0295bc95e670d660fcb985f11e",
+      "times": [
+        16.639,
+        14.074,
+        13.991,
+        13.834,
+        13.624,
+        14.964,
+        16.295,
+        14.18,
+        13.449,
+        13.398
+      ],
+      "median": 14.032499999999999,
+      "fetched": 1,
+      "plan": "Plan hash value: 156299480\n \n-------------------------------------------------------------------------------------\n| Id  | Operation                            | Name            | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                     |                 |     1 |     2   (0)|\n|   1 |  PX COORDINATOR                      |                 |       |            |\n|   2 |   PX SEND QC (RANDOM)                | :TQ10001        |     1 |     2   (0)|\n|   3 |    BUFFER SORT                       |                 |     1 |            |\n|   4 |     NESTED LOOPS                     |                 |     1 |     2   (0)|\n|   5 |      NESTED LOOPS                    |                 |     1 |     2   (0)|\n|   6 |       NESTED LOOPS                   |                 |     1 |     2   (0)|\n|   7 |        PX RECEIVE                    |                 |       |            |\n|   8 |         PX SEND ROUND-ROBIN          | :TQ10000        |       |            |\n|   9 |          PX SELECTOR                 |                 |       |            |\n|  10 |           TABLE ACCESS BY INDEX ROWID| TICKETS         |     1 |     1   (0)|\n|* 11 |            INDEX UNIQUE SCAN         | SYS_C0038178    |     1 |     0   (0)|\n|  12 |        TABLE ACCESS BY INDEX ROWID   | MOVIE_FUNCTIONS |     1 |     1   (0)|\n|* 13 |         INDEX UNIQUE SCAN            | SYS_C0038137    |     1 |     0   (0)|\n|* 14 |       INDEX UNIQUE SCAN              | SYS_C0038159    |     1 |     0   (0)|\n|  15 |      TABLE ACCESS BY INDEX ROWID     | MOVIES          |     1 |     1   (0)|\n-------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n  11 - access(\"T\".\"TICKETS_ID\"=:ID)\n  13 - access(\"T\".\"MOVIE_FUNCTION_ID\"=\"MF\".\"MOVIE_FUNCTION_ID\")\n  14 - access(\"MF\".\"MOVIE_ID\"=\"M\".\"MOVIE_ID\")"
+    },
+    {
+      "module": "Cartelera",
+      "scenario": "Horarios alternativos del boleto",
+      "index": 1,
+      "sql": "SELECT a.movie_function_id,\n       a.theater_id,\n       a.\"TIME\",\n       a.\"DATE\",\n       a.seat_row,\n       (SELECT MIN(s.column_number)\n          FROM Seats s\n         WHERE s.theater_id = a.theater_id\n           AND s.row_number = a.seat_row\n           AND s.seat_state <> 'indisponible'\n           AND NOT EXISTS (\n               SELECT 1 FROM Tickets tk\n                WHERE tk.movie_function_id = a.movie_function_id\n                  AND tk.seat_row    = s.row_number\n                  AND tk.seat_column = s.column_number)) AS seat_column\nFROM (\n    SELECT mf.movie_function_id,\n           mf.theater_id,\n           mf.start_time,\n           TO_CHAR(mf.start_time, 'HH24:MI') AS \"TIME\",\n           TO_CHAR(mf.screening_date, 'FMDD \"de\" month, YYYY',\n                   'NLS_DATE_LANGUAGE = SPANISH') AS \"DATE\",\n           (SELECT MIN(s.row_number)\n              FROM Seats s\n             WHERE s.theater_id = mf.theater_id\n               AND s.seat_state <> 'indisponible'\n               AND NOT EXISTS (\n                   SELECT 1 FROM Tickets tk\n                    WHERE tk.movie_function_id = mf.movie_function_id\n                      AND tk.seat_row    = s.row_number\n                      AND tk.seat_column = s.column_number)) AS seat_row\n      FROM Tickets t\n      JOIN Movie_functions cur ON cur.movie_function_id = t.movie_function_id\n      JOIN Theaters cur_th     ON cur_th.theater_id = cur.theater_id\n      JOIN Movie_functions mf  ON mf.movie_id = cur.movie_id\n      JOIN Theaters mf_th      ON mf_th.theater_id = mf.theater_id\n                                         AND mf_th.branch_id  = cur_th.branch_id\n     WHERE t.tickets_id = :tickets_id\n       AND mf.status = 'ACTIVE'\n       AND mf.start_time > GREATEST(SYSTIMESTAMP, cur.start_time)\n       AND mf.start_time < SYSTIMESTAMP + INTERVAL '7' DAY\n) a\nWHERE a.seat_row IS NOT NULL\nORDER BY a.start_time",
+      "binds": {
+        "tickets_id": 521
+      },
+      "rowCount": 1,
+      "rowsHash": "6f80193822dd71c35cdd2a7da6d51c8a9434c1e056ae7d85a255e9dfb5da00e9",
+      "sortedRowsHash": "3843cac74942739be1e2f3c06309c0fdb4199ef9f4bd5140e62c16955c12b0b2",
+      "times": [
+        0.154,
+        0.142,
+        0.137,
+        0.141,
+        0.135,
+        0.161,
+        0.177,
+        0.236,
+        0.307,
+        0.202
+      ],
+      "median": 0.1575,
+      "fetched": 1,
+      "plan": "Plan hash value: 4250229208\n \n--------------------------------------------------------------------------------------------------\n| Id  | Operation                                | Name                     | Rows  | Cost (%CPU)|\n--------------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                         |                          |     1 |    13   (8)|\n|   1 |  SORT AGGREGATE                          |                          |     1 |            |\n|*  2 |   TABLE ACCESS BY INDEX ROWID BATCHED    | SEATS                    |     6 |     3   (0)|\n|*  3 |    INDEX RANGE SCAN                      | PK_SEATS                 |     6 |     2   (0)|\n|*  4 |     INDEX UNIQUE SCAN                    | UQ_TICKETS_FUNCTION_SEAT |     1 |     0   (0)|\n|   5 |  SORT AGGREGATE                          |                          |     1 |            |\n|*  6 |   TABLE ACCESS BY INDEX ROWID BATCHED    | SEATS                    |     1 |     3   (0)|\n|*  7 |    INDEX RANGE SCAN                      | PK_SEATS                 |     1 |     2   (0)|\n|*  8 |     INDEX UNIQUE SCAN                    | UQ_TICKETS_FUNCTION_SEAT |     1 |     0   (0)|\n|   9 |  SORT ORDER BY                           |                          |     1 |    13   (8)|\n|* 10 |   VIEW                                   |                          |     1 |     9   (0)|\n|  11 |    NESTED LOOPS                          |                          |     1 |     6   (0)|\n|  12 |     NESTED LOOPS                         |                          |     1 |     6   (0)|\n|  13 |      NESTED LOOPS                        |                          |     1 |     5   (0)|\n|  14 |       NESTED LOOPS                       |                          |     1 |     3   (0)|\n|  15 |        NESTED LOOPS                      |                          |     1 |     2   (0)|\n|  16 |         TABLE ACCESS BY INDEX ROWID      | TICKETS                  |     1 |     1   (0)|\n|* 17 |          INDEX UNIQUE SCAN               | SYS_C0038178             |     1 |     0   (0)|\n|* 18 |         TABLE ACCESS BY INDEX ROWID      | MOVIE_FUNCTIONS          |     1 |     1   (0)|\n|* 19 |          INDEX UNIQUE SCAN               | SYS_C0038137             |     1 |     0   (0)|\n|  20 |        TABLE ACCESS BY INDEX ROWID       | THEATERS                 |     1 |     1   (0)|\n|* 21 |         INDEX UNIQUE SCAN                | SYS_C0038216             |     1 |     0   (0)|\n|* 22 |       TABLE ACCESS BY INDEX ROWID BATCHED| MOVIE_FUNCTIONS          |     1 |     2   (0)|\n|* 23 |        INDEX RANGE SCAN                  | UQ_MOVIE_FUNCTION        |     1 |     1   (0)|\n|* 24 |      INDEX UNIQUE SCAN                   | SYS_C0038216             |     1 |     0   (0)|\n|* 25 |     TABLE ACCESS BY INDEX ROWID          | THEATERS                 |     1 |     1   (0)|\n--------------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   2 - filter(\"S\".\"SEAT_STATE\"<>'indisponible')\n   3 - access(\"S\".\"THEATER_ID\"=:B1)\n       filter( NOT EXISTS (SELECT /*+ PUSH_SUBQ INDEX (\"TK\" \"UQ_TICKETS_FUNCTION_SEAT\") \n              */ 0 FROM \"TICKETS\" \"TK\" WHERE \"TK\".\"SEAT_COLUMN\"=:B1 AND \"TK\".\"SEAT_ROW\"=:B2 AND \n              \"TK\".\"MOVIE_FUNCTION_ID\"=:B3))\n   4 - access(\"TK\".\"MOVIE_FUNCTION_ID\"=:B1 AND \"TK\".\"SEAT_ROW\"=:B2 AND \n              \"TK\".\"SEAT_COLUMN\"=:B3)\n   6 - filter(\"S\".\"SEAT_STATE\"<>'indisponible')\n   7 - access(\"S\".\"THEATER_ID\"=:B1 AND \"S\".\"ROW_NUMBER\"=:B2)\n       filter( NOT EXISTS (SELECT /*+ PUSH_SUBQ INDEX (\"TK\" \"UQ_TICKETS_FUNCTION_SEAT\") \n              */ 0 FROM \"TICKETS\" \"TK\" WHERE \"TK\".\"SEAT_COLUMN\"=:B1 AND \"TK\".\"SEAT_ROW\"=:B2 AND \n              \"TK\".\"MOVIE_FUNCTION_ID\"=:B3))\n   8 - access(\"TK\".\"MOVIE_FUNCTION_ID\"=:B1 AND \"TK\".\"SEAT_ROW\"=:B2 AND \n              \"TK\".\"SEAT_COLUMN\"=:B3)\n  10 - filter(\"A\".\"SEAT_ROW\" IS NOT NULL)\n  17 - access(\"T\".\"TICKETS_ID\"=:TICKETS_ID)\n  18 - filter(SYS_EXTRACT_UTC(GREATEST(SYSTIMESTAMP(6),INTERNAL_FUNCTION(\"CUR\".\"START_TIME\n              \")))<SYS_EXTRACT_UTC(SYSTIMESTAMP(6)+INTERVAL'+07 00:00:00' DAY(2) TO SECOND(0)))\n  19 - access(\"CUR\".\"MOVIE_FUNCTION_ID\"=\"T\".\"MOVIE_FUNCTION_ID\")\n  21 - access(\"CUR_TH\".\"THEATER_ID\"=\"CUR\".\"THEATER_ID\")\n  22 - filter(\"MF\".\"STATUS\"='ACTIVE')\n  23 - access(\"MF\".\"MOVIE_ID\"=\"CUR\".\"MOVIE_ID\")\n       filter(SYS_EXTRACT_UTC(INTERNAL_FUNCTION(\"MF\".\"START_TIME\"))<SYS_EXTRACT_UTC(SYSTIM\n              ESTAMP(6)+INTERVAL'+07 00:00:00' DAY(2) TO SECOND(0)) AND \n              SYS_EXTRACT_UTC(INTERNAL_FUNCTION(\"MF\".\"START_TIME\"))>SYS_EXTRACT_UTC(GREATEST(SYSTIMESTAM\n              P(6),INTERNAL_FUNCTION(\"CUR\".\"START_TIME\"))))\n  24 - access(\"MF_TH\".\"THEATER_ID\"=\"MF\".\"THEATER_ID\")\n  25 - filter(\"MF_TH\".\"BRANCH_ID\"=\"CUR_TH\".\"BRANCH_ID\")"
+    },
+    {
+      "module": "Proyecciones",
+      "scenario": "Listado de proyecciones",
+      "index": 1,
+      "sql": "SELECT COUNT(*) AS TOTAL FROM MOVIE_FUNCTIONS mf\n  JOIN MOVIES m ON m.MOVIE_ID = mf.MOVIE_ID\n  JOIN THEATERS t ON t.THEATER_ID = mf.THEATER_ID\n  JOIN CINEMAS c ON c.BRANCH_ID = t.BRANCH_ID WHERE 1 = 1",
+      "binds": {},
+      "rowCount": 1,
+      "rowsHash": "157885eac8865cb843e0146bc0157edb6bf8a545b9f5514fb0132906912dff41",
+      "sortedRowsHash": "652e30155584b20eed10c58c60472bca0b9717964bcfaeb2f8a9ee62daf568db",
+      "times": [
+        0.031,
+        0.027,
+        0.024,
+        0.024,
+        0.025,
+        0.026,
+        0.024,
+        0.024,
+        0.024,
+        0.025
+      ],
+      "median": 0.0245,
+      "fetched": 1,
+      "plan": "Plan hash value: 2881360752\n \n-------------------------------------------------------------------------------\n| Id  | Operation        | Name                          | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT |                               |     1 |     1   (0)|\n|   1 |  SORT AGGREGATE  |                               |     1 |            |\n|   2 |   INDEX FULL SCAN| IX_MOVIE_FUNCTIONS_CREATED_BY |   102 |     1   (0)|\n-------------------------------------------------------------------------------"
+    },
+    {
+      "module": "Proyecciones",
+      "scenario": "Listado de proyecciones",
+      "index": 2,
+      "sql": "SELECT mf.MOVIE_FUNCTION_ID AS \"movieFunctionId\", m.MOVIE_ID AS \"movieId\",\n       m.TITLE AS \"movieTitle\", t.BRANCH_ID AS \"branchId\", c.NAME AS \"branchName\",\n       mf.THEATER_ID AS \"theaterId\", TO_CHAR(mf.START_TIME, 'YYYY-MM-DD\"T\"HH24:MI') AS \"startTime\",\n       TO_CHAR(mf.END_TIME, 'YYYY-MM-DD\"T\"HH24:MI') AS \"endTime\", mf.STATUS AS \"status\", mf.PRICE AS \"price\", mf.PROJECTION_FORMAT AS \"format\", mf.TECHNOLOGY AS \"technology\", CASE mf.IS_PREMIERE WHEN 1 THEN 1 ELSE 0 END AS \"isPremiere\" FROM MOVIE_FUNCTIONS mf\n  JOIN MOVIES m ON m.MOVIE_ID = mf.MOVIE_ID\n  JOIN THEATERS t ON t.THEATER_ID = mf.THEATER_ID\n  JOIN CINEMAS c ON c.BRANCH_ID = t.BRANCH_ID WHERE 1 = 1\n          ORDER BY mf.START_TIME, mf.MOVIE_FUNCTION_ID\n         OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY",
+      "binds": {
+        "offset": 0,
+        "pageSize": 10
+      },
+      "rowCount": 10,
+      "rowsHash": "4cb209ceb026c52839204f6e3957384afa95280046e35f00b67cb20badf79727",
+      "sortedRowsHash": "ea047fa7d27961b5d304eac9f6eb685587fcbf69a663ef42b85a59808e1b0979",
+      "times": [
+        0.92,
+        0.61,
+        0.549,
+        0.576,
+        0.587,
+        0.529,
+        0.565,
+        0.525,
+        0.606,
+        0.515
+      ],
+      "median": 0.5705,
+      "fetched": 10,
+      "plan": "Plan hash value: 886167980\n \n-------------------------------------------------------------------------\n| Id  | Operation                | Name            | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------\n|   0 | SELECT STATEMENT         |                 |   102 |    21   (5)|\n|*  1 |  VIEW                    |                 |   102 |    21   (5)|\n|*  2 |   WINDOW SORT PUSHED RANK|                 |   102 |    21   (5)|\n|*  3 |    FILTER                |                 |       |            |\n|*  4 |     HASH JOIN            |                 |   102 |    20   (0)|\n|   5 |      TABLE ACCESS FULL   | MOVIES          |     8 |     5   (0)|\n|*  6 |      HASH JOIN           |                 |   102 |    15   (0)|\n|*  7 |       HASH JOIN          |                 |    25 |    10   (0)|\n|   8 |        TABLE ACCESS FULL | CINEMAS         |     9 |     5   (0)|\n|   9 |        TABLE ACCESS FULL | THEATERS        |    25 |     5   (0)|\n|  10 |       TABLE ACCESS FULL  | MOVIE_FUNCTIONS |   102 |     5   (0)|\n-------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - filter(\"from$_subquery$_008\".\"rowlimit_$$_rownumber\"<=TO_NUMBER(G\n              REATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OFFSET)))),'0'))+:PAGESIZE AND \n              \"from$_subquery$_008\".\"rowlimit_$$_rownumber\">:OFFSET)\n   2 - filter(ROW_NUMBER() OVER ( ORDER BY \n              \"MF\".\"START_TIME\",\"MF\".\"MOVIE_FUNCTION_ID\")<=TO_NUMBER(GREATEST(TO_CHAR(\n              FLOOR(TO_NUMBER(TO_CHAR(:OFFSET)))),'0'))+:PAGESIZE)\n   3 - filter(:OFFSET<TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR\n              (:OFFSET)))),'0'))+:PAGESIZE)\n   4 - access(\"M\".\"MOVIE_ID\"=\"MF\".\"MOVIE_ID\")\n   6 - access(\"T\".\"THEATER_ID\"=\"MF\".\"THEATER_ID\")\n   7 - access(\"C\".\"BRANCH_ID\"=\"T\".\"BRANCH_ID\")"
+    },
+    {
+      "module": "Proyecciones",
+      "scenario": "Detalle de proyección",
+      "index": 1,
+      "sql": "SELECT mf.MOVIE_FUNCTION_ID AS \"movieFunctionId\", m.MOVIE_ID AS \"movieId\",\n       m.TITLE AS \"movieTitle\", t.BRANCH_ID AS \"branchId\", c.NAME AS \"branchName\",\n       mf.THEATER_ID AS \"theaterId\", TO_CHAR(mf.START_TIME, 'YYYY-MM-DD\"T\"HH24:MI') AS \"startTime\",\n       TO_CHAR(mf.END_TIME, 'YYYY-MM-DD\"T\"HH24:MI') AS \"endTime\", mf.STATUS AS \"status\", mf.PRICE AS \"price\", mf.PROJECTION_FORMAT AS \"format\", mf.TECHNOLOGY AS \"technology\", CASE mf.IS_PREMIERE WHEN 1 THEN 1 ELSE 0 END AS \"isPremiere\",\n              m.RUNNING_TIME AS \"runningTime\", m.POSTER_IMAGE AS \"posterImage\",\n              TO_CHAR(mf.CREATED_AT AT TIME ZONE 'America/Costa_Rica', 'YYYY-MM-DD\"T\"HH24:MI') AS \"createdAt\",\n              (SELECT MAX(a.DURATION_MINUTES) FROM MOVIE_FUNCTIONS_ACTIVITIES mfa\n          JOIN ACTIVITIES a ON a.ACTIVITY_ID = mfa.ACTIVITY_ID\n         WHERE mfa.MOVIE_FUNCTION_ID = mf.MOVIE_FUNCTION_ID AND a.TYPE = 'CLEANING') AS \"cleaningMinutes\",\n              (SELECT MAX(a.DURATION_MINUTES) FROM MOVIE_FUNCTIONS_ACTIVITIES mfa\n          JOIN ACTIVITIES a ON a.ACTIVITY_ID = mfa.ACTIVITY_ID\n         WHERE mfa.MOVIE_FUNCTION_ID = mf.MOVIE_FUNCTION_ID AND a.TYPE = 'ADVERTISEMENT') AS \"advertisementMinutes\"\n         FROM MOVIE_FUNCTIONS mf\n  JOIN MOVIES m ON m.MOVIE_ID = mf.MOVIE_ID\n  JOIN THEATERS t ON t.THEATER_ID = mf.THEATER_ID\n  JOIN CINEMAS c ON c.BRANCH_ID = t.BRANCH_ID\n        WHERE mf.MOVIE_FUNCTION_ID = :id",
+      "binds": {
+        "id": {
+          "val": 183,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 1,
+      "rowsHash": "55db1963b5b31ff1073c0beaf6ebad9f49ce9d4fa7d8c275f24c902e604437c0",
+      "sortedRowsHash": "6b03b1133e59d49f038c64a783b709389f4ced9563eaf3da075f8104ccd02acd",
+      "times": [
+        12.958,
+        13.485,
+        12.203,
+        13.64,
+        15.252,
+        12.783,
+        28.04,
+        26.301,
+        14.848,
+        12.199
+      ],
+      "median": 13.5625,
+      "fetched": 1,
+      "plan": "Plan hash value: 772730747\n \n----------------------------------------------------------------------------------------------------\n| Id  | Operation                                  | Name                     | Rows  | Cost (%CPU)|\n----------------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                           |                          |     1 |     7   (0)|\n|   1 |  PX COORDINATOR                            |                          |       |            |\n|   2 |   PX SEND QC (RANDOM)                      | :TQ10005                 |     1 |     7   (0)|\n|   3 |    JOIN CONSOLIDATOR                       |                          |       |            |\n|*  4 |     HASH JOIN OUTER BUFFERED               |                          |     1 |     7   (0)|\n|   5 |      PX RECEIVE                            |                          |     1 |     4   (0)|\n|   6 |       PX SEND HYBRID HASH                  | :TQ10003                 |     1 |     4   (0)|\n|   7 |        STATISTICS COLLECTOR                |                          |       |            |\n|   8 |         BUFFER SORT                        |                          |     1 |            |\n|   9 |          NESTED LOOPS OUTER                |                          |     1 |     4   (0)|\n|  10 |           NESTED LOOPS                     |                          |     1 |     3   (0)|\n|  11 |            NESTED LOOPS                    |                          |     1 |     2   (0)|\n|  12 |             NESTED LOOPS                   |                          |     1 |     2   (0)|\n|  13 |              PX RECEIVE                    |                          |       |            |\n|  14 |               PX SEND ROUND-ROBIN          | :TQ10001                 |       |            |\n|  15 |                PX SELECTOR                 |                          |       |            |\n|  16 |                 TABLE ACCESS BY INDEX ROWID| MOVIE_FUNCTIONS          |     1 |     1   (0)|\n|* 17 |                  INDEX UNIQUE SCAN         | SYS_C0038137             |     1 |     0   (0)|\n|  18 |              TABLE ACCESS BY INDEX ROWID   | THEATERS                 |     1 |     1   (0)|\n|* 19 |               INDEX UNIQUE SCAN            | SYS_C0038216             |     1 |     0   (0)|\n|  20 |             TABLE ACCESS BY INDEX ROWID    | MOVIES                   |     1 |     1   (0)|\n|* 21 |              INDEX UNIQUE SCAN             | SYS_C0038159             |     1 |     0   (0)|\n|  22 |            TABLE ACCESS BY INDEX ROWID     | CINEMAS                  |     1 |     1   (0)|\n|* 23 |             INDEX UNIQUE SCAN              | PK_CINEMAS               |     1 |     0   (0)|\n|  24 |           VIEW                             | VW_SSQ_2                 |     1 |     3   (0)|\n|  25 |            SORT GROUP BY                   |                          |     1 |     3   (0)|\n|  26 |             HASH GROUP BY                  |                          |     1 |     3   (0)|\n|  27 |              NESTED LOOPS                  |                          |     1 |     3   (0)|\n|  28 |               NESTED LOOPS                 |                          |     2 |     3   (0)|\n|* 29 |                INDEX RANGE SCAN            | UQ_MFA_FUNCTION_ACTIVITY |     2 |     1   (0)|\n|* 30 |                INDEX UNIQUE SCAN           | SYS_C0038190             |     1 |     0   (0)|\n|* 31 |               TABLE ACCESS BY INDEX ROWID  | ACTIVITIES               |     1 |     1   (0)|\n|  32 |      PX RECEIVE                            |                          |     1 |     3   (0)|\n|  33 |       PX SEND HYBRID HASH                  | :TQ10004                 |     1 |     3   (0)|\n|  34 |        VIEW                                | VW_SSQ_1                 |     1 |     3   (0)|\n|  35 |         HASH GROUP BY                      |                          |     1 |     3   (0)|\n|  36 |          PX RECEIVE                        |                          |     1 |     3   (0)|\n|  37 |           PX SEND HASH                     | :TQ10002                 |     1 |     3   (0)|\n|  38 |            HASH GROUP BY                   |                          |     1 |     3   (0)|\n|  39 |             NESTED LOOPS                   |                          |     1 |     3   (0)|\n|  40 |              NESTED LOOPS                  |                          |     2 |     3   (0)|\n|  41 |               PX RECEIVE                   |                          |       |            |\n|  42 |                PX SEND ROUND-ROBIN         | :TQ10000                 |       |            |\n|  43 |                 PX SELECTOR                |                          |       |            |\n|* 44 |                  INDEX RANGE SCAN          | UQ_MFA_FUNCTION_ACTIVITY |     2 |     1   (0)|\n|* 45 |               INDEX UNIQUE SCAN            | SYS_C0038190             |     1 |     0   (0)|\n|* 46 |              TABLE ACCESS BY INDEX ROWID   | ACTIVITIES               |     1 |     1   (0)|\n----------------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   4 - access(\"ITEM_1\"(+)=\"MF\".\"MOVIE_FUNCTION_ID\")\n  17 - access(\"MF\".\"MOVIE_FUNCTION_ID\"=:ID)\n  19 - access(\"T\".\"THEATER_ID\"=\"MF\".\"THEATER_ID\")\n  21 - access(\"M\".\"MOVIE_ID\"=\"MF\".\"MOVIE_ID\")\n  23 - access(\"C\".\"BRANCH_ID\"=\"T\".\"BRANCH_ID\")\n  29 - access(\"MFA\".\"MOVIE_FUNCTION_ID\"=:ID)\n  30 - access(\"A\".\"ACTIVITY_ID\"=\"MFA\".\"ACTIVITY_ID\")\n  31 - filter(\"A\".\"TYPE\"='CLEANING')\n  44 - access(\"MFA\".\"MOVIE_FUNCTION_ID\"=:ID)\n  45 - access(\"A\".\"ACTIVITY_ID\"=\"MFA\".\"ACTIVITY_ID\")\n  46 - filter(\"A\".\"TYPE\"='ADVERTISEMENT')"
+    },
+    {
+      "module": "Proyecciones",
+      "scenario": "Sucursales y salas",
+      "index": 1,
+      "sql": "SELECT BRANCH_ID AS \"branchId\", NAME AS \"name\" FROM CINEMAS ORDER BY NAME",
+      "binds": {},
+      "rowCount": 9,
+      "rowsHash": "63c9c958a76c243803aac4a7968d4fa20d68ef202a345d8e32496d1f61d997b1",
+      "sortedRowsHash": "d1df2260ea7911a137f85d78580349097a21f8fd56651dfa8a16f4d47a73e790",
+      "times": [
+        0.07,
+        0.066,
+        0.062,
+        0.104,
+        0.066,
+        0.062,
+        0.065,
+        0.06,
+        0.063,
+        0.06
+      ],
+      "median": 0.064,
+      "fetched": 9,
+      "plan": "Plan hash value: 48390114\n \n-----------------------------------------------------------\n| Id  | Operation          | Name    | Rows  | Cost (%CPU)|\n-----------------------------------------------------------\n|   0 | SELECT STATEMENT   |         |     9 |     6  (17)|\n|   1 |  SORT ORDER BY     |         |     9 |     6  (17)|\n|   2 |   TABLE ACCESS FULL| CINEMAS |     9 |     5   (0)|\n-----------------------------------------------------------"
+    },
+    {
+      "module": "Proyecciones",
+      "scenario": "Sucursales y salas",
+      "index": 2,
+      "sql": "SELECT THEATER_ID AS \"theaterId\", BRANCH_ID AS \"branchId\", NUMBER_SEATS AS \"numberOfSeats\"\n           FROM THEATERS WHERE IS_ACTIVE = 1\n          ORDER BY THEATER_ID",
+      "binds": {},
+      "rowCount": 8,
+      "rowsHash": "8d9e6dc0a3e9738f582cf034544f609cff4ca93ad7bf0bf541ca3beae8554725",
+      "sortedRowsHash": "d6373757600ebbf8e36179182d21d7caef821fd5e667872915efd44df4c669db",
+      "times": [
+        0.062,
+        0.059,
+        0.055,
+        0.093,
+        0.058,
+        0.055,
+        0.052,
+        0.059,
+        0.054,
+        0.058
+      ],
+      "median": 0.058,
+      "fetched": 8,
+      "plan": "Plan hash value: 3304424429\n \n-------------------------------------------------------------------------\n| Id  | Operation                   | Name         | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------\n|   0 | SELECT STATEMENT            |              |     8 |     2   (0)|\n|*  1 |  TABLE ACCESS BY INDEX ROWID| THEATERS     |     8 |     2   (0)|\n|   2 |   INDEX FULL SCAN           | SYS_C0038216 |    25 |     1   (0)|\n-------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - filter(\"IS_ACTIVE\"=1)"
+    },
+    {
+      "module": "Proyecciones",
+      "scenario": "Películas programadas",
+      "index": 1,
+      "sql": "SELECT m.MOVIE_ID AS \"movieId\", m.TITLE AS \"title\"\n         FROM MOVIES m\n        WHERE EXISTS (SELECT 1 FROM MOVIE_FUNCTIONS mf WHERE mf.MOVIE_ID = m.MOVIE_ID)\n        ORDER BY m.TITLE",
+      "binds": {},
+      "rowCount": 7,
+      "rowsHash": "63bcbb88c2064f0d0f851bb51e8d72cf186eec9311b2631584d9a835bae824d1",
+      "sortedRowsHash": "4d7ea6fef908a99e986a666091be6b398c326ca01a51cd83bd1ca75417c9f23f",
+      "times": [
+        13.214,
+        10.889,
+        10.955,
+        11.587,
+        11.203,
+        10.977,
+        10.711,
+        10.43,
+        11.126,
+        10.925
+      ],
+      "median": 10.966000000000001,
+      "fetched": 7,
+      "plan": "Plan hash value: 346404925\n \n-------------------------------------------------------------------------------\n| Id  | Operation                    | Name              | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT             |                   |     7 |     5  (20)|\n|   1 |  PX COORDINATOR              |                   |       |            |\n|   2 |   PX SEND QC (ORDER)         | :TQ10002          |     7 |     5  (20)|\n|   3 |    SORT ORDER BY             |                   |     7 |     5  (20)|\n|   4 |     PX RECEIVE               |                   |     7 |     4   (0)|\n|   5 |      PX SEND RANGE           | :TQ10001          |     7 |     4   (0)|\n|*  6 |       HASH JOIN SEMI BUFFERED|                   |     7 |     4   (0)|\n|   7 |        PX BLOCK ITERATOR     |                   |     8 |     3   (0)|\n|   8 |         TABLE ACCESS FULL    | MOVIES            |     8 |     3   (0)|\n|   9 |        PX RECEIVE            |                   |   102 |     1   (0)|\n|  10 |         PX SEND BROADCAST    | :TQ10000          |   102 |     1   (0)|\n|  11 |          PX SELECTOR         |                   |       |            |\n|  12 |           INDEX FULL SCAN    | UQ_MOVIE_FUNCTION |   102 |     1   (0)|\n-------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   6 - access(\"MF\".\"MOVIE_ID\"=\"M\".\"MOVIE_ID\")"
+    },
+    {
+      "module": "Proyecciones",
+      "scenario": "Películas disponibles",
+      "index": 1,
+      "sql": "SELECT m.MOVIE_ID AS \"movieId\", m.TITLE AS \"title\",\n              m.RUNNING_TIME AS \"runningTime\", m.POSTER_IMAGE AS \"posterImage\"\n         FROM MOVIES m\n         JOIN CINEMA_MOVIES cm ON cm.MOVIE_ID = m.MOVIE_ID\n        WHERE cm.BRANCH_ID = :branchId AND cm.IS_AVAILABLE = 1\n          AND LOWER(m.TITLE) LIKE :search ESCAPE '\\'\n        ORDER BY m.TITLE\n        FETCH FIRST 10 ROWS ONLY",
+      "binds": {
+        "branchId": {
+          "val": 41,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        },
+        "search": {
+          "val": "%%",
+          "type": {
+            "num": 2001,
+            "name": "DB_TYPE_VARCHAR",
+            "columnTypeName": "VARCHAR2",
+            "_bufferSizeFactor": 4,
+            "_oraTypeNum": 1,
+            "_csfrm": 1,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 8,
+      "rowsHash": "db0c48c704d15d58bebafa1e4d4f7092a449d7ebc64ac8da505600557f54ce14",
+      "sortedRowsHash": "180b38de76f3b524df22e3e95bc3fb672b08eabbdc8f1c6dd98ef36a6d7db537",
+      "times": [
+        0.092,
+        0.079,
+        0.076,
+        0.076,
+        0.107,
+        0.079,
+        0.08,
+        0.076,
+        0.072,
+        0.072
+      ],
+      "median": 0.0775,
+      "fetched": 8,
+      "plan": "Plan hash value: 3573896500\n \n------------------------------------------------------------------------------------------\n| Id  | Operation                                | Name             | Rows  | Cost (%CPU)|\n------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                         |                  |     1 |     6  (34)|\n|*  1 |  COUNT STOPKEY                           |                  |       |            |\n|   2 |   VIEW                                   |                  |     1 |     6  (34)|\n|*  3 |    SORT ORDER BY STOPKEY                 |                  |     1 |     6  (34)|\n|   4 |     MERGE JOIN                           |                  |     1 |     5  (20)|\n|*  5 |      TABLE ACCESS BY INDEX ROWID         | MOVIES           |     1 |     2   (0)|\n|   6 |       INDEX FULL SCAN                    | SYS_C0038159     |     8 |     1   (0)|\n|*  7 |      SORT JOIN                           |                  |     8 |     3  (34)|\n|*  8 |       TABLE ACCESS BY INDEX ROWID BATCHED| CINEMA_MOVIES    |     8 |     2   (0)|\n|*  9 |        INDEX RANGE SCAN                  | PK_CINEMA_MOVIES |     8 |     1   (0)|\n------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - filter(ROWNUM<=10)\n   3 - filter(ROWNUM<=10)\n   5 - filter(LOWER(\"M\".\"TITLE\") LIKE :SEARCH ESCAPE '\\')\n   7 - access(\"CM\".\"MOVIE_ID\"=\"M\".\"MOVIE_ID\")\n       filter(\"CM\".\"MOVIE_ID\"=\"M\".\"MOVIE_ID\")\n   8 - filter(\"CM\".\"IS_AVAILABLE\"=1)\n   9 - access(\"CM\".\"BRANCH_ID\"=:BRANCHID)"
+    },
+    {
+      "module": "Sucursales",
+      "scenario": "Listado de sucursales",
+      "index": 1,
+      "sql": "SELECT COUNT(*) AS TOTAL FROM CINEMAS c JOIN COMPANIES p ON p.COMPANY_ID = c.COMPANY_ID\n       WHERE c.STATUS = 'ACTIVE'",
+      "binds": {},
+      "rowCount": 1,
+      "rowsHash": "dd7fd901160ad88edae48b0864b3236b6bb18290fd23b2427ccc2c61af46f591",
+      "sortedRowsHash": "50c5935673b94c3dc8c3bbb5d1dc02c8aa3f77d6df334fe1240a1688a9a1d3e1",
+      "times": [
+        0.045,
+        0.041,
+        0.038,
+        0.038,
+        0.035,
+        0.034,
+        0.034,
+        0.035,
+        0.037,
+        0.033
+      ],
+      "median": 0.036000000000000004,
+      "fetched": 1,
+      "plan": "Plan hash value: 50940633\n \n-----------------------------------------------------------\n| Id  | Operation          | Name    | Rows  | Cost (%CPU)|\n-----------------------------------------------------------\n|   0 | SELECT STATEMENT   |         |     1 |     5   (0)|\n|   1 |  SORT AGGREGATE    |         |     1 |            |\n|*  2 |   TABLE ACCESS FULL| CINEMAS |     9 |     5   (0)|\n-----------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   2 - filter(\"C\".\"STATUS\"='ACTIVE')"
+    },
+    {
+      "module": "Sucursales",
+      "scenario": "Listado de sucursales",
+      "index": 2,
+      "sql": "SELECT c.BRANCH_ID AS ID, TRIM(c.NAME) AS NAME, c.COMPANY_ID,\n              TRIM(p.NAME) AS COMPANY_NAME\n       FROM CINEMAS c JOIN COMPANIES p ON p.COMPANY_ID = c.COMPANY_ID\n       WHERE c.STATUS = 'ACTIVE'\n       ORDER BY c.BRANCH_ID\n       OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY",
+      "binds": {
+        "offset": {
+          "val": 0,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        },
+        "pageSize": {
+          "val": 10,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 9,
+      "rowsHash": "aa6dbb0653329146d3079bd50eb6935f0e5b87f82c61ab7c137dd2f5a06d6755",
+      "sortedRowsHash": "a4f21e3e17687823b20baa71626638a0c57f263aff387fb9eb00f59e6864ed77",
+      "times": [
+        0.334,
+        0.291,
+        0.319,
+        0.285,
+        0.269,
+        0.264,
+        0.308,
+        0.267,
+        0.261,
+        0.301
+      ],
+      "median": 0.288,
+      "fetched": 9,
+      "plan": "Plan hash value: 615803556\n \n-------------------------------------------------------------------\n| Id  | Operation                | Name      | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------\n|   0 | SELECT STATEMENT         |           |     9 |    11  (10)|\n|*  1 |  VIEW                    |           |     9 |    11  (10)|\n|*  2 |   WINDOW SORT PUSHED RANK|           |     9 |    11  (10)|\n|*  3 |    FILTER                |           |       |            |\n|*  4 |     HASH JOIN            |           |     9 |    10   (0)|\n|   5 |      TABLE ACCESS FULL   | COMPANIES |     4 |     5   (0)|\n|*  6 |      TABLE ACCESS FULL   | CINEMAS   |     9 |     5   (0)|\n-------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - filter(\"from$_subquery$_004\".\"rowlimit_$$_rownumber\"<=TO_NUMBER(G\n              REATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OFFSET)))),'0'))+:PAGESIZE AND \n              \"from$_subquery$_004\".\"rowlimit_$$_rownumber\">:OFFSET)\n   2 - filter(ROW_NUMBER() OVER ( ORDER BY \n              \"C\".\"BRANCH_ID\")<=TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OF\n              FSET)))),'0'))+:PAGESIZE)\n   3 - filter(:OFFSET<TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR\n              (:OFFSET)))),'0'))+:PAGESIZE)\n   4 - access(\"P\".\"COMPANY_ID\"=\"C\".\"COMPANY_ID\")\n   6 - filter(\"C\".\"STATUS\"='ACTIVE')"
+    },
+    {
+      "module": "Sucursales",
+      "scenario": "Detalle de sucursal",
+      "index": 1,
+      "sql": "SELECT c.BRANCH_ID AS ID, TRIM(c.NAME) AS NAME, c.COMPANY_ID,\n              TRIM(p.NAME) AS COMPANY_NAME, c.STATUS\n       FROM CINEMAS c JOIN COMPANIES p ON p.COMPANY_ID = c.COMPANY_ID\n       WHERE c.BRANCH_ID = :id",
+      "binds": {
+        "id": {
+          "val": 1,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 1,
+      "rowsHash": "58fe070339c3a3e95491c7b07c21b750d1a8974efdb78bf41466568e2141d1ec",
+      "sortedRowsHash": "54f0869abff54bbc5d41a226e5951f3c0b87a4ddd4428f535fd4b70bdb7402b4",
+      "times": [
+        0.034,
+        0.029,
+        0.023,
+        0.024,
+        0.023,
+        0.024,
+        0.024,
+        0.022,
+        0.022,
+        0.021
+      ],
+      "median": 0.0235,
+      "fetched": 1,
+      "plan": "Plan hash value: 2610494194\n \n--------------------------------------------------------------------------\n| Id  | Operation                    | Name         | Rows  | Cost (%CPU)|\n--------------------------------------------------------------------------\n|   0 | SELECT STATEMENT             |              |     1 |     2   (0)|\n|   1 |  NESTED LOOPS                |              |     1 |     2   (0)|\n|   2 |   TABLE ACCESS BY INDEX ROWID| CINEMAS      |     1 |     1   (0)|\n|*  3 |    INDEX UNIQUE SCAN         | PK_CINEMAS   |     1 |     0   (0)|\n|   4 |   TABLE ACCESS BY INDEX ROWID| COMPANIES    |     1 |     1   (0)|\n|*  5 |    INDEX UNIQUE SCAN         | PK_COMPANIES |     1 |     0   (0)|\n--------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   3 - access(\"C\".\"BRANCH_ID\"=:ID)\n   5 - access(\"P\".\"COMPANY_ID\"=\"C\".\"COMPANY_ID\")"
+    },
+    {
+      "module": "Sucursales",
+      "scenario": "Todas las sucursales",
+      "index": 1,
+      "sql": "\n        SELECT branch_id, name, company_id\n        FROM Cinemas\n        ORDER BY name\n      ",
+      "binds": {},
+      "rowCount": 9,
+      "rowsHash": "95c7308d7372124e1265ed1a10f96734f72fe4382f8904664901de4c373dab91",
+      "sortedRowsHash": "b91fd3cb380859261bc7157107d44dd4cbbc557bdec0c704f26a62dbdee3a858",
+      "times": [
+        0.078,
+        0.071,
+        0.066,
+        0.066,
+        0.067,
+        0.068,
+        0.067,
+        0.067,
+        0.106,
+        0.075
+      ],
+      "median": 0.0675,
+      "fetched": 9,
+      "plan": "Plan hash value: 48390114\n \n-----------------------------------------------------------\n| Id  | Operation          | Name    | Rows  | Cost (%CPU)|\n-----------------------------------------------------------\n|   0 | SELECT STATEMENT   |         |     9 |     6  (17)|\n|   1 |  SORT ORDER BY     |         |     9 |     6  (17)|\n|   2 |   TABLE ACCESS FULL| CINEMAS |     9 |     5   (0)|\n-----------------------------------------------------------"
+    },
+    {
+      "module": "Salas",
+      "scenario": "Listado de salas",
+      "index": 1,
+      "sql": "\n      SELECT t.theater_id,\n          c.name AS cinema,\n          t.number_seats,\n          t.dimension_x,\n          t.dimension_y,\n          p.name AS projector_name,\n          t.is_active,\n          ts.name AS status,\n          CASE WHEN EXISTS (SELECT 1 FROM MOVIE_FUNCTIONS mf WHERE mf.THEATER_ID = t.THEATER_ID)\n            THEN 0 ELSE 1 END AS can_resize\n      FROM Theaters t\n      JOIN TheaterStatuses ts ON ts.theater_status_id = t.theater_status_id\n      JOIN Cinemas c ON c.branch_id = t.branch_id\n      JOIN Projectors p ON p.projector_id = t.projector_id\n      ORDER BY t.theater_id\n      ",
+      "binds": {},
+      "rowCount": 25,
+      "rowsHash": "e7af4193e95d31152fd648c3b48eb2e06b656f83c6129a63ee2b2c613760bb06",
+      "sortedRowsHash": "1c37b06ba0744e13a39d06abb13fef7c6c52404ef80065c6e46868b96f7f7593",
+      "times": [
+        0.82,
+        0.397,
+        0.39,
+        0.429,
+        0.397,
+        0.391,
+        0.351,
+        0.363,
+        0.426,
+        0.348
+      ],
+      "median": 0.394,
+      "fetched": 25,
+      "plan": "Plan hash value: 4151815772\n \n------------------------------------------------------------------------------------------------\n| Id  | Operation                       | Name                            | Rows  | Cost (%CPU)|\n------------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                |                                 |    25 |    29   (7)|\n|*  1 |  INDEX RANGE SCAN               | IX_MOVIE_FUNCTIONS_THEATER_TIME |     2 |     1   (0)|\n|   2 |  SORT ORDER BY                  |                                 |    25 |    29   (7)|\n|*  3 |   HASH JOIN                     |                                 |    25 |    15   (7)|\n|*  4 |    HASH JOIN                    |                                 |    25 |    10  (10)|\n|   5 |     MERGE JOIN                  |                                 |    25 |     8  (13)|\n|   6 |      TABLE ACCESS BY INDEX ROWID| PROJECTORS                      |     2 |     2   (0)|\n|   7 |       INDEX FULL SCAN           | SYS_C0038203                    |     2 |     1   (0)|\n|*  8 |      SORT JOIN                  |                                 |    25 |     6  (17)|\n|   9 |       TABLE ACCESS FULL         | THEATERS                        |    25 |     5   (0)|\n|  10 |     VIEW                        | index$_join$_003                |     2 |     2   (0)|\n|* 11 |      HASH JOIN                  |                                 |       |            |\n|  12 |       INDEX FAST FULL SCAN      | SYS_C0038218                    |     2 |     1   (0)|\n|  13 |       INDEX FAST FULL SCAN      | UQ_THEATER_STATUS_NAME          |     2 |     1   (0)|\n|  14 |    TABLE ACCESS FULL            | CINEMAS                         |     9 |     5   (0)|\n------------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - access(\"MF\".\"THEATER_ID\"=:B1)\n   3 - access(\"C\".\"BRANCH_ID\"=\"T\".\"BRANCH_ID\")\n   4 - access(\"TS\".\"THEATER_STATUS_ID\"=\"T\".\"THEATER_STATUS_ID\")\n   8 - access(\"P\".\"PROJECTOR_ID\"=\"T\".\"PROJECTOR_ID\")\n       filter(\"P\".\"PROJECTOR_ID\"=\"T\".\"PROJECTOR_ID\")\n  11 - access(ROWID=ROWID)"
+    },
+    {
+      "module": "Salas",
+      "scenario": "Detalle de sala",
+      "index": 1,
+      "sql": "SELECT t.theater_id,\n                c.name AS cinema,\n                t.number_seats,\n                t.dimension_x,\n                t.dimension_y,\n                p.name AS projector_name,\n                t.is_active,\n                ts.name AS status,\n                CASE WHEN EXISTS (SELECT 1 FROM MOVIE_FUNCTIONS mf WHERE mf.THEATER_ID = t.THEATER_ID)\n                  THEN 0 ELSE 1 END AS can_resize\n        FROM Theaters t\n        JOIN TheaterStatuses ts ON ts.theater_status_id = t.theater_status_id\n        JOIN Cinemas c ON c.branch_id = t.branch_id\n        JOIN Projectors p ON p.projector_id = t.projector_id\n        WHERE t.theater_id = :id",
+      "binds": {
+        "id": 222
+      },
+      "rowCount": 1,
+      "rowsHash": "d33cca22b99524b6967794cc024072f4872f1d7700153cf17967910bcd37a185",
+      "sortedRowsHash": "1480e68194d4aa7806acb0761aa32d3785c302e7a30bb0101866acc4f578f99a",
+      "times": [
+        0.054,
+        0.044,
+        0.041,
+        0.079,
+        0.058,
+        0.044,
+        0.04,
+        0.043,
+        0.038,
+        0.037
+      ],
+      "median": 0.0435,
+      "fetched": 1,
+      "plan": "Plan hash value: 678441161\n \n-----------------------------------------------------------------------------------------------\n| Id  | Operation                      | Name                            | Rows  | Cost (%CPU)|\n-----------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT               |                                 |     1 |     5   (0)|\n|*  1 |  INDEX RANGE SCAN              | IX_MOVIE_FUNCTIONS_THEATER_TIME |     2 |     1   (0)|\n|   2 |  NESTED LOOPS                  |                                 |     1 |     4   (0)|\n|   3 |   NESTED LOOPS                 |                                 |     1 |     3   (0)|\n|   4 |    NESTED LOOPS                |                                 |     1 |     2   (0)|\n|   5 |     TABLE ACCESS BY INDEX ROWID| THEATERS                        |     1 |     1   (0)|\n|*  6 |      INDEX UNIQUE SCAN         | SYS_C0038216                    |     1 |     0   (0)|\n|   7 |     TABLE ACCESS BY INDEX ROWID| PROJECTORS                      |     1 |     1   (0)|\n|*  8 |      INDEX UNIQUE SCAN         | SYS_C0038203                    |     1 |     0   (0)|\n|   9 |    TABLE ACCESS BY INDEX ROWID | CINEMAS                         |     1 |     1   (0)|\n|* 10 |     INDEX UNIQUE SCAN          | PK_CINEMAS                      |     1 |     0   (0)|\n|  11 |   TABLE ACCESS BY INDEX ROWID  | THEATERSTATUSES                 |     1 |     1   (0)|\n|* 12 |    INDEX UNIQUE SCAN           | SYS_C0038218                    |     1 |     0   (0)|\n-----------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - access(\"MF\".\"THEATER_ID\"=:B1)\n   6 - access(\"T\".\"THEATER_ID\"=:ID)\n   8 - access(\"P\".\"PROJECTOR_ID\"=\"T\".\"PROJECTOR_ID\")\n  10 - access(\"C\".\"BRANCH_ID\"=\"T\".\"BRANCH_ID\")\n  12 - access(\"TS\".\"THEATER_STATUS_ID\"=\"T\".\"THEATER_STATUS_ID\")"
+    },
+    {
+      "module": "Salas",
+      "scenario": "Asientos de la sala",
+      "index": 1,
+      "sql": "SELECT\n        THEATER_ID,\n        ROW_NUMBER,\n        COLUMN_NUMBER,\n        SEAT_TYPE,\n        SEAT_STATE\n      FROM SEATS\n      WHERE THEATER_ID = :theaterId\n      ORDER BY ROW_NUMBER, COLUMN_NUMBER",
+      "binds": {
+        "theaterId": 222
+      },
+      "rowCount": 600,
+      "rowsHash": "f3b4dce1e17ca11d83af9ce22f5df8bb4d8dd1d9e2521323f7aca54a2c0a7c70",
+      "sortedRowsHash": "326475f3f974a5d3560ecf7a54db4b0956472245481b644fd2d0b4efb16498ca",
+      "times": [
+        2.402,
+        2.439,
+        2.72,
+        2.659,
+        2.543,
+        2.418,
+        2.505,
+        2.439,
+        2.459,
+        2.419
+      ],
+      "median": 2.449,
+      "fetched": 600,
+      "plan": "Plan hash value: 3691326043\n \n---------------------------------------------------------------------\n| Id  | Operation                   | Name     | Rows  | Cost (%CPU)|\n---------------------------------------------------------------------\n|   0 | SELECT STATEMENT            |          |   124 |     3   (0)|\n|   1 |  TABLE ACCESS BY INDEX ROWID| SEATS    |   124 |     3   (0)|\n|*  2 |   INDEX RANGE SCAN          | PK_SEATS |   124 |     2   (0)|\n---------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   2 - access(\"THEATER_ID\"=:THEATERID)"
+    },
+    {
+      "module": "Usuarios",
+      "scenario": "Listado de empleados",
+      "index": 1,
+      "sql": "SELECT COUNT(*) AS TOTAL FROM EMPLOYEES e JOIN CINEMAS b ON b.BRANCH_ID = e.BRANCH_ID ",
+      "binds": {},
+      "rowCount": 1,
+      "rowsHash": "6a95dd69e969d14bbdee62cf032073033d9b5ecf4b35f1644b6415e7f382a67d",
+      "sortedRowsHash": "0e994b909ce1954dfce1691addb9cbb0f7b63034308e32a65f2499f649cbdd31",
+      "times": [
+        0.043,
+        0.04,
+        0.038,
+        0.053,
+        0.042,
+        0.038,
+        0.044,
+        0.038,
+        0.038,
+        0.042
+      ],
+      "median": 0.041,
+      "fetched": 1,
+      "plan": "Plan hash value: 17249303\n \n---------------------------------------------------------------------\n| Id  | Operation        | Name                | Rows  | Cost (%CPU)|\n---------------------------------------------------------------------\n|   0 | SELECT STATEMENT |                     |     1 |     1   (0)|\n|   1 |  SORT AGGREGATE  |                     |     1 |            |\n|   2 |   INDEX FULL SCAN| IX_EMPLOYEES_BRANCH |     8 |     1   (0)|\n---------------------------------------------------------------------"
+    },
+    {
+      "module": "Usuarios",
+      "scenario": "Listado de empleados",
+      "index": 2,
+      "sql": "SELECT e.EMPLOYEE_ID AS ID, e.STATUS, REGEXP_REPLACE(TRIM(e.FIRST_NAME || ' ' || e.SECOND_NAME || ' ' || e.FIRST_SURNAME || ' ' || e.SECOND_SURNAME), '[[:space:]]+', ' ') AS NAME, e.EMAIL, e.PHONE_NUMBER,\n              TO_CHAR(e.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.FF3\"Z\"') AS CREATED_AT,\n              e.ROLE, e.BRANCH_ID, b.NAME AS BRANCH_NAME, TO_CHAR(e.HIRE_DATE, 'YYYY-MM-DD') AS HIRE_DATE\n       FROM EMPLOYEES e JOIN CINEMAS b ON b.BRANCH_ID = e.BRANCH_ID \n       ORDER BY e.EMPLOYEE_ID ASC NULLS LAST, e.EMPLOYEE_ID ASC\n       OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY",
+      "binds": {
+        "offset": {
+          "val": 0,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        },
+        "pageSize": {
+          "val": 10,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 8,
+      "rowsHash": "39d107d80296e83d3cbe85481d0162e26a98a4d1c61ebe0719474ccfe2172a8f",
+      "sortedRowsHash": "b2fb70741aab2b83f0dd0956bcd859b3f89aa559502c02ce70617e641fd88c20",
+      "times": [
+        0.219,
+        0.284,
+        0.28,
+        0.204,
+        0.313,
+        0.295,
+        0.244,
+        0.298,
+        0.259,
+        0.199
+      ],
+      "median": 0.2695,
+      "fetched": 8,
+      "plan": "Plan hash value: 2923644032\n \n---------------------------------------------------------------------------\n| Id  | Operation                       | Name       | Rows  | Cost (%CPU)|\n---------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                |            |     8 |     9  (23)|\n|*  1 |  VIEW                           |            |     8 |     9  (23)|\n|*  2 |   WINDOW SORT PUSHED RANK       |            |     8 |     9  (23)|\n|*  3 |    FILTER                       |            |       |            |\n|   4 |     MERGE JOIN                  |            |     8 |     8  (13)|\n|   5 |      TABLE ACCESS BY INDEX ROWID| CINEMAS    |     9 |     2   (0)|\n|   6 |       INDEX FULL SCAN           | PK_CINEMAS |     9 |     1   (0)|\n|*  7 |      SORT JOIN                  |            |     8 |     6  (17)|\n|   8 |       TABLE ACCESS FULL         | EMPLOYEES  |     8 |     5   (0)|\n---------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - filter(\"from$_subquery$_004\".\"rowlimit_$$_rownumber\"<=TO_NUMBER(G\n              REATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OFFSET)))),'0'))+:PAGESIZE AND \n              \"from$_subquery$_004\".\"rowlimit_$$_rownumber\">:OFFSET)\n   2 - filter(ROW_NUMBER() OVER ( ORDER BY \n              \"E\".\"EMPLOYEE_ID\")<=TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:\n              OFFSET)))),'0'))+:PAGESIZE)\n   3 - filter(:OFFSET<TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR\n              (:OFFSET)))),'0'))+:PAGESIZE)\n   7 - access(\"B\".\"BRANCH_ID\"=\"E\".\"BRANCH_ID\")\n       filter(\"B\".\"BRANCH_ID\"=\"E\".\"BRANCH_ID\")"
+    },
+    {
+      "module": "Usuarios",
+      "scenario": "Detalle de empleado",
+      "index": 1,
+      "sql": "SELECT e.EMPLOYEE_ID AS ID, e.STATUS, e.FIRST_NAME, e.SECOND_NAME, e.FIRST_SURNAME, e.SECOND_SURNAME,\n              TO_CHAR(e.BIRTHDAY, 'YYYY-MM-DD') AS BIRTHDAY, e.PHONE_NUMBER, e.EMAIL,\n              e.ROLE, e.BRANCH_ID, b.NAME AS BRANCH_NAME,\n              TO_CHAR(e.HIRE_DATE, 'YYYY-MM-DD') AS HIRE_DATE,\n              TO_CHAR(e.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.FF3\"Z\"') AS CREATED_AT,\n              a.ID_ADDRESS AS ADDRESS_ID, a.DETAILS AS ADDRESS_DETAILS,\n              d.ID_DISTRICT AS DISTRICT_ID, d.NAME AS DISTRICT_NAME,\n              k.ID_CANTON AS CANTON_ID, k.NAME AS CANTON_NAME,\n              p.ID_PROVINCE AS PROVINCE_ID, p.NAME AS PROVINCE_NAME\n       FROM EMPLOYEES e\n       JOIN CINEMAS b ON b.BRANCH_ID = e.BRANCH_ID\n       LEFT JOIN ADDRESSES a ON a.ID_ADDRESS = e.ID_ADDRESS\n       LEFT JOIN DISTRICTS d ON d.ID_DISTRICT = a.ID_DISTRICT\n       LEFT JOIN CANTONS k ON k.ID_CANTON = d.ID_CANTON\n       LEFT JOIN PROVINCES p ON p.ID_PROVINCE = k.ID_PROVINCE\n       WHERE e.EMPLOYEE_ID = :id",
+      "binds": {
+        "id": {
+          "val": 21,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 1,
+      "rowsHash": "72346543201f66c74eb8ebffecc8ea9f673bfb66a946d1fe51733a066a4fb9de",
+      "sortedRowsHash": "7b226a49cd606d7174b6b9407e33e42699e066f885fefcbadd97d60d433c2fc5",
+      "times": [
+        11.097,
+        11.416,
+        12.403,
+        11.886,
+        11.455,
+        12.135,
+        10.52,
+        10.355,
+        10.597,
+        10.739
+      ],
+      "median": 11.256499999999999,
+      "fetched": 1,
+      "plan": "Plan hash value: 2821889416\n \n------------------------------------------------------------------------------------\n| Id  | Operation                              | Name         | Rows  | Cost (%CPU)|\n------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                       |              |     1 |     4   (0)|\n|   1 |  PX COORDINATOR                        |              |       |            |\n|   2 |   PX SEND QC (RANDOM)                  | :TQ10001     |     1 |     4   (0)|\n|   3 |    BUFFER SORT                         |              |     1 |            |\n|   4 |     NESTED LOOPS OUTER                 |              |     1 |     4   (0)|\n|   5 |      NESTED LOOPS OUTER                |              |     1 |     3   (0)|\n|   6 |       NESTED LOOPS OUTER               |              |     1 |     3   (0)|\n|   7 |        NESTED LOOPS                    |              |     1 |     2   (0)|\n|   8 |         NESTED LOOPS OUTER             |              |     1 |     2   (0)|\n|   9 |          PX RECEIVE                    |              |       |            |\n|  10 |           PX SEND ROUND-ROBIN          | :TQ10000     |       |            |\n|  11 |            PX SELECTOR                 |              |       |            |\n|  12 |             TABLE ACCESS BY INDEX ROWID| EMPLOYEES    |     1 |     1   (0)|\n|* 13 |              INDEX UNIQUE SCAN         | PK_EMPLOYEES |     1 |     0   (0)|\n|  14 |          TABLE ACCESS BY INDEX ROWID   | ADDRESSES    |     1 |     1   (0)|\n|* 15 |           INDEX UNIQUE SCAN            | SYS_C0038198 |     1 |     0   (0)|\n|  16 |         TABLE ACCESS BY INDEX ROWID    | CINEMAS      |     1 |     1   (0)|\n|* 17 |          INDEX UNIQUE SCAN             | PK_CINEMAS   |     1 |     0   (0)|\n|  18 |        TABLE ACCESS BY INDEX ROWID     | DISTRICTS    |     1 |     1   (0)|\n|* 19 |         INDEX UNIQUE SCAN              | SYS_C0038199 |     1 |     0   (0)|\n|  20 |       TABLE ACCESS BY INDEX ROWID      | CANTONS      |     1 |     1   (0)|\n|* 21 |        INDEX UNIQUE SCAN               | SYS_C0038186 |     1 |     0   (0)|\n|  22 |      TABLE ACCESS BY INDEX ROWID       | PROVINCES    |     1 |     1   (0)|\n|* 23 |       INDEX UNIQUE SCAN                | SYS_C0038205 |     1 |     0   (0)|\n------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n  13 - access(\"E\".\"EMPLOYEE_ID\"=:ID)\n  15 - access(\"A\".\"ID_ADDRESS\"(+)=\"E\".\"ID_ADDRESS\")\n  17 - access(\"B\".\"BRANCH_ID\"=\"E\".\"BRANCH_ID\")\n  19 - access(\"D\".\"ID_DISTRICT\"(+)=\"A\".\"ID_DISTRICT\")\n  21 - access(\"K\".\"ID_CANTON\"(+)=\"D\".\"ID_CANTON\")\n  23 - access(\"P\".\"ID_PROVINCE\"(+)=\"K\".\"ID_PROVINCE\")"
+    },
+    {
+      "module": "Usuarios",
+      "scenario": "Opciones del listado",
+      "index": 1,
+      "sql": "SELECT BRANCH_ID, NAME FROM CINEMAS ORDER BY NAME, BRANCH_ID",
+      "binds": {},
+      "rowCount": 9,
+      "rowsHash": "31bbc45f837eee675722e2b7cc42b5213e19d0588017eccca9b79e3b79136e61",
+      "sortedRowsHash": "73776902df0d6fe9417688c4874e558f52fd3522ba9edda032a5e01192fbeeff",
+      "times": [
+        10.961,
+        10.702,
+        10.044,
+        9.871,
+        9.968,
+        10.223,
+        9.996,
+        9.834,
+        10.193,
+        9.72
+      ],
+      "median": 10.02,
+      "fetched": 9,
+      "plan": "Plan hash value: 196190786\n \n-----------------------------------------------------------------\n| Id  | Operation               | Name     | Rows  | Cost (%CPU)|\n-----------------------------------------------------------------\n|   0 | SELECT STATEMENT        |          |     9 |     4  (25)|\n|   1 |  PX COORDINATOR         |          |       |            |\n|   2 |   PX SEND QC (ORDER)    | :TQ10001 |     9 |     4  (25)|\n|   3 |    SORT ORDER BY        |          |     9 |     4  (25)|\n|   4 |     PX RECEIVE          |          |     9 |     3   (0)|\n|   5 |      PX SEND RANGE      | :TQ10000 |     9 |     3   (0)|\n|   6 |       PX BLOCK ITERATOR |          |     9 |     3   (0)|\n|   7 |        TABLE ACCESS FULL| CINEMAS  |     9 |     3   (0)|\n-----------------------------------------------------------------"
+    },
+    {
+      "module": "Usuarios",
+      "scenario": "Listado de clientes",
+      "index": 1,
+      "sql": "SELECT COUNT(*) AS TOTAL FROM CLIENTS c ",
+      "binds": {},
+      "rowCount": 1,
+      "rowsHash": "5c25ebac7dbd562bf7b791c2cd45f1190a5417fdc61cda8e37212091cb828b82",
+      "sortedRowsHash": "340ef950970e96ecbe7e426ebb3b7bb3b697e9d7abb9cb40a6838095c07bc9a9",
+      "times": [
+        0.047,
+        0.03,
+        0.021,
+        0.021,
+        0.02,
+        0.02,
+        0.021,
+        0.022,
+        0.021,
+        0.055
+      ],
+      "median": 0.021,
+      "fetched": 1,
+      "plan": "Plan hash value: 2597461867\n \n--------------------------------------------------------------\n| Id  | Operation        | Name         | Rows  | Cost (%CPU)|\n--------------------------------------------------------------\n|   0 | SELECT STATEMENT |              |     1 |     1   (0)|\n|   1 |  SORT AGGREGATE  |              |     1 |            |\n|   2 |   INDEX FULL SCAN| SYS_C0038196 |    17 |     1   (0)|\n--------------------------------------------------------------"
+    },
+    {
+      "module": "Usuarios",
+      "scenario": "Listado de clientes",
+      "index": 2,
+      "sql": "SELECT c.CLIENT_ID AS ID, c.STATUS, REGEXP_REPLACE(TRIM(c.FIRST_NAME || ' ' || c.SECOND_NAME || ' ' || c.FIRST_SURNAME || ' ' || c.SECOND_SURNAME), '[[:space:]]+', ' ') AS NAME, c.EMAIL, c.PHONE_NUMBER,\n              TO_CHAR(c.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.FF3\"Z\"') AS CREATED_AT\n       FROM CLIENTS c \n       ORDER BY c.CLIENT_ID ASC NULLS LAST, c.CLIENT_ID ASC\n       OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY",
+      "binds": {
+        "offset": {
+          "val": 0,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        },
+        "pageSize": {
+          "val": 10,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 10,
+      "rowsHash": "e639eacfda5a87c645338c8d97b9fae164b71ea56643d1be69a33de0b25ee6ba",
+      "sortedRowsHash": "063a790c2eeb08e2cd885a3eb7391611a16f54729614a1c92593bec92462eda5",
+      "times": [
+        0.18,
+        0.175,
+        0.172,
+        0.195,
+        0.183,
+        0.163,
+        0.164,
+        0.159,
+        0.16,
+        0.2
+      ],
+      "median": 0.1735,
+      "fetched": 10,
+      "plan": "Plan hash value: 970393650\n \n----------------------------------------------------------------------------\n| Id  | Operation                      | Name         | Rows  | Cost (%CPU)|\n----------------------------------------------------------------------------\n|   0 | SELECT STATEMENT               |              |    17 |     2   (0)|\n|*  1 |  VIEW                          |              |    17 |     2   (0)|\n|*  2 |   WINDOW NOSORT STOPKEY        |              |    17 |     2   (0)|\n|*  3 |    FILTER                      |              |       |            |\n|   4 |     TABLE ACCESS BY INDEX ROWID| CLIENTS      |    17 |     2   (0)|\n|   5 |      INDEX FULL SCAN           | SYS_C0038196 |    17 |     1   (0)|\n----------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   1 - filter(\"from$_subquery$_002\".\"rowlimit_$$_rownumber\"<=TO_NUMBER(G\n              REATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OFFSET)))),'0'))+:PAGESIZE AND \n              \"from$_subquery$_002\".\"rowlimit_$$_rownumber\">:OFFSET)\n   2 - filter(ROW_NUMBER() OVER ( ORDER BY \n              \"C\".\"CLIENT_ID\")<=TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR(:OF\n              FSET)))),'0'))+:PAGESIZE)\n   3 - filter(:OFFSET<TO_NUMBER(GREATEST(TO_CHAR(FLOOR(TO_NUMBER(TO_CHAR\n              (:OFFSET)))),'0'))+:PAGESIZE)"
+    },
+    {
+      "module": "Usuarios",
+      "scenario": "Detalle de cliente",
+      "index": 1,
+      "sql": "SELECT c.CLIENT_ID AS ID, c.STATUS, c.FIRST_NAME, c.SECOND_NAME, c.FIRST_SURNAME, c.SECOND_SURNAME,\n              TO_CHAR(c.BIRTHDAY, 'YYYY-MM-DD') AS BIRTHDAY, c.PHONE_NUMBER, c.EMAIL,\n              c.GENDER, c.LANGUAGE,\n              TO_CHAR(c.CREATED_AT AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.FF3\"Z\"') AS CREATED_AT,\n              a.ID_ADDRESS AS ADDRESS_ID, a.DETAILS AS ADDRESS_DETAILS,\n              d.ID_DISTRICT AS DISTRICT_ID, d.NAME AS DISTRICT_NAME,\n              k.ID_CANTON AS CANTON_ID, k.NAME AS CANTON_NAME,\n              p.ID_PROVINCE AS PROVINCE_ID, p.NAME AS PROVINCE_NAME\n       FROM CLIENTS c\n       LEFT JOIN ADDRESSES a ON a.ID_ADDRESS = c.ID_ADDRESS\n       LEFT JOIN DISTRICTS d ON d.ID_DISTRICT = a.ID_DISTRICT\n       LEFT JOIN CANTONS k ON k.ID_CANTON = d.ID_CANTON\n       LEFT JOIN PROVINCES p ON p.ID_PROVINCE = k.ID_PROVINCE\n       WHERE c.CLIENT_ID = :id",
+      "binds": {
+        "id": {
+          "val": 141,
+          "type": {
+            "num": 2010,
+            "name": "DB_TYPE_NUMBER",
+            "columnTypeName": "NUMBER",
+            "_bufferSizeFactor": 22,
+            "_oraTypeNum": 2,
+            "_csfrm": 0,
+            "_is_fast": true
+          }
+        }
+      },
+      "rowCount": 1,
+      "rowsHash": "9ddec93f3c3e7f6b95bc7155dda372d3d89c7a76cc464c2a0a0272d2fc1bed16",
+      "sortedRowsHash": "0cb4769e658d83d4605cc55e2f88e9c7fa8fadd6706c3a93e1bd982edb43e595",
+      "times": [
+        11.339,
+        11.461,
+        11.031,
+        11.797,
+        10.632,
+        10.597,
+        11.133,
+        10.632,
+        10.728,
+        10.257
+      ],
+      "median": 10.8795,
+      "fetched": 1,
+      "plan": "Plan hash value: 469521580\n \n-----------------------------------------------------------------------------------\n| Id  | Operation                             | Name         | Rows  | Cost (%CPU)|\n-----------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                      |              |     1 |     3   (0)|\n|   1 |  PX COORDINATOR                       |              |       |            |\n|   2 |   PX SEND QC (RANDOM)                 | :TQ10001     |     1 |     3   (0)|\n|   3 |    BUFFER SORT                        |              |     1 |            |\n|   4 |     NESTED LOOPS OUTER                |              |     1 |     3   (0)|\n|   5 |      NESTED LOOPS OUTER               |              |     1 |     3   (0)|\n|   6 |       NESTED LOOPS OUTER              |              |     1 |     2   (0)|\n|   7 |        NESTED LOOPS OUTER             |              |     1 |     2   (0)|\n|   8 |         PX RECEIVE                    |              |       |            |\n|   9 |          PX SEND ROUND-ROBIN          | :TQ10000     |       |            |\n|  10 |           PX SELECTOR                 |              |       |            |\n|  11 |            TABLE ACCESS BY INDEX ROWID| CLIENTS      |     1 |     1   (0)|\n|* 12 |             INDEX UNIQUE SCAN         | SYS_C0038196 |     1 |     0   (0)|\n|  13 |         TABLE ACCESS BY INDEX ROWID   | ADDRESSES    |     1 |     1   (0)|\n|* 14 |          INDEX UNIQUE SCAN            | SYS_C0038198 |     1 |     0   (0)|\n|  15 |        TABLE ACCESS BY INDEX ROWID    | DISTRICTS    |     1 |     1   (0)|\n|* 16 |         INDEX UNIQUE SCAN             | SYS_C0038199 |     1 |     0   (0)|\n|  17 |       TABLE ACCESS BY INDEX ROWID     | CANTONS      |     1 |     1   (0)|\n|* 18 |        INDEX UNIQUE SCAN              | SYS_C0038186 |     1 |     0   (0)|\n|  19 |      TABLE ACCESS BY INDEX ROWID      | PROVINCES    |     1 |     1   (0)|\n|* 20 |       INDEX UNIQUE SCAN               | SYS_C0038205 |     1 |     0   (0)|\n-----------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n  12 - access(\"C\".\"CLIENT_ID\"=:ID)\n  14 - access(\"A\".\"ID_ADDRESS\"(+)=\"C\".\"ID_ADDRESS\")\n  16 - access(\"D\".\"ID_DISTRICT\"(+)=\"A\".\"ID_DISTRICT\")\n  18 - access(\"K\".\"ID_CANTON\"(+)=\"D\".\"ID_CANTON\")\n  20 - access(\"P\".\"ID_PROVINCE\"(+)=\"K\".\"ID_PROVINCE\")"
+    },
+    {
+      "module": "Películas",
+      "scenario": "Listado de películas",
+      "index": 1,
+      "sql": "\n      SELECT\n        m.MOVIE_ID,\n        m.TITLE,\n        m.RUNNING_TIME,\n        m.RELEASE_YEAR,\n        c.CLASSIFICATION_NAME AS CLASSIFICATION\n\n      FROM MOVIES m\n\n      JOIN CLASSIFICATIONS c\n        ON m.CLASSIFICATION_ID = c.CLASSIFICATION_ID\n\n      ORDER BY m.TITLE\n      ",
+      "binds": {},
+      "rowCount": 8,
+      "rowsHash": "3f0796a78ee2f0adacce2596eabf6ac91e7dbee4e44041d86bc4593192a615bf",
+      "sortedRowsHash": "8cf0c24d874df25b2d9cec14c87e5b4de7092b40f735a03eb1ac73d796c0ab34",
+      "times": [
+        13.693,
+        11.295,
+        11.166,
+        10.758,
+        10.571,
+        10.236,
+        10.686,
+        10.503,
+        10.386,
+        10.639
+      ],
+      "median": 10.6625,
+      "fetched": 8,
+      "plan": "Plan hash value: 2653629250\n \n-------------------------------------------------------------------------\n| Id  | Operation                | Name            | Rows  | Cost (%CPU)|\n-------------------------------------------------------------------------\n|   0 | SELECT STATEMENT         |                 |     8 |     7  (15)|\n|   1 |  PX COORDINATOR          |                 |       |            |\n|   2 |   PX SEND QC (ORDER)     | :TQ10001        |     8 |     7  (15)|\n|   3 |    SORT ORDER BY         |                 |     8 |     7  (15)|\n|   4 |     PX RECEIVE           |                 |     8 |     6   (0)|\n|   5 |      PX SEND RANGE       | :TQ10000        |     8 |     6   (0)|\n|*  6 |       HASH JOIN          |                 |     8 |     6   (0)|\n|   7 |        PX BLOCK ITERATOR |                 |     8 |     3   (0)|\n|   8 |         TABLE ACCESS FULL| MOVIES          |     8 |     3   (0)|\n|   9 |        TABLE ACCESS FULL | CLASSIFICATIONS |     7 |     3   (0)|\n-------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   6 - access(\"M\".\"CLASSIFICATION_ID\"=\"C\".\"CLASSIFICATION_ID\")"
+    },
+    {
+      "module": "Películas",
+      "scenario": "Detalle de película",
+      "index": 1,
+      "sql": "\n    SELECT\n      m.MOVIE_ID,\n      m.TITLE,\n      m.SYNOPSIS,\n      m.RUNNING_TIME,\n      m.RELEASE_YEAR,\n      m.POSTER_IMAGE,\n      c.CLASSIFICATION_ID,\n      c.CLASSIFICATION_NAME AS CLASSIFICATION,\n\n      l.LANGUAGE_ID,\n      l.NAME AS LANGUAGE,\n\n      g.GENRE_ID,\n      g.NAME AS GENRE\n\n    FROM MOVIES m\n\n    JOIN CLASSIFICATIONS c\n      ON m.CLASSIFICATION_ID = c.CLASSIFICATION_ID\n\n    LEFT JOIN MOVIE_LANGUAGES ml\n      ON m.MOVIE_ID = ml.MOVIE_ID\n\n    LEFT JOIN LANGUAGES l\n      ON ml.LANGUAGE_ID = l.LANGUAGE_ID\n\n    LEFT JOIN MOVIE_GENRES mg\n      ON m.MOVIE_ID = mg.MOVIE_ID\n\n    LEFT JOIN GENRES g\n      ON mg.GENRE_ID = g.GENRE_ID\n\n    WHERE m.MOVIE_ID = :id\n    ",
+      "binds": {
+        "id": 1
+      },
+      "rowCount": 8,
+      "rowsHash": "2fe0bd62ba6fc5ee79f485dd51a980ba67ec60ae6901b2eda3656b0771efb974",
+      "sortedRowsHash": "a2ae36ace5df1e90c4e65f366087e9a255789c3be4e78fc119a55d9cc65f839a",
+      "times": [
+        12.164,
+        11.823,
+        12.126,
+        12.431,
+        12.192,
+        13.145,
+        11.934,
+        11.528,
+        11.825,
+        12.008
+      ],
+      "median": 12.067,
+      "fetched": 8,
+      "plan": "Plan hash value: 390897618\n \n-----------------------------------------------------------------------------------------------\n| Id  | Operation                                   | Name               | Rows  | Cost (%CPU)|\n-----------------------------------------------------------------------------------------------\n|   0 | SELECT STATEMENT                            |                    |     4 |     6   (0)|\n|   1 |  PX COORDINATOR                             |                    |       |            |\n|   2 |   PX SEND QC (RANDOM)                       | :TQ10003           |     4 |     6   (0)|\n|   3 |    BUFFER SORT                              |                    |     4 |            |\n|   4 |     NESTED LOOPS OUTER                      |                    |     4 |     6   (0)|\n|   5 |      JOIN CONSOLIDATOR                      |                    |       |            |\n|*  6 |       HASH JOIN OUTER                       |                    |     4 |     4   (0)|\n|   7 |        PX RECEIVE                           |                    |     2 |     3   (0)|\n|   8 |         PX SEND HYBRID HASH                 | :TQ10001           |     2 |     3   (0)|\n|   9 |          STATISTICS COLLECTOR               |                    |       |            |\n|  10 |           BUFFER SORT                       |                    |     4 |            |\n|  11 |            NESTED LOOPS OUTER               |                    |     2 |     3   (0)|\n|  12 |             NESTED LOOPS OUTER              |                    |     2 |     2   (0)|\n|  13 |              NESTED LOOPS                   |                    |     1 |     2   (0)|\n|  14 |               PX RECEIVE                    |                    |       |            |\n|  15 |                PX SEND ROUND-ROBIN          | :TQ10000           |       |            |\n|  16 |                 PX SELECTOR                 |                    |       |            |\n|  17 |                  TABLE ACCESS BY INDEX ROWID| MOVIES             |     1 |     1   (0)|\n|* 18 |                   INDEX UNIQUE SCAN         | SYS_C0038159       |     1 |     0   (0)|\n|  19 |               TABLE ACCESS BY INDEX ROWID   | CLASSIFICATIONS    |     1 |     1   (0)|\n|* 20 |                INDEX UNIQUE SCAN            | SYS_C0038204       |     1 |     0   (0)|\n|* 21 |              INDEX RANGE SCAN               | PK_MOVIE_LANGUAGES |     2 |     1   (0)|\n|  22 |             TABLE ACCESS BY INDEX ROWID     | LANGUAGES          |     1 |     1   (0)|\n|* 23 |              INDEX UNIQUE SCAN              | SYS_C0038157       |     1 |     0   (0)|\n|  24 |        PX RECEIVE                           |                    |     2 |     1   (0)|\n|  25 |         PX SEND HYBRID HASH                 | :TQ10002           |     2 |     1   (0)|\n|  26 |          PX SELECTOR                        |                    |       |            |\n|* 27 |           INDEX RANGE SCAN                  | PK_MOVIE_GENRES    |     2 |     1   (0)|\n|  28 |      TABLE ACCESS BY INDEX ROWID            | GENRES             |     1 |     1   (0)|\n|* 29 |       INDEX UNIQUE SCAN                     | SYS_C0038168       |     1 |     0   (0)|\n-----------------------------------------------------------------------------------------------\n \nPredicate Information (identified by operation id):\n---------------------------------------------------\n \n   6 - access(\"M\".\"MOVIE_ID\"=\"MG\".\"MOVIE_ID\"(+))\n  18 - access(\"M\".\"MOVIE_ID\"=:ID)\n  20 - access(\"M\".\"CLASSIFICATION_ID\"=\"C\".\"CLASSIFICATION_ID\")\n  21 - access(\"ML\".\"MOVIE_ID\"(+)=:ID)\n  23 - access(\"ML\".\"LANGUAGE_ID\"=\"L\".\"LANGUAGE_ID\"(+))\n  27 - access(\"MG\".\"MOVIE_ID\"(+)=:ID)\n  29 - access(\"MG\".\"GENRE_ID\"=\"G\".\"GENRE_ID\"(+))"
+    }
+  ]
+}
