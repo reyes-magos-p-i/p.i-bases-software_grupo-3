@@ -14,6 +14,9 @@ Lo que se prueba en desarrollo no cambia la app desplegada.
 - **`ADMIN`**, o la cuenta de administración del equipo, crea usuarios, permisos, copias y
   respaldos (`01` a `06`).
 - Los tres usuarios usan la misma wallet y el mismo `DB_CONNECT_STRING`.
+- `DB_CONNECT_STRING` usa el alias **`<base>_tp`**, el servicio para aplicaciones transaccionales.
+  `_high` y `_medium` son para reportes y ejecutan en paralelo hasta las búsquedas de una fila, lo
+  que suma ~10 ms a cada consulta con joins (SCRUM-436, [`query-optimization.md`](query-optimization.md)).
 - Las contraseñas no se guardan en el repositorio. Se comparten por un canal privado.
 
 Los scripts están en [`database/environments/`](../database/environments/).
