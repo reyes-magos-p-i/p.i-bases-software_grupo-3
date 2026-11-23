@@ -12,7 +12,7 @@ import {
   uploadPromotionPoster,
   getPromotionPosterUrl,
  } from '@/services/image-handler.service'
-import { createPromotion, getPromotion } from '@/services/promotion.service'
+import { createPromotion, getPromotion, updatePromotion } from '@/services/promotion.service'
 import type { PromotionDetail } from '@/types/promotion-read'
 import type {
   CinemaOption,
@@ -35,10 +35,23 @@ import LoadingState from '../common/LoadingState.vue'
 
 const props = withDefaults(defineProps<{
   cinemas: CinemaOption[]
-  mode?: 'create' | 'view'
+  mode?: 'create' | 'edit' | 'view'
   promotionId?: number | null
 }>(), { mode: 'create', promotionId: null })
 const isView = computed(() => props.mode === 'view')
+const isEdit = computed(() => props.mode === 'edit')
+let populating = false
+const originalCinemaIds = ref<number[]>([])
+const availableCinemas = computed(() => {
+  const options = [...props.cinemas]
+  if (isEdit.value) {
+    const known = new Set(options.map((item) => item.id))
+    for (const id of originalCinemaIds.value) {
+      if (!known.has(id)) options.push({ id, name: `Sucursal #${id}` })
+    }
+  }
+  return options
+})
 const emit = defineEmits<{
   close: []
   saved: []
@@ -58,7 +71,7 @@ const loadingDetails = ref(false)
 const detailLoaded = ref(false)
 const detailError = ref('')
 const posterFailed = ref(false)
-const inputsDisabled = computed(() => saving.value || isView.value || loadingDetails.value)
+const inputsDisabled = computed(() => saving.value || isView.value || loadingDetails.value || (isEdit.value && !detailLoaded.value))
 let detailRequest: AbortController | undefined
 let detailVersion = 0
 const error = ref('')
@@ -71,7 +84,7 @@ const existingPosterUrl = computed(() =>
   getPromotionPosterUrl(form.posterPath),
 )
 const cinemaOptions = computed(() => {
-  const options = props.cinemas.map((item) => ({ value: item.id, label: item.name }))
+  const options = availableCinemas.value.map((item) => ({ value: item.id, label: item.name }))
   // Details must still identify associations not present in the active cinema catalog.
   if (isView.value) {
     const known = new Set(options.map((item) => item.value))
@@ -81,8 +94,8 @@ const cinemaOptions = computed(() => {
   }
   return options
 })
-const allCinemasSelected = computed(() => props.cinemas.length > 0
-  && props.cinemas.every((cinema) => form.branchIds.includes(cinema.id)))
+const allCinemasSelected = computed(() => availableCinemas.value.length > 0
+  && availableCinemas.value.every((cinema) => form.branchIds.includes(cinema.id)))
 const maxAmount = computed(() => form.promotionType === 'percentage' ? 100 : 4000)
 const weekdays = [
   { value: 1, label: 'Lunes' }, { value: 2, label: 'Martes' },
@@ -134,14 +147,14 @@ const technologyModel = computed<Technology | null>({
 })
 
 watch(endAtMidnight, (enabled) => {
-  if (isView.value) return
+  if (isView.value || populating) return
   form.endHour = enabled ? '24:00' : ''
   delete fieldErrors.endHour
-})
+}, { flush: 'sync' })
 watch(selectedPoster, () => { delete fieldErrors.poster })
 
 function selectAllCinemas() {
-  form.branchIds = [...new Set(props.cinemas.map((cinema) => cinema.id))]
+  form.branchIds = [...new Set(availableCinemas.value.map((cinema) => cinema.id))]
   delete fieldErrors.branchIds
 }
 function clearHoursErrors() {
@@ -161,11 +174,13 @@ function apiMessages(value: unknown): string {
   return ''
 }
 async function save() {
-  if (saving.value || isView.value) return
+  if (saving.value || isView.value || loadingDetails.value || (isEdit.value && !detailLoaded.value)) return
+  const editId = isEdit.value ? props.promotionId : null
+  const version = detailVersion
   error.value = ''
   validationNotice.value = ''
   for (const key of Object.keys(fieldErrors)) delete fieldErrors[key as keyof PromotionErrors]
-  Object.assign(fieldErrors, validatePromotion(form, props.cinemas, selectedPoster.value))
+  Object.assign(fieldErrors, validatePromotion(form, availableCinemas.value, selectedPoster.value))
   if (Object.keys(fieldErrors).length) {
     validationNotice.value = 'Revisa los campos indicados antes de continuar.'
     await focusFirstError()
@@ -176,6 +191,7 @@ async function save() {
   try {
     if (selectedPoster.value) {
       const uploaded = await uploadPromotionPoster(selectedPoster.value)
+      if (version !== detailVersion) return
       if (typeof uploaded.path !== 'string' || !uploaded.path
         || uploaded.path.length > PROMOTION_POSTER_PATH_LIMIT) {
         fieldErrors.poster = 'No se recibió una ruta válida para el póster. Vuelve a seleccionarlo.'
@@ -186,26 +202,39 @@ async function save() {
       form.posterPath = uploaded.path
       selectedPoster.value = null
     }
-    await createPromotion(buildPromotionPayload(form))
+    const payload = buildPromotionPayload(form)
+    if (editId !== null) await updatePromotion(editId, payload)
+    else await createPromotion(payload)
+    if (version !== detailVersion) return
     emit('saved')
     emit('close')
   } catch (failure: unknown) {
+    if (version !== detailVersion) return
     if (isAxiosError(failure)) {
       if (failure.response?.status === 401) { emit('session-expired'); return }
       if (failure.response?.status === 403) { emit('forbidden'); return }
+      if (failure.response?.status === 404 && editId !== null) {
+        detailLoaded.value = false
+        detailError.value = 'La promoción no existe o ya no está disponible.'
+        return
+      }
       if ([400, 409, 413, 415].includes(failure.response?.status ?? 0)) {
         validationNotice.value = apiMessages(failure.response?.data?.message)
           || 'Revisa los datos, las sucursales y la imagen seleccionada.'
         return
       }
     }
-    error.value = 'No se pudo crear la promoción. Vuelve a intentarlo.'
+    error.value = editId !== null
+      ? 'No se pudo actualizar la promoción. Vuelve a intentarlo.'
+      : 'No se pudo crear la promoción. Vuelve a intentarlo.'
   } finally {
     saving.value = false
   }
 }
 
 function populateDetails(detail: PromotionDetail) {
+  populating = true
+  originalCinemaIds.value = [...detail.branchIds]
   Object.assign(form, {
     promotionType: detail.promotionType,
     amount: String(detail.promotionAmount),
@@ -224,6 +253,7 @@ function populateDetails(detail: PromotionDetail) {
     branchIds: [...detail.branchIds],
   })
   endAtMidnight.value = detail.endHour === '24:00'
+  populating = false
 }
 
 async function loadDetails() {
@@ -233,7 +263,7 @@ async function loadDetails() {
   detailError.value = ''
   posterFailed.value = false
   loadingDetails.value = false
-  if (!isView.value) return
+  if (props.mode === 'create') return
   if (!props.promotionId || !Number.isSafeInteger(props.promotionId) || props.promotionId < 1) {
     detailError.value = 'Selecciona una promoción válida.'
     return
@@ -263,21 +293,20 @@ async function loadDetails() {
 }
 
 watch(() => [props.mode, props.promotionId] as const, () => {
-  if (!isView.value) {
-    Object.assign(form, emptyForm())
-    selectedPoster.value = null
-    endAtMidnight.value = false
-    error.value = ''
-    validationNotice.value = ''
-    for (const key of Object.keys(fieldErrors)) delete fieldErrors[key as keyof PromotionErrors]
-  }
+  originalCinemaIds.value = []
+  Object.assign(form, emptyForm())
+  selectedPoster.value = null
+  endAtMidnight.value = false
+  error.value = ''
+  validationNotice.value = ''
+  for (const key of Object.keys(fieldErrors)) delete fieldErrors[key as keyof PromotionErrors]
   void loadDetails()
 }, { immediate: true })
 onBeforeUnmount(() => { detailVersion++; detailRequest?.abort() })
 </script>
 
 <template>
-  <BaseModal :open="true" :title="isView ? 'Detalle de promoción' : 'Crear promoción'" :close-disabled="saving" @close="emit('close')">
+  <BaseModal :open="true" :title="isView ? 'Detalle de promoción' : isEdit ? 'Editar promoción' : 'Crear promoción'" :close-disabled="saving" @close="emit('close')">
     <div class="promotion-create-content dialog-content">
        <LoadingState
         v-if="loadingDetails"
@@ -291,7 +320,7 @@ onBeforeUnmount(() => { detailVersion++; detailRequest?.abort() })
       </div>
       <form ref="form-element" novalidate @submit.prevent="save"
         @input="validationNotice = ''" @change="validationNotice = ''">
-        <fieldset v-if="!isView || detailLoaded" class="create-fieldset" :disabled="inputsDisabled">
+        <fieldset v-if="mode === 'create' || detailLoaded" class="create-fieldset" :disabled="inputsDisabled">
           <div class="dialog-sections">
             <DialogSection title="Información general">
               <div class="general-layout">
@@ -321,7 +350,7 @@ onBeforeUnmount(() => { detailVersion++; detailRequest?.abort() })
                   <div>
                     <div v-if="!isView" class="selection-actions">
                       <span class="hint">Selecciona una o más sucursales.</span>
-                      <button type="button" class="small-action" :disabled="inputsDisabled || !cinemas.length || allCinemasSelected"
+                      <button type="button" class="small-action" :disabled="inputsDisabled || !availableCinemas.length || allCinemasSelected"
                         @click="selectAllCinemas">Seleccionar todas</button>
                       <button type="button" class="small-action" :disabled="inputsDisabled || !form.branchIds.length"
                         @click="form.branchIds = []; delete fieldErrors.branchIds">Limpiar</button>
@@ -329,9 +358,9 @@ onBeforeUnmount(() => { detailVersion++; detailRequest?.abort() })
                     <ReusableSearchDropdown v-model="form.branchIds" label="Sucursales"
                       placeholder="Buscar sucursales..." :options="cinemaOptions" :disabled="inputsDisabled" required
                       :error="fieldErrors.branchIds" @update:model-value="delete fieldErrors.branchIds" />
-                    <p v-if="!isView" class="hint" role="status">{{ form.branchIds.length }} de {{ cinemas.length }} sucursales seleccionadas.</p>
+                    <p v-if="!isView" class="hint" role="status">{{ form.branchIds.length }} de {{ availableCinemas.length }} sucursales seleccionadas.</p>
                     <p v-if="isView" class="hint" role="status">{{ form.branchIds.length }} sucursales asociadas.</p>
-                    <p v-if="!isView && !cinemas.length" class="form-error">No hay sucursales disponibles. Carga el catálogo antes de crear la promoción.</p>
+                    <p v-if="!isView && !availableCinemas.length" class="form-error">No hay sucursales disponibles. Carga el catálogo antes de crear la promoción.</p>
                   </div>
                 </div>
                 <aside class="poster-column">
@@ -347,6 +376,10 @@ onBeforeUnmount(() => { detailVersion++; detailRequest?.abort() })
                     :existing-image-url="existingPosterUrl"
                     :disabled="inputsDisabled"
                   />
+                  <button v-if="isEdit && form.posterPath" type="button" class="small-action"
+                    :disabled="inputsDisabled" @click="form.posterPath = null; selectedPoster = null; delete fieldErrors.poster">
+                    Quitar póster
+                  </button>
                   <p v-if="!isView" class="hint">JPEG, PNG o WebP. Máximo 5 MB.</p>
                   <p v-if="fieldErrors.poster" class="form-error" role="alert">{{ fieldErrors.poster }}</p>
                 </aside>
@@ -483,8 +516,8 @@ onBeforeUnmount(() => { detailVersion++; detailRequest?.abort() })
           placement="bottom-right" @close="error = ''" />
         <footer class="form-footer">
           <button type="button" class="secondary" :disabled="saving" @click="emit('close')">{{ isView ? 'Cerrar' : 'Cancelar' }}</button>
-          <button v-if="!isView" type="submit" class="primary" :disabled="saving || !cinemas.length">
-            {{ saving ? 'Creando...' : 'Crear promoción' }}
+          <button v-if="!isView" type="submit" class="primary" :disabled="inputsDisabled || !availableCinemas.length">
+            {{ saving ? (isEdit ? 'Guardando...' : 'Creando...') : (isEdit ? 'Guardar cambios' : 'Crear promoción') }}
           </button>
         </footer>
       </form>
