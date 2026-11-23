@@ -42,4 +42,25 @@ describe('SalesPeriodFilter', () => {
     expect(view.find('[role="alert"]').exists()).toBe(false)
     expect(view.emitted('apply')).toHaveLength(1)
   })
+  it('supports isolated identifiers and explicit submission without changing dashboard defaults', async () => {
+    view = mount(SalesPeriodFilter, {
+      props: {
+        initialPeriod: { dateFrom: '2026-11-01', dateTo: '2026-11-21' },
+        idPrefix: 'report',
+        autoApply: false,
+        alwaysShowSubmit: true,
+        surface: 'light',
+      },
+    })
+    expect(view.findAllComponents(DatePicker)).toHaveLength(2)
+    expect(view.get('label').attributes('for')).toBe('report-period')
+    await view.get('select').setValue('today')
+    expect(view.emitted('apply')).toBeUndefined()
+    expect(view.find('button[type="submit"]').exists()).toBe(true)
+    await view.get('form').trigger('submit')
+    expect(view.emitted('apply')).toHaveLength(1)
+    await view.setProps({ disabled: true })
+    await view.get('form').trigger('submit')
+    expect(view.emitted('apply')).toHaveLength(1)
+  })
 })
