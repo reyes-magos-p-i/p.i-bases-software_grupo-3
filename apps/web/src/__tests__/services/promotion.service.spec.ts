@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getApi } from '@/services/api'
 import {
   createPromotion,
+  deletePromotion,
   getPromotion,
   getPromotions,
   updatePromotion,
@@ -14,6 +15,7 @@ vi.mock('@/services/api', () => ({ getApi: vi.fn() }))
 const get = vi.fn()
 const post = vi.fn()
 const put = vi.fn()
+const remove = vi.fn()
 
 function payload(): CreatePromotionPayload {
   return {
@@ -40,8 +42,9 @@ beforeEach(() => {
   get.mockReset()
   post.mockReset()
   put.mockReset()
+  remove.mockReset()
   vi.mocked(getApi).mockReset().mockReturnValue(
-    { get, post, put } as unknown as ReturnType<typeof getApi>,
+    { get, post, put, delete: remove } as unknown as ReturnType<typeof getApi>,
   )
 })
 
@@ -56,6 +59,7 @@ describe('createPromotion', () => {
     expect(getApi).toHaveBeenCalledTimes(1)
     expect(get).not.toHaveBeenCalled()
     expect(put).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
   })
 })
 
@@ -144,6 +148,7 @@ const operations = [
   { name: 'getPromotions', run: () => getPromotions(), method: get },
   { name: 'getPromotion', run: () => getPromotion(42), method: get },
   { name: 'updatePromotion', run: () => updatePromotion(42, payload()), method: put },
+  { name: 'deletePromotion', run: () => deletePromotion(42), method: remove },
 ]
 describe.each(operations)('$name errors', ({ run, method }) => {
   it.each([400, 401, 403, 404, 409, 500])('propagates HTTP %s without replacing the error or retrying', async (status) => {
@@ -165,6 +170,7 @@ describe.each(operations)('$name errors', ({ run, method }) => {
     expect(get).not.toHaveBeenCalled()
     expect(post).not.toHaveBeenCalled()
     expect(put).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
   })
 })
 
@@ -180,5 +186,18 @@ describe.each([
     await expect(run(controller.signal)).rejects.toBe(error)
     expect(get.mock.calls[0]![1].signal).toBe(controller.signal)
     expect(get).toHaveBeenCalledTimes(1)
+  })
+})
+
+
+describe('deletePromotion', () => {
+  it('sends DELETE with session credentials and resolves without data for HTTP 204', async () => {
+    remove.mockResolvedValueOnce({ status: 204, data: '' })
+    await expect(deletePromotion(42)).resolves.toBeUndefined()
+    expect(remove).toHaveBeenCalledWith('/promotions/42', { withCredentials: true })
+    expect(remove).toHaveBeenCalledTimes(1)
+    expect(get).not.toHaveBeenCalled()
+    expect(post).not.toHaveBeenCalled()
+    expect(put).not.toHaveBeenCalled()
   })
 })

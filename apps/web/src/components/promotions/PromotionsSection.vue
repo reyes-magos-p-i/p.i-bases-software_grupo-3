@@ -10,6 +10,7 @@ import { getPromotions } from '@/services/promotion.service'
 import type { PromotionListItem } from '@/types/promotion-read'
 import LoadingState from '../common/LoadingState.vue'
 import PromotionView from '@/components/promotions/PromotionView.vue'
+import PromotionDelete from '@/components/promotions/PromotionDelete.vue'
 
 const cinemas = ref<CinemaOption[]>([])
 const loadingCinemas = ref(false)
@@ -17,6 +18,7 @@ const cinemaError = ref('')
 const creatingPromotion = ref(false)
 const editingPromotionId = ref<number | null>(null)
 const viewingPromotionId = ref<number | null>(null)
+const deletingPromotion = ref<{ id: number; title: string } | null>(null)
 const promotions = ref<PromotionListItem[]>([])
 const loadingPromotions = ref(false)
 const listError = ref('')
@@ -30,7 +32,7 @@ function openPromotionEdit(id: number) {
   return openPromotionForm(id)
 }
 async function openPromotionForm(editId: number | null) {
-   if (loadingCinemas.value || creatingPromotion.value || editingPromotionId.value !== null || viewingPromotionId.value !== null) return
+   if (deletingPromotion.value !== null || loadingCinemas.value || creatingPromotion.value || editingPromotionId.value !== null || viewingPromotionId.value !== null) return
 
   loadingCinemas.value = true
   cinemaError.value = ''
@@ -96,6 +98,15 @@ async function openPromotionForm(editId: number | null) {
   }
 }
 
+function openPromotionDelete(id: number) {
+  if (loadingPromotions.value || loadingCinemas.value || creatingPromotion.value
+    || editingPromotionId.value !== null || viewingPromotionId.value !== null
+    || deletingPromotion.value !== null) return
+  const promotion = promotions.value.find((item) => item.promotionId === id)
+  if (!promotion) return
+  cinemaError.value = ''
+  deletingPromotion.value = { id: promotion.promotionId, title: promotion.promotionTitle }
+}
 
 async function refreshPromotions() {
   listRequest?.abort()
@@ -120,7 +131,7 @@ async function refreshPromotions() {
   }
 }
 function openPromotionView(id: number) {
-  if (creatingPromotion.value || editingPromotionId.value !== null || loadingCinemas.value || viewingPromotionId.value !== null) return
+  if (deletingPromotion.value !== null || creatingPromotion.value || editingPromotionId.value !== null || loadingCinemas.value || viewingPromotionId.value !== null) return
   cinemaError.value = ''
   viewingPromotionId.value = id
 }
@@ -128,12 +139,14 @@ function openPromotionView(id: number) {
 onMounted(() => { void refreshPromotions() })
 onBeforeUnmount(() => { disposed = true; listVersion++; listRequest?.abort() })
 function handleSessionExpired() {
+  deletingPromotion.value = null
   creatingPromotion.value = false
   editingPromotionId.value = null
   viewingPromotionId.value = null
   cinemaError.value = 'La sesión ha expirado. Inicia sesión nuevamente.'
 }
 function handleForbidden() {
+  deletingPromotion.value = null
   creatingPromotion.value = false
   editingPromotionId.value = null
   viewingPromotionId.value = null
@@ -157,8 +170,18 @@ function handleForbidden() {
       </p>
 
       <PromotionList :promotions="promotions" :loading="loadingPromotions" :error="listError"
-        @view="openPromotionView" @edit="openPromotionEdit" @retry="refreshPromotions" />
+        @view="openPromotionView" @edit="openPromotionEdit"   @delete="openPromotionDelete" @retry="refreshPromotions" />
       <LoadingState v-if="loadingPromotions" message="Cargando películas…" />
+
+      <PromotionDelete
+        v-if="deletingPromotion !== null"
+        :promotion="deletingPromotion"
+        @close="deletingPromotion = null"
+        @deleted="refreshPromotions"
+        @not-found="refreshPromotions"
+        @session-expired="handleSessionExpired"
+        @forbidden="handleForbidden"
+      />
 
       <PromotionCreate
         v-if="creatingPromotion"

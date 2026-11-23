@@ -187,4 +187,12 @@ describe('PromotionList', () => {
     expect(wrapper.emitted('view')).toBeUndefined()
   })
 
+  it('emits only delete with the selected numeric ID when the trash button is clicked', async () => {
+    render()
+    await wrapper.get('[aria-label="Eliminar promoción 2"]').trigger('click')
+    expect(wrapper.emitted('delete')).toEqual([[2]])
+    expect(wrapper.emitted('view')).toBeUndefined()
+    expect(wrapper.emitted('edit')).toBeUndefined()
+  })
+
 })

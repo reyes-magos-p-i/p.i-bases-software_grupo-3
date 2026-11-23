@@ -40,3 +40,9 @@ export async function updatePromotion(id: number, payload: UpdatePromotionPayloa
   )
   return response.data
 }
+
+export async function deletePromotion(id: number): Promise<void> {
+  await getApi().delete(`/promotions/${id}`, {
+    withCredentials: true,
+  })
+}

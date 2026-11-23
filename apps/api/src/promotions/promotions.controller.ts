@@ -8,6 +8,9 @@ import {
   Post,
   Put,
   UseGuards,
+  HttpCode,
+  Delete,
+  HttpStatus
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -49,5 +52,11 @@ export class PromotionsController {
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePromotionDto) {
     return this.promotionsService.update(id, dto);
   }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    await this.promotionsService.remove(id);
+}
 
 }

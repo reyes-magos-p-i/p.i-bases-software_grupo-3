@@ -498,4 +498,122 @@ describe('PromotionsRepository', () => {
     });
   });
 
+  describe('remove', () => {
+  beforeEach(() => {
+    connection.execute.mockReset().mockResolvedValue({ rowsAffected: 1 });
+  });
+  it('disables parallel DML, locks the parent and deletes all related rows in one transaction', async () => {
+    connection.execute
+      .mockResolvedValueOnce({}) // ALTER SESSION
+      .mockResolvedValueOnce({ rows: [[42]] }); // SELECT FOR UPDATE
+    await expect(repository.remove(42)).resolves.toBe(true);
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(connection.execute).toHaveBeenCalledTimes(5);
+    expect(connection.execute).toHaveBeenNthCalledWith(
+      1,
+      'ALTER SESSION DISABLE PARALLEL DML',
+    );
+    expect(connection.execute).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(
+        /SELECT promotion_id[\s\S]*FROM promotions[\s\S]*WHERE promotion_id = :id[\s\S]*FOR UPDATE/,
+      ),
+      { id: 42 },
+    );
+    expect(connection.execute).toHaveBeenNthCalledWith(
+      3,
+      'DELETE FROM promotion_weekdays WHERE promotion_id = :id',
+      { id: 42 },
+      { autoCommit: false },
+    );
+    expect(connection.execute).toHaveBeenNthCalledWith(
+      4,
+      'DELETE FROM promotion_cinemas WHERE promotion_id = :id',
+      { id: 42 },
+      { autoCommit: false },
+    );
+    expect(connection.execute).toHaveBeenNthCalledWith(
+      5,
+      'DELETE FROM promotions WHERE promotion_id = :id',
+      { id: 42 },
+      { autoCommit: false },
+    );
+    expect(connection.executeMany).not.toHaveBeenCalled();
+  });
+  it.each([{ rows: [] }, {}])(
+    'does not delete associations when the parent is absent: %p',
+    async (result) => {
+      connection.execute
+        .mockResolvedValueOnce({}) // ALTER SESSION
+        .mockResolvedValueOnce(result); // SELECT FOR UPDATE
+      await expect(repository.remove(999)).resolves.toBe(false);
+      expect(connection.execute).toHaveBeenCalledTimes(2);
+      expect(connection.executeMany).not.toHaveBeenCalled();
+    },
+  );
+  it('deletes the parent even if it has no existing association rows', async () => {
+    connection.execute
+      .mockResolvedValueOnce({}) // ALTER SESSION
+      .mockResolvedValueOnce({ rows: [[42]] })
+      .mockResolvedValueOnce({ rowsAffected: 0 })
+      .mockResolvedValueOnce({ rowsAffected: 0 })
+      .mockResolvedValueOnce({ rowsAffected: 1 });
+    await expect(repository.remove(42)).resolves.toBe(true);
+    expect(connection.execute).toHaveBeenCalledTimes(5);
+  });
+  it('waits for the parent lock before deleting any association', async () => {
+    let unlock!: (result: { rows: number[][] }) => void;
+    const lockPending = new Promise<{ rows: number[][] }>((resolve) => {
+      unlock = resolve;
+    });
+    connection.execute
+      .mockResolvedValueOnce({}) // ALTER SESSION
+      .mockReturnValueOnce(lockPending); // SELECT FOR UPDATE
+    const pending = repository.remove(42);
+    await Promise.resolve();
+    expect(connection.execute).toHaveBeenCalledTimes(2);
+    expect(connection.execute.mock.calls[1][0]).toContain('FOR UPDATE');
+    expect(connection.executeMany).not.toHaveBeenCalled();
+    unlock({ rows: [[42]] });
+    await expect(pending).resolves.toBe(true);
+    expect(connection.execute).toHaveBeenCalledTimes(5);
+  });
+  it.each([1, 2, 3, 4, 5])(
+    'propagates failure at statement %s and stops subsequent statements',
+    async (stage) => {
+      const error = new Error('Delete failed');
+      connection.execute.mockReset();
+      for (let index = 1; index < stage; index++) {
+        const result =
+          index === 1
+            ? {} // ALTER SESSION
+            : index === 2
+              ? { rows: [[42]] } // SELECT FOR UPDATE
+              : { rowsAffected: 1 }; // DELETE
+
+        connection.execute.mockResolvedValueOnce(result);
+      }
+      connection.execute.mockRejectedValueOnce(error);
+      await expect(repository.remove(42)).rejects.toBe(error);
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenCalledTimes(stage);
+      expect(connection.executeMany).not.toHaveBeenCalled();
+    },
+  );
+  it('preserves a parent-delete FK error for the transaction handler to roll back', async () => {
+    const error = Object.assign(
+      new Error('ORA-02292: child record found'),
+      { errorNum: 2292 },
+    );
+    connection.execute
+      .mockResolvedValueOnce({}) // ALTER SESSION
+      .mockResolvedValueOnce({ rows: [[42]] })
+      .mockResolvedValueOnce({ rowsAffected: 1 })
+      .mockResolvedValueOnce({ rowsAffected: 2 })
+      .mockRejectedValueOnce(error); // DELETE promotion
+    await expect(repository.remove(42)).rejects.toBe(error);
+    expect(connection.execute).toHaveBeenCalledTimes(5);
+  });
+});
+
 });

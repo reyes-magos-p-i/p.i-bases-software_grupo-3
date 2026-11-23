@@ -334,6 +334,45 @@ export class PromotionsRepository {
     });
   }
 
+  async remove(id: number): Promise<boolean> {
+    return this.db.transaction(async (connection) => {
+      // Lock the promotion before changing its associations.
+      await connection.execute(
+        'ALTER SESSION DISABLE PARALLEL DML',
+      );
+
+      const existing = await connection.execute(
+        `SELECT promotion_id
+        FROM promotions
+        WHERE promotion_id = :id
+        FOR UPDATE`,
+        { id },
+      );
+
+      if (!existing.rows?.length) return false;
+
+      await connection.execute(
+        'DELETE FROM promotion_weekdays WHERE promotion_id = :id',
+        { id },
+        { autoCommit: false },
+      );
+
+      await connection.execute(
+        'DELETE FROM promotion_cinemas WHERE promotion_id = :id',
+        { id },
+        { autoCommit: false },
+      );
+
+      await connection.execute(
+        'DELETE FROM promotions WHERE promotion_id = :id',
+        { id },
+        { autoCommit: false },
+      );
+
+      return true;
+    });
+  }
+
   private toSeconds(value?: string | null): number | null {
     if (value == null) {
       return null;
