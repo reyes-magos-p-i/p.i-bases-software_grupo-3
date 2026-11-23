@@ -72,6 +72,8 @@ que utiliza ese prefijo global.
 4. Recargar `/dashboard`: conserva la sesión mediante `GET /api/auth/me`. La cabecera
    conserva el primer nombre devuelto por este endpoint. No hay selector de rol
    simulado. La recarga no renueva la expiración de la sesión.
+   Abrir el portal con una sesión válida también redirige a `/dashboard` antes de
+   mostrar la cartelera; la recuperación inicial se resuelve desde el router.
 5. Abrir el formulario de creación y comprobar los catálogos. Crear una cuenta
    requiere los datos reales de Oracle y envía correo; seguir las pruebas de
    [creación administrativa](development-admin.md). No repetir un envío cuyo
@@ -97,6 +99,17 @@ que utiliza ese prefijo global.
     incorrecta. Repetir el recorrido con una ventana estrecha y teclado.
 
 ## Contrato y límites
+
+La comprobación del personal precede a la del cliente. Las rutas con
+`requiresEmployee` conservan la validación de la sesión en el backend y no consultan
+el estado de contraseña del cliente, aunque haya un token antiguo en el navegador.
+Las páginas legales y los enlaces de recuperación continúan siendo accesibles.
+
+Durante el login del personal, el diálogo permanece abierto y bloqueado hasta que
+termina la navegación al dashboard. Si esta se cancela o termina en otra ruta, se
+muestra el error y se permite reintentar. El header reutiliza la recuperación del
+router; únicamente un reintento explícito fuerza una nueva comprobación. Un fallo
+del backend no inicia redirecciones repetidas entre el portal y el dashboard.
 
 - `POST /api/auth/employees/login`: perfil seguro y cookie; nunca un token en JSON.
 - `GET /api/auth/me`: ID, rol y primer nombre vigentes del personal; `401` si no hay sesión válida.
