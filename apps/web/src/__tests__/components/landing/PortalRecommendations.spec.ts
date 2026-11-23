@@ -51,7 +51,7 @@ const mountHome = async () => {
         MoviePoster: true,
         AppHeader: true,
         AppFooter: true,
-        HeroCarousel: true,
+        PortalHero: true,
       },
     },
   })

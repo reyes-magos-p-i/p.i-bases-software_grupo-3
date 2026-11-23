@@ -172,12 +172,12 @@ describe('HomeView sections', () => {
 
   const mountHome = () =>
     mount(HomeView, {
-      global: { stubs: { ...stubs, AppHeader: true, AppFooter: true, HeroCarousel: true } },
+      global: { stubs: { ...stubs, AppHeader: true, AppFooter: true, PortalHero: true } },
     })
   const titlesOf = (wrapper: ReturnType<typeof mountHome>, section: PortalSectionKey) =>
     wrapper.findAll(`#${section} .card-title`).map((title) => title.text())
 
-  it('loads each section with its own request and feeds the carousel from Cartelera', async () => {
+  it('loads each section with its own request and features the Cartelera movies', async () => {
     const data = { cartelera: [odyssey], preventas: [presale], estrenos: [upcoming] }
     vi.mocked(getPortalSection).mockImplementation((section) => Promise.resolve(data[section]))
 
@@ -192,9 +192,7 @@ describe('HomeView sections', () => {
     expect(titlesOf(wrapper, 'cartelera')).toEqual(['The Odyssey'])
     expect(titlesOf(wrapper, 'preventas')).toEqual(['Ecos del Volcán'])
     expect(titlesOf(wrapper, 'estrenos')).toEqual(['Marea Alta'])
-    expect(wrapper.getComponent({ name: 'HeroCarousel' }).props('movies')).toEqual([
-      { id: 42, title: 'The Odyssey', posterImage: 'odyssey.webp' },
-    ])
+    expect(wrapper.getComponent({ name: 'PortalHero' }).props('movies')).toEqual([odyssey])
   })
 
   it('keeps the other sections when Preventas fails, and retries only Preventas (UT-045)', async () => {

@@ -208,6 +208,15 @@ const presaleStart = computed(() => formatShortDate(props.movie.presaleStart))
   color: var(--accent-color);
 }
 
+/* SCRUM-438: on a phone the row shows about two cards, so the button keeps one line. */
+@media (width <= 640px) {
+  .buy-button {
+    padding: 0 8px;
+    font-size: 0.875rem;
+    white-space: nowrap;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .poster,
   .buy-button {

@@ -188,6 +188,35 @@ describe('AppHeader authentication navigation', () => {
     },
   )
 
+  // SCRUM-438: the portal header links to its sections; "Para ti" only for a client.
+  it('links the portal sections only in the portal header', async () => {
+    expect(wrapper.find('.portal-nav').exists()).toBe(false)
+    wrapper.unmount()
+    wrapper = mount(AppHeader, {
+      props: { overlay: true },
+      attachTo: document.body,
+      global: { plugins: [router] },
+    })
+    const links = () =>
+      wrapper.findAll('.portal-nav a').map((link) => [link.text(), link.attributes('href')])
+
+    expect(wrapper.get('.portal-nav').attributes('aria-label')).toBe('Secciones del portal')
+    expect(links()).toEqual([
+      ['Cartelera', '/#cartelera'],
+      ['Preventas', '/#preventas'],
+      ['Estrenos', '/#estrenos'],
+    ])
+
+    establishClientSession(
+      { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' },
+      'client-token',
+    )
+    await flushPromises()
+
+    expect(links()[0]).toEqual(['Para ti', '/#recomendaciones'])
+    expect(links()).toHaveLength(4)
+  })
+
   it('navigates from the portal through both login modes and restores focus on close', async () => {
     const opener = wrapper.get<HTMLButtonElement>('.login-button')
     opener.element.focus()
