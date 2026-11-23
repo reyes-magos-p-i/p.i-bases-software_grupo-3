@@ -6,6 +6,7 @@ import TicketsSection from '@/components/tickets/TicketsSection.vue'
 import BranchesSection from '@/components/branches/BranchesSection.vue'
 import TransactionsSection from '@/components/transactions/TransactionsSection.vue'
 import PromotionsSection from '../promotions/PromotionsSection.vue'
+import SalesStatisticsSection from '@/components/statistics/SalesStatisticsSection.vue'
 
 export type DashboardSectionId =
   | 'dashboard'
@@ -38,7 +39,14 @@ export interface DashboardSectionDefinition {
 
 // Sidebar order follows this array.
 export const dashboardSections: readonly DashboardSectionDefinition[] = [
-  { id: 'dashboard', label: 'Tablero', icon: 'bi-grid', adminOnly: true, roles: [] },
+  {
+    id: 'dashboard',
+    label: 'Estadísticas',
+    icon: 'bi-grid',
+    adminOnly: true,
+    roles: ['ADMINISTRATOR'],
+    component: SalesStatisticsSection,
+  },
   {
     id: 'theaters',
     label: 'Salas',
@@ -94,7 +102,6 @@ export const dashboardSections: readonly DashboardSectionDefinition[] = [
     adminOnly: true,
     roles: ['ADMINISTRATOR'],
     component: PromotionsSection,
-
   },
   {
     id: 'password',
