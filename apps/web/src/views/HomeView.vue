@@ -46,14 +46,19 @@ const state = {
   estrenos: usePortalSection('estrenos'),
 }
 
-// SCRUM-439: "Recomendaciones para ti" only for a signed-in client.
+// SCRUM-439: "Recomendaciones para ti" only for a signed-in client, ranked by favorite genres and
+// languages plus purchases (SCRUM-417).
 const recommendations = usePortalRecommendations()
 const PREFERENCES_LINK = { name: 'client-profile', query: { section: 'preferences' } }
-const hasPreferences = computed(() => recommendations.genres.value.length > 0)
+const favorites = computed(() => [
+  ...recommendations.genres.value,
+  ...recommendations.languages.value,
+])
+const hasPreferences = computed(() => favorites.value.length > 0)
 const recommendationsSubtitle = computed(() =>
   hasPreferences.value
-    ? `Según tus géneros favoritos: ${recommendations.genres.value.join(', ')}`
-    : 'Según tus géneros favoritos',
+    ? `Según tus preferencias (${favorites.value.join(', ')}) y tus compras`
+    : 'Según tus preferencias y tus compras',
 )
 
 // The featured carousel shows the movies of Cartelera.

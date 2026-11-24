@@ -44,7 +44,7 @@ describe('Client preference API', () => {
   })
   // SCRUM-439
   it('fetches the portal recommendations of the signed-in client', async () => {
-    const data = { genres: ['Aventura'], movies: [] }
+    const data = { genres: ['Aventura'], languages: ['Español'], movies: [] }
     get.mockResolvedValue({ data })
     const signal = new AbortController().signal
     await expect(getPortalRecommendations(signal)).resolves.toEqual(data)

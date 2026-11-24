@@ -7,6 +7,7 @@ import type { RecommendedMovie } from '@/types/portal'
 // the portal and when the session changes, so new preferences show up without reloading the page.
 export function usePortalRecommendations() {
   const genres = shallowRef<readonly string[]>([])
+  const languages = shallowRef<readonly string[]>([])
   const movies = shallowRef<readonly RecommendedMovie[]>([])
   const loading = ref(false)
   const failed = ref(false)
@@ -17,6 +18,7 @@ export function usePortalRecommendations() {
     controller?.abort()
     controller = undefined
     genres.value = []
+    languages.value = []
     movies.value = []
     loading.value = false
     failed.value = false
@@ -32,10 +34,12 @@ export function usePortalRecommendations() {
       const result = await getPortalRecommendations(request.signal)
       if (request.signal.aborted) return
       genres.value = result.genres
+      languages.value = result.languages
       movies.value = result.movies
     } catch {
       if (request.signal.aborted) return
       genres.value = []
+      languages.value = []
       movies.value = []
       failed.value = true
     } finally {
@@ -53,6 +57,7 @@ export function usePortalRecommendations() {
   return {
     enabled,
     genres,
+    languages,
     movies,
     loading: readonly(loading),
     failed: readonly(failed),

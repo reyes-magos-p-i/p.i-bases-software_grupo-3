@@ -1,10 +1,13 @@
-import { rankMoviesByPreferences } from './movie-preference-ranking.util';
+import {
+  rankMoviesByPreferences,
+  recommendMovies,
+} from './movie-preference-ranking.util';
 import type {
   MoviePreferences,
+  OnSaleMovie,
   PortalMovie,
   PortalSection,
   PortalSectionMovie,
-  RecommendedMovie,
 } from './entities/upcoming-movie-functions.interface';
 import { Injectable } from '@nestjs/common';
 import { MovieFunctionsRepository } from './movie-functions.repository/movie-functions.repository';
@@ -24,9 +27,23 @@ export class MovieFuctionsService {
     return this.movieFunctionsRepository.getSectionMovies(section);
   }
 
-  /** SCRUM-439: Cartelera and Preventas movies that match the client's favorite genres. */
-  findRecommendations(clientId: number): Promise<RecommendedMovie[]> {
-    return this.movieFunctionsRepository.getRecommendedMovies(clientId);
+  /**
+   * SCRUM-439: Cartelera and Preventas movies ranked by the SCRUM-417 recommendation system:
+   * favorite genres and languages plus purchase history. Movies without a match are left out.
+   */
+  async findRecommendations(
+    clientId: number,
+    preferences: MoviePreferences,
+  ): Promise<OnSaleMovie[]> {
+    const [candidates, history, movies] = await Promise.all([
+      this.movieFunctionsRepository.getCatalogCandidates(),
+      this.movieFunctionsRepository.getPurchaseHistory(clientId),
+      this.movieFunctionsRepository.getOnSaleMovies(),
+    ]);
+    const cards = new Map(movies.map((movie) => [movie.id, movie]));
+    return recommendMovies(candidates, preferences, history).flatMap(
+      ({ id }) => cards.get(id) ?? [],
+    );
   }
 
   async findCatalog(

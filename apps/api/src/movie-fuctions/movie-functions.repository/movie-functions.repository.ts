@@ -10,13 +10,11 @@ import type {
   MoviePurchaseHistory,
   PortalSection,
   PortalSectionMovie,
-  RecommendedMovie,
+  OnSaleMovie,
   UpcomingMovieFunction,
 } from '../entities/upcoming-movie-functions.interface';
 
 interface PortalMoviesSql {
-  /** More CTEs after `upcoming`, starting with a comma. */
-  with?: string;
   /** More columns, starting with a comma. */
   select?: string;
   join: string;
@@ -147,42 +145,29 @@ export class MovieFunctionsRepository {
     return this.queryPortalMovies(SECTION_SQL[section]);
   }
 
-  /**
-   * SCRUM-439: the Cartelera and Preventas movies with a favorite genre of the client, the ones
-   * that match more genres first. matchedGenre is the first matching genre by name.
-   */
-  getRecommendedMovies(clientId: number): Promise<RecommendedMovie[]> {
+  /** SCRUM-439: the cards of every Cartelera and Preventas movie, which recommendations rank. */
+  getOnSaleMovies(): Promise<OnSaleMovie[]> {
     const { cartelera, preventas } = SECTION_SQL;
-    return this.queryPortalMovies<Pick<RecommendedMovie, 'section' | 'matchedGenre'>>(
-      {
-        with: `, liked AS (
-          SELECT mg.movie_id, MIN(g.name) AS genre, COUNT(*) AS matches
-          FROM Movie_genres mg
-          JOIN Client_genre_preferences p ON p.genre_id = mg.genre_id
-          JOIN Genres g ON g.genre_id = mg.genre_id
-          WHERE p.client_id = :clientId
-          GROUP BY mg.movie_id
-        )`,
-        select: `, l.genre AS "matchedGenre",
-             CASE WHEN m.RELEASE_DATE > ${COSTA_RICA_TODAY} THEN 'preventas' ELSE 'cartelera' END AS "section"`,
-        join: `${cartelera.join} JOIN liked l ON l.movie_id = m.movie_id`,
-        where: `((${cartelera.where}) OR (${preventas.where}))`,
-        order: `l.matches DESC, ${cartelera.order}`,
-      },
-      { clientId },
-    );
+    return this.queryPortalMovies<Pick<OnSaleMovie, 'section'>>({
+      select: `, CASE WHEN m.RELEASE_DATE > ${COSTA_RICA_TODAY} THEN 'preventas' ELSE 'cartelera' END AS "section"`,
+      join: cartelera.join,
+      where: `((${cartelera.where}) OR (${preventas.where}))`,
+      order: cartelera.order,
+    });
   }
 
-  private async queryPortalMovies<Extra extends object = object>(
-    { with: extraWith = '', select = '', join, where, order }: PortalMoviesSql,
-    binds: Record<string, string | number> = {},
-  ): Promise<(PortalSectionMovie & Extra)[]> {
+  private async queryPortalMovies<Extra extends object = object>({
+    select = '',
+    join,
+    where,
+    order,
+  }: PortalMoviesSql): Promise<(PortalSectionMovie & Extra)[]> {
     const result = await this.db.query<
       Omit<PortalSectionMovie, 'genres'> & Extra & { genres: string | null }
     >(
       `
       WITH upcoming AS (${UPCOMING_FUNCTIONS}
-      )${extraWith}
+      )
       SELECT m.movie_id AS "id", m.title AS "title", m.poster_image AS "posterImage",
              m.synopsis AS "synopsis", c.classification_name AS "classification",
              m.running_time AS "runningTime",
@@ -197,7 +182,6 @@ export class MovieFunctionsRepository {
       WHERE ${where}
       ORDER BY ${order}
     `,
-      binds,
     );
     return (result.rows ?? []).map((row) => ({
       ...row,

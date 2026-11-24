@@ -9,7 +9,8 @@ La selección puede estar vacía. Guardar reemplaza ambos grupos; quitar todas l
 ## Prioridad en el portal
 
 > Desde SCRUM-437 el portal ya no usa este orden: sus secciones son iguales para visitantes y
-> clientes, y la personalización es la fila **Recomendaciones para ti** (SCRUM-439, ver
+> clientes, y la personalización es la fila **Recomendaciones para ti** (SCRUM-439), que usa este
+> mismo puntaje (ver
 > [portal-sections.md](portal-sections.md)). `/clients/me/preferences/portal` y
 > `/movie-fuctions/catalog` se conservan sin cambios.
 
@@ -47,7 +48,7 @@ Contrato: [client-profile.openapi.yaml](client-profile.openapi.yaml). Las rutas 
 | PUT    | `/clients/me/preferences`                 | Reemplaza las preferencias y devuelve `{genreIds, languageIds}`                                             |
 | GET    | `/clients/me/preferences/portal`          | `[{id, title, posterImage}]` ordenados por preferencias e historial del cliente autenticado                 |
 | GET    | `/movie-fuctions/catalog`                 | El mismo formato en orden público, sin datos de preferencias                                                |
-| GET    | `/clients/me/preferences/recommendations` | `{ genres: string[], movies: [...] }` de "Recomendaciones para ti" (SCRUM-439)                              |
+| GET    | `/clients/me/preferences/recommendations` | `{ genres, languages, movies }` de "Recomendaciones para ti" (SCRUM-439), con el mismo puntaje          |
 
 Los endpoints propios reutilizan JWT, cuenta activa, rol de cliente y vigencia de contraseña. El identificador del cliente proviene exclusivamente de la sesión. La escritura requiere además un origen autorizado. Las respuestas usan `Cache-Control: no-store`. El endpoint público no recibe identificadores de clientes ni aplica preferencias de otra cuenta.
 

@@ -51,15 +51,24 @@ export interface PortalSectionMovie {
   presaleStart: string | null;
 }
 
-// SCRUM-439: movies of Cartelera and Preventas that match the client's favorite genres.
-export interface RecommendedMovie extends PortalSectionMovie {
+// SCRUM-439: a Cartelera or Preventas movie, with the section that sells it.
+export interface OnSaleMovie extends PortalSectionMovie {
   section: Exclude<PortalSection, 'estrenos'>;
-  /** The favorite genre it matches, shown as "Te gusta <género>". */
-  matchedGenre: string;
+}
+
+// SCRUM-439: a movie recommended by the client's preferences or purchase history.
+export interface RecommendedMovie extends OnSaleMovie {
+  /**
+   * The first favorite genre it matches, shown as "Te gusta <género>"; null when it is
+   * recommended by language or by purchases.
+   */
+  matchedGenre: string | null;
 }
 
 export interface PortalRecommendations {
   /** Names of the client's favorite genres; empty when the client has none. */
   genres: string[];
+  /** Names of the client's favorite languages; empty when the client has none. */
+  languages: string[];
   movies: RecommendedMovie[];
 }
