@@ -383,7 +383,11 @@ describe('PromotionsService', () => {
   });
 
   describe('findApplicableToMovieFunction', () => {
-    const { weekdays: _days, branchIds: _cinemas, ...applicable } = detail;
+    const applicable = Object.fromEntries(
+      Object.entries(detail).filter(
+        ([key]) => key !== 'weekdays' && key !== 'branchIds',
+      ),
+    );
     it('returns all matching promotions from the repository without fetching each detail', async () => {
       const matches = [applicable, { ...applicable, promotionId: 43, promotionType: 'fixed' as const, promotionAmount: 500 }];
       repository.findApplicableToMovieFunction.mockResolvedValueOnce(matches);
