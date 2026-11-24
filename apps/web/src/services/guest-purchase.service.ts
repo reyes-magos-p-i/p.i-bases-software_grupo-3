@@ -1,6 +1,11 @@
 import { getApi } from './api'
-import { readGuestPurchaseReceipt, readTicketEmailStatus } from '@/utils/purchase-response'
+import {
+  readCardIntent,
+  readGuestPurchaseReceipt,
+  readTicketEmailStatus,
+} from '@/utils/purchase-response'
 import type {
+  CardIntent,
   GuestBuyer,
   PurchaseFunction,
   PurchaseMovie,
@@ -38,8 +43,27 @@ export async function identifyGuestBuyer(data: GuestBuyer, signal?: AbortSignal)
     })
   ).data
 }
+export async function createGuestCardPaymentIntent(
+  data: PurchaseSelection & { requestKey: string; quoteVersion: string },
+  signal?: AbortSignal,
+): Promise<CardIntent> {
+  return readCardIntent(
+    (
+      await getApi().post<unknown>('/guest-purchases/payment-intents', data, {
+        signal,
+        timeout: 30000,
+      })
+    ).data,
+  )
+}
 export async function confirmGuestPurchase(
-  data: PurchaseSelection & GuestBuyer & { requestKey: string; quoteVersion: string },
+  data: PurchaseSelection &
+    GuestBuyer & {
+      requestKey: string
+      quoteVersion: string
+      paymentMethod?: 'CARD'
+      paymentIntentId?: string
+    },
 ) {
   const { email, confirmEmail, ...selection } = data
   return readGuestPurchaseReceipt(

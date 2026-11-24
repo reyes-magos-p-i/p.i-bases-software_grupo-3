@@ -20,6 +20,7 @@ import { ParseDecimalIdPipe } from '../common/pipes/parse-decimal-id.pipe';
 import {
   ConfirmPurchaseDto,
   ListPurchasesQueryDto,
+  PurchaseIntentDto,
   PurchaseSelectionDto,
 } from './purchase.dto';
 import { PurchasesService } from './purchases.service';
@@ -47,6 +48,15 @@ export class PurchasesController {
   quote(@Body() data: PurchaseSelectionDto) {
     return this.service.quote(data);
   }
+  @Post('payment-intents')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(SessionOriginGuard, PurchaseThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  cardIntent(@Body() data: PurchaseIntentDto) {
+    return this.service.cardIntent(data);
+  }
+
   @Post()
   @Header('Cache-Control', 'no-store')
   @UseGuards(SessionOriginGuard, PurchaseThrottlerGuard)
