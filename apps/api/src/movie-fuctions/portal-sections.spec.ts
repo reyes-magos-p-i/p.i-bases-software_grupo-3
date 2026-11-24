@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { DatabaseService } from '../database/database.service';
+import { MOVIE_ON_SALE } from '../purchases/purchase-catalog.repository';
 import { PortalSectionParamsDto } from './dto/portal-section-params.dto';
 import { MovieFuctionsController } from './movie-fuctions.controller';
 import { MovieFuctionsService } from './movie-fuctions.service';
@@ -86,6 +87,8 @@ describe('Portal sections', () => {
         const sql = await sqlFor(section);
         expect(sql).toContain("mf.status = 'ACTIVE'");
         expect(sql).toContain("s.SEAT_STATE='libre'");
+        // The same sale window that checkout enforces.
+        expect(sql).toContain(`AND ${MOVIE_ON_SALE}`);
       }
     });
   });

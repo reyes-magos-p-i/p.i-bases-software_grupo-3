@@ -290,6 +290,17 @@ describe('Atomic purchase storage', () => {
     await expect(repo.confirm(8, valid)).rejects.toThrow('La función');
     expect(executeMany).not.toHaveBeenCalled();
   });
+  // SCRUM-437: a function whose movie is outside its sale window reads as unavailable.
+  it('rejects a guest confirmation of a function that is not on sale', async () => {
+    catalog.getFunction.mockResolvedValue({ ...context, available: false });
+    await expect(
+      repo.confirmGuest('guest@example.com', valid),
+    ).rejects.toMatchObject({
+      response: { code: 'FUNCTION_UNAVAILABLE' },
+    });
+    expect(executeMany).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+  });
   it('rejects missing functions and invalid selections without partial purchases', async () => {
     overrides['SELECT MOVIE_FUNCTION_ID'] = { rows: [] };
     await expect(repo.confirm(8, valid)).rejects.toThrow(
