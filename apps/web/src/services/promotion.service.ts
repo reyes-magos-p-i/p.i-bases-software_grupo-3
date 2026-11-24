@@ -1,5 +1,5 @@
 import { getApi } from './api'
-import type { CreatePromotionPayload } from '@/types/promotion'
+import type { CreatePromotionPayload, UpdatePromotionPayload } from '@/types/promotion'
 import type { PromotionDetail, PromotionListItem } from '@/types/promotion-read'
 
 export async function createPromotion(
@@ -31,4 +31,18 @@ export async function getPromotion(id: number, signal?: AbortSignal): Promise<Pr
     timeout: 10000,
   })
   return response.data
+}
+
+/** Full replacement of the editable fields and associations. */
+export async function updatePromotion(id: number, payload: UpdatePromotionPayload): Promise<{ promotionId: number }> {
+  const response = await getApi().put<{ promotionId: number }>(
+    `/promotions/${id}`, payload, { withCredentials: true },
+  )
+  return response.data
+}
+
+export async function deletePromotion(id: number): Promise<void> {
+  await getApi().delete(`/promotions/${id}`, {
+    withCredentials: true,
+  })
 }

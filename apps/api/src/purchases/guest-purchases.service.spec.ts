@@ -13,8 +13,9 @@ describe('Guest purchase orchestration', () => {
     },
     repository = { confirmGuest: jest.fn(), findGuest: jest.fn() };
   const emails = { status: jest.fn(), request: jest.fn() };
+  const purchases = { confirmPaid: jest.fn() };
   const service = new GuestPurchasesService(
-    {} as PurchasesService,
+    purchases as unknown as PurchasesService,
     repository as unknown as PurchasesRepository,
     clients as unknown as ClientsService,
     emails as unknown as TicketEmailService,
@@ -118,11 +119,20 @@ describe('Guest purchase orchestration', () => {
       accessCode: 'private',
     });
     repository.findGuest.mockResolvedValue({ id: 12 });
+    const settlement = { intentId: 'pi_1' };
+    purchases.confirmPaid.mockImplementation(
+      (_data: unknown, save: (settlement: unknown) => unknown) =>
+        save(settlement),
+    );
     await expect(service.confirm(data)).resolves.toEqual({
       id: 12,
       accessCode: 'private',
     });
-    expect(repository.confirmGuest).toHaveBeenCalledWith(buyer.email, data);
+    expect(repository.confirmGuest).toHaveBeenCalledWith(
+      buyer.email,
+      data,
+      settlement,
+    );
     await expect(service.lookup('private')).resolves.toEqual({ id: 12 });
     expect(repository.findGuest).toHaveBeenCalledWith('private');
     expect(clients.deleteExpiredPendingClientByEmail).not.toHaveBeenCalled();

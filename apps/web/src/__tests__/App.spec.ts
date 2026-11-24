@@ -7,7 +7,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 import App from '../App.vue'
 import router from '../router'
 import { getPortalSection } from '@/services/movieFunctions'
+import { employeeSession, restoreEmployeeSession } from '@/services/employee-session.service'
+import type { EmployeeIdentity } from '@/types/employee-auth'
 import type { PortalSection, PortalSectionMovie } from '@/types/portal'
+
+vi.mock('@/views/DashboardView.vue', () => ({ default: { template: '<p>Panel del personal</p>' } }))
 
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')
@@ -56,6 +60,9 @@ describe('App', () => {
     clearClientSession()
     vi.clearAllMocks()
     vi.unstubAllEnvs()
+    Object.assign(employeeSession.user, { value: null })
+    Object.assign(employeeSession.status, { value: 'unknown' })
+    vi.mocked(restoreEmployeeSession).mockReset().mockResolvedValue(null)
   })
 
   it.each(['/api', '/api/'])(
@@ -137,4 +144,32 @@ describe('App', () => {
     expect(matched.meta.requiresClient).not.toBe(true)
     expect(matched.components!.default).toMatchObject({ __name: 'TicketPurchaseView' })
   })
+
+  it.each(['ADMINISTRATOR', 'EMPLOYEE'] as const)(
+    'never mounts the portal while restoring a %s session',
+    async (role) => {
+      await router.push('/privacy-policy')
+      let finish!: (identity: EmployeeIdentity) => void
+      const pending = new Promise<EmployeeIdentity>((resolve) => {
+        finish = resolve
+      })
+      vi.mocked(restoreEmployeeSession).mockReturnValue(pending)
+      localStorage.setItem('accessToken', 'older-client-token')
+      const navigation = router.push('/')
+      const wrapper = mount(App, { global: { plugins: [router] } })
+      try {
+        await flushPromises()
+        expect(wrapper.findComponent({ name: 'HomeView' }).exists()).toBe(false)
+        expect(getPortalSection).not.toHaveBeenCalled()
+        finish({ id: 21, role, firstName: 'Ana' })
+        await navigation
+        await flushPromises()
+        expect(router.currentRoute.value.path).toBe('/dashboard')
+        expect(wrapper.text()).toContain('Panel del personal')
+        expect(getPortalSection).not.toHaveBeenCalled()
+      } finally {
+        wrapper.unmount()
+      }
+    },
+  )
 })

@@ -18,6 +18,8 @@ describe('Guest purchase input', () => {
       functionId: 4,
       seats: { GENERAL: [1], CHILD: [], SENIOR: [] },
       requestKey: randomUUID(),
+      paymentMethod: 'CARD',
+      paymentIntentId: 'pi_123',
       quoteVersion: 'a'.repeat(64),
     });
     expect(await validate(dto)).toEqual([]);

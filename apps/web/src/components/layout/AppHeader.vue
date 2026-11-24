@@ -114,27 +114,46 @@ async function enforceClientPasswordStatus() {
   }
 }
 
-async function recoverSession() {
+async function openEmployeeDashboard() {
+  await router.replace('/dashboard')
+  if (route.path !== '/dashboard') {
+    throw new EmployeeAuthError(
+      employeeSession.error.value ||
+        'No se pudo abrir el panel del personal. Inténtalo nuevamente.',
+    )
+  }
+  if (!disposed) activeModal.value = null
+}
+
+async function recoverSession(force = false) {
   if (recovering.value) return
   recovering.value = true
   recoveryError.value = ''
   const results = await Promise.allSettled([
-    restoreEmployeeSession(true),
+    restoreEmployeeSession(force),
     restoreClientSession(getClientSession),
   ])
-  if (results[1]?.status === 'fulfilled' && !disposed) {
+  if (disposed) return
+  const employee = results[0]
+  if (employee.status === 'fulfilled' && employee.value) {
+    if (route.path === '/' && !submitting.value) {
+      await openEmployeeDashboard().catch((error_: unknown) => {
+        if (!disposed)
+          recoveryError.value = authErrorMessage(
+            error_,
+            'No se pudo abrir el panel del personal. Inténtalo nuevamente.',
+          )
+      })
+    }
+  } else if (results[1]?.status === 'fulfilled') {
     await enforceClientPasswordStatus()
   }
   const failure = results.find((result) => result.status === 'rejected')
-  if (failure?.status === 'rejected') {
-    if (!disposed)
-      recoveryError.value =
-        failure.reason instanceof EmployeeAuthError
-          ? failure.reason.message
-          : authErrorMessage(
-              failure.reason,
-              'No se pudo comprobar tu sesión. Puedes volver a intentarlo.',
-            )
+  if (failure?.status === 'rejected' && !disposed) {
+    recoveryError.value = authErrorMessage(
+      failure.reason,
+      'No se pudo comprobar tu sesión. Puedes volver a intentarlo.',
+    )
   }
   if (!disposed) recovering.value = false
 }
@@ -157,10 +176,9 @@ async function submitLogin(credentials: EmployeeLoginRequest) {
     } else {
       const identity = await authenticateEmployee(credentials)
       if (disposed || !identity) return
-      activeModal.value = null
       // The dashboard checks the password status when it opens.
       expectPasswordExpiryNotice()
-      await router.push('/dashboard')
+      await openEmployeeDashboard()
     }
   } catch (error) {
     if (disposed) return
@@ -336,7 +354,7 @@ function goToProfileSection(section: string) {
     </div>
     <p v-if="recoveryError" class="landing-container session-feedback" role="status">
       {{ recoveryError }}
-      <button type="button" :disabled="recovering" @click="recoverSession">
+      <button type="button" :disabled="recovering" @click="recoverSession(true)">
         {{ recovering ? 'Comprobando…' : 'Reintentar' }}
       </button>
     </p>

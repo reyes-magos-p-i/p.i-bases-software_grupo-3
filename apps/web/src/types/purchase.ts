@@ -85,12 +85,19 @@ export interface TicketEmailStatus {
   sentAt: string | null
   retryAfter: number
 }
+export interface CardIntent {
+  intentId: string
+  clientSecret: string
+  publishableKey: string
+}
+
 export interface PendingPurchaseAttempt {
   version: 1
   requestKey: string
   quote: PurchaseQuote
   selection: PurchaseSelection
   buyer: { kind: 'client'; clientId: number } | ({ kind: 'guest' } & GuestBuyer)
+  paymentIntentId?: string
 }
 export interface PurchaseCategory {
   code: TicketCategory

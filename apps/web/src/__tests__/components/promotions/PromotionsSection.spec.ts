@@ -25,7 +25,7 @@ vi.mock('@/components/promotions/PromotionCreate.vue', () => ({
 vi.mock('@/services/promotion.service', () => ({ getPromotions: vi.fn() }))
 vi.mock('@/components/promotions/PromotionList.vue', () => ({
   default: {
-    name: 'PromotionList', props: ['promotions', 'loading', 'error'], emits: ['view', 'retry'],
+    name: 'PromotionList', props: ['promotions', 'loading', 'error'], emits: ['view', 'edit', 'delete', 'retry'],
     template: '<div data-testid="promotion-list" />',
   },
 }))
@@ -39,6 +39,14 @@ vi.mock('@/components/promotions/PromotionView.vue', () => ({
 }))
 vi.mock('@/components/common/LoadingState.vue', () => ({
   default: { name: 'LoadingState', props: ['message'], template: '<p role="status">{{ message }}</p>' },
+}))
+
+vi.mock('@/components/promotions/PromotionDelete.vue', () => ({
+  default: {
+    name: 'PromotionDelete', props: ['promotion'],
+    emits: ['deleted', 'close', 'not-found', 'session-expired', 'forbidden'],
+    template: '<div data-testid="promotion-delete" />',
+  },
 }))
 
 function branch(id: number, overrides: Partial<BranchListItem> = {}): BranchListItem {
@@ -381,5 +389,121 @@ describe('PromotionsSection: list and detail integration', () => {
     wrapper.unmount()
     expect(signal.aborted).toBe(true)
     pending.resolve([])
+  })
+})
+
+
+describe('PromotionsSection: editing', () => {
+  const list = () => wrapper.findComponent({ name: 'PromotionList' })
+  async function edit() {
+    list().vm.$emit('edit', 42)
+    await flushPromises()
+  }
+  it('loads the cinema catalog before opening the form in edit mode', async () => {
+    render(); await flushPromises(); await edit()
+    expect(getBranches).toHaveBeenCalledWith({ page: 1, pageSize: 50 })
+    expect(modal().props('mode')).toBe('edit')
+    expect(modal().props('promotionId')).toBe(42)
+    expect(modal().props('cinemas')).toHaveLength(1)
+    expect(view().exists()).toBe(false)
+  })
+  it('reloads the list after a successful edit and closes the editor', async () => {
+    render(); await flushPromises(); await edit()
+    modal().vm.$emit('saved'); modal().vm.$emit('close'); await flushPromises()
+    expect(getPromotions).toHaveBeenCalledTimes(2)
+    expect(modal().exists()).toBe(false)
+  })
+  it('blocks other dialogs and duplicate catalog loads while editing', async () => {
+    render(); await flushPromises(); await edit()
+    list().vm.$emit('view', 43); list().vm.$emit('edit', 43); await open()
+    expect(getBranches).toHaveBeenCalledTimes(1)
+    expect(view().exists()).toBe(false)
+    expect(modal().props('promotionId')).toBe(42)
+  })
+  it('does not open editing during creation', async () => {
+    render(); await open(); await edit()
+    expect(getBranches).toHaveBeenCalledTimes(1)
+    expect(modal().props('mode')).not.toBe('edit')
+  })
+  it('allows editing with an empty catalog so stored cinema associations can load', async () => {
+    vi.mocked(getBranches).mockResolvedValueOnce(page([]))
+    render(); await flushPromises(); await edit()
+    expect(modal().props('mode')).toBe('edit')
+    expect(modal().props('cinemas')).toEqual([])
+  })
+  it('keeps the editor closed when catalog loading fails', async () => {
+    vi.mocked(getBranches).mockRejectedValueOnce(new Error('Offline'))
+    render(); await flushPromises(); await edit()
+    expect(modal().exists()).toBe(false)
+    expect(wrapper.get('[role="alert"]').text()).toContain('No se pudieron cargar las sucursales')
+  })
+  it.each(['session-expired', 'forbidden'])('closes the edit form on %s', async (event) => {
+    render(); await flushPromises(); await edit()
+    modal().vm.$emit(event); await nextTick()
+    expect(modal().exists()).toBe(false)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+  })
+})
+
+
+describe('PromotionsSection: delete modal', () => {
+  const row = { promotionId: 42, promotionTitle: 'Oferta', promotionType: 'fixed' as const,
+    technology: null, projectionFormat: null, beginDate: '2026-01-01', endDate: '2026-12-31' }
+  const list = () => wrapper.getComponent({ name: 'PromotionList' })
+  const deletion = () => wrapper.findComponent({ name: 'PromotionDelete' })
+  async function selectDelete() { list().vm.$emit('delete', 42); await nextTick() }
+  async function renderLoaded() {
+    vi.mocked(getPromotions).mockResolvedValueOnce([row])
+    render(); await flushPromises()
+  }
+  it('opens a delete modal with the chosen promotion ID and title', async () => {
+    await renderLoaded(); await selectDelete()
+    expect(deletion().props('promotion')).toEqual({ id: 42, title: 'Oferta' })
+    expect(getBranches).not.toHaveBeenCalled()
+    expect(modal().exists()).toBe(false)
+    expect(view().exists()).toBe(false)
+  })
+  it('closes a cancelled confirmation without refreshing', async () => {
+    await renderLoaded(); await selectDelete()
+    deletion().vm.$emit('close'); await nextTick()
+    expect(deletion().exists()).toBe(false)
+    expect(getPromotions).toHaveBeenCalledTimes(1)
+  })
+  it('refreshes on deleted and closes when the modal emits close', async () => {
+    await renderLoaded(); await selectDelete()
+    deletion().vm.$emit('deleted'); deletion().vm.$emit('close'); await flushPromises()
+    expect(getPromotions).toHaveBeenCalledTimes(2)
+    expect(deletion().exists()).toBe(false)
+  })
+  it('refreshes a stale catalog on not-found without counting it as a successful deletion', async () => {
+    await renderLoaded(); await selectDelete()
+    deletion().vm.$emit('not-found'); await flushPromises()
+    expect(getPromotions).toHaveBeenCalledTimes(2)
+    expect(deletion().exists()).toBe(true)
+  })
+  it.each([
+    ['session-expired', 'La sesión ha expirado.'], ['forbidden', 'No tienes permisos'],
+  ])('closes confirmation on %s', async (event, message) => {
+    await renderLoaded(); await selectDelete()
+    deletion().vm.$emit(event); await nextTick()
+    expect(deletion().exists()).toBe(false)
+    expect(wrapper.get('[role="alert"]').text()).toContain(message)
+  })
+  it('blocks creation, editing, viewing and duplicate delete dialogs while confirming', async () => {
+    await renderLoaded(); await selectDelete()
+    list().vm.$emit('view', 42); list().vm.$emit('edit', 42); list().vm.$emit('delete', 42)
+    await open()
+    expect(getBranches).not.toHaveBeenCalled()
+    expect(modal().exists()).toBe(false)
+    expect(view().exists()).toBe(false)
+    expect(wrapper.findAllComponents({ name: 'PromotionDelete' })).toHaveLength(1)
+  })
+  it('does not open delete while the creation form is open', async () => {
+    await renderLoaded(); await open(); await selectDelete()
+    expect(deletion().exists()).toBe(false)
+  })
+  it('does not open confirmation for an ID absent from the loaded list', async () => {
+    await renderLoaded(); list().vm.$emit('delete', 999); await nextTick()
+    expect(deletion().exists()).toBe(false)
   })
 })
