@@ -86,4 +86,105 @@ describe('PromotionalEmailService', () => {
 
     expect(sender.send).toHaveBeenCalledTimes(2);
   });
+
+  it('sends at exactly the send hour', async () => {
+    // 09:00 in Costa Rica.
+    await service.sendIfDue(new Date('2026-12-01T15:00:00Z'));
+
+    expect(sender.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends again in the next month', async () => {
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+    // 2027-01-01 09:00 in Costa Rica.
+    await service.sendIfDue(new Date('2027-01-01T15:00:00Z'));
+
+    expect(sender.send).toHaveBeenCalledTimes(4);
+  });
+
+  it('retries the same month when the run fails before sending', async () => {
+    repository.findActivePromotions.mockRejectedValueOnce(
+      new Error('database down'),
+    );
+
+    await expect(service.sendIfDue(FIRST_DAY_AFTER_NINE)).rejects.toThrow(
+      'database down',
+    );
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+
+    expect(sender.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not look up recipients when there are no active promotions', async () => {
+    repository.findActivePromotions.mockResolvedValue([]);
+
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+
+    expect(repository.findRecipients).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing when no client opted in', async () => {
+    repository.findRecipients.mockResolvedValue([]);
+
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+
+    expect(sender.send).not.toHaveBeenCalled();
+  });
+
+  it('ignores a run requested while another run is still in progress', async () => {
+    let finishLookup: (promotions: unknown[]) => void = () => undefined;
+    repository.findActivePromotions.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLookup = resolve;
+      }),
+    );
+
+    const firstRun = service.sendIfDue(FIRST_DAY_AFTER_NINE);
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+    finishLookup([{ title: 'Estreno', description: 'Nueva película' }]);
+    await firstRun;
+
+    expect(repository.findActivePromotions).toHaveBeenCalledTimes(1);
+    expect(sender.send).toHaveBeenCalledTimes(2);
+  });
+
+  describe('scheduling', () => {
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      service.onModuleDestroy();
+      jest.useRealTimers();
+    });
+
+    it('checks whether a send is due every hour after the module starts', () => {
+      const sendIfDue = jest
+        .spyOn(service, 'sendIfDue')
+        .mockResolvedValue(undefined);
+
+      service.onModuleInit();
+      jest.advanceTimersByTime(ONE_HOUR_MS * 2);
+
+      expect(sendIfDue).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops checking once the module is destroyed', () => {
+      const sendIfDue = jest
+        .spyOn(service, 'sendIfDue')
+        .mockResolvedValue(undefined);
+
+      service.onModuleInit();
+      service.onModuleDestroy();
+      jest.advanceTimersByTime(ONE_HOUR_MS * 2);
+
+      expect(sendIfDue).not.toHaveBeenCalled();
+    });
+
+    it('can be destroyed without ever being initialized', () => {
+      expect(() => service.onModuleDestroy()).not.toThrow();
+    });
+  });
 });
