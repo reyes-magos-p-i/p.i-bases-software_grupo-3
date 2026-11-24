@@ -313,7 +313,7 @@ describe('Atomic purchase storage', () => {
   it('rejects a guest confirmation of a function that is not on sale', async () => {
     catalog.getFunction.mockResolvedValue({ ...context, available: false });
     await expect(
-      repo.confirmGuest('guest@example.com', valid),
+      repo.confirmGuest('guest@example.com', valid, card),
     ).rejects.toMatchObject({
       response: { code: 'FUNCTION_UNAVAILABLE' },
     });
