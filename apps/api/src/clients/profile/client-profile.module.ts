@@ -12,6 +12,9 @@ import { ClientProfileService } from './client-profile.service';
 import { ClientEmailChangeController } from './client-email-change.controller';
 import { ClientEmailChangeService } from './client-email-change.service';
 import { ClientGuard } from './guards/client.guard';
+import { ClientPromotionalEmailsController } from './promotional-emails/client-promotional-emails.controller';
+import { ClientPromotionalEmailsRepository } from './promotional-emails/client-promotional-emails.repository';
+import { ClientPromotionalEmailsService } from './promotional-emails/client-promotional-emails.service';
 
 @Module({
   imports: [
@@ -25,6 +28,7 @@ import { ClientGuard } from './guards/client.guard';
     ClientProfileController,
     ClientEmailChangeController,
     ClientPreferencesController,
+    ClientPromotionalEmailsController,
   ],
   providers: [
     ClientProfileService,
@@ -32,6 +36,8 @@ import { ClientGuard } from './guards/client.guard';
     ClientGuard,
     ClientPreferencesService,
     ClientPreferencesRepository,
+    ClientPromotionalEmailsService,
+    ClientPromotionalEmailsRepository,
   ],
 })
 export class ClientProfileModule {}

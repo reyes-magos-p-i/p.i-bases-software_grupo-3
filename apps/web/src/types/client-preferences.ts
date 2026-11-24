@@ -11,3 +11,7 @@ export interface ClientPreferenceSettings {
   selected: ClientPreferenceSelection
   maxSelections: number
 }
+
+export interface ClientPromotionalEmailSetting {
+  enabled: boolean
+}
