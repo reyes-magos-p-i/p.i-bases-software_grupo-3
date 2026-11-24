@@ -451,3 +451,18 @@ reintentos, conservación del texto y cancelación de solicitudes obsoletas.
 También verifican el envío de empleados y administradores, el cuerpo enviado,
 la validación completa, la prevención de duplicados, la limpieza tras una creación
 confirmada y el tratamiento de errores corregibles o resultados inciertos.
+
+## Configuración de Stripe
+
+La compra de boletos solo admite pago con tarjeta mediante Stripe. El `.env` de la API (`apps/api/.env`) necesita:
+
+```dotenv
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+```
+
+- Usar claves de **prueba** (`sk_test_…`, `pk_test_…`) en desarrollo y en el espejo de desarrollo. Las claves reales (`sk_live_…`) solo van en producción.
+- `make dev`, `make debug` y `make prod` comprueban que exista `apps/api/.env`; los nombres de estas variables aparecen en su mensaje de error.
+- Sin ellas, crear el intento de pago o confirmar una compra responde `503`, y no se pueden comprar boletos.
+- Los despliegues del espejo de desarrollo se actualizan al integrar en `dev`: añadir las claves al `.env` del servidor antes de fusionar.
+- Con claves de prueba, la tarjeta `4242 4242 4242 4242` (cualquier fecha futura y CVC) aprueba el pago.

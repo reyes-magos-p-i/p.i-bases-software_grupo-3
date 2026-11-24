@@ -1,6 +1,6 @@
 # Compra de boletos con sesión iniciada — SCRUM-29
 
-El cliente inicia la compra desde una película del catálogo, elige sucursal y fecha, selecciona una función futura, marca asientos y asigna una categoría a cada boleto. El resumen muestra película, sucursal, sala, horario, asientos, categorías e importes finales. «Pagar» registra una factura pagada mediante **pago simulado**, sus líneas y los boletos. No se procesa un cobro real ni se solicita tarjeta. Tras registrar la compra se solicita automáticamente el envío de sus boletos por correo. La confirmación y el detalle del historial muestran un QR identificativo de la compra para un futuro sistema de verificación en el cine.
+El cliente inicia la compra desde una película del catálogo, elige sucursal y fecha, selecciona una función futura, marca asientos y asigna una categoría a cada boleto. El resumen muestra película, sucursal, sala, horario, asientos, categorías e importes finales. «Pagar» cobra con **tarjeta** mediante Stripe y, una vez aprobado el pago, registra la factura pagada, sus líneas y los boletos. La tarjeta es el único método de pago: no existe un modo simulado. Tras registrar la compra se solicita automáticamente el envío de sus boletos por correo. La confirmación y el detalle del historial muestran un QR identificativo de la compra para un futuro sistema de verificación en el cine.
 
 ## Presentación y código QR de compra
 
@@ -204,3 +204,10 @@ Las pruebas comprueban apertura directa sin sesión ni formulario, enlaces incom
 | Web        |             123 |              1819 |         95,90 % |                   97,83 % |                 100,00 % |
 
 La cobertura local cruza LCOV con las líneas modificadas frente a HEAD y los archivos nuevos de producción, excluyendo pruebas. Pasan las suites completas con mocks, ESLint, Prettier, tipos y builds de ambas aplicaciones. El OpenAPI conserva sus 73 referencias internas válidas. Este cambio reutiliza el acceso privado existente y no requiere migraciones ni operaciones contra Oracle.
+
+## Pago con tarjeta
+
+- `POST /purchases/payment-intents` y `POST /guest-purchases/payment-intents` crean el intento de pago con el total de la cotización del servidor, nunca con un importe enviado por el cliente. La interfaz confirma la tarjeta directamente con Stripe: el número y el CVV no llegan a la API.
+- `POST /purchases` y `POST /guest-purchases` exigen `paymentMethod: "CARD"` y un `paymentIntentId` (`pi_…`). Antes de registrar la compra, la API consulta a Stripe y comprueba que el pago se completó, que está en colones, que pertenece a la misma `requestKey` y que no fue reembolsado. El importe cobrado debe coincidir con la cotización vigente (`PAYMENT_MISMATCH`).
+- Stripe cobra antes de que la compra se guarde y los asientos no se reservan entre ambos pasos. Si la confirmación falla con `SEATS_UNAVAILABLE`, `QUOTE_CHANGED`, `PAYMENT_MISMATCH`, `FUNCTION_UNAVAILABLE` o `TICKET_LIMIT_REACHED`, la API reembolsa el pago (`refund:<intentId>` como clave de idempotencia) y devuelve el conflicto original. `PURCHASE_BUSY` y los errores 5xx no reembolsan porque la web reintenta con el mismo intento de pago. Si el reembolso falla, se registra en el log y el cobro requiere conciliación manual en Stripe.
+- Sin `STRIPE_SECRET_KEY` y `STRIPE_PUBLISHABLE_KEY` todas las compras responden `503`. Véase [Configuración de Stripe](./development-admin.md#configuración-de-stripe).

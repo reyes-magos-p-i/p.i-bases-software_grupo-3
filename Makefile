@@ -57,7 +57,7 @@ check-node:
 	@node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major !== 24 || minor < 15) { console.error('Node ^24.15.0 is required; you have ' + process.version); process.exit(1) }"
 
 check-env:
-	@node -e "if (!require('node:fs').existsSync('apps/api/.env')) { console.error('Missing apps/api/.env. Variables: DB_USER, DB_PASSWORD, DB_CONNECT_STRING, DB_WALLET_DIR, DB_WALLET_PASSWORD, JWT_SECRET, FRONTEND_URL, SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, FACEBOOK_APP_ID, FACEBOOK_APP_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI.'); process.exit(1) }"
+	@node -e "if (!require('node:fs').existsSync('apps/api/.env')) { console.error('Missing apps/api/.env. Variables: DB_USER, DB_PASSWORD, DB_CONNECT_STRING, DB_WALLET_DIR, DB_WALLET_PASSWORD, JWT_SECRET, FRONTEND_URL, SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, FACEBOOK_APP_ID, FACEBOOK_APP_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY.'); process.exit(1) }"
 
 check-deps:
 	@node -e "const fs = require('node:fs'); if (['api', 'web'].some((app) => !fs.existsSync('apps/' + app + '/node_modules'))) { console.error('Missing dependencies. Run: make install'); process.exit(1) }"
