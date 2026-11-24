@@ -1,3 +1,9 @@
+import {
+  ConflictException,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { GuestPurchasesService } from './guest-purchases.service';
 import { PurchasesService } from './purchases.service';
 import type { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import type { PurchasesRepository } from './purchases.repository';
@@ -12,7 +18,11 @@ describe('PurchasesService', () => {
     },
     purchases = { confirm: jest.fn(), list: jest.fn(), findOne: jest.fn() };
   const emails = { status: jest.fn(), request: jest.fn() };
-  const payments = { createIntent: jest.fn(), settled: jest.fn() };
+  const payments = {
+    createIntent: jest.fn(),
+    settled: jest.fn(),
+    refund: jest.fn(),
+  };
   const service = new PurchasesService(
     catalog as unknown as PurchaseCatalogRepository,
     purchases as unknown as PurchasesRepository,
@@ -172,6 +182,99 @@ describe('PurchasesService', () => {
         expect.anything(),
         settlement,
       );
+    });
+
+    describe('refunds after a captured payment', () => {
+      const confirmation = {
+        ...base,
+        paymentMethod: 'CARD' as const,
+        paymentIntentId,
+      };
+      const conflict = (code: string) =>
+        new ConflictException({ code, message: 'conflict' });
+
+      it.each([
+        'SEATS_UNAVAILABLE',
+        'QUOTE_CHANGED',
+        'PAYMENT_MISMATCH',
+        'FUNCTION_UNAVAILABLE',
+        'TICKET_LIMIT_REACHED',
+      ])('refunds the intent on %s', async (code) => {
+        payments.settled.mockResolvedValue(settlement);
+        purchases.confirm.mockRejectedValue(conflict(code));
+
+        await expect(service.confirm(8, confirmation)).rejects.toMatchObject({
+          response: { code },
+        });
+        expect(payments.refund).toHaveBeenCalledWith(paymentIntentId);
+      });
+
+      it('keeps the charge when the purchase is only busy', async () => {
+        payments.settled.mockResolvedValue(settlement);
+        purchases.confirm.mockRejectedValue(conflict('PURCHASE_BUSY'));
+
+        await expect(service.confirm(8, confirmation)).rejects.toBeInstanceOf(
+          ConflictException,
+        );
+        expect(payments.refund).not.toHaveBeenCalled();
+      });
+
+      it('keeps the charge on server errors and unrelated conflicts', async () => {
+        payments.settled.mockResolvedValue(settlement);
+        purchases.confirm.mockRejectedValueOnce(
+          new ServiceUnavailableException(),
+        );
+        purchases.confirm.mockRejectedValueOnce(
+          new ConflictException('reused'),
+        );
+        purchases.confirm.mockRejectedValueOnce(new Error('boom'));
+
+        for (let i = 0; i < 3; i++)
+          await expect(service.confirm(8, confirmation)).rejects.toThrow();
+        expect(payments.refund).not.toHaveBeenCalled();
+      });
+
+      it('does not refund when the payment itself was not verified', async () => {
+        payments.settled.mockResolvedValue(null);
+
+        await expect(service.confirm(8, confirmation)).rejects.toThrow();
+        expect(payments.refund).not.toHaveBeenCalled();
+        expect(purchases.confirm).not.toHaveBeenCalled();
+      });
+
+      it('still reports the conflict when the refund fails', async () => {
+        payments.settled.mockResolvedValue(settlement);
+        purchases.confirm.mockRejectedValue(conflict('SEATS_UNAVAILABLE'));
+        payments.refund.mockRejectedValue(new ServiceUnavailableException());
+        jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+
+        await expect(service.confirm(8, confirmation)).rejects.toMatchObject({
+          response: { code: 'SEATS_UNAVAILABLE' },
+        });
+      });
+
+      it('refunds guest confirmations through the same path', async () => {
+        payments.settled.mockResolvedValue(settlement);
+        const repository = {
+          confirmGuest: jest
+            .fn()
+            .mockRejectedValue(conflict('SEATS_UNAVAILABLE')),
+        };
+        const guests = new GuestPurchasesService(
+          service,
+          repository as unknown as PurchasesRepository,
+          {} as never,
+          {} as never,
+        );
+        const buyer = { email: 'a@example.com', confirmEmail: 'a@example.com' };
+
+        await expect(
+          guests.confirm({ ...confirmation, buyer } as never),
+        ).rejects.toBeInstanceOf(ConflictException);
+        expect(payments.refund).toHaveBeenCalledWith(paymentIntentId);
+      });
     });
 
     it('rejects a card confirmation that has not succeeded', async () => {

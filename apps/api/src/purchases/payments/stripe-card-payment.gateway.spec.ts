@@ -4,11 +4,13 @@ import { StripeCardPaymentGateway } from './stripe-card-payment.gateway';
 
 const mockCreate = jest.fn();
 const mockRetrieve = jest.fn();
+const mockRefund = jest.fn();
 
 jest.mock('stripe', () => {
   class StripeInvalidRequestError extends Error {}
   const Stripe = jest.fn().mockImplementation(() => ({
     paymentIntents: { create: mockCreate, retrieve: mockRetrieve },
+    refunds: { create: mockRefund },
   }));
   Object.assign(Stripe, { errors: { StripeInvalidRequestError } });
   return { __esModule: true, default: Stripe };
@@ -23,6 +25,7 @@ describe('StripeCardPaymentGateway', () => {
   beforeEach(() => {
     mockCreate.mockReset();
     mockRetrieve.mockReset();
+    mockRefund.mockReset();
   });
 
   it('creates a CRC intent in centavos with the request metadata', async () => {
@@ -86,6 +89,50 @@ describe('StripeCardPaymentGateway', () => {
       brand: 'visa',
       last4: '4242',
     });
+  });
+
+  it('returns null for an intent whose charge was refunded', async () => {
+    mockRetrieve.mockResolvedValue({
+      id: 'pi_1',
+      status: 'succeeded',
+      livemode: false,
+      amount_received: 500000,
+      currency: 'crc',
+      metadata: { requestKey: 'key' },
+      latest_charge: {
+        refunded: true,
+        payment_method_details: { card: { brand: 'visa', last4: '4242' } },
+      },
+    });
+
+    await expect(gateway.settled('pi_1')).resolves.toBeNull();
+  });
+
+  it('refunds the intent with a stable idempotency key', async () => {
+    mockRefund.mockResolvedValue({ id: 're_1' });
+
+    await expect(gateway.refund('pi_1')).resolves.toBeUndefined();
+    expect(mockRefund).toHaveBeenCalledWith(
+      { payment_intent: 'pi_1' },
+      { idempotencyKey: 'refund:pi_1' },
+    );
+  });
+
+  it('treats an already refunded charge as refunded', async () => {
+    const Stripe = jest.requireMock('stripe').default;
+    const failure = new Stripe.errors.StripeInvalidRequestError('refunded');
+    Object.assign(failure, { code: 'charge_already_refunded' });
+    mockRefund.mockRejectedValue(failure);
+
+    await expect(gateway.refund('pi_1')).resolves.toBeUndefined();
+  });
+
+  it('hides other refund failures behind a generic unavailable error', async () => {
+    mockRefund.mockRejectedValue(new Error('network down'));
+
+    await expect(gateway.refund('pi_1')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('returns null when the intent did not succeed', async () => {

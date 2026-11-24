@@ -29,4 +29,7 @@ export abstract class CardPaymentGateway {
 
   // Resolves to null when the intent has not succeeded or is unknown.
   abstract settled(intentId: string): Promise<CardSettlement | null>;
+
+  // Returns the money of a captured intent. Safe to call again for the same intent.
+  abstract refund(intentId: string): Promise<void>;
 }

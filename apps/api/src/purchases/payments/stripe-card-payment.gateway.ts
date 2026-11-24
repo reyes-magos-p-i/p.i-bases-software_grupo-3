@@ -65,7 +65,13 @@ export class StripeCardPaymentGateway extends CardPaymentGateway {
     const charge =
       typeof intent.latest_charge === 'object' ? intent.latest_charge : null;
     const card = charge?.payment_method_details?.card;
-    if (intent.status !== 'succeeded' || !card?.brand || !card.last4)
+    // A refunded intent still reports "succeeded"; it must not buy tickets.
+    if (
+      intent.status !== 'succeeded' ||
+      charge?.refunded ||
+      !card?.brand ||
+      !card.last4
+    )
       return null;
     return {
       intentId: intent.id,
@@ -76,6 +82,23 @@ export class StripeCardPaymentGateway extends CardPaymentGateway {
       brand: card.brand,
       last4: card.last4,
     };
+  }
+
+  async refund(intentId: string): Promise<void> {
+    const stripe = this.stripe();
+    try {
+      await stripe.refunds.create(
+        { payment_intent: intentId },
+        { idempotencyKey: `refund:${intentId}` },
+      );
+    } catch (error) {
+      if (
+        error instanceof Stripe.errors.StripeInvalidRequestError &&
+        error.code === 'charge_already_refunded'
+      )
+        return;
+      throw new ServiceUnavailableException(UNAVAILABLE);
+    }
   }
 
   private stripe(): Stripe {

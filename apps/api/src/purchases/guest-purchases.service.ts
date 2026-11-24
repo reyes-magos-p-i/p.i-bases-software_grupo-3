@@ -46,11 +46,9 @@ export class GuestPurchasesService {
 
   confirm(data: ConfirmGuestPurchaseDto) {
     this.matchingEmail(data.buyer);
-    return this.purchases
-      .cardSettlement(data)
-      .then((settlement) =>
-        this.repository.confirmGuest(data.buyer.email, data, settlement),
-      );
+    return this.purchases.confirmPaid(data, (settlement) =>
+      this.repository.confirmGuest(data.buyer.email, data, settlement),
+    );
   }
 
   lookup(code: string) {

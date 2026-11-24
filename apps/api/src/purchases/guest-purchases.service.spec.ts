@@ -13,7 +13,7 @@ describe('Guest purchase orchestration', () => {
     },
     repository = { confirmGuest: jest.fn(), findGuest: jest.fn() };
   const emails = { status: jest.fn(), request: jest.fn() };
-  const purchases = { cardSettlement: jest.fn() };
+  const purchases = { confirmPaid: jest.fn() };
   const service = new GuestPurchasesService(
     purchases as unknown as PurchasesService,
     repository as unknown as PurchasesRepository,
@@ -119,7 +119,11 @@ describe('Guest purchase orchestration', () => {
       accessCode: 'private',
     });
     repository.findGuest.mockResolvedValue({ id: 12 });
-    purchases.cardSettlement.mockResolvedValue(undefined);
+    const settlement = { intentId: 'pi_1' };
+    purchases.confirmPaid.mockImplementation(
+      (_data: unknown, save: (settlement: unknown) => unknown) =>
+        save(settlement),
+    );
     await expect(service.confirm(data)).resolves.toEqual({
       id: 12,
       accessCode: 'private',
@@ -127,7 +131,7 @@ describe('Guest purchase orchestration', () => {
     expect(repository.confirmGuest).toHaveBeenCalledWith(
       buyer.email,
       data,
-      undefined,
+      settlement,
     );
     await expect(service.lookup('private')).resolves.toEqual({ id: 12 });
     expect(repository.findGuest).toHaveBeenCalledWith('private');

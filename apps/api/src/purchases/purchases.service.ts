@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { CardPaymentGateway } from './payments/card-payment.gateway';
@@ -24,8 +25,26 @@ import type {
   PurchaseIntentDto,
   PurchaseSelectionDto,
 } from './purchase.dto';
+// Conflicts that leave a captured payment without tickets. PURCHASE_BUSY and
+// server errors are not listed: the web retries those with the same intent.
+const REFUNDABLE_CODES = new Set([
+  'SEATS_UNAVAILABLE',
+  'QUOTE_CHANGED',
+  'PAYMENT_MISMATCH',
+  'FUNCTION_UNAVAILABLE',
+  'TICKET_LIMIT_REACHED',
+]);
+function refundable(error: unknown): boolean {
+  if (!(error instanceof ConflictException)) return false;
+  const response = error.getResponse();
+  return (
+    typeof response === 'object' &&
+    REFUNDABLE_CODES.has((response as { code?: string }).code ?? '')
+  );
+}
 @Injectable()
 export class PurchasesService {
+  private readonly logger = new Logger(PurchasesService.name);
   constructor(
     private readonly catalog: PurchaseCatalogRepository,
     private readonly purchases: PurchasesRepository,
@@ -84,11 +103,37 @@ export class PurchasesService {
     return settlement;
   }
 
-  async confirm(clientId: number, data: ConfirmPurchaseDto) {
-    return this.purchases.confirm(
-      clientId,
-      data,
-      await this.cardSettlement(data),
+  // Verifies the card payment, then saves the purchase. The payment is already
+  // captured at this point, so a conflict that leaves it without tickets
+  // refunds it.
+  async confirmPaid<T>(
+    data: ConfirmPurchaseDto,
+    save: (settlement: CardSettlement) => Promise<T>,
+  ): Promise<T> {
+    const settlement = await this.cardSettlement(data);
+    try {
+      return await save(settlement);
+    } catch (error) {
+      if (refundable(error)) await this.refund(settlement.intentId);
+      throw error;
+    }
+  }
+
+  private async refund(intentId: string) {
+    try {
+      await this.payments.refund(intentId);
+    } catch (failure) {
+      // The conflict is what the buyer needs to see; the charge needs manual follow-up.
+      this.logger.error(
+        `Refund of ${intentId} failed after a purchase conflict.`,
+        failure instanceof Error ? failure.stack : undefined,
+      );
+    }
+  }
+
+  confirm(clientId: number, data: ConfirmPurchaseDto) {
+    return this.confirmPaid(data, (settlement) =>
+      this.purchases.confirm(clientId, data, settlement),
     );
   }
   list(clientId: number, query: ListPurchasesQueryDto) {
