@@ -102,4 +102,32 @@ describe('PromotionalEmailRepository', () => {
       await expect(repository.findActivePromotions()).rejects.toBe(error);
     });
   });
+
+  describe('claimMonth', () => {
+    it('claims the month with an insert that is committed right away', async () => {
+      await expect(repository.claimMonth('2026-12')).resolves.toBe(true);
+
+      const [sql, binds] = db.query.mock.calls[0];
+      expect(sql).toContain('INSERT INTO PROMOTIONAL_EMAIL_RUNS');
+      expect(binds).toEqual({ monthKey: '2026-12' });
+    });
+
+    it('reports a month that another run already claimed (ORA-00001)', async () => {
+      db.query.mockRejectedValueOnce(
+        Object.assign(new Error('ORA-00001: unique constraint'), {
+          errorNum: 1,
+        }),
+      );
+
+      await expect(repository.claimMonth('2026-12')).resolves.toBe(false);
+    });
+
+    it('propagates other database failures so the month is retried', async () => {
+      db.query.mockRejectedValueOnce(new Error('ORA-00942'));
+
+      await expect(repository.claimMonth('2026-12')).rejects.toThrow(
+        'ORA-00942',
+      );
+    });
+  });
 });

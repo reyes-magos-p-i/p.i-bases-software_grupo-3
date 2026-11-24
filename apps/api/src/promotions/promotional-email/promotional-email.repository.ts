@@ -29,6 +29,20 @@ export class PromotionalEmailRepository {
     }));
   }
 
+  // Records the month before sending. Returns false when another run already claimed it (ORA-00001).
+  async claimMonth(monthKey: string): Promise<boolean> {
+    try {
+      await this.db.query(
+        `INSERT INTO PROMOTIONAL_EMAIL_RUNS (MONTH_KEY, CLAIMED_AT) VALUES (:monthKey, SYSTIMESTAMP)`,
+        { monthKey },
+      );
+      return true;
+    } catch (error) {
+      if ((error as { errorNum?: number }).errorNum === 1) return false;
+      throw error;
+    }
+  }
+
   async findActivePromotions(): Promise<PromotionalEmailPromotion[]> {
     const result = await this.db.query<{
       PROMOTION_TITLE: string;

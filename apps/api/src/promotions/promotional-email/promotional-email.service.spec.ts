@@ -14,12 +14,21 @@ describe('PromotionalEmailService', () => {
   let repository: {
     findActivePromotions: jest.Mock;
     findRecipients: jest.Mock;
+    claimMonth: jest.Mock;
   };
+  // Stands in for PROMOTIONAL_EMAIL_RUNS, which outlives the service instance.
+  let claimedMonths: Set<string>;
   let sender: { send: jest.Mock };
   let service: PromotionalEmailService;
 
   beforeEach(() => {
+    claimedMonths = new Set();
     repository = {
+      claimMonth: jest.fn().mockImplementation(async (monthKey: string) => {
+        if (claimedMonths.has(monthKey)) return false;
+        claimedMonths.add(monthKey);
+        return true;
+      }),
       findActivePromotions: jest
         .fn()
         .mockResolvedValue([
@@ -62,12 +71,52 @@ describe('PromotionalEmailService', () => {
     expect(sender.send).toHaveBeenCalledTimes(2);
   });
 
-  it('does nothing before the send hour or on other days', async () => {
+  it('does nothing before the send hour', async () => {
     await service.sendIfDue(FIRST_DAY_BEFORE_NINE);
-    await service.sendIfDue(SECOND_DAY);
 
     expect(repository.findRecipients).not.toHaveBeenCalled();
     expect(sender.send).not.toHaveBeenCalled();
+  });
+
+  it('sends on a later day when the first day of the month was missed', async () => {
+    await service.sendIfDue(SECOND_DAY);
+
+    expect(sender.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not send again after a restart in the same month', async () => {
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+    const restarted = new PromotionalEmailService(
+      repository as unknown as PromotionalEmailRepository,
+      sender as unknown as SmtpPromotionalEmailSender,
+      {
+        getOrThrow: jest.fn().mockReturnValue(FRONTEND_URL),
+      } as unknown as ConfigService,
+    );
+    await restarted.sendIfDue(SECOND_DAY);
+
+    expect(sender.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not send when another instance already claimed the month', async () => {
+    claimedMonths.add('2026-12');
+
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+
+    expect(repository.claimMonth).toHaveBeenCalledWith('2026-12');
+    expect(sender.send).not.toHaveBeenCalled();
+  });
+
+  it('does not send when the claim fails, so the next check retries', async () => {
+    repository.claimMonth.mockRejectedValueOnce(new Error('ORA-00942'));
+
+    await expect(service.sendIfDue(FIRST_DAY_AFTER_NINE)).rejects.toThrow(
+      'ORA-00942',
+    );
+    expect(sender.send).not.toHaveBeenCalled();
+
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+    expect(sender.send).toHaveBeenCalledTimes(2);
   });
 
   it('skips the send when there are no active promotions', async () => {

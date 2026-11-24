@@ -9,13 +9,11 @@ import { PromotionalEmailRepository } from './promotional-email.repository';
 import { SmtpPromotionalEmailSender } from './smtp-promotional-email-sender';
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
-const SEND_DAY = 1;
 const SEND_HOUR = 9;
 const TIME_ZONE = 'America/Costa_Rica';
 
 interface LocalDate {
   monthKey: string;
-  day: number;
   hour: number;
 }
 
@@ -25,7 +23,6 @@ function localDate(now: Date): LocalDate {
       timeZone: TIME_ZONE,
       year: 'numeric',
       month: '2-digit',
-      day: '2-digit',
       hour: '2-digit',
       hourCycle: 'h23',
     })
@@ -34,21 +31,19 @@ function localDate(now: Date): LocalDate {
   );
   return {
     monthKey: `${parts.year}-${parts.month}`,
-    day: Number(parts.day),
     hour: Number(parts.hour),
   };
 }
 
 /**
  * Emails the active promotions to every active client who opted in to promotional emails.
- * Runs at most once per calendar month. The month is tracked in memory, so a restart on the
- * same day can send the monthly email again.
+ * Runs at most once per calendar month: the month is claimed in PROMOTIONAL_EMAIL_RUNS before
+ * sending, so restarts never resend it. A missed day is sent at the next hourly check.
  */
 @Injectable()
 export class PromotionalEmailService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PromotionalEmailService.name);
   private interval: NodeJS.Timeout | undefined;
-  private lastSentMonth: string | undefined;
   private running = false;
 
   constructor(
@@ -75,24 +70,17 @@ export class PromotionalEmailService implements OnModuleInit, OnModuleDestroy {
 
   async sendIfDue(now = new Date()): Promise<void> {
     const local = localDate(now);
-    if (
-      this.running ||
-      local.day !== SEND_DAY ||
-      local.hour < SEND_HOUR ||
-      this.lastSentMonth === local.monthKey
-    )
-      return;
+    if (this.running || local.hour < SEND_HOUR) return;
 
     this.running = true;
     try {
-      await this.sendMonthly();
-      this.lastSentMonth = local.monthKey;
+      await this.sendMonthly(local.monthKey);
     } finally {
       this.running = false;
     }
   }
 
-  private async sendMonthly(): Promise<void> {
+  private async sendMonthly(monthKey: string): Promise<void> {
     const promotions = await this.repository.findActivePromotions();
     if (!promotions.length) {
       this.logger.log('No active promotions; skipping the monthly email.');
@@ -106,6 +94,11 @@ export class PromotionalEmailService implements OnModuleInit, OnModuleDestroy {
       frontendUrl,
     ).href;
     const recipients = await this.repository.findRecipients();
+    // Failures above leave the month unclaimed, so the next hourly check retries it.
+    if (!(await this.repository.claimMonth(monthKey))) {
+      this.logger.log(`Promotional email for ${monthKey} was already claimed.`);
+      return;
+    }
 
     let failed = 0;
     for (const recipient of recipients) {
