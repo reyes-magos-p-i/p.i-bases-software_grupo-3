@@ -6,13 +6,13 @@ import { defineComponent, nextTick } from 'vue'
 // Uses the real promotion-validation helper.
 import type { PromotionDetail } from '@/types/promotion-read'
 import PromotionCreate from '@/components/promotions/PromotionCreate.vue'
-import { createPromotion, getPromotion } from '@/services/promotion.service'
+import { createPromotion, getPromotion, updatePromotion } from '@/services/promotion.service'
 import {
   getPromotionPosterUrl,
   uploadPromotionPoster,
 } from '@/services/image-handler.service'
 
-vi.mock('@/services/promotion.service', () => ({ createPromotion: vi.fn(), getPromotion: vi.fn() }))
+vi.mock('@/services/promotion.service', () => ({ createPromotion: vi.fn(), getPromotion: vi.fn(), updatePromotion: vi.fn() }))
 vi.mock('@/services/image-handler.service', () => ({
   uploadPromotionPoster: vi.fn(),
   getPromotionPosterUrl: vi.fn((path: string | null) =>
@@ -94,7 +94,7 @@ function apiError(status: number, message?: unknown) {
 }
 
 let wrapper: VueWrapper
-function render(options = cinemas, extra: { mode?: 'create' | 'view'; promotionId?: number | null } = {}) {
+function render(options = cinemas, extra: { mode?: 'create' | 'edit' | 'view'; promotionId?: number | null } = {}) {
   wrapper = mount(PromotionCreate, {
     props: { cinemas: options, ...extra },
     attachTo: document.body,
@@ -157,6 +157,7 @@ async function selectPoster(file = new File(['image bytes'], 'banner.png', { typ
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getPromotion).mockReset().mockResolvedValue(detail())
+  vi.mocked(updatePromotion).mockReset().mockResolvedValue({ promotionId: 42 })
   vi.mocked(createPromotion).mockReset().mockResolvedValue({ promotionId: 42 })
   vi.mocked(uploadPromotionPoster).mockReset().mockResolvedValue({
     filename: 'banner.webp', path: '/uploads/promotions/banner.webp',
@@ -642,5 +643,177 @@ describe('PromotionCreate: read-only view mode', () => {
     wrapper.unmount()
     expect(signal.aborted).toBe(true)
     pending.resolve(detail())
+  })
+})
+
+
+describe('PromotionCreate: edit mode', () => {
+  async function edit(overrides: Partial<PromotionDetail> = {}) {
+    vi.mocked(getPromotion).mockResolvedValueOnce(detail(overrides))
+    render(cinemas, { mode: 'edit', promotionId: 42 })
+    await flushPromises()
+  }
+  it('loads details into editable inputs and preserves a 24:00 end time', async () => {
+    await edit()
+    expect(wrapper.getComponent({ name: 'BaseModal' }).props('title')).toBe('Editar promoción')
+    expect(control('LimitedTextInput', 'Nombre de la promoción').props('modelValue')).toBe('Promoción guardada')
+    expect(control('LimitedTextInput', 'Nombre de la promoción').props('disabled')).toBe(false)
+    expect(wrapper.get('#promo-end-hour').element).toHaveProperty('value', '24:00')
+    expect(wrapper.get('#promo-end-hour').attributes('disabled')).toBeUndefined()
+    expect(button('Guardar cambios').attributes('disabled')).toBeUndefined()
+    expect(wrapper.findComponent({ name: 'PromotionImageUpload' }).props('existingImageUrl')).toContain('banner.webp')
+    expect(control('ReusableSearchDropdown', 'Sucursales').props('options')).toContainEqual({ value: 99, label: 'Sucursal #99' })
+  })
+  it('submits the complete updated payload with the original poster and associations', async () => {
+    await edit()
+    await update('LimitedTextInput', 'Nombre de la promoción', '  Título editado  ')
+    await submit()
+    expect(updatePromotion).toHaveBeenCalledWith(42, {
+      promotionType: 'fixed', promotionAmount: 3500.5,
+      promotionTitle: 'Título editado', description: 'Descripción guardada', conditions: 'Condiciones guardadas',
+      posterPath: '/uploads/promotions/banner.webp', beginDate: '2026-11-17', endDate: '2026-12-31',
+      beginHour: '22:00', endHour: '24:00', projectionFormat: '2D', technology: 'IMAX', weekdays: [2,4], branchIds: [1,99],
+    })
+    expect(createPromotion).not.toHaveBeenCalled()
+    expect(uploadPromotionPoster).not.toHaveBeenCalled()
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+  it('clears restrictions and replaces selected associations in the PUT payload', async () => {
+    await edit()
+    await wrapper.findAll('input[type="checkbox"]')[0]!.setValue(true)
+    await update('SimpleDropdown', 'Formato de proyección', null)
+    await update('SimpleDropdown', 'Tecnología', null)
+    await update('LimitedTextInput', 'Condiciones (opcional)', '')
+    await update('ReusableSearchDropdown', 'Sucursales', [2])
+    for (const checkbox of wrapper.findAll('.day-option input')) await checkbox.setValue(false)
+    await submit()
+    expect(updatePromotion).toHaveBeenCalledWith(42, expect.objectContaining({
+      beginHour: null, endHour: null, projectionFormat: null, technology: null, conditions: null, weekdays: [], branchIds: [2],
+    }))
+  })
+  it('reuses the existing form validation before PUT', async () => {
+    await edit()
+    await update('SimpleDropdown', 'Tipo de promoción', 'percentage')
+    await wrapper.get('#promo-amount').setValue('100.01')
+    await submit()
+    expect(updatePromotion).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('100')
+  })
+  it('rejects unknown cinema IDs that were not existing associations', async () => {
+    await edit()
+    await update('ReusableSearchDropdown', 'Sucursales', [500])
+    await submit()
+    expect(updatePromotion).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('inválidas')
+  })
+  it('allows removing an existing poster through the edit form', async () => {
+    await edit()
+    await button('Quitar póster').trigger('click')
+    expect(wrapper.findComponent({ name: 'PromotionImageUpload' }).props('existingImageUrl')).toBeNull()
+    await submit()
+    expect(updatePromotion).toHaveBeenCalledWith(42, expect.objectContaining({ posterPath: null }))
+    expect(uploadPromotionPoster).not.toHaveBeenCalled()
+  })
+  it('uploads a replacement poster before PUT and reuses it after a failed save', async () => {
+    await edit()
+    const file = await selectPoster()
+    vi.mocked(uploadPromotionPoster).mockResolvedValueOnce({ filename: 'new.webp', path: '/uploads/promotions/new.webp' })
+    vi.mocked(updatePromotion).mockRejectedValueOnce(new Error('Offline'))
+    await submit()
+    expect(uploadPromotionPoster).toHaveBeenCalledWith(file)
+    expect(updatePromotion).toHaveBeenCalledWith(42, expect.objectContaining({ posterPath: '/uploads/promotions/new.webp' }))
+    expect(wrapper.emitted('saved')).toBeUndefined()
+    await submit()
+    expect(uploadPromotionPoster).toHaveBeenCalledTimes(1)
+    expect(updatePromotion).toHaveBeenCalledTimes(2)
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+  })
+  it('does not PUT when the replacement poster upload fails', async () => {
+    await edit(); await selectPoster()
+    vi.mocked(uploadPromotionPoster).mockRejectedValueOnce(new Error('Offline'))
+    await submit()
+    expect(updatePromotion).not.toHaveBeenCalled()
+  })
+  it('blocks saving while details are pending or failed to load', async () => {
+    const pending = deferred<PromotionDetail>()
+    vi.mocked(getPromotion).mockReturnValueOnce(pending.promise)
+    render(cinemas, { mode: 'edit', promotionId: 42 })
+    await submit()
+    expect(updatePromotion).not.toHaveBeenCalled()
+    expect(wrapper.find('input').exists()).toBe(false)
+    pending.resolve(detail()); await flushPromises()
+    expect(button('Guardar cambios').attributes('disabled')).toBeUndefined()
+  })
+  it('keeps controls disabled and blocks duplicate saves while PUT is pending', async () => {
+    await edit()
+    const pending = deferred<{ promotionId: number }>()
+    vi.mocked(updatePromotion).mockReturnValueOnce(pending.promise)
+    await wrapper.get('form').trigger('submit'); await nextTick()
+    expect(button('Guardando...').attributes('disabled')).toBeDefined()
+    expect(control('LimitedTextInput', 'Nombre de la promoción').props('disabled')).toBe(true)
+    await wrapper.get('form').trigger('submit')
+    expect(updatePromotion).toHaveBeenCalledTimes(1)
+    pending.resolve({ promotionId: 42 }); await flushPromises()
+  })
+  it.each([401, 403])('forwards save authentication error %s', async (status) => {
+    await edit()
+    vi.mocked(updatePromotion).mockRejectedValueOnce(apiError(status))
+    await submit()
+    expect(wrapper.emitted(status === 401 ? 'session-expired' : 'forbidden')).toHaveLength(1)
+    expect(wrapper.emitted('saved')).toBeUndefined()
+  })
+  it('shows API validation feedback without closing on a rejected update', async () => {
+    await edit()
+    vi.mocked(updatePromotion).mockRejectedValueOnce(apiError(400, 'Invalid cinema'))
+    await submit()
+    expect(wrapper.text()).toContain('Invalid cinema')
+    expect(wrapper.emitted('close')).toBeUndefined()
+  })
+  it('handles a promotion removed before PUT and blocks resubmission', async () => {
+    await edit()
+    vi.mocked(updatePromotion).mockRejectedValueOnce(apiError(404))
+    await submit()
+    expect(wrapper.text()).toContain('no existe')
+    await submit()
+    expect(updatePromotion).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('saved')).toBeUndefined()
+  })
+  it('shows the edit-specific message for network failures', async () => {
+    await edit()
+    vi.mocked(updatePromotion).mockRejectedValueOnce(new Error('Offline'))
+    await submit()
+    expect(wrapper.text()).toContain('No se pudo actualizar la promoción.')
+  })
+  it('permits retrying a failed detail request in edit mode', async () => {
+    vi.mocked(getPromotion).mockRejectedValueOnce(apiError(404))
+    render(cinemas, { mode: 'edit', promotionId: 42 }); await flushPromises()
+    await submit()
+    expect(updatePromotion).not.toHaveBeenCalled()
+    await button('Reintentar').trigger('click'); await flushPromises()
+    expect(button('Guardar cambios').exists()).toBe(true)
+  })
+  it('preserves a stored ordinary ending hour when switching edited records', async () => {
+    await edit()
+    vi.mocked(getPromotion).mockResolvedValueOnce(detail({ promotionId: 43, endHour: '23:30' }))
+    await wrapper.setProps({ promotionId: 43 }); await flushPromises()
+    expect(wrapper.get('#promo-end-hour').element).toHaveProperty('value', '23:30')
+    await submit()
+    expect(updatePromotion).toHaveBeenCalledWith(43, expect.objectContaining({ endHour: '23:30' }))
+  })
+  it('does not send PUT to a new record after a stale poster upload finishes', async () => {
+    await edit(); await selectPoster()
+    const pending = deferred<{ filename: string; path: string }>()
+    vi.mocked(uploadPromotionPoster).mockReturnValueOnce(pending.promise)
+    await wrapper.get('form').trigger('submit')
+    await wrapper.setProps({ promotionId: 43 }); await flushPromises()
+    pending.resolve({ filename: 'old.webp', path: '/uploads/promotions/old.webp' }); await flushPromises()
+    expect(updatePromotion).not.toHaveBeenCalled()
+    expect(wrapper.emitted('saved')).toBeUndefined()
+  })
+  it('cancels editing without making a write request', async () => {
+    await edit(); await button('Cancelar').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    expect(updatePromotion).not.toHaveBeenCalled()
   })
 })

@@ -120,8 +120,8 @@ const router = createRouter({
     },
   ],
 })
-router.beforeEach(requireClientSession)
 router.beforeEach(requireEmployeeSession)
+router.beforeEach(requireClientSession)
 redirectClientWhenPasswordBlocked(router)
 
 export default router
