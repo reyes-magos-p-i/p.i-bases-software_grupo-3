@@ -53,6 +53,13 @@ export class PromotionalEmailService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    // Only production sends this email. Development is a copy of production data, so it stays off.
+    if (this.config.get<string>('PROMOTIONAL_EMAILS_ENABLED') !== 'true') {
+      this.logger.log(
+        'Promotional emails are disabled; set PROMOTIONAL_EMAILS_ENABLED=true to enable them.',
+      );
+      return;
+    }
     this.interval = setInterval(() => {
       void this.sendIfDue().catch((error: unknown) => {
         this.logger.error(

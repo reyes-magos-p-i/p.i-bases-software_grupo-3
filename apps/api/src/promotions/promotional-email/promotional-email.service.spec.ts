@@ -41,6 +41,7 @@ describe('PromotionalEmailService', () => {
     };
     sender = { send: jest.fn().mockResolvedValue(undefined) };
     const config = {
+      get: jest.fn().mockReturnValue('true'),
       getOrThrow: jest.fn().mockReturnValue(FRONTEND_URL),
     } as unknown as ConfigService;
     service = new PromotionalEmailService(
@@ -303,6 +304,25 @@ describe('PromotionalEmailService', () => {
         expect.any(String),
       );
       logError.mockRestore();
+    });
+
+    it('does not schedule anything unless PROMOTIONAL_EMAILS_ENABLED is true', async () => {
+      const sendIfDue = jest
+        .spyOn(service, 'sendIfDue')
+        .mockResolvedValue(undefined);
+      const disabled = new PromotionalEmailService(
+        repository as unknown as PromotionalEmailRepository,
+        sender as unknown as SmtpPromotionalEmailSender,
+        {
+          get: jest.fn().mockReturnValue('false'),
+        } as unknown as ConfigService,
+      );
+
+      disabled.onModuleInit();
+      await jest.advanceTimersByTimeAsync(ONE_HOUR_MS * 24);
+
+      expect(sendIfDue).not.toHaveBeenCalled();
+      disabled.onModuleDestroy();
     });
 
     it('can be destroyed without ever being initialized', () => {
