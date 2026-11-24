@@ -6,13 +6,18 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Put,
   UseGuards,
+  HttpCode,
+  Delete,
+  HttpStatus
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 
 import { AdministratorGuard } from '../users/guards/administrator.guard';
 import { PasswordStatusGuard } from '../auth/password/password-status.guard';
 
+import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsService } from './promotions.service';
 
@@ -42,4 +47,16 @@ export class PromotionsController {
   create(@Body() dto: CreatePromotionDto) {
     return this.promotionsService.create(dto);
   }
+
+  @Put(':id')
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePromotionDto) {
+    return this.promotionsService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    await this.promotionsService.remove(id);
+}
+
 }

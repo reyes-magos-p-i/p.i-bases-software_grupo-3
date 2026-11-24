@@ -643,4 +643,5 @@ CREATE INDEX ix_ticket_invoice_product ON Tickets (invoice_id, product_id);
 @@migrations/20261102_purchase_ticket_email.sql
 @@migrations/20261102_global_settings.sql
 @@migrations/20261102_ticket_limit_by_availability.sql
+@@migrations/20261123_foreign_key_indexes.sql
 @@migrations/20261123_movie_release_presale_dates.sql

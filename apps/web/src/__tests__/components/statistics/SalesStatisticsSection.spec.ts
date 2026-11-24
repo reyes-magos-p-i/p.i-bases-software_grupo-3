@@ -12,6 +12,15 @@ import type { SalesStatistics } from '@/types/sales-statistics'
 
 vi.mock('@/services/sales-statistics.service', () => ({ getSalesStatistics: vi.fn() }))
 vi.mock('@/services/employee-session.service', () => ({ invalidateEmployeeSession: vi.fn() }))
+vi.mock('@/components/statistics/SalesReportDialog.vue', () => ({
+  __esModule: true,
+  default: {
+    name: 'SalesReportDialog',
+    props: ['initialPeriod'],
+    emits: ['close', 'downloaded', 'session-expired'],
+    render: () => null,
+  },
+}))
 let view: VueWrapper
 let router: ReturnType<typeof createRouter>
 const deferred = () => {
@@ -51,7 +60,8 @@ describe('SalesStatisticsSection', () => {
     pending.resolve(salesStatistics())
     await flushPromises()
     expect(view.findAll('.stat-card')).toHaveLength(4)
-    expect(view.get('.report-button').attributes('disabled')).toBeDefined()
+    expect(view.get('.report-button').attributes('disabled')).toBeUndefined()
+    expect(view.get('.report-button').text()).toContain('Generar reporte')
     expect(view.findAllComponents(DataChart).map((chart) => chart.props('type'))).toEqual([
       'line',
       'donut',
@@ -98,6 +108,33 @@ describe('SalesStatisticsSection', () => {
     await view.get('#sales-audience').setValue('genders')
     expect(view.findAllComponents(DataChart)[3]!.props('type')).toBe('donut')
     expect(view.find('.age-filter').exists()).toBe(false)
+  })
+  it('opens a report for the applied period independently of chart filters and reports the download', async () => {
+    await render()
+    await flushPromises()
+    expect(view.find('.report-button .bi-download').exists()).toBe(true)
+    await view.get('#sales-metric').setValue('tickets')
+    await view.get('#sales-age-range').setValue('18-24')
+    await view.get('.report-button').trigger('click')
+    await flushPromises()
+    const report = view.getComponent({ name: 'SalesReportDialog' })
+    expect(report.props('initialPeriod')).toEqual(vi.mocked(getSalesStatistics).mock.calls[0]![0])
+    report.vm.$emit('downloaded')
+    report.vm.$emit('close')
+    await flushPromises()
+    expect(view.findComponent({ name: 'SalesReportDialog' }).exists()).toBe(false)
+    expect(view.getComponent(NotificationPopup).props()).toMatchObject({
+      type: 'success',
+      placement: 'bottom-right',
+    })
+    expect(getSalesStatistics).toHaveBeenCalledTimes(1)
+    expect(view.get<HTMLSelectElement>('#sales-metric').element.value).toBe('tickets')
+    await view.get('.report-button').trigger('click')
+    await flushPromises()
+    view.getComponent({ name: 'SalesReportDialog' }).vm.$emit('session-expired')
+    await flushPromises()
+    expect(invalidateEmployeeSession).toHaveBeenCalledTimes(1)
+    expect(router.currentRoute.value.fullPath).toBe('/?login=employee&reason=expired')
   })
   it('ranks by the selected metric, uses stable ties and limits rankings to ten', async () => {
     const data = salesStatistics()

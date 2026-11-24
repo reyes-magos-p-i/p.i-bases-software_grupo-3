@@ -30,7 +30,7 @@ async function select(label: string, value: string) {
 afterEach(() => wrapper?.unmount())
 
 describe('PromotionList', () => {
-  it('renders all requested columns and only the view action', () => {
+  it('renders all requested columns and view/edit actions', () => {
     render()
     expect(wrapper.findAll('thead th').map((cell) => cell.text())).toEqual([
       'ID', 'Nombre', 'Tipo de promoción', 'Tecnología', 'Formato', 'Fecha inicial', 'Fecha final', 'Acciones',
@@ -180,4 +180,19 @@ describe('PromotionList', () => {
     await retry.trigger('click')
     expect(wrapper.emitted('retry')).toHaveLength(1)
   })
+  it('emits the numeric promotion ID when edit is clicked', async () => {
+    render()
+    await wrapper.get('[aria-label="Editar promoción 2"]').trigger('click')
+    expect(wrapper.emitted('edit')).toEqual([[2]])
+    expect(wrapper.emitted('view')).toBeUndefined()
+  })
+
+  it('emits only delete with the selected numeric ID when the trash button is clicked', async () => {
+    render()
+    await wrapper.get('[aria-label="Eliminar promoción 2"]').trigger('click')
+    expect(wrapper.emitted('delete')).toEqual([[2]])
+    expect(wrapper.emitted('view')).toBeUndefined()
+    expect(wrapper.emitted('edit')).toBeUndefined()
+  })
+
 })
