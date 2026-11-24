@@ -8,11 +8,8 @@ import {
   readTicketEmailStatus,
 } from '@/utils/purchase-response'
 import type {
-<<<<<<< HEAD
   PurchasePromotion,
-=======
   CardIntent,
->>>>>>> dev
   PurchaseList,
   PurchaseListQuery,
   PurchaseMovie,

@@ -32,11 +32,8 @@ import { validEmail } from '@/utils/user-validation'
 import { registeredSeatMap } from '@/utils/seat-layout'
 import type { Seat } from '@/types/seats'
 import type {
-<<<<<<< HEAD
   PurchasePromotion,
-=======
   CardIntent,
->>>>>>> dev
   GuestBuyer,
   GuestPurchaseReceipt,
   PendingPurchaseAttempt,
@@ -493,13 +490,6 @@ export function useTicketPurchase(onExpired: () => void) {
       return null
     }
   }
-<<<<<<< HEAD
-  async function pay() {
-    if (
-      !quote.value ||
-      promotionError.value ||
-      busy.value ||
-=======
   // Opens the card step for a new purchase, or retries the saved payment of an uncertain one.
   async function continuePayment() {
     if (attempt) return pay()
@@ -511,14 +501,10 @@ export function useTicketPurchase(onExpired: () => void) {
       !quote.value ||
       busy.value ||
       locked() ||
->>>>>>> dev
       receipt.value ||
       (guest.value && !guestBuyer.value)
     )
       return
-<<<<<<< HEAD
-    const pending = prepareAttempt()
-=======
     const operation = beginRead()
     busy.value = true
     error.value = ''
@@ -546,7 +532,6 @@ export function useTicketPurchase(onExpired: () => void) {
   async function pay(paymentIntentId?: string) {
     if (!quote.value || busy.value || receipt.value || (guest.value && !guestBuyer.value)) return
     const pending = prepareAttempt(paymentIntentId)
->>>>>>> dev
     if (!pending) return
     request?.abort()
     refreshRequest?.abort()

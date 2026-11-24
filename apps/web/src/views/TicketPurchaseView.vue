@@ -149,15 +149,6 @@ watch(
             :disabled="busy || uncertain"
             @click="flow.back"
           >
-<<<<<<< HEAD
-            {{ guest ? 'Volver al correo' : 'Volver a los asientos' }}</button><button
-            type="button"
-            class="purchase-action primary"
-            :disabled="busy || !!promotionError"
-            @click="flow.pay"
-          >
-            {{ busy ? 'Registrando compra...' : uncertain ? 'Reintentar pago' : 'Pagar' }}
-=======
             {{ guest ? 'Volver al correo' : 'Volver a los asientos' }}</button
           ><button
             type="button"
@@ -174,7 +165,6 @@ watch(
                   ? 'Reintentar pago'
                   : 'Pagar'
             }}
->>>>>>> dev
           </button>
         </div>
       </section>
