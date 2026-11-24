@@ -11,6 +11,7 @@ import ClientPurchasesPanel from '@/components/purchases/ClientPurchasesPanel.vu
 import ClientProfileForm from '@/components/clients/ClientProfileForm.vue'
 import ClientEmailChangeDialog from '@/components/clients/ClientEmailChangeDialog.vue'
 import ClientPreferencesForm from '@/components/clients/ClientPreferencesForm.vue'
+import PromotionalEmailToggle from '@/components/clients/PromotionalEmailToggle.vue'
 import {
   getClientPreferenceSettings,
   saveClientPreferences,
@@ -496,6 +497,7 @@ onBeforeUnmount(() => {
       </template>
       <template v-else-if="selected === 'preferences'"
         ><h2 v-if="!preferenceSettings || preferencesLoading || preferencesError">Preferencias</h2>
+        <PromotionalEmailToggle />
         <dl>
           <dt>Idioma registrado</dt>
           <dd>

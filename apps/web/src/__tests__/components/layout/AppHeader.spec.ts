@@ -188,6 +188,30 @@ describe('AppHeader authentication navigation', () => {
     },
   )
 
+  // SCRUM-438: the portal header stays clean, with only the logo and the account.
+  it('keeps the portal header to the logo and the account', async () => {
+    wrapper.unmount()
+    wrapper = mount(AppHeader, {
+      props: { overlay: true },
+      attachTo: document.body,
+      global: { plugins: [router] },
+    })
+    const sectionLinks = () =>
+      wrapper.findAll('a').filter((link) => link.attributes('href')?.startsWith('/#'))
+
+    expect(wrapper.find('nav').exists()).toBe(false)
+    expect(sectionLinks()).toHaveLength(0)
+
+    establishClientSession(
+      { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' },
+      'client-token',
+    )
+    await flushPromises()
+
+    expect(sectionLinks()).toHaveLength(0)
+    expect(wrapper.text()).not.toContain('Para ti')
+  })
+
   it('navigates from the portal through both login modes and restores focus on close', async () => {
     const opener = wrapper.get<HTMLButtonElement>('.login-button')
     opener.element.focus()

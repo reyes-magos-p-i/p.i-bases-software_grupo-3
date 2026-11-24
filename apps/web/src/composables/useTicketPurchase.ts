@@ -5,6 +5,7 @@ import {
   getPurchaseSeats,
   quotePurchase,
   confirmPurchase,
+  createCardPaymentIntent,
   purchaseError,
 } from '@/services/purchase.service'
 import {
@@ -17,6 +18,7 @@ import {
   getGuestPurchaseSeats,
   quoteGuestPurchase,
   confirmGuestPurchase,
+  createGuestCardPaymentIntent,
   identifyGuestBuyer,
 } from '@/services/guest-purchase.service'
 import {
@@ -30,7 +32,11 @@ import { validEmail } from '@/utils/user-validation'
 import { registeredSeatMap } from '@/utils/seat-layout'
 import type { Seat } from '@/types/seats'
 import type {
+<<<<<<< HEAD
   PurchasePromotion,
+=======
+  CardIntent,
+>>>>>>> dev
   GuestBuyer,
   GuestPurchaseReceipt,
   PendingPurchaseAttempt,
@@ -83,12 +89,14 @@ export function useTicketPurchase(onExpired: () => void) {
     guestBuyer = ref<GuestBuyer | null>(null),
     buyerError = ref(''),
     loginRequired = ref(false)
+  const cardIntent = ref<CardIntent | null>(null)
   const summaryStep = computed(() => (guest.value ? 4 : 3)),
-    finalStep = computed(() => summaryStep.value + 1)
+    paymentStep = computed(() => summaryStep.value + 1),
+    finalStep = computed(() => summaryStep.value + 2)
   const labels = computed(() =>
     guest.value
-      ? ['Función', 'Asientos', 'Correo', 'Resumen', 'Compra lista']
-      : ['Función', 'Asientos', 'Resumen', 'Compra lista'],
+      ? ['Función', 'Asientos', 'Correo', 'Resumen', 'Pago', 'Compra lista']
+      : ['Función', 'Asientos', 'Resumen', 'Pago', 'Compra lista'],
   )
   let generation = 0,
     disposed = false,
@@ -106,8 +114,14 @@ export function useTicketPurchase(onExpired: () => void) {
           functions: getGuestPurchaseFunctions,
           seats: getGuestPurchaseSeats,
           quote: quoteGuestPurchase,
+          intent: createGuestCardPaymentIntent,
         }
-      : { functions: getPurchaseFunctions, seats: getPurchaseSeats, quote: quotePurchase }
+      : {
+          functions: getPurchaseFunctions,
+          seats: getPurchaseSeats,
+          quote: quotePurchase,
+          intent: createCardPaymentIntent,
+        }
   const selection = computed<PurchaseSelection>(() => {
     const seats: PurchaseSelection['seats'] = { GENERAL: [], CHILD: [], SENIOR: [] }
     const context = availability.value?.function
@@ -458,7 +472,7 @@ export function useTicketPurchase(onExpired: () => void) {
       if (operation.serial === generation) busy.value = false
     }
   }
-  function prepareAttempt(): PendingPurchaseAttempt | null {
+  function prepareAttempt(paymentIntentId?: string): PendingPurchaseAttempt | null {
     if (attempt) return attempt
     const buyer =
       guest.value && guestBuyer.value
@@ -471,6 +485,7 @@ export function useTicketPurchase(onExpired: () => void) {
         requestKey,
         quote: quote.value!,
         selection: selection.value,
+        ...(paymentIntentId ? { paymentIntentId } : {}),
       })
       return attempt
     } catch (error_) {
@@ -478,16 +493,60 @@ export function useTicketPurchase(onExpired: () => void) {
       return null
     }
   }
+<<<<<<< HEAD
   async function pay() {
     if (
       !quote.value ||
       promotionError.value ||
       busy.value ||
+=======
+  // Opens the card step for a new purchase, or retries the saved payment of an uncertain one.
+  async function continuePayment() {
+    if (attempt) return pay()
+    await goToPayment()
+  }
+  // Creates the card intent for the quoted total. Nothing is saved until Stripe confirms the payment.
+  async function goToPayment() {
+    if (
+      !quote.value ||
+      busy.value ||
+      locked() ||
+>>>>>>> dev
       receipt.value ||
       (guest.value && !guestBuyer.value)
     )
       return
+<<<<<<< HEAD
     const pending = prepareAttempt()
+=======
+    const operation = beginRead()
+    busy.value = true
+    error.value = ''
+    try {
+      const intent = await api().intent(
+        { ...selection.value, requestKey, quoteVersion: quote.value.version },
+        operation.controller.signal,
+      )
+      if (operation.active()) {
+        cardIntent.value = intent
+        step.value = paymentStep.value
+      }
+    } catch (error_) {
+      if (operation.active()) failed(error_)
+    } finally {
+      if (operation.serial === generation) busy.value = false
+    }
+  }
+  function cancelCardPayment() {
+    if (busy.value || locked()) return
+    cardIntent.value = null
+    step.value = summaryStep.value
+  }
+  // paymentIntentId comes from the card step after Stripe confirms the payment.
+  async function pay(paymentIntentId?: string) {
+    if (!quote.value || busy.value || receipt.value || (guest.value && !guestBuyer.value)) return
+    const pending = prepareAttempt(paymentIntentId)
+>>>>>>> dev
     if (!pending) return
     request?.abort()
     refreshRequest?.abort()
@@ -503,6 +562,9 @@ export function useTicketPurchase(onExpired: () => void) {
         ...pending.selection,
         requestKey: pending.requestKey,
         quoteVersion: pending.quote.version,
+        ...(pending.paymentIntentId
+          ? { paymentMethod: 'CARD' as const, paymentIntentId: pending.paymentIntentId }
+          : {}),
       }
       const result =
         pending.buyer.kind === 'guest'
@@ -515,6 +577,7 @@ export function useTicketPurchase(onExpired: () => void) {
       if (current() && serial === generation) {
         receipt.value = result
         releaseAttempt()
+        cardIntent.value = null
         notice.value = ''
         step.value = finalStep.value
       }
@@ -536,6 +599,8 @@ export function useTicketPurchase(onExpired: () => void) {
     uncertain.value =
       !definite && (wasUncertain || !status || status >= 500 || code === 'PURCHASE_BUSY')
     if (uncertain.value) {
+      cardIntent.value = null
+      step.value = summaryStep.value
       error.value += guest.value
         ? ' Reintenta el pago de esta misma selección para recuperar tu compra sin duplicarla. Conservaremos la selección mientras comprobamos el resultado.'
         : ' Puedes reintentar el pago de esta misma selección; la compra no se duplicará. También puedes consultar «Historial de compras».'
@@ -543,6 +608,8 @@ export function useTicketPurchase(onExpired: () => void) {
     }
     const wasRestored = restored.value
     releaseAttempt()
+    cardIntent.value = null
+    if (step.value === paymentStep.value) step.value = summaryStep.value
     restartable.value = true
     if (status === 404 || wasRestored) {
       await reloadRejectedPurchase()
@@ -617,6 +684,7 @@ export function useTicketPurchase(onExpired: () => void) {
   function clearPrivateState() {
     resetOperations()
     releaseAttempt()
+    cardIntent.value = null
     movie.value = null
     functions.value = []
     availability.value = null
@@ -671,8 +739,12 @@ export function useTicketPurchase(onExpired: () => void) {
     buyerError,
     loginRequired,
     summaryStep,
+    paymentStep,
     finalStep,
     labels,
+    cardIntent,
+    continuePayment,
+    cancelCardPayment,
     identify,
     restored,
     canRestart,

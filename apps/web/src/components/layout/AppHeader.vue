@@ -299,7 +299,7 @@ function goToProfileSection(section: string) {
 
 <template>
   <header class="site-header" :class="{ 'site-header-overlay': overlay }">
-    <nav class="landing-container navbar-content">
+    <div class="landing-container navbar-content">
       <RouterLink to="/" class="brand" aria-label="Ir a la página principal de Cinetadel">
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
       </RouterLink>
@@ -351,7 +351,7 @@ function goToProfileSection(section: string) {
           @submit="submitLogin"
         />
       </div>
-    </nav>
+    </div>
     <p v-if="recoveryError" class="landing-container session-feedback" role="status">
       {{ recoveryError }}
       <button type="button" :disabled="recovering" @click="recoverSession(true)">
@@ -456,6 +456,70 @@ function goToProfileSection(section: string) {
 .login-button:focus-visible {
   outline: 2px solid var(--focus-on-dark);
   outline-offset: -4px;
+}
+
+/* SCRUM-438: portal header, kept to the logo and the account (option A without section links). */
+.site-header-overlay .navbar-content {
+  min-height: 88px;
+  align-items: center;
+  gap: 12px;
+}
+
+.site-header-overlay .brand-logo {
+  width: 56px;
+  height: 56px;
+}
+
+.site-header-overlay .navbar-actions {
+  align-items: center;
+  gap: 8px;
+}
+
+.site-header-overlay .login-button,
+.site-header-overlay .register-button {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.site-header-overlay .login-button {
+  border: 1px solid var(--text-on-dark);
+  background: color-mix(in srgb, var(--page-background) 40%, transparent);
+}
+
+.site-header-overlay .register-button::before {
+  display: none;
+}
+
+.site-header-overlay .login-button:hover,
+.site-header-overlay .register-button:hover {
+  background: var(--surface-on-dark-hover);
+}
+
+.site-header-overlay .login-button:focus-visible,
+.site-header-overlay .register-button:focus-visible {
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .site-header-overlay .navbar-content {
+    min-height: 68px;
+  }
+
+  .site-header-overlay .brand-logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .site-header-overlay .login-button,
+  .site-header-overlay .register-button {
+    padding: 0 12px;
+  }
+
+  .site-header-overlay :deep(.account-name) {
+    display: none;
+  }
 }
 
 @media (max-width: 576px) {

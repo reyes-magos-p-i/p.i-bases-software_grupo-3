@@ -451,3 +451,38 @@ reintentos, conservación del texto y cancelación de solicitudes obsoletas.
 También verifican el envío de empleados y administradores, el cuerpo enviado,
 la validación completa, la prevención de duplicados, la limpieza tras una creación
 confirmada y el tratamiento de errores corregibles o resultados inciertos.
+
+## Correos promocionales mensuales
+
+El correo mensual de promociones (SCRUM-321) solo se envía a los clientes que activaron la opción en su perfil. Su envío queda a cargo de la API y está apagado por defecto:
+
+```dotenv
+PROMOTIONAL_EMAILS_ENABLED=true
+```
+
+- Solo el `.env` de producción debe tener `PROMOTIONAL_EMAILS_ENABLED=true`. El entorno de desarrollo es una copia completa de producción, incluidos sus clientes, y usa el mismo SMTP: con la variable activa enviaría el correo a clientes reales. Sin la variable, la API no programa el envío y lo registra en el log.
+- Cada mes se reclama en la tabla `PROMOTIONAL_EMAIL_RUNS` antes de enviar. Un reinicio no reenvía el correo del mismo mes; si el servidor estaba caído el día 1, se envía en la siguiente revisión horaria. Si el proceso falla a mitad del envío, el mes ya quedó reclamado y no se reintenta: el correo sale como máximo una vez por mes.
+- Para desactivarlo en producción, quitar la variable o cambiarla a otro valor y reiniciar la API.
+
+### Orden de despliegue
+
+La migración `database/migrations/20261122_client_promotional_email_opt_in.sql` crea `PROMOTIONAL_EMAIL_RUNS` y la columna `CLIENTS.PROMO_EMAIL_OPT_IN`. Debe ejecutarse antes de integrar el cambio:
+
+1. En DEVELOPMENT, antes de fusionar en `dev`.
+2. En PRODUCTION, antes de la liberación a `main`.
+
+Sin la migración, `GET /clients/me/promotional-emails` falla con `ORA-00904` y la pestaña «Mi perfil › Preferencias» deja de funcionar. Después de aplicarla, ejecutar `database/environments/03_admin_grant_app_user.sql` como ADMIN para que `CINETADEL_APP` pueda insertar en la nueva tabla.
+## Configuración de Stripe
+
+La compra de boletos solo admite pago con tarjeta mediante Stripe. El `.env` de la API (`apps/api/.env`) necesita:
+
+```dotenv
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+```
+
+- Usar claves de **prueba** (`sk_test_…`, `pk_test_…`) en desarrollo y en el espejo de desarrollo. Las claves reales (`sk_live_…`) solo van en producción.
+- `make dev`, `make debug` y `make prod` comprueban que exista `apps/api/.env`; los nombres de estas variables aparecen en su mensaje de error.
+- Sin ellas, crear el intento de pago o confirmar una compra responde `503`, y no se pueden comprar boletos.
+- Los despliegues del espejo de desarrollo se actualizan al integrar en `dev`: añadir las claves al `.env` del servidor antes de fusionar.
+- Con claves de prueba, la tarjeta `4242 4242 4242 4242` (cualquier fecha futura y CVC) aprueba el pago.

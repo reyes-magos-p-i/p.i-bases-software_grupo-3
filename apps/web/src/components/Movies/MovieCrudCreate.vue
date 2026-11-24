@@ -21,6 +21,7 @@ import { createMovie } from '@/services/movie.service'
 import type { MovieOption } from '@/types/movie'
 
 import ImageUpload from '../image/ImageUpload.vue'
+import MovieScheduleFields from './MovieScheduleFields.vue'
 import { uploadPoster, getPosterUrl } from '@/services/image-handler.service.ts'
 
 const props = defineProps<{
@@ -41,6 +42,8 @@ const form = reactive({
   synopsis: '',
   runningTime: null as number | null,
   releaseYear: null as number | null,
+  releaseDate: '',
+  presaleStart: '',
   classificationId: null as number | null,
   languageIds: [] as number[],
   genreIds: [] as number[],
@@ -104,6 +107,8 @@ async function save() {
       synopsis: form.synopsis.trim(),
       runningTime,
       releaseYear,
+      ...(form.releaseDate ? { releaseDate: form.releaseDate } : {}),
+      ...(form.presaleStart ? { presaleStart: form.presaleStart } : {}),
       classificationId,
       languageIds: [...form.languageIds],
       genreIds: [...form.genreIds],
@@ -184,6 +189,15 @@ async function save() {
                     required
                   />
                 </div>
+                <MovieScheduleFields
+                  class="schedule"
+                  v-model:release-date="form.releaseDate"
+                  v-model:presale-start="form.presaleStart"
+                  :release-date-error="fieldErrors.releaseDate"
+                  :presale-start-error="fieldErrors.presaleStart"
+                  :disabled="saving"
+                  @clear-error="delete fieldErrors[$event]"
+                />
               </DialogSection>
               <DialogSection title="Idiomas y géneros">
                 <div class="option-grid">
@@ -277,6 +291,10 @@ async function save() {
 .movie-create-content {
   padding: 24px;
   overflow-y: auto;
+}
+
+.schedule {
+  margin-top: 16px;
 }
 
 .form-grid {

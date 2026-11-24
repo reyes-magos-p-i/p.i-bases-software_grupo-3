@@ -1,6 +1,5 @@
 import { getApi } from './api'
-import { clientRequestOptions } from './authService'
-import type { PortalMovie } from '@/types/movie'
+import type { PortalSection, PortalSectionMovie } from '@/types/portal'
 
 export function stripTrailingSlashes(str: string) {
   let i = str.length
@@ -23,13 +22,12 @@ export async function getMovieFunctions() {
 
   return response.json()
 }
-export async function getPortalMovies(
-  personalized = false,
+// SCRUM-437: one public request per section; the same for visitors and clients.
+export async function getPortalSection(
+  section: PortalSection,
   signal?: AbortSignal,
-): Promise<PortalMovie[]> {
-  const options = personalized
-    ? clientRequestOptions()
-    : { adapter: 'fetch' as const, withCredentials: false, timeout: 10000 }
-  const path = personalized ? '/clients/me/preferences/portal' : '/movie-fuctions/catalog'
-  return (await getApi().get<PortalMovie[]>(path, { ...options, signal })).data
+): Promise<PortalSectionMovie[]> {
+  const options = { adapter: 'fetch' as const, withCredentials: false, timeout: 10000, signal }
+  const path = `/movie-fuctions/sections/${encodeURIComponent(section)}`
+  return (await getApi().get<PortalSectionMovie[]>(path, options)).data
 }

@@ -1,11 +1,69 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
-import { HAS_FREE_SEAT } from '../../purchases/purchase-catalog.repository';
+import {
+  COSTA_RICA_TODAY,
+  HAS_FREE_SEAT,
+  MOVIE_ON_SALE,
+} from '../../purchases/purchase-catalog.repository';
 import type {
   MoviePreferenceCandidate,
   MoviePurchaseHistory,
+  PortalSection,
+  PortalSectionMovie,
+  OnSaleMovie,
   UpcomingMovieFunction,
 } from '../entities/upcoming-movie-functions.interface';
+
+interface PortalMoviesSql {
+  /** More columns, starting with a comma. */
+  select?: string;
+  join: string;
+  where: string;
+  order: string;
+}
+
+const COSTA_RICA_NOW = `CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP)`;
+
+// Movies with an active future function on sale: active theater and branch, the movie
+// available in that branch, its sale window open (the same rule as checkout) and at least one
+// free seat. Shared with the portal catalog.
+const UPCOMING_FUNCTIONS = `
+  SELECT mf.movie_id, MIN(mf.start_time) AS next_start
+  FROM Movie_functions mf
+  JOIN Movies m ON m.movie_id = mf.movie_id
+  JOIN Theaters t ON t.theater_id = mf.theater_id
+  JOIN Cinemas ci ON ci.branch_id = t.branch_id
+  JOIN Companies co ON co.company_id = ci.company_id
+  WHERE mf.start_time > ${COSTA_RICA_NOW} AND mf.status = 'ACTIVE' AND t.is_active = 1 AND ci.status = 'ACTIVE'
+    AND EXISTS (SELECT 1 FROM CINEMA_MOVIES cm WHERE cm.MOVIE_ID=mf.MOVIE_ID AND cm.BRANCH_ID=t.BRANCH_ID AND cm.IS_AVAILABLE=1)
+    AND ${MOVIE_ON_SALE}
+    AND ${HAS_FREE_SEAT}
+  GROUP BY mf.movie_id`;
+
+// SCRUM-437 section rules. Each movie matches at most one of them.
+const SECTION_SQL: Record<PortalSection, PortalMoviesSql> = {
+  // Already released (no release date means it was showing before the dates existed).
+  cartelera: {
+    join: 'JOIN upcoming u ON u.movie_id = m.movie_id',
+    where: `(m.RELEASE_DATE IS NULL OR m.RELEASE_DATE <= ${COSTA_RICA_TODAY})`,
+    order: 'u.next_start, m.movie_id',
+  },
+  // Presale open and not released yet; it sells its functions like Cartelera.
+  preventas: {
+    join: 'JOIN upcoming u ON u.movie_id = m.movie_id',
+    where: `m.PRESALE_START <= ${COSTA_RICA_TODAY} AND m.RELEASE_DATE > ${COSTA_RICA_TODAY}`,
+    order: 'u.next_start, m.movie_id',
+  },
+  // Not released and presale not open yet. It needs no functions, only to be offered somewhere.
+  estrenos: {
+    join: '',
+    where: `m.RELEASE_DATE > ${COSTA_RICA_TODAY}
+      AND (m.PRESALE_START IS NULL OR m.PRESALE_START > ${COSTA_RICA_TODAY})
+      AND EXISTS (SELECT 1 FROM CINEMA_MOVIES cm JOIN Cinemas ci ON ci.branch_id = cm.BRANCH_ID
+                   WHERE cm.MOVIE_ID = m.movie_id AND cm.IS_AVAILABLE = 1 AND ci.status = 'ACTIVE')`,
+    order: 'm.RELEASE_DATE, m.title, m.movie_id',
+  },
+};
 
 @Injectable()
 export class MovieFunctionsRepository {
@@ -82,6 +140,55 @@ export class MovieFunctionsRepository {
     return history;
   }
 
+  /** SCRUM-437: the movies of one portal section, with what their cards show. */
+  getSectionMovies(section: PortalSection): Promise<PortalSectionMovie[]> {
+    return this.queryPortalMovies(SECTION_SQL[section]);
+  }
+
+  /** SCRUM-439: the cards of every Cartelera and Preventas movie, which recommendations rank. */
+  getOnSaleMovies(): Promise<OnSaleMovie[]> {
+    const { cartelera, preventas } = SECTION_SQL;
+    return this.queryPortalMovies<Pick<OnSaleMovie, 'section'>>({
+      select: `, CASE WHEN m.RELEASE_DATE > ${COSTA_RICA_TODAY} THEN 'preventas' ELSE 'cartelera' END AS "section"`,
+      join: cartelera.join,
+      where: `((${cartelera.where}) OR (${preventas.where}))`,
+      order: cartelera.order,
+    });
+  }
+
+  private async queryPortalMovies<Extra extends object = object>({
+    select = '',
+    join,
+    where,
+    order,
+  }: PortalMoviesSql): Promise<(PortalSectionMovie & Extra)[]> {
+    const result = await this.db.query<
+      Omit<PortalSectionMovie, 'genres'> & Extra & { genres: string | null }
+    >(
+      `
+      WITH upcoming AS (${UPCOMING_FUNCTIONS}
+      )
+      SELECT m.movie_id AS "id", m.title AS "title", m.poster_image AS "posterImage",
+             m.synopsis AS "synopsis", c.classification_name AS "classification",
+             m.running_time AS "runningTime",
+             (SELECT LISTAGG(g.name, '|') WITHIN GROUP (ORDER BY g.name)
+                FROM Movie_genres mg JOIN Genres g ON g.genre_id = mg.genre_id
+               WHERE mg.movie_id = m.movie_id) AS "genres",
+             TO_CHAR(m.RELEASE_DATE, 'YYYY-MM-DD') AS "releaseDate",
+             TO_CHAR(m.PRESALE_START, 'YYYY-MM-DD') AS "presaleStart"${select}
+      FROM Movies m
+      ${join}
+      LEFT JOIN Classifications c ON c.classification_id = m.classification_id
+      WHERE ${where}
+      ORDER BY ${order}
+    `,
+    );
+    return (result.rows ?? []).map((row) => ({
+      ...row,
+      genres: row.genres ? row.genres.split('|') : [],
+    }));
+  }
+
   async getCatalogCandidates(): Promise<MoviePreferenceCandidate[]> {
     try {
       const result = await this.db.query<{
@@ -91,16 +198,7 @@ export class MovieFunctionsRepository {
         kind: 'GENRE' | 'LANGUAGE' | null;
         optionId: number | null;
       }>(`
-        WITH upcoming AS (
-          SELECT mf.movie_id, MIN(mf.start_time) AS next_start
-          FROM Movie_functions mf
-          JOIN Theaters t ON t.theater_id = mf.theater_id
-          JOIN Cinemas ci ON ci.branch_id = t.branch_id
-          JOIN Companies co ON co.company_id = ci.company_id
-          WHERE mf.start_time > CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP) AND mf.status = 'ACTIVE' AND t.is_active = 1 AND ci.status = 'ACTIVE'
-            AND EXISTS (SELECT 1 FROM CINEMA_MOVIES cm WHERE cm.MOVIE_ID=mf.MOVIE_ID AND cm.BRANCH_ID=t.BRANCH_ID AND cm.IS_AVAILABLE=1)
-            AND ${HAS_FREE_SEAT}
-          GROUP BY mf.movie_id
+        WITH upcoming AS (${UPCOMING_FUNCTIONS}
         ), associations AS (
           SELECT movie_id, 'GENRE' AS kind, genre_id AS option_id FROM Movie_genres
           UNION ALL

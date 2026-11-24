@@ -24,6 +24,7 @@ import {
   selectionPositions,
 } from './purchase-rules';
 import type { ConfirmPurchaseDto, ListPurchasesQueryDto } from './purchase.dto';
+import type { CardSettlement } from './payments/card-payment.gateway';
 import type {
   PurchaseLine,
   PurchaseQuote,
@@ -110,14 +111,16 @@ export class PurchasesRepository {
   confirm(
     clientId: number,
     data: ConfirmPurchaseDto,
+    settlement: CardSettlement,
   ): Promise<PurchaseReceipt> {
-    return this.confirmFor({ clientId }, data);
+    return this.confirmFor({ clientId }, data, settlement);
   }
   async confirmGuest(
     email: string,
     data: ConfirmPurchaseDto,
+    settlement: CardSettlement,
   ): Promise<GuestPurchaseReceipt> {
-    const receipt = await this.confirmFor({ email }, data);
+    const receipt = await this.confirmFor({ email }, data, settlement);
     return {
       ...receipt,
       accessCode: guestPurchaseCode(receipt.id, data.requestKey),
@@ -126,12 +129,13 @@ export class PurchasesRepository {
   private async confirmFor(
     buyer: Buyer,
     data: ConfirmPurchaseDto,
+    settlement: CardSettlement,
   ): Promise<PurchaseReceipt> {
     const hash = selectionHash(data);
     const positions = selectionPositions(data);
     try {
       return await this.db.transaction((connection) =>
-        this.register(connection, buyer, data, hash, positions),
+        this.register(connection, buyer, data, hash, positions, settlement),
       );
     } catch (error) {
       return this.recoverFailure(error, buyer, data, hash);
@@ -159,6 +163,7 @@ export class PurchasesRepository {
     data: ConfirmPurchaseDto,
     hash: string,
     positions: number[],
+    settlement: CardSettlement,
   ) {
     await connection.execute('ALTER SESSION DISABLE PARALLEL DML', {}, OPTIONS);
     const email = await this.buyerEmail(connection, buyer);
@@ -194,13 +199,27 @@ export class PurchasesRepository {
       context,
       await this.lockSeats(connection, context, positions),
       data,
-      await this.promotions.resolveForPurchase(data.functionId, data.promotionId, connection),
+      await this.promotions.resolveForPurchase(
+        data.functionId,
+        data.promotionId,
+        connection,
+      ),
     );
     if (quote.version !== data.quoteVersion)
       throw new ConflictException({
         code: 'QUOTE_CHANGED',
         message:
           'Los datos o el precio de la función cambiaron. Revisa el resumen actualizado antes de pagar.',
+      });
+    // The intent was created from this same quote, so a mismatch means the captured amount is not ours to ticket.
+    if (
+      !Number.isSafeInteger(settlement.amount) ||
+      settlement.amount !== Math.round(quote.total * 100)
+    )
+      throw new ConflictException({
+        code: 'PAYMENT_MISMATCH',
+        message:
+          'El monto pagado no coincide con el resumen. Reinicia la compra.',
       });
     const id = await this.writePurchase(
       connection,
@@ -209,6 +228,7 @@ export class PurchasesRepository {
       data,
       hash,
       quote,
+      settlement,
     );
     requireAvailableFunction(
       await this.catalog.getFunction(context.id, connection),
@@ -283,7 +303,7 @@ export class PurchasesRepository {
         message: 'Uno de los asientos ya fue comprado. Actualiza tu selección.',
       });
     }
-    if ([54, 30006, 60].includes(failure?.errorNum ?? 0))
+    if ([54, 30006, 60, 12860].includes(failure?.errorNum ?? 0))
       throw new ConflictException({
         code: 'PURCHASE_BUSY',
         message:
@@ -328,6 +348,7 @@ export class PurchasesRepository {
     data: ConfirmPurchaseDto,
     hash: string,
     quote: PurchaseQuote,
+    settlement: CardSettlement,
   ) {
     const productBinds = Object.fromEntries(
       quote.lines.map((line, index) => ['code' + index, line.code]),
@@ -346,18 +367,27 @@ export class PurchasesRepository {
       );
     const context = quote.function;
     const invoice = await connection.execute(
-      `INSERT INTO INVOICES (CLIENT_ID,MOVIE_FUNCTION_ID,STATUS,PAYMENT_METHOD,TOTAL,REQUEST_KEY,REQUEST_HASH,BUYER_EMAIL,PURCHASE_CONTEXT) VALUES (:clientId,:functionId,'PAID','SIMULATED',:total,:key,:hash,:email,:context) RETURNING INVOICE_ID INTO :id`,
+      `INSERT INTO INVOICES (CLIENT_ID,MOVIE_FUNCTION_ID,STATUS,PAYMENT_METHOD,TOTAL,REQUEST_KEY,REQUEST_HASH,BUYER_EMAIL,PURCHASE_CONTEXT,STRIPE_PAYMENT_INTENT_ID,STRIPE_LIVEMODE,CARD_BRAND,CARD_LAST4) VALUES (:clientId,:functionId,'PAID',:paymentMethod,:total,:key,:hash,:email,:context,:intentId,:livemode,:brand,:last4) RETURNING INVOICE_ID INTO :id`,
       {
         clientId,
         functionId: context.id,
+        paymentMethod: 'CARD',
         total: quote.total,
         key: data.requestKey,
         hash,
         email: buyerEmail,
         context: {
-          val: JSON.stringify({ function: context, lines: quote.lines, ...(quote.discount ? { discount: quote.discount } : {}) }),
+          val: JSON.stringify({
+            function: context,
+            lines: quote.lines,
+            ...(quote.discount ? { discount: quote.discount } : {}),
+          }),
           type: oracle.CLOB,
         },
+        intentId: settlement.intentId,
+        livemode: settlement.livemode ? 1 : 0,
+        brand: settlement.brand,
+        last4: settlement.last4,
         id: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
       },
       OPTIONS,

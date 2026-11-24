@@ -46,13 +46,37 @@ export function scoreMoviesForClient(
   });
 }
 
+// Highest score first; ties keep the given order (the next showtime).
+function rankRecommendations(
+  movies: readonly MoviePreferenceCandidate[],
+  preferences: MoviePreferences,
+  history?: MoviePurchaseHistory,
+): MovieRecommendation[] {
+  return scoreMoviesForClient(movies, preferences, history)
+    .map((item, index) => ({ ...item, index }))
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+}
+
 export function rankMoviesByPreferences(
   movies: readonly MoviePreferenceCandidate[],
   preferences: MoviePreferences,
   history?: MoviePurchaseHistory,
 ): MoviePreferenceCandidate[] {
-  return scoreMoviesForClient(movies, preferences, history)
-    .map((item, index) => ({ ...item, index }))
-    .sort((a, b) => b.score - a.score || a.index - b.index)
+  return rankRecommendations(movies, preferences, history).map(
+    (item) => item.movie,
+  );
+}
+
+/**
+ * SCRUM-439: the ranked movies that match the client's preferences or purchase history, for
+ * "Recomendaciones para ti". Movies without any match are left out.
+ */
+export function recommendMovies(
+  movies: readonly MoviePreferenceCandidate[],
+  preferences: MoviePreferences,
+  history?: MoviePurchaseHistory,
+): MoviePreferenceCandidate[] {
+  return rankRecommendations(movies, preferences, history)
+    .filter((item) => item.score > 0)
     .map((item) => item.movie);
 }

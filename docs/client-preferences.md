@@ -8,6 +8,12 @@ La selección puede estar vacía. Guardar reemplaza ambos grupos; quitar todas l
 
 ## Prioridad en el portal
 
+> Desde SCRUM-437 el portal ya no usa este orden: sus secciones son iguales para visitantes y
+> clientes, y la personalización es la fila **Recomendaciones para ti** (SCRUM-439), que usa este
+> mismo puntaje (ver
+> [portal-sections.md](portal-sections.md)). `/clients/me/preferences/portal` y
+> `/movie-fuctions/catalog` se conservan sin cambios.
+
 El catálogo reúne películas con funciones futuras activas y asientos comprables. Cada película aparece una vez, con su próxima función disponible como orden base. Se suma un punto por cada género preferido y cada idioma preferido distinto asociado a la película. Se añaden 0,2 puntos por cada compra que coincida con cada uno de sus géneros o idiomas. Los géneros y los idiomas tienen el mismo peso dentro de cada fuente. Los empates conservan el orden por próxima función y, como desempate del orden base, el identificador de película.
 
 La puntuación se calcula sobre el catálogo completo antes de limitar el carrusel a cuatro películas. El catálogo muestra todas las películas, incluidas las que no coinciden con ninguna preferencia o compra. Sin preferencias ni compras relacionadas, o sin sesión, se mantiene el orden base. Los cambios guardados y las compras confirmadas se consideran al volver a consultar el portal; no se introduce una sección visual de recomendaciones ni se cambia el registro de idiomas o géneros de películas.
@@ -36,12 +42,13 @@ La identidad de la sesión determina la consulta personalizada. Cerrar sesión b
 
 Contrato: [client-profile.openapi.yaml](client-profile.openapi.yaml). Las rutas se sirven bajo `/api`.
 
-| Método | Ruta                             | Respuesta                                                                                                   |
-| ------ | -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| GET    | `/clients/me/preferences`        | `{ genres: [{id, name}], languages: [{id, name}], selected: {genreIds, languageIds}, maxSelections: 1000 }` |
-| PUT    | `/clients/me/preferences`        | Reemplaza las preferencias y devuelve `{genreIds, languageIds}`                                             |
-| GET    | `/clients/me/preferences/portal` | `[{id, title, posterImage}]` ordenados por preferencias e historial del cliente autenticado                 |
-| GET    | `/movie-fuctions/catalog`        | El mismo formato en orden público, sin datos de preferencias                                                |
+| Método | Ruta                                      | Respuesta                                                                                                   |
+| ------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| GET    | `/clients/me/preferences`                 | `{ genres: [{id, name}], languages: [{id, name}], selected: {genreIds, languageIds}, maxSelections: 1000 }` |
+| PUT    | `/clients/me/preferences`                 | Reemplaza las preferencias y devuelve `{genreIds, languageIds}`                                             |
+| GET    | `/clients/me/preferences/portal`          | `[{id, title, posterImage}]` ordenados por preferencias e historial del cliente autenticado                 |
+| GET    | `/movie-fuctions/catalog`                 | El mismo formato en orden público, sin datos de preferencias                                                |
+| GET    | `/clients/me/preferences/recommendations` | `{ genres, languages, movies }` de "Recomendaciones para ti" (SCRUM-439), con el mismo puntaje          |
 
 Los endpoints propios reutilizan JWT, cuenta activa, rol de cliente y vigencia de contraseña. El identificador del cliente proviene exclusivamente de la sesión. La escritura requiere además un origen autorizado. Las respuestas usan `Cache-Control: no-store`. El endpoint público no recibe identificadores de clientes ni aplica preferencias de otra cuenta.
 
@@ -86,7 +93,7 @@ CREATE INDEX IX_CL_LANG_PREF_LANGUAGE ON CLIENT_LANGUAGE_PREFERENCES (LANGUAGE_I
 - El controlador deriva la identidad de la sesión y aplica las guardas existentes. El servicio reutiliza los catálogos de películas y el servicio del portal. El repositorio concentra las consultas y la transacción Oracle.
 - La función de prioridad es independiente de HTTP y persistencia y combina preferencias con afinidad por compras. El repositorio del catálogo agrega las compras; el servicio coordina las lecturas. La API no devuelve las asociaciones ni la puntuación en ninguno de los catálogos.
 - `ClientPreferencesForm` solo maneja selección, validación y eventos. La vista de perfil coordina solicitudes, notificaciones y confirmación de descarte con los mecanismos existentes.
-- `usePortalMovies` comparte una carga entre carrusel y catálogo, gestiona cambios de sesión y errores. Ambos componentes reciben datos y no realizan solicitudes.
+- `usePortalRecommendations` carga las recomendaciones solo con sesión de cliente, las vuelve a pedir al entrar al portal o al cambiar la sesión y las descarta al cerrarla.
 - Se reutilizan `NotificationPopup`, `LoadingState`, el transporte autenticado y las variables de la paleta actual. No se agregan dependencias ni se cambia CI/CD o la configuración de SonarQube.
 
 ## Verificación
