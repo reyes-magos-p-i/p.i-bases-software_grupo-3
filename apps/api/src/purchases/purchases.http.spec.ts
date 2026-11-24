@@ -15,6 +15,7 @@ import { PasswordRecoveryRepository } from '../auth/password-recovery.repository
 import { PasswordRecoverySender } from '../auth/notifications/password-recovery-sender';
 import { EmailVerificationSender } from '../auth/notifications/email-verification-sender';
 import { TicketEmailService } from './ticket-email.service';
+import { CardPaymentGateway } from './payments/card-payment.gateway';
 import { TicketEmailSender } from './notifications/ticket-email-sender';
 describe('Purchase HTTP with mocked persistence', () => {
   let app: INestApplication, server: Server, jwt: JwtService;
@@ -45,6 +46,17 @@ describe('Purchase HTTP with mocked persistence', () => {
     technology: 'STANDARD',
     isPremiere: false,
   };
+  const PURCHASE_KEY = randomUUID();
+  const settlement = {
+    intentId: 'pi_123',
+    livemode: false,
+    amount: 300000,
+    currency: 'crc',
+    requestKey: PURCHASE_KEY,
+    brand: 'visa',
+    last4: '4242',
+  };
+  const payments = { createIntent: jest.fn(), settled: jest.fn() };
   const body = {
     functionId: 4,
     seats: { GENERAL: [1], CHILD: [], SENIOR: [] },
@@ -59,6 +71,7 @@ describe('Purchase HTTP with mocked persistence', () => {
       .send(data);
   beforeEach(async () => {
     jest.resetAllMocks();
+    payments.settled.mockResolvedValue(settlement);
     clients.findById.mockResolvedValue({
       id: 8,
       email: 'client@example.com',
@@ -117,6 +130,8 @@ describe('Purchase HTTP with mocked persistence', () => {
       .useValue(catalog)
       .overrideProvider(PurchasesRepository)
       .useValue(storage)
+      .overrideProvider(CardPaymentGateway)
+      .useValue(payments)
       .overrideProvider(TicketEmailService)
       .useValue(emails)
       .overrideProvider(TicketEmailSender)
@@ -182,9 +197,12 @@ describe('Purchase HTTP with mocked persistence', () => {
     });
   });
   it('binds purchases and history exclusively to the authenticated client', async () => {
+    payments.settled.mockResolvedValue(settlement);
     const confirmed = await post('', {
       ...body,
-      requestKey: randomUUID(),
+      paymentMethod: 'CARD',
+      paymentIntentId: 'pi_123',
+      requestKey: PURCHASE_KEY,
       quoteVersion: 'a'.repeat(64),
     });
     expect(confirmed.status).toBe(201);
@@ -192,7 +210,7 @@ describe('Purchase HTTP with mocked persistence', () => {
     expect(storage.confirm).toHaveBeenCalledWith(
       8,
       expect.objectContaining(body),
-      undefined,
+      settlement,
     );
     const list = await request(server)
       .get(
@@ -281,14 +299,18 @@ describe('Purchase HTTP with mocked persistence', () => {
       lastStatus = (
         await post('', {
           ...body,
-          requestKey: randomUUID(),
+          paymentMethod: 'CARD',
+          paymentIntentId: 'pi_123',
+          requestKey: PURCHASE_KEY,
           quoteVersion: 'a'.repeat(64),
         })
       ).status;
     expect(lastStatus).toBe(429);
     const blocked = await post('', {
       ...body,
-      requestKey: randomUUID(),
+      paymentMethod: 'CARD',
+      paymentIntentId: 'pi_123',
+      requestKey: PURCHASE_KEY,
       quoteVersion: 'a'.repeat(64),
     });
     expect(blocked.status).toBe(429);

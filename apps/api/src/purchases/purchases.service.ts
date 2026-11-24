@@ -69,13 +69,10 @@ export class PurchasesService {
     });
   }
 
-  // Returns the verified card payment for a confirmation, or undefined for
-  // the simulated flow. The intent must have succeeded and belong to this request.
-  async cardSettlement(
-    data: ConfirmPurchaseDto,
-  ): Promise<CardSettlement | undefined> {
-    if (data.paymentMethod !== 'CARD') return undefined;
-    const settlement = await this.payments.settled(data.paymentIntentId!);
+  // Returns the verified card payment for a confirmation. The intent must
+  // have succeeded and belong to this request.
+  async cardSettlement(data: ConfirmPurchaseDto): Promise<CardSettlement> {
+    const settlement = await this.payments.settled(data.paymentIntentId);
     if (
       !settlement ||
       settlement.currency !== 'crc' ||

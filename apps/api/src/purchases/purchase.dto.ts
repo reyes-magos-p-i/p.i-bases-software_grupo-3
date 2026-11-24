@@ -15,7 +15,6 @@ import {
   Max,
   MaxLength,
   Min,
-  ValidateIf,
   ValidateNested,
   IsOptional,
 } from 'class-validator';
@@ -58,18 +57,14 @@ export class PurchaseIntentDto extends PurchaseSelectionDto {
   quoteVersion: string;
 }
 export class ConfirmPurchaseDto extends PurchaseIntentDto {
-  // Omitting the method keeps the original simulated flow.
-  @IsOptional()
-  @IsIn(['CARD', 'SIMULATED'], {
-    message: 'Selecciona un método de pago válido.',
-  })
-  paymentMethod?: 'CARD' | 'SIMULATED';
-  @ValidateIf((dto: ConfirmPurchaseDto) => dto.paymentMethod === 'CARD')
+  @IsDefined({ message: 'Selecciona un método de pago válido.' })
+  @IsIn(['CARD'], { message: 'Selecciona un método de pago válido.' })
+  paymentMethod: 'CARD';
   @IsDefined({ message: 'Confirma el pago con tu tarjeta antes de continuar.' })
   @Matches(/^pi_[A-Za-z0-9_]{1,250}$/u, {
     message: 'El pago no es válido. Intenta nuevamente.',
   })
-  paymentIntentId?: string;
+  paymentIntentId: string;
 }
 const DATE_MESSAGE = 'Introduce una fecha válida (AAAA-MM-DD).';
 export class ListPurchasesQueryDto {

@@ -109,14 +109,14 @@ export class PurchasesRepository {
   confirm(
     clientId: number,
     data: ConfirmPurchaseDto,
-    settlement?: CardSettlement,
+    settlement: CardSettlement,
   ): Promise<PurchaseReceipt> {
     return this.confirmFor({ clientId }, data, settlement);
   }
   async confirmGuest(
     email: string,
     data: ConfirmPurchaseDto,
-    settlement?: CardSettlement,
+    settlement: CardSettlement,
   ): Promise<GuestPurchaseReceipt> {
     const receipt = await this.confirmFor({ email }, data, settlement);
     return {
@@ -127,7 +127,7 @@ export class PurchasesRepository {
   private async confirmFor(
     buyer: Buyer,
     data: ConfirmPurchaseDto,
-    settlement?: CardSettlement,
+    settlement: CardSettlement,
   ): Promise<PurchaseReceipt> {
     const hash = selectionHash(data);
     const positions = selectionPositions(data);
@@ -161,7 +161,7 @@ export class PurchasesRepository {
     data: ConfirmPurchaseDto,
     hash: string,
     positions: number[],
-    settlement?: CardSettlement,
+    settlement: CardSettlement,
   ) {
     await connection.execute('ALTER SESSION DISABLE PARALLEL DML', {}, OPTIONS);
     const email = await this.buyerEmail(connection, buyer);
@@ -205,7 +205,7 @@ export class PurchasesRepository {
           'Los datos o el precio de la función cambiaron. Revisa el resumen actualizado antes de pagar.',
       });
     // The intent was created from this same quote, so a mismatch means the captured amount is not ours to ticket.
-    if (settlement && settlement.amount !== quote.total * 100)
+    if (settlement.amount !== quote.total * 100)
       throw new ConflictException({
         code: 'PAYMENT_MISMATCH',
         message:
@@ -338,7 +338,7 @@ export class PurchasesRepository {
     data: ConfirmPurchaseDto,
     hash: string,
     quote: PurchaseQuote,
-    settlement?: CardSettlement,
+    settlement: CardSettlement,
   ) {
     const productBinds = Object.fromEntries(
       quote.lines.map((line, index) => ['code' + index, line.code]),
@@ -361,7 +361,7 @@ export class PurchasesRepository {
       {
         clientId,
         functionId: context.id,
-        paymentMethod: settlement ? 'CARD' : 'SIMULATED',
+        paymentMethod: 'CARD',
         total: quote.total,
         key: data.requestKey,
         hash,
@@ -370,10 +370,10 @@ export class PurchasesRepository {
           val: JSON.stringify({ function: context, lines: quote.lines }),
           type: oracle.CLOB,
         },
-        intentId: settlement?.intentId ?? null,
-        livemode: settlement ? (settlement.livemode ? 1 : 0) : null,
-        brand: settlement?.brand ?? null,
-        last4: settlement?.last4 ?? null,
+        intentId: settlement.intentId,
+        livemode: settlement.livemode ? 1 : 0,
+        brand: settlement.brand,
+        last4: settlement.last4,
         id: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
       },
       OPTIONS,

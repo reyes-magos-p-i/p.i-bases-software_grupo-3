@@ -92,14 +92,20 @@ describe('PurchasesService', () => {
     expect(catalog.getSeats).toHaveBeenCalledWith(context);
   });
   it('always passes the authenticated owner to storage', async () => {
-    const data = {} as never;
+    const requestKey = '6f1f1a52-9c7e-4a51-9f57-1e2a2c3d4e5f';
+    const data = {
+      requestKey,
+      paymentMethod: 'CARD',
+      paymentIntentId: 'pi_1',
+    } as never;
+    payments.settled.mockResolvedValue({ currency: 'crc', requestKey });
     purchases.confirm.mockResolvedValue({ id: 5 });
     purchases.list.mockResolvedValue({ items: [] });
     purchases.findOne.mockResolvedValue({ id: 5 });
     expect(await service.confirm(8, data)).toEqual({ id: 5 });
     expect(await service.list(8, { page: 2 })).toEqual({ items: [] });
     expect(await service.findOne(8, 5)).toEqual({ id: 5 });
-    expect(purchases.confirm).toHaveBeenCalledWith(8, data, undefined);
+    expect(purchases.confirm).toHaveBeenCalledWith(8, data, expect.anything());
     expect(purchases.list).toHaveBeenCalledWith(8, { page: 2 });
     expect(purchases.findOne).toHaveBeenCalledWith(5, 8);
   });
@@ -149,19 +155,6 @@ describe('PurchasesService', () => {
         status: 409,
       });
       expect(payments.createIntent).not.toHaveBeenCalled();
-    });
-
-    it('skips the gateway for simulated confirmations', async () => {
-      purchases.confirm.mockResolvedValue({ id: 1 });
-
-      await service.confirm(8, { ...base, paymentMethod: 'SIMULATED' });
-
-      expect(payments.settled).not.toHaveBeenCalled();
-      expect(purchases.confirm).toHaveBeenCalledWith(
-        8,
-        expect.anything(),
-        undefined,
-      );
     });
 
     it('passes the verified settlement to the repository', async () => {

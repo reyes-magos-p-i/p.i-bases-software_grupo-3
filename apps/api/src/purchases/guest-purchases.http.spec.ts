@@ -21,6 +21,17 @@ import { guestPurchaseCode } from './guest-purchase-access';
 import { TicketEmailService } from './ticket-email.service';
 import { CardPaymentGateway } from './payments/card-payment.gateway';
 
+const PURCHASE_KEY = randomUUID();
+const settlement = {
+  intentId: 'pi_123',
+  livemode: false,
+  amount: 300000,
+  currency: 'crc',
+  requestKey: PURCHASE_KEY,
+  brand: 'visa',
+  last4: '4242',
+};
+const payments = { createIntent: jest.fn(), settled: jest.fn() };
 describe('Guest purchase HTTP with mocked persistence', () => {
   let app: INestApplication, server: Server;
   const origin = 'https://cinema.example';
@@ -48,7 +59,9 @@ describe('Guest purchase HTTP with mocked persistence', () => {
   const body = () => ({
     ...selection,
     buyer,
-    requestKey: randomUUID(),
+    paymentMethod: 'CARD',
+    paymentIntentId: 'pi_123',
+    requestKey: PURCHASE_KEY,
     quoteVersion: 'a'.repeat(64),
   });
   const post = (path: string, data: object) =>
@@ -58,6 +71,7 @@ describe('Guest purchase HTTP with mocked persistence', () => {
       .send(data);
   beforeEach(async () => {
     jest.resetAllMocks();
+    payments.settled.mockResolvedValue(settlement);
     const context = {
       id: 4,
       available: true,
@@ -97,7 +111,7 @@ describe('Guest purchase HTTP with mocked persistence', () => {
         { provide: TicketEmailService, useValue: emails },
         {
           provide: CardPaymentGateway,
-          useValue: { createIntent: jest.fn(), settled: jest.fn() },
+          useValue: payments,
         },
       ],
     }).compile();
@@ -170,7 +184,7 @@ describe('Guest purchase HTTP with mocked persistence', () => {
     expect(repository.confirmGuest).toHaveBeenCalledWith(
       buyer.email,
       expect.objectContaining(data),
-      undefined,
+      settlement,
     );
     const code = guestPurchaseCode(12, data.requestKey);
     const lookup = await post('/lookup', { accessCode: code });
