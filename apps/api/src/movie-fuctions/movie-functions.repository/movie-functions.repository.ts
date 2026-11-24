@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
-import { HAS_FREE_SEAT } from '../../purchases/purchase-catalog.repository';
+import {
+  COSTA_RICA_TODAY,
+  HAS_FREE_SEAT,
+  MOVIE_ON_SALE,
+} from '../../purchases/purchase-catalog.repository';
 import type {
   MoviePreferenceCandidate,
   MoviePurchaseHistory,
@@ -10,18 +14,20 @@ import type {
 } from '../entities/upcoming-movie-functions.interface';
 
 const COSTA_RICA_NOW = `CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP)`;
-const COSTA_RICA_TODAY = `TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS DATE))`;
 
 // Movies with an active future function on sale: active theater and branch, the movie
-// available in that branch and at least one free seat. Shared with the portal catalog.
+// available in that branch, its sale window open (the same rule as checkout) and at least one
+// free seat. Shared with the portal catalog.
 const UPCOMING_FUNCTIONS = `
   SELECT mf.movie_id, MIN(mf.start_time) AS next_start
   FROM Movie_functions mf
+  JOIN Movies m ON m.movie_id = mf.movie_id
   JOIN Theaters t ON t.theater_id = mf.theater_id
   JOIN Cinemas ci ON ci.branch_id = t.branch_id
   JOIN Companies co ON co.company_id = ci.company_id
   WHERE mf.start_time > ${COSTA_RICA_NOW} AND mf.status = 'ACTIVE' AND t.is_active = 1 AND ci.status = 'ACTIVE'
     AND EXISTS (SELECT 1 FROM CINEMA_MOVIES cm WHERE cm.MOVIE_ID=mf.MOVIE_ID AND cm.BRANCH_ID=t.BRANCH_ID AND cm.IS_AVAILABLE=1)
+    AND ${MOVIE_ON_SALE}
     AND ${HAS_FREE_SEAT}
   GROUP BY mf.movie_id`;
 

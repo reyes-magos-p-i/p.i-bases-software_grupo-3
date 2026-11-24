@@ -23,7 +23,15 @@ Se usan dos fechas nuevas de la película, en hora de Costa Rica:
 - función `ACTIVE` que todavía no empieza;
 - sala y sucursal activas;
 - la película disponible en esa sucursal;
+- la película ya estrenó o su preventa ya empezó (`RELEASE_DATE` vacía o ≤ hoy, o
+  `PRESALE_START` ≤ hoy);
 - al menos un asiento libre.
+
+La compra aplica la misma regla, compartida en `MOVIE_ON_SALE`
+(`purchase-catalog.repository.ts`): al listar las funciones, al cotizar y otra vez al confirmar
+dentro de la transacción, con o sin sesión. Una película de Estrenos no se puede comprar ni
+entrando directo a `/buy-tickets?movieId=<id>`: no muestra funciones y una confirmación responde
+`FUNCTION_UNAVAILABLE`.
 
 Una película de Estrenos también debe estar disponible en alguna sucursal activa.
 
