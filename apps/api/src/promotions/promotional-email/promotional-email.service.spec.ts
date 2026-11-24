@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PromotionalEmailRepository } from './promotional-email.repository';
 import { PromotionalEmailService } from './promotional-email.service';
@@ -148,6 +149,58 @@ describe('PromotionalEmailService', () => {
     expect(sender.send).toHaveBeenCalledTimes(2);
   });
 
+  it('sends the active promotions and the links to every email', async () => {
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+
+    expect(sender.send).toHaveBeenCalledWith({
+      clientName: 'Luis',
+      email: 'luis@example.com',
+      promotions: [{ title: 'Estreno', description: 'Nueva película' }],
+      billboardUrl: `${FRONTEND_URL}/buy-tickets`,
+      preferencesUrl: `${FRONTEND_URL}/account/profile?section=preferences`,
+    });
+  });
+
+  it('retries the same month when the recipient lookup fails', async () => {
+    repository.findRecipients.mockRejectedValueOnce(new Error('database down'));
+
+    await expect(service.sendIfDue(FIRST_DAY_AFTER_NINE)).rejects.toThrow(
+      'database down',
+    );
+    expect(sender.send).not.toHaveBeenCalled();
+
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+
+    expect(sender.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not send and retries the same month when FRONTEND_URL is missing', async () => {
+    const config = {
+      getOrThrow: jest.fn().mockImplementation(() => {
+        throw new Error('Missing FRONTEND_URL');
+      }),
+    } as unknown as ConfigService;
+    service = new PromotionalEmailService(
+      repository as unknown as PromotionalEmailRepository,
+      sender as unknown as SmtpPromotionalEmailSender,
+      config,
+    );
+
+    await expect(service.sendIfDue(FIRST_DAY_AFTER_NINE)).rejects.toThrow(
+      'Missing FRONTEND_URL',
+    );
+    expect(sender.send).not.toHaveBeenCalled();
+  });
+
+  it('does not retry the same month after every delivery has failed', async () => {
+    sender.send.mockRejectedValue(new Error('SMTP down'));
+
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+    await service.sendIfDue(FIRST_DAY_AFTER_NINE);
+
+    expect(sender.send).toHaveBeenCalledTimes(2);
+  });
+
   describe('scheduling', () => {
     const ONE_HOUR_MS = 60 * 60 * 1000;
 
@@ -181,6 +234,26 @@ describe('PromotionalEmailService', () => {
       jest.advanceTimersByTime(ONE_HOUR_MS * 2);
 
       expect(sendIfDue).not.toHaveBeenCalled();
+    });
+
+    it('logs a failed scheduled run and keeps checking', async () => {
+      const sendIfDue = jest
+        .spyOn(service, 'sendIfDue')
+        .mockRejectedValueOnce(new Error('database down'))
+        .mockResolvedValue(undefined);
+      const logError = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+
+      service.onModuleInit();
+      await jest.advanceTimersByTimeAsync(ONE_HOUR_MS * 2);
+
+      expect(sendIfDue).toHaveBeenCalledTimes(2);
+      expect(logError).toHaveBeenCalledWith(
+        'Monthly promotional email run failed.',
+        expect.any(String),
+      );
+      logError.mockRestore();
     });
 
     it('can be destroyed without ever being initialized', () => {
