@@ -91,10 +91,19 @@ de `variables.css`.
     los lados. Los colores muy claros se oscurecen para que el texto mantenga su contraste, y al
     cambiar de película el degradado pasa suavemente de unos colores a otros.
   - Cambia cada 7 s, salvo que el visitante la pause, tenga el cursor o el foco encima, o prefiera
-    movimiento reducido.
+    movimiento reducido. Cursor y foco se cuentan por separado: si el cursor sale pero el foco del
+    teclado sigue en el hero, no cambia.
   - Se navega con las flechas y con puntos, uno por película. No hay tarjetas de miniaturas, para
     no recargar la vista.
+  - **Altura estable**: el texto de las cinco películas ocupa la misma celda y solo se ve el actual
+    (los otros quedan ocultos, fuera del tabulador y del lector de pantalla). Así el hero mide lo
+    que su película más alta en cada ancho y con zoom, sin recortar nada, y al rotar las secciones
+    de abajo no se mueven.
   - Sin Cartelera muestra "Cartelera, preventas y estrenos".
+- **Tarjetas simétricas**: en cada fila todas las tarjetas miden lo mismo. El título reserva dos
+  líneas, los géneros ocupan como mucho dos (el texto completo queda en el `title`) y el botón de
+  compra o la fecha de estreno van al fondo. En Recomendaciones, una tarjeta sin "Te gusta" y, en
+  Estrenos, una sin "Preventa desde" reservan ese espacio para no desalinear la fila.
 - **Pie de página**: marca, **Contáctanos** (teléfono y correo enlazados), **Cartelera** (un enlace
   por sección) y **Sobre Cinetadel**. Cada fila mide 44 px con la misma separación; son 4 columnas,
   2 hasta 1100 px y 1 en el celular.
@@ -153,7 +162,7 @@ agrega las dos columnas y la restricción. Se puede repetir y no necesita permis
 | UT-051 | Al volver al portal después de cambiar las preferencias, la fila se actualiza. |
 | UT-052 | El pie de página usa listas con filas iguales en sus tres columnas. |
 | UT-053 | Las cuatro secciones comparten componente: mismo título, tarjetas y separación. |
-| UT-054 | Revisado en 1366, 390 y 360 px: `scrollWidth <= clientWidth` en los tres. |
+| UT-054 | Revisado en 1366, 390 y 360 px: `scrollWidth <= clientWidth`, la sección de abajo no se mueve al rotar el hero y las tarjetas de cada fila tienen la misma altura y el botón alineado. |
 | UT-055 y UT-056 | Contraste de cada texto del portal, del menú de la cuenta y de las recomendaciones. |
 
 Pruebas automáticas:

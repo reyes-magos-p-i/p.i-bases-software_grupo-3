@@ -14,7 +14,9 @@ const props = defineProps<{ movies: readonly PortalSectionMovie[] }>()
 const featured = computed(() => props.movies.slice(0, 5))
 const index = ref(0)
 const paused = ref(false)
-const holding = ref(false)
+// Pointer and keyboard are tracked apart: rotation waits until both have left the hero.
+const hovering = ref(false)
+const focused = ref(false)
 const current = computed(() => featured.value[index.value])
 const edges = ref<EdgeColors | null>(null)
 const ambient = computed(() =>
@@ -44,7 +46,7 @@ function readEdges(event: Event) {
 }
 
 function leave(event: FocusEvent) {
-  holding.value =
+  focused.value =
     event.relatedTarget instanceof Node &&
     (event.currentTarget as HTMLElement).contains(event.relatedTarget)
 }
@@ -52,7 +54,7 @@ function leave(event: FocusEvent) {
 onMounted(() => {
   paused.value = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
   timer = setInterval(() => {
-    if (!paused.value && !holding.value) step(1)
+    if (!paused.value && !hovering.value && !focused.value) step(1)
   }, ROTATION_MS)
 })
 onBeforeUnmount(() => clearInterval(timer))
@@ -62,9 +64,9 @@ onBeforeUnmount(() => clearInterval(timer))
   <section
     class="hero"
     aria-label="Película destacada"
-    @mouseenter="holding = true"
-    @mouseleave="holding = false"
-    @focusin="holding = true"
+    @mouseenter="hovering = true"
+    @mouseleave="hovering = false"
+    @focusin="focused = true"
     @focusout="leave"
   >
     <div class="hero-ambient" :style="ambient" aria-hidden="true"></div>
@@ -74,31 +76,42 @@ onBeforeUnmount(() => clearInterval(timer))
 
     <div class="landing-container hero-content">
       <div class="hero-grid">
-        <div v-if="current" class="hero-copy">
-          <p class="eyebrow">En cartelera · Destacada</p>
-          <h1 class="hero-title">{{ current.title }}</h1>
-          <p class="meta">
-            <span v-if="current.classification" class="classification">
-              {{ current.classification }}
-            </span>
-            <span v-if="current.runningTime">{{ formatRunningTime(current.runningTime) }}</span>
-            <template v-if="current.genres.length">
-              <span class="separator" aria-hidden="true"></span>
-              <span>{{ current.genres.join(', ') }}</span>
-            </template>
-          </p>
-          <p v-if="current.synopsis" class="synopsis">{{ current.synopsis }}</p>
-          <div class="actions">
-            <RouterLink
-              :to="{ name: 'buy-tickets', query: { movieId: current.id } }"
-              class="hero-action buy-button"
-              :aria-label="`Comprar boletos para ${current.title}`"
-            >
-              Comprar boletos
-            </RouterLink>
-            <RouterLink :to="{ path: '/', hash: '#cartelera' }" class="hero-action ghost-button">
-              Ver cartelera
-            </RouterLink>
+        <!-- Every featured movie is laid out in the same cell and only the current one is visible,
+             so the hero keeps the height of the tallest one at every width and zoom, and rotating
+             never moves the sections below. Hidden copies are out of the tab order and of the
+             accessibility tree. -->
+        <div v-if="current" class="hero-slides">
+          <div
+            v-for="(movie, position) in featured"
+            :key="movie.id"
+            class="hero-copy"
+            :class="{ current: position === index }"
+          >
+            <p class="eyebrow">En cartelera · Destacada</p>
+            <h1 class="hero-title">{{ movie.title }}</h1>
+            <p class="meta">
+              <span v-if="movie.classification" class="classification">
+                {{ movie.classification }}
+              </span>
+              <span v-if="movie.runningTime">{{ formatRunningTime(movie.runningTime) }}</span>
+              <template v-if="movie.genres.length">
+                <span class="separator" aria-hidden="true"></span>
+                <span>{{ movie.genres.join(', ') }}</span>
+              </template>
+            </p>
+            <p v-if="movie.synopsis" class="synopsis">{{ movie.synopsis }}</p>
+            <div class="actions">
+              <RouterLink
+                :to="{ name: 'buy-tickets', query: { movieId: movie.id } }"
+                class="hero-action buy-button"
+                :aria-label="`Comprar boletos para ${movie.title}`"
+              >
+                Comprar boletos
+              </RouterLink>
+              <RouterLink :to="{ path: '/', hash: '#cartelera' }" class="hero-action ghost-button">
+                Ver cartelera
+              </RouterLink>
+            </div>
           </div>
         </div>
         <div v-else class="hero-copy">
@@ -285,8 +298,22 @@ onBeforeUnmount(() => clearInterval(timer))
   padding-top: 150px;
 }
 
+.hero-slides {
+  display: grid;
+  min-width: 0;
+}
+
 .hero-copy {
   min-width: 0;
+}
+
+.hero-slides .hero-copy {
+  grid-area: 1 / 1;
+  align-self: end;
+}
+
+.hero-slides .hero-copy:not(.current) {
+  visibility: hidden;
 }
 
 .eyebrow {

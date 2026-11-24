@@ -39,18 +39,23 @@ describe('PortalHero', () => {
       props: { movies: list },
       global: { stubs: { RouterLink: RouterLinkStub, MoviePoster: true } },
     })
-  const title = (wrapper: ReturnType<typeof mountHero>) => wrapper.get('.hero-title').text()
+  // The copy of the featured movie (every movie is rendered, only the current one is visible).
+  const copy = (wrapper: ReturnType<typeof mountHero>) =>
+    wrapper.find('.hero-copy.current').exists()
+      ? wrapper.get('.hero-copy.current')
+      : wrapper.get('.hero-copy')
+  const title = (wrapper: ReturnType<typeof mountHero>) => copy(wrapper).get('.hero-title').text()
 
   it('features the first Cartelera movie with its details and purchase link', () => {
     const wrapper = mountHero()
 
-    expect(wrapper.get('.eyebrow').text()).toBe('En cartelera · Destacada')
+    expect(copy(wrapper).get('.eyebrow').text()).toBe('En cartelera · Destacada')
     expect(title(wrapper)).toBe('Película 1')
-    expect(wrapper.get('.meta').text()).toContain('+12')
-    expect(wrapper.get('.meta').text()).toContain('2 h 8 min')
-    expect(wrapper.get('.meta').text()).toContain('Acción, Aventura')
-    expect(wrapper.get('.synopsis').text()).toBe('Sinopsis de Película 1.')
-    const [buy, cartelera] = wrapper.findAllComponents(RouterLinkStub)
+    expect(copy(wrapper).get('.meta').text()).toContain('+12')
+    expect(copy(wrapper).get('.meta').text()).toContain('2 h 8 min')
+    expect(copy(wrapper).get('.meta').text()).toContain('Acción, Aventura')
+    expect(copy(wrapper).get('.synopsis').text()).toBe('Sinopsis de Película 1.')
+    const [buy, cartelera] = copy(wrapper).findAllComponents(RouterLinkStub)
     expect(buy!.props('to')).toEqual({ name: 'buy-tickets', query: { movieId: 1 } })
     expect(buy!.attributes('aria-label')).toBe('Comprar boletos para Película 1')
     expect(cartelera!.props('to')).toEqual({ path: '/', hash: '#cartelera' })
@@ -58,6 +63,17 @@ describe('PortalHero', () => {
     expect(dots).toHaveLength(5)
     expect(dots[0]!.attributes('aria-label')).toBe('Película 1')
     expect(wrapper.find('.thumb').exists()).toBe(false)
+  })
+
+  // Review of #148: the hero is as tall as its tallest movie, so rotating never moves the page.
+  it('lays out every featured movie in the same place and shows only the current one', async () => {
+    const wrapper = mountHero()
+
+    expect(wrapper.findAll('.hero-slides > .hero-copy')).toHaveLength(5)
+    expect(wrapper.findAll('.hero-copy.current')).toHaveLength(1)
+    await wrapper.get('[aria-label="Siguiente película"]').trigger('click')
+    expect(wrapper.findAll('.hero-slides > .hero-copy')).toHaveLength(5)
+    expect(wrapper.findAll('.hero-copy')[1]!.classes()).toContain('current')
   })
 
   it('paints the background with the edge colors of the current poster', async () => {
@@ -114,6 +130,22 @@ describe('PortalHero', () => {
     wrapper.unmount()
   })
 
+  it('stays paused while the keyboard focus remains after the pointer leaves', async () => {
+    const wrapper = mountHero()
+
+    await wrapper.trigger('mouseenter')
+    await wrapper.trigger('focusin')
+    await wrapper.trigger('mouseleave')
+    vi.advanceTimersByTime(7000)
+    await wrapper.vm.$nextTick()
+    expect(title(wrapper)).toBe('Película 1')
+
+    await wrapper.trigger('focusout', { relatedTarget: null })
+    vi.advanceTimersByTime(7000)
+    await wrapper.vm.$nextTick()
+    expect(title(wrapper)).toBe('Película 2')
+  })
+
   it('keeps rotating only while the focus stays outside', async () => {
     const wrapper = mountHero()
     const dot = wrapper.findAll('.dot')[1]!.element
@@ -154,7 +186,7 @@ describe('PortalHero', () => {
 
     expect(wrapper.find('.controls').exists()).toBe(false)
     expect(wrapper.find('.separator').exists()).toBe(false)
-    expect(wrapper.get('.meta').text()).toBe('2 h 8 min')
+    expect(copy(wrapper).get('.meta').text()).toBe('2 h 8 min')
   })
 
   it('presents Cinetadel while Cartelera is empty', () => {

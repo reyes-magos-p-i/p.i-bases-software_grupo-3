@@ -24,13 +24,19 @@ const presaleStart = computed(() => formatShortDate(props.movie.presaleStart))
       <span v-if="section === 'preventas'" class="badge-presale">Preventa</span>
     </div>
 
+    <!-- SCRUM-438: a recommendation without a genre keeps the tag's space, so titles line up. -->
     <span v-if="movie.matchedGenre" class="reason">Te gusta {{ movie.matchedGenre }}</span>
+    <span v-else-if="movie.matchedGenre === null" class="reason placeholder" aria-hidden="true"
+      >&nbsp;</span
+    >
     <h3 class="card-title">{{ movie.title }}</h3>
     <p class="card-meta">
       <span v-if="movie.classification" class="classification">{{ movie.classification }}</span>
       <span v-if="runningTime">{{ runningTime }}</span>
     </p>
-    <p v-if="movie.genres.length" class="card-genres">{{ movie.genres.join(' · ') }}</p>
+    <p v-if="movie.genres.length" class="card-genres" :title="movie.genres.join(' · ')">
+      {{ movie.genres.join(' · ') }}
+    </p>
 
     <template v-if="section === 'estrenos'">
       <p class="release-box">
@@ -51,6 +57,7 @@ const presaleStart = computed(() => formatShortDate(props.movie.presaleStart))
         <span>Estreno · {{ releaseDate }}</span>
       </p>
       <p v-if="presaleStart" class="card-note">Preventa desde el {{ presaleStart }}</p>
+      <p v-else class="card-note placeholder" aria-hidden="true">&nbsp;</p>
     </template>
     <template v-else>
       <p v-if="section === 'preventas' && releaseDate" class="card-note">
@@ -68,8 +75,11 @@ const presaleStart = computed(() => formatShortDate(props.movie.presaleStart))
 </template>
 
 <style scoped>
+/* SCRUM-438: every card of a row has the same height and its parts line up: the title keeps two
+   lines and the purchase button or the release date sits at the bottom. */
 .movie-card {
   display: flex;
+  height: 100%;
   min-width: 0;
   flex-direction: column;
   gap: 10px;
@@ -122,9 +132,14 @@ const presaleStart = computed(() => formatShortDate(props.movie.presaleStart))
   font-weight: 700;
 }
 
+.reason.placeholder {
+  visibility: hidden;
+}
+
 .card-title {
   display: -webkit-box;
   overflow: hidden;
+  min-height: 2.6em;
   margin: 2px 0 0;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -163,13 +178,25 @@ const presaleStart = computed(() => formatShortDate(props.movie.presaleStart))
   font-size: 0.8125rem;
 }
 
+/* At most two lines; the title attribute keeps the full list. */
+.card-genres {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.card-note.placeholder {
+  visibility: hidden;
+}
+
 .buy-button {
   display: inline-flex;
   width: 100%;
   min-height: 44px;
   align-items: center;
   justify-content: center;
-  margin-top: 4px;
+  margin-top: auto;
   padding: 0 18px;
   border-radius: 8px;
   background: var(--accent-color);
@@ -195,7 +222,7 @@ const presaleStart = computed(() => formatShortDate(props.movie.presaleStart))
   min-height: 44px;
   align-items: center;
   gap: 10px;
-  margin: 4px 0 0;
+  margin: auto 0 0;
   padding: 0 12px;
   border: 1px solid var(--primary-color);
   border-radius: 8px;
