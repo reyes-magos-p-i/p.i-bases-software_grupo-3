@@ -5,7 +5,7 @@ import DatePicker from '@/components/common/DatePicker.vue'
 
 let view: VueWrapper
 beforeEach(() =>
-  vi.useFakeTimers({ toFake: ['Date'] }).setSystemTime(new Date('2026-11-24T02:00:00Z')),
+  vi.useFakeTimers({ toFake: ['Date'] }).setSystemTime(new Date('2026-11-23T12:00:00-06:00')),
 )
 afterEach(() => {
   view?.unmount()
