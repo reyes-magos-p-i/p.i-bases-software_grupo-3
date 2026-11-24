@@ -93,8 +93,7 @@ export class PurchasesService {
   async cardSettlement(data: ConfirmPurchaseDto): Promise<CardSettlement> {
     const settlement = await this.payments.settled(data.paymentIntentId);
     if (
-      !settlement ||
-      settlement.currency !== 'crc' ||
+      settlement?.currency !== 'crc' ||
       settlement.requestKey !== data.requestKey
     )
       throw new BadRequestException(
@@ -122,11 +121,11 @@ export class PurchasesService {
   private async refund(intentId: string) {
     try {
       await this.payments.refund(intentId);
-    } catch (failure) {
+    } catch (error_) {
       // The conflict is what the buyer needs to see; the charge needs manual follow-up.
       this.logger.error(
         `Refund of ${intentId} failed after a purchase conflict.`,
-        failure instanceof Error ? failure.stack : undefined,
+        error_ instanceof Error ? error_.stack : undefined,
       );
     }
   }

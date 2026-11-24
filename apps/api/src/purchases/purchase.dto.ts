@@ -61,7 +61,7 @@ export class ConfirmPurchaseDto extends PurchaseIntentDto {
   @IsIn(['CARD'], { message: 'Selecciona un método de pago válido.' })
   paymentMethod: 'CARD';
   @IsDefined({ message: 'Confirma el pago con tu tarjeta antes de continuar.' })
-  @Matches(/^pi_[A-Za-z0-9_]{1,250}$/u, {
+  @Matches(/^pi_\w{1,250}$/u, {
     message: 'El pago no es válido. Intenta nuevamente.',
   })
   paymentIntentId: string;
