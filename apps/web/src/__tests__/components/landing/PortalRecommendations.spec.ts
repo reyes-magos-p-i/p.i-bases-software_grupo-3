@@ -51,7 +51,7 @@ const mountHome = async () => {
         MoviePoster: true,
         AppHeader: true,
         AppFooter: true,
-        HeroCarousel: true,
+        PortalHero: true,
       },
     },
   })
@@ -128,7 +128,9 @@ describe('Portal recommendations', () => {
 
     expect(section(wrapper).text()).toContain('Según tus preferencias (Español) y tus compras')
     expect(titles(wrapper)).toEqual(['The Odyssey'])
-    expect(section(wrapper).find('.reason').exists()).toBe(false)
+    // No tag, but its space is kept so the titles of the row line up.
+    expect(section(wrapper).find('.reason:not(.placeholder)').exists()).toBe(false)
+    expect(section(wrapper).get('.reason.placeholder').attributes('aria-hidden')).toBe('true')
   })
 
   it('does not ask a client with favorite languages to set preferences', async () => {

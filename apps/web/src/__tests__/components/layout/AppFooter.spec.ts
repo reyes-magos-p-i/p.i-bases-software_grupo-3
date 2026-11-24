@@ -20,7 +20,19 @@ describe('Footer purchase access', () => {
     expect(wrapper.find('a[href^="/guest-purchases"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('Consultar compra')
     expect(wrapper.text()).not.toContain('Próximamente')
-    expect(wrapper.findAll('a')).toHaveLength(6)
+    expect(wrapper.findAll('a')).toHaveLength(8)
+    expect(wrapper.get('a[href="tel:+50600000000"]').text()).toBe('+506 0000 0000')
+    expect(wrapper.get('a[href="mailto:cinetadel2026@gmail.com"]').text()).toBe(
+      'cinetadel2026@gmail.com',
+    )
+    // SCRUM-438 (UT-052): every column is a list with the same row height and gap.
+    expect(wrapper.findAll('h2').map((heading) => heading.text())).toEqual([
+      'Contáctanos',
+      'Cartelera',
+      'Sobre Cinetadel',
+    ])
+    expect(wrapper.findAll('section ul')).toHaveLength(3)
+    expect(wrapper.get('.footer-bottom').text()).toBe(`© ${new Date().getFullYear()} Cinetadel`)
     expect(wrapper.get('a[href="/#cartelera"]').text()).toBe('Ver cartelera')
     expect(wrapper.get('a[href="/#preventas"]').text()).toBe('Preventas')
     expect(wrapper.get('a[href="/#estrenos"]').text()).toBe('Estrenos')

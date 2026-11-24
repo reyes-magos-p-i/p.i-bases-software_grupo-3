@@ -74,11 +74,43 @@ muestra todas las películas en cuadrícula. También tiene sus propios estados:
 | Preventas | No hay películas en preventa por ahora. | No se pudieron cargar las preventas. |
 | Estrenos | No hay próximos estrenos por ahora. | No se pudieron cargar los estrenos. |
 
-**Reintentar** vuelve a pedir solo esa sección. El carrusel destacado muestra las películas de
-Cartelera. Los títulos de sección usan Bebas Neue (`--font-display`), como el prototipo. El pie
-de página enlaza a cada sección (`/#cartelera`, `/#preventas`, `/#estrenos`).
+**Reintentar** vuelve a pedir solo esa sección. Los títulos de sección usan Bebas Neue
+(`--font-display`), como el prototipo.
 
-El pulido visual del portal y el pie de página (SCRUM-438) va en su propia historia.
+## Diseño del portal (SCRUM-438)
+
+Sigue la opción A del prototipo de Figma. Los valores salen de su HTML, y los colores, de los tokens
+de `variables.css`.
+
+- **Encabezado**: solo el logo y la cuenta, o **Iniciar sesión** / **Registrarse**. Para que se vea
+  más limpio, no lleva enlaces a las secciones.
+- **Destacada** (`PortalHero`, reemplaza al carrusel): las primeras cinco películas de Cartelera,
+  con título, clasificación, duración, géneros, sinopsis, **Comprar boletos** (abre la compra de esa
+  película, `/buy-tickets?movieId=<id>`) y **Ver cartelera**. A la derecha va el póster real.
+  - El fondo es un degradado con los colores de los bordes del póster actual: arriba, abajo y a
+    los lados. Los colores muy claros se oscurecen para que el texto mantenga su contraste, y al
+    cambiar de película el degradado pasa suavemente de unos colores a otros.
+  - Cambia cada 7 s, salvo que el visitante la pause, tenga el cursor o el foco encima, o prefiera
+    movimiento reducido. Cursor y foco se cuentan por separado: si el cursor sale pero el foco del
+    teclado sigue en el hero, no cambia.
+  - Se navega con las flechas y con puntos, uno por película. No hay tarjetas de miniaturas, para
+    no recargar la vista.
+  - **Altura estable**: el texto de las cinco películas ocupa la misma celda y solo se ve el actual
+    (los otros quedan ocultos, fuera del tabulador y del lector de pantalla). Así el hero mide lo
+    que su película más alta en cada ancho y con zoom, sin recortar nada, y al rotar las secciones
+    de abajo no se mueven.
+  - Sin Cartelera muestra "Cartelera, preventas y estrenos".
+- **Tarjetas simétricas**: en cada fila todas las tarjetas miden lo mismo. El título reserva dos
+  líneas, los géneros ocupan como mucho dos (el texto completo queda en el `title`) y el botón de
+  compra o la fecha de estreno van al fondo. En Recomendaciones, una tarjeta sin "Te gusta" y, en
+  Estrenos, una sin "Preventa desde" reservan ese espacio para no desalinear la fila.
+- **Pie de página**: marca, **Contáctanos** (teléfono y correo enlazados), **Cartelera** (un enlace
+  por sección) y **Sobre Cinetadel**. Cada fila mide 44 px con la misma separación; son 4 columnas,
+  2 hasta 1100 px y 1 en el celular.
+- **Contraste**: todos los textos tienen al menos 4.5:1 contra su fondo, con y sin sesión. El texto
+  del hero se apoya en el degradado del fondo de página, así que no depende del póster.
+- **Celular** (360 y 390 px): sin scroll horizontal. Las filas muestran unas dos tarjetas y el botón
+  de compra queda en una línea.
 
 ## Recomendaciones para ti (SCRUM-439)
 
@@ -128,6 +160,10 @@ agrega las dos columnas y la restricción. Se puede repetir y no necesita permis
 | UT-048 y UT-049 | Un visitante no ve la fila, y desaparece al cerrar sesión. |
 | UT-050 | Si nada coincide, la fila mantiene su título y dice que no hay recomendaciones. |
 | UT-051 | Al volver al portal después de cambiar las preferencias, la fila se actualiza. |
+| UT-052 | El pie de página usa listas con filas iguales en sus tres columnas. |
+| UT-053 | Las cuatro secciones comparten componente: mismo título, tarjetas y separación. |
+| UT-054 | Revisado en 1366, 390 y 360 px: `scrollWidth <= clientWidth`, la sección de abajo no se mueve al rotar el hero y las tarjetas de cada fila tienen la misma altura y el botón alineado. |
+| UT-055 y UT-056 | Contraste de cada texto del portal, del menú de la cuenta y de las recomendaciones. |
 
 Pruebas automáticas:
 
@@ -135,5 +171,7 @@ Pruebas automáticas:
   `apps/api/src/movies/`.
 - API (SCRUM-439): `portal-sections.spec.ts` y `apps/api/src/clients/profile/client-profile.http.spec.ts`.
 - Web (SCRUM-439): `apps/web/src/__tests__/components/landing/PortalRecommendations.spec.ts`.
+- Web (SCRUM-438): `PortalHero.spec.ts` y `PortalContrast.spec.ts` en
+  `apps/web/src/__tests__/components/landing/`, más `AppHeader.spec.ts` y `AppFooter.spec.ts`.
 - Web: `apps/web/src/__tests__/components/landing/PortalSections.spec.ts`,
   `apps/web/src/__tests__/App.spec.ts` y las del CRUD en `apps/web/src/__tests__/Movie/`.

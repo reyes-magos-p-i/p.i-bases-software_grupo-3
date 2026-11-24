@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
-import HeroCarousel from '@/components/landing/HeroCarousel.vue'
+import PortalHero from '@/components/landing/PortalHero.vue'
 import PortalSection from '@/components/landing/PortalSection.vue'
 import { usePortalRecommendations } from '@/composables/usePortalRecommendations'
 import { usePortalSection } from '@/composables/usePortalSection'
@@ -61,20 +61,13 @@ const recommendationsSubtitle = computed(() =>
     : 'Según tus preferencias y tus compras',
 )
 
-// The featured carousel shows the movies of Cartelera.
-const featured = computed(() =>
-  state.cartelera.movies.value.map((movie) => ({
-    id: movie.id,
-    title: movie.title,
-    posterImage: movie.posterImage ?? '',
-  })),
-)
 </script>
 
 <template>
   <AppHeader overlay />
   <main>
-    <HeroCarousel :movies="featured" />
+    <!-- SCRUM-438: the featured movies come from Cartelera. -->
+    <PortalHero :movies="state.cartelera.movies.value" />
     <PortalSection
       v-if="recommendations.enabled.value"
       section="recomendaciones"
