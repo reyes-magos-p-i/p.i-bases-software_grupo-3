@@ -3,7 +3,12 @@
 
   // Override to include only test files and clear exclusions.
   // Application code imported in tests is automatically included via module resolution.
-  "include": ["src/**/__tests__/**/*", "src/types/facebook.d.ts", "env.d.ts"],
+  "include": [
+    "src/**/__tests__/**/*",
+    "src/types/facebook.d.ts",
+    "src/types/pdfmake-standard-fonts.d.ts",
+    "env.d.ts"
+  ],
   "exclude": [],
 
   "compilerOptions": {

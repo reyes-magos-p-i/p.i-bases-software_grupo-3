@@ -1,4 +1,7 @@
 -- =========================================================
+-- RETIRED: SCRUM-434 deleted these fictional movies and their test invoices
+-- (docs/database-cleanup.md). Do not run this seed again.
+--
 -- Test data for SCRUM-17 / SCRUM-18 (transactions) and SCRUM-347.
 -- Requires: migrations/20261016_sales_invoices_products.sql
 --

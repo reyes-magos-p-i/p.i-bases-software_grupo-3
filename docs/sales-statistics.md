@@ -69,6 +69,11 @@ año actual y rango personalizado. Los últimos 12 meses comienzan el primer dí
 del mes situado once meses antes del actual y terminan hoy; mes y año actuales
 también terminan hoy.
 
+En los periodos personalizados, ambas fechas deben ser iguales o anteriores al día
+actual en Costa Rica. Los calendarios deshabilitan los días futuros y la validación
+del formulario impide aplicar esos valores. La API también los rechaza con HTTP 400
+antes de consultar las ventas. El día actual permanece permitido.
+
 La agrupación es diaria hasta 31 días, semanal hasta 180 días, mensual hasta
 1096 días y anual para rangos mayores. Las semanas comienzan el lunes. Aunque el
 inicio de una semana, mes o año esté fuera del rango seleccionado, únicamente se
@@ -110,7 +115,8 @@ filtros de edades para consumidores que necesiten solicitar ese subconjunto.
   periodo». No se rellenan gráficos con datos ajenos al periodo.
 - Los errores dejan los gráficos sin datos y permiten reintentar. Las sesiones
   vencidas llevan al acceso del personal. Los errores de la base no se exponen.
-- Descargar reporte permanece deshabilitado: la generación pertenece a otra historia.
+- **Generar reporte** abre el modal de la historia SCRUM-25. La descarga incluye
+  todas las vistas y medidas; su alcance se describe en [Reportes de ventas](sales-reports.md).
 
 ## Verificación
 

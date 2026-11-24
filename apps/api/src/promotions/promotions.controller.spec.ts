@@ -1,4 +1,5 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import 'reflect-metadata';
+import { BadRequestException, NotFoundException, RequestMethod, HttpStatus } from '@nestjs/common';
 
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsController } from './promotions.controller';
@@ -8,6 +9,8 @@ describe('PromotionsController', () => {
   let controller: PromotionsController;
   let service: {
     create: jest.Mock;
+    update: jest.Mock;
+    remove: jest.Mock;
     findAll: jest.Mock;
     findOne: jest.Mock;
   };
@@ -46,6 +49,8 @@ describe('PromotionsController', () => {
   beforeEach(() => {
     service = {
       create: jest.fn(),
+      update: jest.fn(),
+      remove: jest.fn(),
       findAll: jest.fn(),
       findOne: jest.fn(),
     };
@@ -113,4 +118,58 @@ describe('PromotionsController', () => {
       await expect(controller.findOne(42)).rejects.toBe(error);
     });
   });
+  describe('update', () => {
+    it('passes the ID and body and returns the service response', async () => {
+      service.update.mockResolvedValueOnce({ promotionId: 42 });
+      await expect(controller.update(42, dto)).resolves.toEqual({ promotionId: 42 });
+      expect(service.update).toHaveBeenCalledWith(42, dto);
+      expect(service.update).toHaveBeenCalledTimes(1);
+    });
+    it.each([new BadRequestException('Invalid promotion'), new NotFoundException('Promotion not found.'), new Error('Database unavailable')])(
+      'preserves update failures: %p', async (error) => {
+        service.update.mockRejectedValueOnce(error);
+        await expect(controller.update(42, dto)).rejects.toBe(error);
+      },
+    );
+    it('registers PUT :id behind the existing controller guards', () => {
+      expect(Reflect.getMetadata('path', controller.update)).toBe(':id');
+      expect(Reflect.getMetadata('method', controller.update)).toBe(RequestMethod.PUT);
+      expect(Reflect.getMetadata('__guards__', PromotionsController)).toHaveLength(3);
+    });
+  });
+
+  describe('remove', () => {
+    it('passes the promotion ID and resolves without a response body', async () => {
+      service.remove.mockResolvedValueOnce(undefined);
+      await expect(controller.remove(42)).resolves.toBeUndefined();
+      expect(service.remove).toHaveBeenCalledTimes(1);
+      expect(service.remove).toHaveBeenCalledWith(42);
+    });
+    it('waits for deletion before resolving', async () => {
+      let finish!: () => void;
+      service.remove.mockReturnValueOnce(new Promise<void>((resolve) => { finish = resolve; }));
+      let completed = false;
+      const pending = controller.remove(42).then(() => { completed = true; });
+      await Promise.resolve();
+      expect(completed).toBe(false);
+      finish();
+      await pending;
+      expect(completed).toBe(true);
+    });
+    it.each([
+      new BadRequestException('Invalid ID'),
+      new NotFoundException('Promotion not found.'),
+      new Error('Database unavailable'),
+    ])('preserves service errors: %p', async (error) => {
+      service.remove.mockRejectedValueOnce(error);
+      await expect(controller.remove(42)).rejects.toBe(error);
+    });
+    it('registers DELETE :id with HTTP 204 and the existing controller guards', () => {
+      expect(Reflect.getMetadata('path', controller.remove)).toBe(':id');
+      expect(Reflect.getMetadata('method', controller.remove)).toBe(RequestMethod.DELETE);
+      expect(Reflect.getMetadata('__httpCode__', controller.remove)).toBe(HttpStatus.NO_CONTENT);
+      expect(Reflect.getMetadata('__guards__', PromotionsController)).toHaveLength(3);
+    });
+  });
+
 });
