@@ -92,3 +92,12 @@ describe('Purchase DTO validation', () => {
       ).not.toHaveLength(0);
   });
 });
+
+describe('optional promotion ID', () => {
+  it.each([undefined, null, 1, Number.MAX_SAFE_INTEGER])('accepts %p', async (promotionId) => {
+    expect(await validate(plainToInstance(PurchaseSelectionDto, { ...selection, promotionId }))).toEqual([]);
+  });
+  it.each([0, -1, 1.5, '1', NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('rejects %p', async (promotionId) => {
+    expect((await validate(plainToInstance(PurchaseSelectionDto, { ...selection, promotionId }))).some((error) => error.property === 'promotionId')).toBe(true);
+  });
+});

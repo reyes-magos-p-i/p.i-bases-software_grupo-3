@@ -1,3 +1,4 @@
+import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import QrCode from '@/components/common/QrCode.vue'
@@ -197,5 +198,53 @@ describe('PurchaseSummary', () => {
     expect(color).toBe('var(--error-text)')
     expect(background).toBe('var(--error-background)')
     expect(contrastRatio(color, background)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('summary promotions', () => {
+  const promotion = {
+    promotionId: 9,
+    promotionTitle: 'Oferta',
+    promotionType: 'fixed' as const,
+    promotionAmount: 500,
+  }
+  it('offers one promotion or none and forwards numeric selection', async () => {
+    const wrapper = mount(PurchaseSummary, {
+      props: { purchase: quote, showPromotions: true, promotions: [promotion] },
+    })
+    expect(wrapper.getComponent(SimpleDropdown).props('options')).toEqual([
+      { id: 9, name: expect.stringContaining('por boleto') },
+    ])
+    await wrapper.get('select').setValue('9')
+    expect(wrapper.emitted('promotion-change')?.at(-1)).toEqual([9])
+    const select = wrapper.get('select')
+    ;(select.element as HTMLSelectElement).selectedIndex = 0
+    await select.trigger('change')
+    expect(wrapper.emitted('promotion-change')?.at(-1)).toEqual([null])
+    wrapper.unmount()
+  })
+  it('disables changes during payment and shows errors', () => {
+    const wrapper = mount(PurchaseSummary, {
+      props: {
+        purchase: quote,
+        showPromotions: true,
+        promotionDisabled: true,
+        promotionError: 'No disponible',
+      },
+    })
+    expect(wrapper.get('select').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('No disponible')
+    wrapper.unmount()
+  })
+  it('shows the server discount snapshot and keeps the selector out of receipts', () => {
+    const purchase = {
+      ...quote,
+      discount: { promotion, originalTotal: 3500, discountTotal: 500 },
+      total: 3000,
+    }
+    const wrapper = mount(PurchaseSummary, { props: { purchase } })
+    expect(wrapper.text()).toContain('Promoción aplicada: Oferta')
+    expect(wrapper.find('select').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

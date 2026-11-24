@@ -1,3 +1,14 @@
+export interface PurchasePromotion {
+  promotionId: number;
+  promotionTitle: string;
+  promotionType: 'percentage' | 'fixed';
+  promotionAmount: number;
+}
+export interface PurchaseDiscount {
+  promotion: PurchasePromotion;
+  originalTotal: number;
+  discountTotal: number;
+}
 import type {
   PricingSettings,
   TicketCategory,
@@ -40,6 +51,7 @@ export interface SeatSelection {
 export interface PurchaseSelection {
   functionId: number;
   seats: SeatSelection;
+  promotionId?: number | null;
 }
 export interface PurchaseLine {
   code: string;
@@ -53,6 +65,7 @@ export interface PurchaseLine {
   subtotal: number;
 }
 export interface PurchaseQuote {
+  discount?: PurchaseDiscount;
   function: PurchaseFunction;
   seats: (PurchaseSeat & { category: TicketCategory })[];
   lines: PurchaseLine[];
@@ -74,6 +87,7 @@ export interface PurchasedTicket {
   category: TicketCategory;
 }
 export interface PurchaseReceipt {
+  discount?: PurchaseDiscount;
   id: number;
   reference: string;
   qrPayload: string;

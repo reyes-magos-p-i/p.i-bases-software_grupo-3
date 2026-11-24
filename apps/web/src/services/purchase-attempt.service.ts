@@ -4,6 +4,7 @@ import {
   positiveId,
   validPurchaseFunction,
   validPurchaseLines,
+  validPurchaseDiscount,
 } from '@/utils/purchase-response'
 import { validEmail } from '@/utils/user-validation'
 
@@ -79,7 +80,8 @@ function validQuote(value: unknown): value is PurchaseQuote {
     typeof value.total !== 'number' ||
     !Number.isFinite(value.total) ||
     value.total < 0 ||
-    !validPurchaseLines(value.lines)
+    !validPurchaseLines(value.lines) ||
+    !validPurchaseDiscount(value.discount, value.total)
   )
     return false
   return validSeats(value, value.function)
@@ -107,6 +109,12 @@ function validAttempt(value: unknown): value is PendingPurchaseAttempt {
 }
 function matchingSelection(value: unknown, quote: PurchaseQuote): boolean {
   if (!isRecord(value) || value.functionId !== quote.function.id || !isRecord(value.seats))
+    return false
+  const promotionId = value.promotionId ?? null
+  if (
+    (promotionId !== null && !positiveId(promotionId)) ||
+    promotionId !== (quote.discount?.promotion.promotionId ?? null)
+  )
     return false
   const seats = value.seats
   return categories.every((category) => {

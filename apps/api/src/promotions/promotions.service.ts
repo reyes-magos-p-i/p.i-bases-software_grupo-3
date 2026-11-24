@@ -1,6 +1,8 @@
+import type { Connection } from 'oracledb';
 // promotions.service.ts
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,7 +10,7 @@ import {
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsRepository } from './promotions.repository';
-import type { PromotionDetail, PromotionListItem } from './promotion-response.types';
+import type { ApplicablePromotion, PromotionDetail, PromotionListItem } from './promotion-response.types';
 
 @Injectable()
 export class PromotionsService {
@@ -16,8 +18,40 @@ export class PromotionsService {
     private readonly repository: PromotionsRepository,
   ) {}
 
+  /** Lock selected promotion during confirmation, then recheck all restrictions. */
+  async resolveForPurchase(functionId: number, promotionId?: number | null, connection?: Connection): Promise<ApplicablePromotion | undefined> {
+    if (promotionId == null) return undefined;
+    if (!Number.isSafeInteger(promotionId) || promotionId < 1)
+      throw new BadRequestException('Selecciona una promoción válida.');
+    if (connection) {
+      await connection.execute(
+        'SELECT promotion_id FROM promotions WHERE promotion_id = :id FOR UPDATE WAIT 5',
+        { id: promotionId }, { autoCommit: false },
+      );
+    }
+    const matches = await this.repository.findApplicableToMovieFunction(functionId, connection);
+    const promotion = matches?.find((item) => item.promotionId === promotionId);
+    if (!promotion) throw new ConflictException({
+      code: 'PROMOTION_UNAVAILABLE',
+      message: 'La promoción ya no está disponible para esta función. Actualiza el resumen.',
+    });
+    return promotion;
+  }
+
   async findAll(): Promise<PromotionListItem[]> {
     return this.repository.findAll();
+  }
+
+  /** Match the function's start date/time and cinema, not the current date/time. */
+  async findApplicableToMovieFunction(movieFunctionId: number): Promise<ApplicablePromotion[]> {
+    if (!Number.isSafeInteger(movieFunctionId) || movieFunctionId < 1) {
+      throw new BadRequestException('Movie function ID must be a positive safe integer.');
+    }
+    const promotions = await this.repository.findApplicableToMovieFunction(movieFunctionId);
+    if (promotions === null) {
+      throw new NotFoundException('Movie function not found.');
+    }
+    return promotions;
   }
 
   async findOne(id: number): Promise<PromotionDetail> {

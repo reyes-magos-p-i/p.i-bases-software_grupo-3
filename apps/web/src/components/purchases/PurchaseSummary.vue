@@ -1,15 +1,37 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 import QrCode from '@/components/common/QrCode.vue'
 import MoviePoster from '@/components/common/MoviePoster.vue'
 import { PROJECTION_STATUS_LABELS, type ProjectionStatus } from '@/types/projection'
 import { formatDateTime, formatColones, formatPaymentMethod } from '@/utils/transaction-format'
-import { TICKET_CATEGORY_LABELS, type PurchaseQuote, type PurchaseReceipt } from '@/types/purchase'
+import {
+  TICKET_CATEGORY_LABELS,
+  type PurchaseQuote,
+  type PurchaseReceipt,
+  type PurchasePromotion,
+} from '@/types/purchase'
 const props = defineProps<{
   purchase: PurchaseQuote | PurchaseReceipt
   buyerEmail?: string
   showPayment?: boolean
+  promotions?: PurchasePromotion[]
+  promotionId?: number | null
+  showPromotions?: boolean
+  promotionDisabled?: boolean
+  promotionError?: string
 }>()
+const emit = defineEmits<{ 'promotion-change': [id: number | null] }>()
+const promotionOptions = computed(() =>
+  (props.promotions ?? []).map((promotion) => ({
+    id: promotion.promotionId,
+    name: `${promotion.promotionTitle} — ${
+      promotion.promotionType === 'percentage'
+        ? `${promotion.promotionAmount}%`
+        : `${formatColones(promotion.promotionAmount)} por boleto`
+    }`,
+  })),
+)
 const email = computed(
   () => props.buyerEmail || ('buyerEmail' in props.purchase ? props.purchase.buyerEmail : ''),
 )
@@ -63,6 +85,24 @@ const purchaseCode = computed(() => {
           )
           .join('; ')
       }}
+    </p>
+    <div v-if="showPromotions && 'seats' in purchase" class="promotion-selection">
+      <SimpleDropdown
+        class="promotion-dropdown"
+        :model-value="promotionId ?? null"
+        :options="promotionOptions"
+        label="Promoción"
+        placeholder="Sin promoción"
+        :disabled="promotionDisabled"
+        :error="promotionError"
+        @update:model-value="emit('promotion-change', $event)"
+      />
+      <p v-if="!promotions?.length">No hay promociones disponibles para esta función.</p>
+    </div>
+    <p v-if="purchase.discount" class="promotion-applied">
+      Promoción aplicada: {{ purchase.discount.promotion.promotionTitle }}. Subtotal sin promoción:
+      {{ formatColones(purchase.discount.originalTotal) }}. Descuento:
+      {{ formatColones(purchase.discount.discountTotal) }}.
     </p>
     <div class="line-scroll" tabindex="0" aria-label="Productos de la compra">
       <table>
@@ -126,6 +166,19 @@ const purchaseCode = computed(() => {
   </section>
 </template>
 <style scoped>
+.promotion-dropdown :deep(.dropdown-select:focus-visible) {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
+}
+.promotion-dropdown :deep(.dropdown-select) {
+  background: var(--input-background);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.promotion-dropdown :deep(label) {
+  color: var(--text-primary);
+}
 .function-cancelled {
   padding: 12px 16px;
   border: 1px solid var(--error-color);

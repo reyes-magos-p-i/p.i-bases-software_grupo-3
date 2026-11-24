@@ -1,3 +1,4 @@
+import type { PromotionsService } from '../promotions/promotions.service';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { PurchaseCatalogRepository } from './purchase-catalog.repository';
@@ -58,10 +59,12 @@ describe('Atomic purchase storage', () => {
   });
   const catalog = { getFunction: jest.fn(), getLimits: jest.fn() };
   const emails = { enqueueInitial: jest.fn() };
+  const promotions = { resolveForPurchase: jest.fn() };
   const repo = new PurchasesRepository(
     db,
     catalog as unknown as PurchaseCatalogRepository,
     emails as unknown as TicketEmailRepository,
+    promotions as unknown as PromotionsService,
   );
   let overrides: Record<string, unknown>;
   function prepareLargeSelection(quantity: number) {
@@ -159,6 +162,47 @@ describe('Atomic purchase storage', () => {
     executeMany.mockImplementation((_sql: string, rows: unknown[]) =>
       Promise.resolve({ rowsAffected: rows.length }),
     );
+  });
+  it('revalidates the chosen promotion on the purchase transaction and stores discounted prices', async () => {
+    const promotion = { promotionId: 9, promotionTitle: 'Descuento', promotionType: 'fixed' as const, promotionAmount: 500 };
+    const data = { ...valid, promotionId: 9 };
+    const quote = purchaseQuote(context, seats, data, promotion);
+    data.quoteVersion = quote.version;
+    promotions.resolveForPurchase.mockResolvedValue(promotion);
+    await repo.confirm(8, data);
+    expect(promotions.resolveForPurchase).toHaveBeenCalledWith(4, 9, connection);
+    const invoice = execute.mock.calls.find(([sql]) => sql.includes('INSERT INTO INVOICES'))!;
+    expect(invoice[1].total).toBe(2500);
+    expect(JSON.parse(invoice[1].context.val).discount).toEqual(quote.discount);
+    const lines = executeMany.mock.calls.find(([sql]) => sql.includes('INSERT INTO INVOICE_PRODUCTS'))!;
+    expect(lines[1][0].price).toBe(2500);
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+  it('rolls back without writing an invoice when a promotion is no longer eligible', async () => {
+    const error = new Error('Promotion unavailable');
+    promotions.resolveForPurchase.mockRejectedValue(error);
+    await expect(repo.confirm(8, { ...valid, promotionId: 9 })).rejects.toBe(error);
+    expect(execute.mock.calls.some(([sql]) => sql.includes('INSERT INTO INVOICES'))).toBe(false);
+    expect(rollback).toHaveBeenCalledTimes(1);
+  });
+  it('rejects a changed promotion price instead of charging the old quote', async () => {
+    const promotion = { promotionId: 9, promotionTitle: 'Descuento', promotionType: 'fixed' as const, promotionAmount: 500 };
+    const data = { ...valid, promotionId: 9 };
+    data.quoteVersion = purchaseQuote(context, seats, data, promotion).version;
+    promotions.resolveForPurchase.mockResolvedValue({ ...promotion, promotionAmount: 600 });
+    await expect(repo.confirm(8, data)).rejects.toMatchObject({ response: { code: 'QUOTE_CHANGED' } });
+    expect(rollback).toHaveBeenCalledTimes(1);
+  });
+  it('replays a paid promotion purchase from its snapshot without reapplying a changed promotion', async () => {
+    const promotion = { promotionId: 9, promotionTitle: 'Oferta original', promotionType: 'fixed' as const, promotionAmount: 500 };
+    const data = { ...valid, promotionId: 9 };
+    const quote = purchaseQuote(context, seats, data, promotion);
+    data.quoteVersion = quote.version;
+    overrides['REQUEST_HASH AS'] = { rows: [{ id: 12, hash: selectionHash(data) }] };
+    overrides['AS "contextJson"'] = { rows: [{ id: 12, functionId: 4, purchasedAt: '2099-01-01T12:00:00-06:00', status: 'PAID', buyerEmail: 'client@example.com', total: quote.total, contextJson: JSON.stringify({ function: context, lines: quote.lines, discount: quote.discount }) }] };
+    await expect(repo.confirm(8, data)).resolves.toMatchObject({ total: 2500, discount: quote.discount });
+    expect(promotions.resolveForPurchase).not.toHaveBeenCalled();
+    expect(executeMany).not.toHaveBeenCalled();
   });
   it('commits the invoice, lines and tickets together and preserves physical seats', async () => {
     const result = await repo.confirm(8, valid);
@@ -928,6 +972,7 @@ describe('Atomic purchase storage', () => {
         concurrentDb,
         catalog as unknown as PurchaseCatalogRepository,
         emails as unknown as TicketEmailRepository,
+    promotions as unknown as PromotionsService,
       );
       const results = await Promise.allSettled([
         concurrent.confirm(8, valid),

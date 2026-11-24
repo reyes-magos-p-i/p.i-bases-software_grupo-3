@@ -22,3 +22,8 @@ export interface PromotionDetail extends PromotionListItem {
   /** IDs from promotion_cinemas.branch_id. Empty means no cinema association. */
   branchIds: number[];
 }
+
+/** Eligible promotion information for a function selection.
+ * Association arrays are omitted: eligibility has already been checked in SQL.
+ */
+export type ApplicablePromotion = Omit<PromotionDetail, 'weekdays' | 'branchIds'>;

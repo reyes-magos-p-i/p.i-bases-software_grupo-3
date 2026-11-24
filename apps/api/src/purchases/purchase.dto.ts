@@ -37,6 +37,12 @@ export class SeatSelectionDto {
   @SeatPositions() SENIOR: number[];
 }
 export class PurchaseSelectionDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
+  promotionId?: number | null;
+
   @IsInt({ message: 'Selecciona una función válida.' })
   @Min(1)
   @Max(Number.MAX_SAFE_INTEGER)

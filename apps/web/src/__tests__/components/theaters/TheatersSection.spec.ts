@@ -77,8 +77,15 @@ function dialogStub(name: string) {
     props: ['theater', 'submissionErrors'],
     emits: ['submit'],
     setup(_props, { expose }) {
-      expose({ open: vi.fn(), complete: vi.fn() })
-      return () => h('div')
+      const open = vi.fn()
+      const complete = vi.fn()
+
+      expose({ open, complete })
+
+      return { open, complete }
+    },
+    render() {
+      return h('div')
     },
   })
 }

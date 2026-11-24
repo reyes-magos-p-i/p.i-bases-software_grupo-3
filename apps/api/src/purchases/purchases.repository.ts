@@ -1,3 +1,4 @@
+import { PromotionsService } from '../promotions/promotions.service';
 import {
   ConflictException,
   Injectable,
@@ -65,6 +66,7 @@ export class PurchasesRepository {
     private readonly db: DatabaseService,
     private readonly catalog: PurchaseCatalogRepository,
     private readonly ticketEmails: TicketEmailRepository,
+    private readonly promotions: PromotionsService,
   ) {}
   private query<T>(
     sql: string,
@@ -192,6 +194,7 @@ export class PurchasesRepository {
       context,
       await this.lockSeats(connection, context, positions),
       data,
+      await this.promotions.resolveForPurchase(data.functionId, data.promotionId, connection),
     );
     if (quote.version !== data.quoteVersion)
       throw new ConflictException({
@@ -352,7 +355,7 @@ export class PurchasesRepository {
         hash,
         email: buyerEmail,
         context: {
-          val: JSON.stringify({ function: context, lines: quote.lines }),
+          val: JSON.stringify({ function: context, lines: quote.lines, ...(quote.discount ? { discount: quote.discount } : {}) }),
           type: oracle.CLOB,
         },
         id: { dir: oracle.BIND_OUT, type: oracle.NUMBER },
@@ -496,6 +499,7 @@ export class PurchasesRepository {
       ? (JSON.parse(row.contextJson) as {
           function: PurchaseReceipt['function'];
           lines: PurchaseLine[];
+          discount?: PurchaseReceipt['discount'];
         })
       : null;
     const context =
@@ -544,6 +548,7 @@ export class PurchasesRepository {
       cardBrand: row.cardBrand,
       cardLast4: row.cardLast4,
       total: row.total,
+      ...(snapshot?.discount ? { discount: snapshot.discount } : {}),
       function: context,
       lines,
       tickets: tickets.rows ?? [],

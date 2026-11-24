@@ -5,7 +5,7 @@ import * as oracledb from 'oracledb';
 import { DatabaseService } from '../database/database.service';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
-import type { PromotionDetail, PromotionListItem } from './promotion-response.types';
+import type { ApplicablePromotion, PromotionDetail, PromotionListItem } from './promotion-response.types';
 
 @Injectable()
 export class PromotionsRepository {
@@ -34,6 +34,98 @@ export class PromotionsRepository {
 
       return result.rows ?? [];
     });
+  }
+
+  /** Null means no function; [] means an existing function has no matching promotions. */
+  async findApplicableToMovieFunction(movieFunctionId: number, connection?: oracledb.Connection): Promise<ApplicablePromotion[] | null> {
+    const read = async (connection: oracledb.Connection): Promise<ApplicablePromotion[] | null> => {
+      // LEFT JOIN retains one sentinel row for an existing function with no matches.
+      // A single statement also gives one consistent snapshot of all eligibility inputs.
+      const result = await connection.execute<
+        (ApplicablePromotion & { movieFunctionId: number })
+        | { movieFunctionId: number; promotionId: null }
+      >(
+        `
+          WITH function_context AS (
+            SELECT mf.movie_function_id,
+                   t.branch_id,
+                   mf.projection_format,
+                   mf.technology,
+                   TRUNC(CAST(mf.start_time AS DATE)) AS function_date,
+                   TRUNC(CAST(mf.start_time AS DATE))
+                     - TRUNC(CAST(mf.start_time AS DATE), 'IW') + 1 AS weekday,
+                   mf.start_time
+                     - CAST(TRUNC(CAST(mf.start_time AS DATE)) AS TIMESTAMP) AS start_offset
+            FROM Movie_functions mf
+            JOIN Theaters t ON t.theater_id = mf.theater_id
+            WHERE mf.movie_function_id = :movieFunctionId
+          )
+          SELECT f.movie_function_id AS "movieFunctionId",
+                 p.promotion_id AS "promotionId",
+                 p.promotion_type AS "promotionType",
+                 p.promotion_amount AS "promotionAmount",
+                 p.promotion_title AS "promotionTitle",
+                 p.promotion_description AS "description",
+                 p.conditions AS "conditions",
+                 p.poster_path AS "posterPath",
+                 p.projection_format AS "projectionFormat",
+                 p.technology AS "technology",
+                 TO_CHAR(p.begin_date, 'YYYY-MM-DD') AS "beginDate",
+                 TO_CHAR(p.end_date, 'YYYY-MM-DD') AS "endDate",
+                 CASE WHEN p.begin_hour IS NULL THEN NULL ELSE
+                   TO_CHAR(EXTRACT(DAY FROM p.begin_hour) * 24
+                           + EXTRACT(HOUR FROM p.begin_hour), 'FM00')
+                   || ':' || TO_CHAR(EXTRACT(MINUTE FROM p.begin_hour), 'FM00')
+                 END AS "beginHour",
+                 CASE WHEN p.end_hour IS NULL THEN NULL ELSE
+                   TO_CHAR(EXTRACT(DAY FROM p.end_hour) * 24
+                           + EXTRACT(HOUR FROM p.end_hour), 'FM00')
+                   || ':' || TO_CHAR(EXTRACT(MINUTE FROM p.end_hour), 'FM00')
+                 END AS "endHour"
+          FROM function_context f
+          LEFT JOIN promotions p ON
+            f.function_date BETWEEN TRUNC(p.begin_date) AND TRUNC(p.end_date)
+            AND (
+              (p.begin_hour IS NULL AND p.end_hour IS NULL)
+              OR (p.begin_hour IS NOT NULL AND p.end_hour IS NOT NULL
+                  AND f.start_offset >= p.begin_hour
+                  AND f.start_offset < p.end_hour)
+            )
+            AND (p.projection_format IS NULL OR p.projection_format = f.projection_format)
+            AND (p.technology IS NULL OR p.technology = f.technology)
+            AND EXISTS (
+              SELECT 1 FROM promotion_cinemas pc
+              WHERE pc.promotion_id = p.promotion_id AND pc.branch_id = f.branch_id
+            )
+            AND (
+              NOT EXISTS (
+                SELECT 1 FROM promotion_weekdays pw
+                WHERE pw.promotion_id = p.promotion_id
+              )
+              OR EXISTS (
+                SELECT 1 FROM promotion_weekdays pw
+                WHERE pw.promotion_id = p.promotion_id AND pw.day_of_week = f.weekday
+              )
+            )
+          ORDER BY p.promotion_id DESC
+        `,
+        { movieFunctionId },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+      if (!result.rows?.length) return null;
+      return result.rows.flatMap((row) => {
+        if (row.promotionId === null) return [];
+        return [{
+          promotionId: row.promotionId, promotionType: row.promotionType,
+          promotionAmount: row.promotionAmount, promotionTitle: row.promotionTitle,
+          description: row.description, conditions: row.conditions, posterPath: row.posterPath,
+          projectionFormat: row.projectionFormat, technology: row.technology,
+          beginDate: row.beginDate, endDate: row.endDate,
+          beginHour: row.beginHour, endHour: row.endHour,
+        }];
+      });
+    };
+    return connection ? read(connection) : this.db.transaction(read);
   }
 
   async findOne(id: number): Promise<PromotionDetail | null> {

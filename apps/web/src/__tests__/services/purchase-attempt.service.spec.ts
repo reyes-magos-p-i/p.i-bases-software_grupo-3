@@ -152,3 +152,94 @@ describe('Pending purchase storage', () => {
     expect(loadPurchaseAttempt()).toEqual(attempt)
   })
 })
+
+const promotionAttempt = (): PendingPurchaseAttempt => ({
+  version: 1,
+  requestKey: 'b801323b-9057-460b-b6ab-a36aa4e9b7d2',
+  buyer: { kind: 'client', clientId: 8 },
+  selection: { functionId: 4, promotionId: 9, seats: { GENERAL: [1], CHILD: [], SENIOR: [] } },
+  quote: {
+    function: {
+      id: 4,
+      movieId: 2,
+      title: 'Película',
+      synopsis: '',
+      posterImage: '',
+      branchId: 1,
+      branchName: 'Central',
+      theaterId: 3,
+      rows: 1,
+      columns: 1,
+      startsAt: '2099-01-01T20:00:00-06:00',
+      endsAt: '2099-01-01T22:00:00-06:00',
+      status: 'ACTIVE',
+      available: true,
+      format: '2D',
+      technology: 'STANDARD',
+      isPremiere: false,
+      price: 3000,
+    },
+    seats: [
+      {
+        positionId: 1,
+        theaterId: 3,
+        rowNumber: 1,
+        columnNumber: 1,
+        category: 'GENERAL',
+        type: 'normal',
+        state: 'free',
+      },
+    ],
+    lines: [
+      {
+        code: 'TICKET_GENERAL_STANDARD',
+        category: 'GENERAL',
+        label: 'General',
+        vip: false,
+        quantity: 1,
+        base: 3000,
+        modifiers: [{ label: 'Oferta', amount: -500 }],
+        unitPrice: 2500,
+        subtotal: 2500,
+      },
+    ],
+    total: 2500,
+    quantity: 1,
+    version: 'a'.repeat(64),
+    discount: {
+      promotion: {
+        promotionId: 9,
+        promotionTitle: 'Oferta',
+        promotionType: 'fixed',
+        promotionAmount: 500,
+      },
+      originalTotal: 3000,
+      discountTotal: 500,
+    },
+  },
+})
+describe('promotion-safe pending purchases', () => {
+  it('preserves the selected promotion and quoted discount across reloads', () => {
+    savePurchaseAttempt(promotionAttempt())
+    expect(loadPurchaseAttempt()).toEqual(promotionAttempt())
+  })
+  it('accepts historical pending attempts with no promotion', () => {
+    const saved = promotionAttempt()
+    delete saved.selection.promotionId
+    delete saved.quote.discount
+    savePurchaseAttempt(saved)
+    expect(loadPurchaseAttempt()).toEqual(saved)
+  })
+  it.each([0, -1, 1.5, 10, null, undefined])('rejects selection/snapshot mismatch: %p', (id) => {
+    const saved = promotionAttempt()
+    saved.selection.promotionId = id
+    expect(() => savePurchaseAttempt(saved)).toThrow(PurchaseAttemptStorageError)
+  })
+  it('discards a corrupted stored discount instead of silently losing it', () => {
+    const saved = promotionAttempt()
+    saved.quote.discount!.discountTotal = -500
+    sessionStorage.setItem('cinetadel.pending-purchase', JSON.stringify(saved))
+    expect(() => loadPurchaseAttempt()).toThrow(PurchaseAttemptStorageError)
+    expect(sessionStorage.getItem('cinetadel.pending-purchase')).toBeNull()
+  })
+})

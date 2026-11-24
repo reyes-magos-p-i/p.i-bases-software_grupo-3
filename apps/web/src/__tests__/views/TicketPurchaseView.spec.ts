@@ -29,6 +29,7 @@ vi.mock('@/services/guest-purchase.service', () => ({
 }))
 import { establishClientSession, clearClientSession } from '@/services/client-session.service'
 import {
+  getPurchasePromotions,
   getPurchaseFunctions,
   getPurchaseSeats,
   quotePurchase,
@@ -43,6 +44,7 @@ const navigation = vi.hoisted(() => ({
 vi.mock('vue-router', () => ({ useRoute: () => navigation.route, useRouter: () => navigation }))
 vi.mock('@/facebook-auth', () => ({ fbAuth: { status: 'unknown' }, logoutFromFacebook: vi.fn() }))
 vi.mock('@/services/purchase.service', () => ({
+  getPurchasePromotions: vi.fn(),
   getPurchaseFunctions: vi.fn(),
   getPurchaseSeats: vi.fn(),
   quotePurchase: vi.fn(),
@@ -95,6 +97,7 @@ function render() {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(getPurchasePromotions).mockResolvedValue([])
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.mocked(getTicketEmailStatus).mockResolvedValue({
     status: 'SENT',
@@ -495,5 +498,34 @@ describe('TicketPurchaseView', () => {
       left: 0,
       behavior: 'instant',
     })
+  })
+})
+
+describe('summary promotion wiring', () => {
+  it('passes options to the summary and forwards selection into a new quote', async () => {
+    const promotion = {
+      promotionId: 9,
+      promotionTitle: 'Oferta',
+      promotionType: 'fixed' as const,
+      promotionAmount: 500,
+    }
+    vi.mocked(getPurchasePromotions).mockResolvedValue([promotion])
+    render()
+    await flushPromises()
+    wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
+    await flushPromises()
+    wrapper.getComponent(SeatSelectionStep).vm.$emit('selection', [seat])
+    wrapper.getComponent(SeatSelectionStep).vm.$emit('continue')
+    await flushPromises()
+    const summary = wrapper.getComponent(PurchaseSummary)
+    expect(summary.props('promotions')).toEqual([promotion])
+    expect(summary.props('showPromotions')).toBe(true)
+    summary.vm.$emit('promotion-change', 9)
+    await flushPromises()
+    expect(quotePurchase).toHaveBeenLastCalledWith(
+      expect.objectContaining({ promotionId: 9 }),
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.getComponent(PurchaseSummary).props('promotionId')).toBe(9)
   })
 })

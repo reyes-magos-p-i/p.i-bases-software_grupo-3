@@ -13,5 +13,6 @@ import { PromotionsService } from './promotions.service';
     PromotionsService,
     PromotionsRepository,
   ],
+  exports: [PromotionsService],
 })
 export class PromotionsModule {}

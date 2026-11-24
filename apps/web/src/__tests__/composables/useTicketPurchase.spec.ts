@@ -4,6 +4,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { useTicketPurchase } from '@/composables/useTicketPurchase'
 import { establishClientSession, clearClientSession } from '@/services/client-session.service'
 import {
+  getPurchasePromotions,
   getPurchaseFunctions,
   getPurchaseSeats,
   quotePurchase,
@@ -33,6 +34,7 @@ vi.mock('@/services/guest-purchase.service', () => ({
 }))
 vi.mock('@/facebook-auth', () => ({ fbAuth: { status: 'unknown' }, logoutFromFacebook: vi.fn() }))
 vi.mock('@/services/purchase.service', () => ({
+  getPurchasePromotions: vi.fn(),
   getPurchaseFunctions: vi.fn(),
   getPurchaseSeats: vi.fn(),
   quotePurchase: vi.fn(),
@@ -86,7 +88,21 @@ function quoted(data: PurchaseSelection) {
     function: context,
     seats: selected,
     lines: [],
-    total: selected.length * 3000,
+    ...(data.promotionId
+      ? {
+          discount: {
+            promotion: {
+              promotionId: data.promotionId,
+              promotionTitle: 'Oferta',
+              promotionType: 'fixed' as const,
+              promotionAmount: 500,
+            },
+            originalTotal: selected.length * 3000,
+            discountTotal: selected.length * 500,
+          },
+        }
+      : {}),
+    total: selected.length * (data.promotionId ? 2500 : 3000),
     quantity: selected.length,
     version: 'a'.repeat(64),
   }
@@ -110,6 +126,7 @@ async function ready() {
 beforeEach(() => {
   vi.useFakeTimers()
   vi.resetAllMocks()
+  vi.mocked(getPurchasePromotions).mockResolvedValue([])
   sessionStorage.clear()
   establishClientSession(
     { id: 8, email: 'a@example.com', firstName: 'Ana', lastName: 'Rojas' },
@@ -771,6 +788,7 @@ describe('Ticket purchase coordination', () => {
       }),
     )
     const old = flow.summarize()
+    await flushPromises() // Eligible promotions are loaded before the quote request.
     const signal = vi.mocked(quotePurchase).mock.calls[0]![1]!
     vi.mocked(getPurchaseFunctions).mockReturnValueOnce(
       new Promise((done) => {
@@ -929,4 +947,122 @@ describe('Ticket purchase coordination', () => {
     expect(flow.error.value).toBe('')
     expect(flow.loading.value).toBe(false)
   })
+})
+
+describe('purchase promotion selection', () => {
+  const promotion = {
+    promotionId: 9,
+    promotionTitle: 'Oferta',
+    promotionType: 'fixed' as const,
+    promotionAmount: 500,
+  }
+  it('loads eligible promotions, requotes on selection and confirms the selected ID', async () => {
+    vi.mocked(getPurchasePromotions).mockResolvedValue([promotion])
+    await ready()
+    expect(flow.promotions.value).toEqual([promotion])
+    await flow.selectPromotion(9)
+    expect(quotePurchase).toHaveBeenLastCalledWith(
+      expect.objectContaining({ promotionId: 9 }),
+      expect.any(AbortSignal),
+    )
+    await flow.pay()
+    expect(confirmPurchase).toHaveBeenCalledWith(expect.objectContaining({ promotionId: 9 }))
+  })
+  it('allows removing the promotion and resets it when switching functions', async () => {
+    vi.mocked(getPurchasePromotions).mockResolvedValue([promotion])
+    await ready()
+    await flow.selectPromotion(9)
+    await flow.selectPromotion(null)
+    expect(flow.selection.value).not.toHaveProperty('promotionId')
+    await flow.selectPromotion(9)
+    await flow.chooseFunction(4)
+    expect(flow.promotionId.value).toBeNull()
+  })
+  it('blocks payment after a failed requote until a new quote succeeds', async () => {
+    vi.mocked(getPurchasePromotions).mockResolvedValue([promotion])
+    await ready()
+    vi.mocked(quotePurchase).mockRejectedValueOnce(conflict('PROMOTION_UNAVAILABLE'))
+    await flow.selectPromotion(9)
+    await flow.pay()
+    expect(confirmPurchase).not.toHaveBeenCalled()
+    expect(flow.promotionError.value).not.toBe('')
+    await flow.selectPromotion(null)
+    expect(flow.promotionError.value).toBe('')
+    await flow.pay()
+    expect(confirmPurchase).toHaveBeenCalledTimes(1)
+  })
+  it('ignores unknown promotion IDs', async () => {
+    await ready()
+    const count = vi.mocked(quotePurchase).mock.calls.length
+    await flow.selectPromotion(999)
+    expect(quotePurchase).toHaveBeenCalledTimes(count)
+  })
+})
+
+it('restores and retries the same promotion after an uncertain payment', async () => {
+  const promotion = {
+    promotionId: 9,
+    promotionTitle: 'Oferta',
+    promotionType: 'fixed' as const,
+    promotionAmount: 500,
+  }
+  vi.mocked(getPurchasePromotions).mockResolvedValue([promotion])
+  await ready()
+  await flow.selectPromotion(9)
+  vi.mocked(confirmPurchase).mockRejectedValueOnce(new Error('timeout'))
+  await flow.pay()
+  const original = vi.mocked(confirmPurchase).mock.calls[0]![0]
+  wrapper.unmount()
+  render()
+  await flow.load(2)
+  expect(flow.promotionId.value).toBe(9)
+  expect(flow.promotions.value).toEqual([promotion])
+  expect(flow.uncertain.value).toBe(true)
+  await flow.selectPromotion(null)
+  expect(flow.promotionId.value).toBe(9)
+  await flow.pay()
+  expect(confirmPurchase).toHaveBeenLastCalledWith(original)
+})
+
+it('blocks payment while the promotion quote is pending', async () => {
+  vi.mocked(getPurchasePromotions).mockResolvedValue([
+    { promotionId: 9, promotionTitle: 'Oferta', promotionType: 'fixed', promotionAmount: 500 },
+  ])
+  await ready()
+  let finish!: (value: ReturnType<typeof quoted>) => void
+  vi.mocked(quotePurchase).mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
+  const pending = flow.selectPromotion(9)
+  await flushPromises()
+  expect(flow.busy.value).toBe(true)
+  await flow.pay()
+  expect(confirmPurchase).not.toHaveBeenCalled()
+  finish(quoted(flow.selection.value))
+  await pending
+  expect(flow.busy.value).toBe(false)
+  expect(flow.quote.value?.total).toBe(2500)
+})
+it('ignores eligible promotions returned after switching to another function', async () => {
+  await flow.load(2)
+  await flow.chooseFunction(4)
+  flow.setSelection([seats[0]!])
+  let finish!: (value: never) => void
+  vi.mocked(getPurchasePromotions).mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
+  const old = flow.summarize()
+  const newer = flow.load(3)
+  await newer
+  finish([
+    { promotionId: 9, promotionTitle: 'Oferta', promotionType: 'fixed', promotionAmount: 500 },
+  ] as never)
+  await old
+  expect(flow.promotions.value).toEqual([])
+  expect(flow.quote.value).toBeNull()
+  expect(quotePurchase).not.toHaveBeenCalled()
 })

@@ -12,6 +12,7 @@ describe('PromotionsService', () => {
     remove: jest.Mock;
     findAll: jest.Mock;
     findOne: jest.Mock;
+    findApplicableToMovieFunction: jest.Mock;
   };
 
   const validDto = (): CreatePromotionDto => ({
@@ -57,6 +58,7 @@ describe('PromotionsService', () => {
       remove: jest.fn().mockResolvedValue(true),
       findAll: jest.fn(),
       findOne: jest.fn(),
+      findApplicableToMovieFunction: jest.fn(),
     };
 
     service = new PromotionsService(
@@ -380,4 +382,75 @@ describe('PromotionsService', () => {
     });
   });
 
+  describe('findApplicableToMovieFunction', () => {
+    const { weekdays: _days, branchIds: _cinemas, ...applicable } = detail;
+    it('returns all matching promotions from the repository without fetching each detail', async () => {
+      const matches = [applicable, { ...applicable, promotionId: 43, promotionType: 'fixed' as const, promotionAmount: 500 }];
+      repository.findApplicableToMovieFunction.mockResolvedValueOnce(matches);
+      await expect(service.findApplicableToMovieFunction(7)).resolves.toBe(matches);
+      expect(repository.findApplicableToMovieFunction).toHaveBeenCalledTimes(1);
+      expect(repository.findApplicableToMovieFunction).toHaveBeenCalledWith(7);
+      expect(repository.findOne).not.toHaveBeenCalled();
+    });
+    it('returns [] for an existing function without matching promotions', async () => {
+      repository.findApplicableToMovieFunction.mockResolvedValueOnce([]);
+      await expect(service.findApplicableToMovieFunction(7)).resolves.toEqual([]);
+    });
+    it('returns 404 for a missing function', async () => {
+      repository.findApplicableToMovieFunction.mockResolvedValueOnce(null);
+      await expect(service.findApplicableToMovieFunction(999)).rejects.toThrow(new NotFoundException('Movie function not found.'));
+    });
+    it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('rejects invalid function ID %s before querying', async (id) => {
+      await expect(service.findApplicableToMovieFunction(id)).rejects.toThrow(BadRequestException);
+      expect(repository.findApplicableToMovieFunction).not.toHaveBeenCalled();
+    });
+    it('preserves database failures rather than returning an empty result', async () => {
+      const error = new Error('Read failed');
+      repository.findApplicableToMovieFunction.mockRejectedValueOnce(error);
+      await expect(service.findApplicableToMovieFunction(7)).rejects.toBe(error);
+    });
+  });
+
+});
+
+describe('purchase promotion resolution', () => {
+  const promotion = { promotionId: 9, promotionTitle: 'Oferta', promotionType: 'fixed', promotionAmount: 500 };
+  it('does no database work when no promotion is selected', async () => {
+    const findApplicableToMovieFunction = jest.fn();
+    const service = new PromotionsService({ findApplicableToMovieFunction } as never);
+    expect(await service.resolveForPurchase(4, null)).toBeUndefined();
+    expect(findApplicableToMovieFunction).not.toHaveBeenCalled();
+  });
+  it('locks first and rechecks eligibility on the same transaction connection', async () => {
+    const connection = { execute: jest.fn().mockResolvedValue({ rows: [[9]] }) };
+    const findApplicableToMovieFunction = jest.fn().mockResolvedValue([promotion]);
+    const service = new PromotionsService({ findApplicableToMovieFunction } as never);
+    expect(await service.resolveForPurchase(4, 9, connection as never)).toBe(promotion);
+    expect(connection.execute).toHaveBeenCalledWith(expect.stringContaining('FOR UPDATE WAIT 5'), { id: 9 }, { autoCommit: false });
+    expect(findApplicableToMovieFunction).toHaveBeenCalledWith(4, connection);
+    expect(connection.execute.mock.invocationCallOrder[0]).toBeLessThan(findApplicableToMovieFunction.mock.invocationCallOrder[0]);
+  });
+  it.each([[], null])('rejects stale or ineligible promotions: %p', async (matches) => {
+    const service = new PromotionsService({ findApplicableToMovieFunction: jest.fn().mockResolvedValue(matches) } as never);
+    await expect(service.resolveForPurchase(4, 9)).rejects.toMatchObject({ response: { code: 'PROMOTION_UNAVAILABLE' } });
+  });
+  it('does not query eligibility after a lock failure', async () => {
+    const error = new Error('Lock timeout');
+    const findApplicableToMovieFunction = jest.fn();
+    const service = new PromotionsService({ findApplicableToMovieFunction } as never);
+    await expect(service.resolveForPurchase(4, 9, { execute: jest.fn().mockRejectedValue(error) } as never)).rejects.toBe(error);
+    expect(findApplicableToMovieFunction).not.toHaveBeenCalled();
+  });
+});
+
+it('awaits the promotion lock before reading eligibility', async () => {
+  let unlock!: (result: object) => void;
+  const execute = jest.fn().mockReturnValue(new Promise((resolve) => { unlock = resolve; }));
+  const promotion = { promotionId: 9 };
+  const findApplicableToMovieFunction = jest.fn().mockResolvedValue([promotion]);
+  const service = new PromotionsService({ findApplicableToMovieFunction } as never);
+  const pending = service.resolveForPurchase(4, 9, { execute } as never);
+  expect(findApplicableToMovieFunction).not.toHaveBeenCalled();
+  unlock({ rows: [[9]] });
+  await expect(pending).resolves.toBe(promotion);
 });
