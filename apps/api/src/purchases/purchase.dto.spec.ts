@@ -19,6 +19,8 @@ describe('Purchase DTO validation', () => {
         SENIOR: [],
       },
       requestKey: 'b801323b-9057-460b-b6ab-a36aa4e9b7d2',
+      paymentMethod: 'CARD',
+      paymentIntentId: 'pi_123',
       quoteVersion: 'a'.repeat(64),
     });
     expect(await validate(data)).toEqual([]);
@@ -90,5 +92,23 @@ describe('Purchase DTO validation', () => {
       expect(
         await validate(plainToInstance(ListPurchasesQueryDto, invalid)),
       ).not.toHaveLength(0);
+  });
+  it.each([
+    ['no payment method', { paymentMethod: undefined }, 'paymentMethod'],
+    ['the simulated method', { paymentMethod: 'SIMULATED' }, 'paymentMethod'],
+    ['no payment intent', { paymentIntentId: undefined }, 'paymentIntentId'],
+    ['a malformed intent', { paymentIntentId: 'x' }, 'paymentIntentId'],
+  ])('rejects a confirmation with %s', async (_name, override, property) => {
+    const errors = await validate(
+      plainToInstance(ConfirmPurchaseDto, {
+        ...selection,
+        requestKey: 'b801323b-9057-460b-b6ab-a36aa4e9b7d2',
+        quoteVersion: 'a'.repeat(64),
+        paymentMethod: 'CARD',
+        paymentIntentId: 'pi_123',
+        ...override,
+      }),
+    );
+    expect(errors.map((error) => error.property)).toEqual([property]);
   });
 });
