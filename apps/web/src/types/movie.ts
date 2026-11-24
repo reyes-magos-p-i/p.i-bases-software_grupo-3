@@ -25,6 +25,10 @@ export interface MovieDetail {
   runningTime: number
   releaseYear: number | null
   posterImage?: string | null
+  /** YYYY-MM-DD; null when the movie is already showing (SCRUM-437). */
+  releaseDate?: string | null
+  /** YYYY-MM-DD; null when it has no presale. */
+  presaleStart?: string | null
   classification: MovieOption
   languages: MovieOption[]
   genres: MovieOption[]
