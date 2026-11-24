@@ -228,6 +228,21 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "500":
           description: No se pudo obtener la personalización completa; el portal puede consultar el catálogo público sin presentar datos anteriores como recomendaciones válidas
+  /clients/me/preferences/recommendations:
+    get:
+      summary: Consultar las recomendaciones del portal (SCRUM-439)
+      description: Películas de Cartelera y Preventas ordenadas con el sistema de recomendación de SCRUM-417 (géneros e idiomas favoritos del cliente autenticado más su historial de compras). Solo incluye las que tienen puntuación; a igual puntuación, por próxima función. Sin preferencias ni compras relacionadas devuelve movies vacío. Reglas en docs/portal-sections.md.
+      responses:
+        "200":
+          description: Recomendaciones; Cache-Control no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalRecommendations"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /movie-fuctions/catalog:
     get:
       security: []
@@ -255,6 +270,40 @@ components:
     RateLimited:
       description: Demasiadas solicitudes; esperar el período indicado por Retry-After
   schemas:
+    PortalRecommendations:
+      type: object
+      required: [genres, languages, movies]
+      properties:
+        genres:
+          type: array
+          description: Nombres de los géneros favoritos; vacío si el cliente no tiene.
+          items: { type: string }
+        languages:
+          type: array
+          description: Nombres de los idiomas favoritos; vacío si el cliente no tiene.
+          items: { type: string }
+        movies:
+          type: array
+          items:
+            type: object
+            description: Película del portal (PortalSectionMovie en portal-sections.openapi.yaml) con la sección donde se vende y el primer género favorito que coincide.
+            required: [id, title, posterImage, synopsis, classification, runningTime, genres, releaseDate, presaleStart, section, matchedGenre]
+            properties:
+              id: { type: integer }
+              title: { type: string }
+              posterImage: { type: string, nullable: true }
+              synopsis: { type: string }
+              classification: { type: string, nullable: true }
+              runningTime: { type: integer }
+              genres: { type: array, items: { type: string } }
+              releaseDate: { type: string, format: date, nullable: true }
+              presaleStart: { type: string, format: date, nullable: true }
+              section: { type: string, enum: [cartelera, preventas] }
+              matchedGenre:
+                type: string
+                nullable: true
+                example: Aventura
+                description: Se muestra como "Te gusta <género>"; null si se recomienda por idioma o por compras.
     PreferenceSelection:
       type: object
       additionalProperties: false

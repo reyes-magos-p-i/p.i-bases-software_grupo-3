@@ -56,6 +56,7 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
     getCatalogCandidates: jest.fn(),
     getMovieFunctions: jest.fn(),
     getPurchaseHistory: jest.fn(),
+    getOnSaleMovies: jest.fn(),
   };
   let savedPreferences: { genreIds: number[]; languageIds: number[] };
   const origin = 'https://cinema.example';
@@ -471,14 +472,97 @@ describe('Client profile HTTP with mocked persistence and mail', () => {
     ]);
     expect(preferences.getPreferences).toHaveBeenCalledWith(7);
   });
+  // SCRUM-439: Cartelera and Preventas ranked by the SCRUM-417 system, only for the own client.
+  const card = (id: number, genres: string[]) => ({
+    id,
+    title: `Película ${id}`,
+    section: 'cartelera',
+    genres,
+  });
+  const recommendationsFor = async (path = '') => {
+    const response = await request(server)
+      .get('/api/clients/me/preferences/recommendations' + path)
+      .auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    return response.body as {
+      genres: string[];
+      languages: string[];
+      movies: { id: number; matchedGenre: string | null }[];
+    };
+  };
+  it('recommends the own client movies that match their favorite genres and languages', async () => {
+    catalog.getOnSaleMovies.mockResolvedValue([
+      card(1, []),
+      card(6, ['Acción']),
+    ]);
+    const body = await recommendationsFor('?clientId=8');
+    expect(body).toEqual({
+      genres: ['Acción'],
+      languages: ['Español'],
+      movies: [{ ...card(6, ['Acción']), matchedGenre: 'Acción' }],
+    });
+    expect(preferences.getPreferences).toHaveBeenCalledWith(7);
+    expect(catalog.getPurchaseHistory).toHaveBeenCalledWith(7);
+  });
+  it('recommends by favorite language or by purchases without favorite genres', async () => {
+    catalog.getOnSaleMovies.mockResolvedValue([card(1, []), card(6, [])]);
+    savedPreferences = { genreIds: [], languageIds: [3] };
+    expect((await recommendationsFor()).movies).toEqual([
+      { ...card(6, []), matchedGenre: null },
+    ]);
+    savedPreferences = { genreIds: [], languageIds: [] };
+    catalog.getPurchaseHistory.mockResolvedValue({
+      purchasedMovieIds: [1],
+      genres: [{ id: 2, purchaseCount: 1 }],
+      languages: [],
+    });
+    const body = await recommendationsFor();
+    expect(body.genres).toEqual([]);
+    expect(body.languages).toEqual([]);
+    expect(body.movies.map((movie) => movie.id)).toEqual([6]);
+  });
+  it('lets new purchases change the order of the recommendations', async () => {
+    catalog.getCatalogCandidates.mockResolvedValue([
+      { id: 2, title: 'Película 2', posterImage: '', genreIds: [5], languageIds: [] },
+      { id: 6, title: 'Película 6', posterImage: '', genreIds: [2], languageIds: [] },
+    ]);
+    catalog.getOnSaleMovies.mockResolvedValue([card(2, []), card(6, ['Acción'])]);
+    savedPreferences = { genreIds: [2], languageIds: [] };
+    expect((await recommendationsFor()).movies.map((movie) => movie.id)).toEqual([6]);
+    catalog.getPurchaseHistory.mockResolvedValue({
+      purchasedMovieIds: [],
+      genres: [{ id: 5, purchaseCount: 10 }],
+      languages: [],
+    });
+    expect((await recommendationsFor()).movies.map((movie) => movie.id)).toEqual([2, 6]);
+  });
+  it('has nothing to recommend without preferences or purchases', async () => {
+    catalog.getOnSaleMovies.mockResolvedValue([card(6, ['Acción'])]);
+    savedPreferences = { genreIds: [], languageIds: [] };
+    expect(await recommendationsFor()).toEqual({
+      genres: [],
+      languages: [],
+      movies: [],
+    });
+  });
+  it('keeps recommendations away from employees', async () => {
+    const response = await request(server)
+      .get('/api/clients/me/preferences/recommendations')
+      .auth(token('employee'), { type: 'bearer' });
+    expect(response.status).toBe(403);
+    expect(catalog.getOnSaleMovies).not.toHaveBeenCalled();
+  });
   it.each([
     '/api/clients/me/preferences',
     '/api/clients/me/preferences/portal',
+    '/api/clients/me/preferences/recommendations',
   ])('requires a valid client session for %s', async (path) => {
     const response = await request(server).get(path);
     expect(response.status).toBe(401);
     expect(preferences.getPreferences).not.toHaveBeenCalled();
     expect(catalog.getPurchaseHistory).not.toHaveBeenCalled();
+    expect(catalog.getOnSaleMovies).not.toHaveBeenCalled();
   });
   it('reports options removed from the catalog without pretending preferences were saved', async () => {
     preferences.savePreferences.mockRejectedValue(

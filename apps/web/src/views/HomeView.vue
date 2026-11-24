@@ -4,10 +4,12 @@ import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import HeroCarousel from '@/components/landing/HeroCarousel.vue'
 import PortalSection from '@/components/landing/PortalSection.vue'
+import { usePortalRecommendations } from '@/composables/usePortalRecommendations'
 import { usePortalSection } from '@/composables/usePortalSection'
 import type { PortalSection as PortalSectionKey } from '@/types/portal'
 
 // SCRUM-437: Cartelera, Preventas and Estrenos, the same for visitors and clients.
+// SCRUM-439 adds "Recomendaciones para ti" above them, only for clients.
 const SECTIONS: {
   key: PortalSectionKey
   title: string
@@ -44,6 +46,21 @@ const state = {
   estrenos: usePortalSection('estrenos'),
 }
 
+// SCRUM-439: "Recomendaciones para ti" only for a signed-in client, ranked by favorite genres and
+// languages plus purchases (SCRUM-417).
+const recommendations = usePortalRecommendations()
+const PREFERENCES_LINK = { name: 'client-profile', query: { section: 'preferences' } }
+const favorites = computed(() => [
+  ...recommendations.genres.value,
+  ...recommendations.languages.value,
+])
+const hasPreferences = computed(() => favorites.value.length > 0)
+const recommendationsSubtitle = computed(() =>
+  hasPreferences.value
+    ? `Según tus preferencias (${favorites.value.join(', ')}) y tus compras`
+    : 'Según tus preferencias y tus compras',
+)
+
 // The featured carousel shows the movies of Cartelera.
 const featured = computed(() =>
   state.cartelera.movies.value.map((movie) => ({
@@ -58,6 +75,29 @@ const featured = computed(() =>
   <AppHeader overlay />
   <main>
     <HeroCarousel :movies="featured" />
+    <PortalSection
+      v-if="recommendations.enabled.value"
+      section="recomendaciones"
+      title="Recomendaciones para ti"
+      :subtitle="recommendationsSubtitle"
+      :empty-message="
+        hasPreferences
+          ? 'No hay recomendaciones para ti por ahora.'
+          : 'Configura tus preferencias en Mi perfil para recibir recomendaciones.'
+      "
+      error-message="No se pudieron cargar tus recomendaciones."
+      :movies="recommendations.movies.value"
+      :loading="recommendations.loading.value"
+      :failed="recommendations.failed.value"
+      @retry="recommendations.reload()"
+    >
+      <template #tools>
+        <RouterLink :to="PREFERENCES_LINK" class="see-all">Editar preferencias</RouterLink>
+      </template>
+      <template v-if="!hasPreferences" #empty>
+        <RouterLink :to="PREFERENCES_LINK" class="retry-button">Configurar preferencias</RouterLink>
+      </template>
+    </PortalSection>
     <PortalSection
       v-for="section in SECTIONS"
       :key="section.key"

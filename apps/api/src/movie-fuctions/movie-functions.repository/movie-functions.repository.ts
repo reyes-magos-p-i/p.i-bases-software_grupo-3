@@ -10,8 +10,17 @@ import type {
   MoviePurchaseHistory,
   PortalSection,
   PortalSectionMovie,
+  OnSaleMovie,
   UpcomingMovieFunction,
 } from '../entities/upcoming-movie-functions.interface';
+
+interface PortalMoviesSql {
+  /** More columns, starting with a comma. */
+  select?: string;
+  join: string;
+  where: string;
+  order: string;
+}
 
 const COSTA_RICA_NOW = `CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS TIMESTAMP)`;
 
@@ -32,7 +41,7 @@ const UPCOMING_FUNCTIONS = `
   GROUP BY mf.movie_id`;
 
 // SCRUM-437 section rules. Each movie matches at most one of them.
-const SECTION_SQL: Record<PortalSection, { join: string; where: string; order: string }> = {
+const SECTION_SQL: Record<PortalSection, PortalMoviesSql> = {
   // Already released (no release date means it was showing before the dates existed).
   cartelera: {
     join: 'JOIN upcoming u ON u.movie_id = m.movie_id',
@@ -132,11 +141,31 @@ export class MovieFunctionsRepository {
   }
 
   /** SCRUM-437: the movies of one portal section, with what their cards show. */
-  async getSectionMovies(section: PortalSection): Promise<PortalSectionMovie[]> {
-    const { join, where, order } = SECTION_SQL[section];
+  getSectionMovies(section: PortalSection): Promise<PortalSectionMovie[]> {
+    return this.queryPortalMovies(SECTION_SQL[section]);
+  }
+
+  /** SCRUM-439: the cards of every Cartelera and Preventas movie, which recommendations rank. */
+  getOnSaleMovies(): Promise<OnSaleMovie[]> {
+    const { cartelera, preventas } = SECTION_SQL;
+    return this.queryPortalMovies<Pick<OnSaleMovie, 'section'>>({
+      select: `, CASE WHEN m.RELEASE_DATE > ${COSTA_RICA_TODAY} THEN 'preventas' ELSE 'cartelera' END AS "section"`,
+      join: cartelera.join,
+      where: `((${cartelera.where}) OR (${preventas.where}))`,
+      order: cartelera.order,
+    });
+  }
+
+  private async queryPortalMovies<Extra extends object = object>({
+    select = '',
+    join,
+    where,
+    order,
+  }: PortalMoviesSql): Promise<(PortalSectionMovie & Extra)[]> {
     const result = await this.db.query<
-      Omit<PortalSectionMovie, 'genres'> & { genres: string | null }
-    >(`
+      Omit<PortalSectionMovie, 'genres'> & Extra & { genres: string | null }
+    >(
+      `
       WITH upcoming AS (${UPCOMING_FUNCTIONS}
       )
       SELECT m.movie_id AS "id", m.title AS "title", m.poster_image AS "posterImage",
@@ -146,13 +175,14 @@ export class MovieFunctionsRepository {
                 FROM Movie_genres mg JOIN Genres g ON g.genre_id = mg.genre_id
                WHERE mg.movie_id = m.movie_id) AS "genres",
              TO_CHAR(m.RELEASE_DATE, 'YYYY-MM-DD') AS "releaseDate",
-             TO_CHAR(m.PRESALE_START, 'YYYY-MM-DD') AS "presaleStart"
+             TO_CHAR(m.PRESALE_START, 'YYYY-MM-DD') AS "presaleStart"${select}
       FROM Movies m
       ${join}
       LEFT JOIN Classifications c ON c.classification_id = m.classification_id
       WHERE ${where}
       ORDER BY ${order}
-    `);
+    `,
+    );
     return (result.rows ?? []).map((row) => ({
       ...row,
       genres: row.genres ? row.genres.split('|') : [],

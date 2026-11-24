@@ -26,6 +26,10 @@ vi.mock('@/services/movieFunctions', async (original) => ({
   getPortalSection: vi.fn(),
 }))
 
+vi.mock('@/services/client-preferences.service', () => ({
+  getPortalRecommendations: vi.fn().mockResolvedValue({ genres: [], languages: [], movies: [] }),
+}))
+
 function movie(id: number, title: string): PortalSectionMovie {
   return {
     id,
@@ -119,6 +123,13 @@ describe('App', () => {
       expect(titlesOf('cartelera')).toEqual(['The Odyssey'])
       expect(titlesOf('preventas')).toEqual(['Ecos del Volcán'])
       expect(getPortalSection).toHaveBeenCalledTimes(3)
+      // SCRUM-439: only the signed-in client gets the recommendations row on top.
+      expect(wrapper.findAll('.section-title').map((title) => title.text())).toEqual([
+        'Recomendaciones para ti',
+        'Cartelera',
+        'Preventas',
+        'Estrenos',
+      ])
     } finally {
       wrapper.unmount()
     }

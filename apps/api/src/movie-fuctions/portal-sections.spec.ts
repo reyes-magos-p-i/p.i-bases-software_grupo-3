@@ -93,6 +93,69 @@ describe('Portal sections', () => {
     });
   });
 
+  // SCRUM-439: Cartelera and Preventas ranked by the SCRUM-417 recommendation system.
+  describe('recommendations', () => {
+    const query = jest.fn();
+    const repository = new MovieFunctionsRepository({
+      query,
+    } as unknown as DatabaseService);
+
+    beforeEach(() => query.mockReset());
+
+    it('reads the cards of every Cartelera and Preventas movie with its section', async () => {
+      const onSale = { ...row, section: 'cartelera' };
+      query.mockResolvedValue({ rows: [onSale] });
+
+      await expect(repository.getOnSaleMovies()).resolves.toEqual([
+        { ...onSale, genres: ['Acción', 'Aventura'] },
+      ]);
+      const text = String(query.mock.calls[0][0]).replace(/\s+/g, ' ');
+      expect(text).toContain('JOIN upcoming u ON u.movie_id = m.movie_id');
+      expect(text).toContain('((m.RELEASE_DATE IS NULL OR m.RELEASE_DATE <=');
+      expect(text).toContain(') OR (m.PRESALE_START <=');
+      expect(text).toContain("THEN 'preventas' ELSE 'cartelera' END AS \"section\"");
+      expect(text).toContain('ORDER BY u.next_start, m.movie_id');
+    });
+
+    it('ranks by preferences and purchases and leaves out the movies without a match', async () => {
+      const candidate = (id: number, genreIds: number[], languageIds: number[]) => ({
+        id,
+        title: `Película ${id}`,
+        posterImage: '',
+        genreIds,
+        languageIds,
+      });
+      const repo = {
+        getCatalogCandidates: jest.fn().mockResolvedValue([
+          candidate(1, [], []),
+          candidate(2, [], [3]),
+          candidate(3, [5], []),
+          candidate(4, [2], []),
+        ]),
+        getPurchaseHistory: jest.fn().mockResolvedValue({
+          purchasedMovieIds: [],
+          genres: [{ id: 5, purchaseCount: 10 }],
+          languages: [],
+        }),
+        getOnSaleMovies: jest
+          .fn()
+          .mockResolvedValue([1, 2, 3].map((id) => ({ ...row, id }))),
+      };
+      const service = new MovieFuctionsService(
+        repo as unknown as MovieFunctionsRepository,
+      );
+
+      const movies = await service.findRecommendations(7, {
+        genreIds: [2],
+        languageIds: [3],
+      });
+
+      // 3 wins by purchases, 2 matches a language and 4 has no card any more.
+      expect(movies.map((movie) => movie.id)).toEqual([3, 2]);
+      expect(repo.getPurchaseHistory).toHaveBeenCalledWith(7);
+    });
+  });
+
   it('the service returns the section from the repository', async () => {
     const getSectionMovies = jest.fn().mockResolvedValue([row]);
     const service = new MovieFuctionsService({

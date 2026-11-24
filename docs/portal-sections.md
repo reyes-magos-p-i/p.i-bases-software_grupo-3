@@ -78,8 +78,35 @@ muestra todas las películas en cuadrícula. También tiene sus propios estados:
 Cartelera. Los títulos de sección usan Bebas Neue (`--font-display`), como el prototipo. El pie
 de página enlaza a cada sección (`/#cartelera`, `/#preventas`, `/#estrenos`).
 
-Recomendaciones para ti (SCRUM-439) y el pulido visual del portal y el pie de página (SCRUM-438)
-van en sus propias historias.
+El pulido visual del portal y el pie de página (SCRUM-438) va en su propia historia.
+
+## Recomendaciones para ti (SCRUM-439)
+
+Fila que solo ve un cliente con sesión, arriba de Cartelera. Ordena las películas de **Cartelera**
+y **Preventas** con el sistema de recomendación de SCRUM-417 ([client-preferences.md](client-preferences.md)):
+`scoreMoviesForClient` suma sus **géneros e idiomas favoritos** (Mi perfil › Preferencias) y su
+**historial de compras**. Solo entran las películas con puntuación; a igual puntuación, por próxima
+función. Estrenos no entra porque todavía no se puede comprar.
+
+- Un cliente con solo idiomas favoritos, o solo compras, también recibe recomendaciones, y una
+  compra nueva cambia el orden al volver al portal.
+- Subtítulo: "Según tus preferencias (Aventura, Español) y tus compras". En lugar de **Ver todas**,
+  el enlace **Editar preferencias** abre Mi perfil en *Preferencias*.
+- Si la película coincide con un género favorito, la tarjeta dice **Te gusta <género>** (el primero
+  que coincide, por nombre). Las recomendadas por idioma o por compras no llevan etiqueta. Se
+  compra igual que en su sección; una preventa conserva su insignia.
+- Se vuelve a pedir cada vez que se entra al portal, así que los cambios de preferencias y las
+  compras nuevas se ven al volver, sin recargar. Al cerrar sesión la fila desaparece.
+
+| Estado | Mensaje |
+| --- | --- |
+| Sin géneros ni idiomas favoritos, y nada por compras | Configura tus preferencias en Mi perfil para recibir recomendaciones. (botón **Configurar preferencias**) |
+| Ninguna película coincide | No hay recomendaciones para ti por ahora. |
+| Error (con **Reintentar**) | No se pudieron cargar tus recomendaciones. |
+
+API: `GET /api/clients/me/preferences/recommendations` (sesión de cliente, `Cache-Control: no-store`)
+devuelve `{ genres, languages, movies }`. Contrato en
+[`client-profile.openapi.yaml`](client-profile.openapi.yaml). No necesita cambios en la base de datos.
 
 ## Base de datos
 
@@ -96,10 +123,17 @@ agrega las dos columnas y la restricción. Se puede repetir y no necesita permis
 | UT-042 y UT-043 | Una película en preventa aparece solo en Preventas, y ninguna película se repite. |
 | UT-044 | Sin preventas, la sección mantiene su título y muestra su mensaje. |
 | UT-045 | Si falla Preventas, muestra su aviso y **Reintentar**; las otras dos cargan normal. |
+| UT-046 | Con preferencia Aventura recomienda "The Odyssey" con "Te gusta Aventura". |
+| UT-047 | Sin preferencias invita a configurarlas y enlaza a Mi perfil › Preferencias. |
+| UT-048 y UT-049 | Un visitante no ve la fila, y desaparece al cerrar sesión. |
+| UT-050 | Si nada coincide, la fila mantiene su título y dice que no hay recomendaciones. |
+| UT-051 | Al volver al portal después de cambiar las preferencias, la fila se actualiza. |
 
 Pruebas automáticas:
 
 - API: `apps/api/src/movie-fuctions/portal-sections.spec.ts`, más las de fechas en
   `apps/api/src/movies/`.
+- API (SCRUM-439): `portal-sections.spec.ts` y `apps/api/src/clients/profile/client-profile.http.spec.ts`.
+- Web (SCRUM-439): `apps/web/src/__tests__/components/landing/PortalRecommendations.spec.ts`.
 - Web: `apps/web/src/__tests__/components/landing/PortalSections.spec.ts`,
   `apps/web/src/__tests__/App.spec.ts` y las del CRUD en `apps/web/src/__tests__/Movie/`.

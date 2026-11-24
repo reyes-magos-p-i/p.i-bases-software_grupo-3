@@ -1,20 +1,28 @@
 <script setup lang="ts">
 import { ref, useTemplateRef } from 'vue'
 import PortalMovieCard from './PortalMovieCard.vue'
-import type { PortalSection, PortalSectionMovie } from '@/types/portal'
+import type { PortalSection, PortalSectionMovie, RecommendedMovie } from '@/types/portal'
+
+type SectionMovie = PortalSectionMovie & Partial<Pick<RecommendedMovie, 'section' | 'matchedGenre'>>
 
 // SCRUM-437: one section of the portal with its own loading, empty and error states.
+// SCRUM-439: "recomendaciones" mixes Cartelera and Preventas movies, so each card uses its own.
 const props = defineProps<{
-  section: PortalSection
+  section: PortalSection | 'recomendaciones'
   title: string
   subtitle: string
   emptyMessage: string
   errorMessage: string
-  movies: readonly PortalSectionMovie[]
+  movies: readonly SectionMovie[]
   loading: boolean
   failed: boolean
 }>()
 const emit = defineEmits<{ retry: [] }>()
+// tools: replaces "Ver todas"; empty: an action under the empty message.
+const slots = defineSlots<{ tools?: () => unknown; empty?: () => unknown }>()
+
+const cardSection = (movie: SectionMovie): PortalSection =>
+  movie.section ?? (props.section === 'recomendaciones' ? 'cartelera' : props.section)
 
 const expanded = ref(false)
 const row = useTemplateRef<HTMLElement>('row')
@@ -44,7 +52,9 @@ function scrollRow(direction: 1 | -1) {
           <p class="section-subtitle">{{ props.subtitle }}</p>
         </div>
         <div v-if="!props.loading && !props.failed && props.movies.length" class="section-tools">
+          <slot name="tools" />
           <button
+            v-if="!slots.tools"
             type="button"
             class="see-all"
             :aria-expanded="expanded"
@@ -117,6 +127,7 @@ function scrollRow(direction: 1 | -1) {
         <p class="state-text">
           <strong>{{ props.emptyMessage }}</strong>
         </p>
+        <slot name="empty" />
       </div>
 
       <ul
@@ -127,7 +138,7 @@ function scrollRow(direction: 1 | -1) {
         :class="{ expanded }"
       >
         <li v-for="movie in props.movies" :key="movie.id">
-          <PortalMovieCard :movie="movie" :section="props.section" />
+          <PortalMovieCard :movie="movie" :section="cardSection(movie)" />
         </li>
       </ul>
     </div>
@@ -191,6 +202,44 @@ function scrollRow(direction: 1 | -1) {
 
 .see-all:hover {
   color: var(--accent-color);
+}
+
+/* Links passed in the tools and empty slots look like the section's own actions. */
+.section-tools :slotted(.see-all) {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--text-on-dark);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--primary-color);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+
+.section-tools :slotted(.see-all:hover) {
+  color: var(--accent-color);
+}
+
+.section-state :slotted(.retry-button) {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 20px;
+  border-radius: 8px;
+  background: var(--primary-color);
+  color: var(--text-on-dark);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.section-tools :slotted(.see-all:focus-visible),
+.section-state :slotted(.retry-button:focus-visible) {
+  outline: 3px solid var(--focus-on-dark);
+  outline-offset: 3px;
 }
 
 .circle-button {
