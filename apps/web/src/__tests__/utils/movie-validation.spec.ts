@@ -16,6 +16,8 @@ const valid: MovieDraft = {
   synopsis: 'Una aventura.',
   runningTime: 120,
   releaseYear: 2026,
+  releaseDate: '',
+  presaleStart: '',
   classificationId: 1,
   languageIds: [2],
   genreIds: [3],
@@ -53,6 +55,39 @@ describe('shared movie validation', () => {
     expect(errors[field]).toBeTruthy()
     expect(Object.keys(errors)).toEqual([field])
     expect(errors[field]).not.toMatch(/bytes|UTF-8|Unicode/iu)
+  })
+
+  // SCRUM-437: both dates are optional; a presale needs a release date and must start before it.
+  it.each<[Partial<MovieDraft>, Partial<Record<MovieField, string>>]>([
+    [{ releaseDate: '2026-12-04' }, {}],
+    [{ releaseDate: '2026-12-04', presaleStart: '2026-11-15' }, {}],
+    [{ releaseDate: '2026-02-30' }, { releaseDate: 'Selecciona una fecha de estreno válida.' }],
+    [
+      { presaleStart: '2026-11-15' },
+      { presaleStart: 'Indica la fecha de estreno para programar la preventa.' },
+    ],
+    [
+      { releaseDate: '2026-12-04', presaleStart: '2026-12-04' },
+      { presaleStart: 'La preventa debe empezar antes de la fecha de estreno.' },
+    ],
+    [
+      { releaseDate: '2026-12-04', presaleStart: '2026-13-01' },
+      { presaleStart: 'Selecciona una fecha de inicio de preventa válida.' },
+    ],
+  ])('validates the release and presale dates %o', (dates, errors) => {
+    expect(validateMovie({ ...valid, ...dates }, options)).toEqual(errors)
+  })
+
+  it('maps the API date messages to their fields', () => {
+    expect(
+      movieErrorsFromApi([
+        'La preventa debe empezar antes de la fecha de estreno.',
+        'Selecciona una fecha de estreno válida.',
+      ]),
+    ).toEqual({
+      presaleStart: 'La preventa debe empezar antes de la fecha de estreno.',
+      releaseDate: 'Selecciona una fecha de estreno válida.',
+    })
   })
 
   it('preserves the existing ability to clear associations when modifying a movie', () => {

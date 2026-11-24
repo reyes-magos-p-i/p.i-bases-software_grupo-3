@@ -6,6 +6,7 @@ import { purchaseQuote, selectionHash } from './purchase-rules';
 import type { PurchaseFunction, PurchaseSeat } from './purchase.types';
 import { guestPurchaseCode } from './guest-purchase-access';
 import { TicketEmailRepository } from './ticket-email.repository';
+import type { CardSettlement } from './payments/card-payment.gateway';
 const context: PurchaseFunction = {
   id: 4,
   movieId: 2,
@@ -40,9 +41,20 @@ const selection = {
   functionId: 4,
   seats: { GENERAL: [1], CHILD: [], SENIOR: [] },
 };
+const card: CardSettlement = {
+  intentId: 'pi_123',
+  livemode: false,
+  amount: 300000,
+  currency: 'crc',
+  requestKey: 'b801323b-9057-460b-b6ab-a36aa4e9b7d2',
+  brand: 'visa',
+  last4: '4242',
+};
 const valid = {
   ...selection,
   requestKey: 'b801323b-9057-460b-b6ab-a36aa4e9b7d2',
+  paymentMethod: 'CARD' as const,
+  paymentIntentId: 'pi_123',
   quoteVersion: purchaseQuote(context, seats, selection).version,
 };
 describe('Atomic purchase storage', () => {
@@ -161,7 +173,7 @@ describe('Atomic purchase storage', () => {
     );
   });
   it('commits the invoice, lines and tickets together and preserves physical seats', async () => {
-    const result = await repo.confirm(8, valid);
+    const result = await repo.confirm(8, valid, card);
     expect(result).toMatchObject({
       id: 12,
       reference: 'ORD-000012',
@@ -183,12 +195,17 @@ describe('Atomic purchase storage', () => {
     const invoiceCall = execute.mock.calls.find(([sql]) =>
       String(sql).includes('INSERT INTO INVOICES'),
     );
-    expect(invoiceCall?.[0]).toContain("'PAID','SIMULATED'");
+    expect(invoiceCall?.[0]).toContain("'PAID',:paymentMethod");
     expect(invoiceCall?.[1]).toMatchObject({
       clientId: 8,
       email: 'client@example.com',
       total: 3000,
       key: valid.requestKey,
+      paymentMethod: 'CARD',
+      intentId: card.intentId,
+      livemode: 0,
+      brand: 'visa',
+      last4: '4242',
     });
     expect(
       execute.mock.calls.some(([sql]) =>
@@ -256,7 +273,7 @@ describe('Atomic purchase storage', () => {
     overrides['REQUEST_HASH AS'] = {
       rows: [{ id: 12, hash: selectionHash(valid) }],
     };
-    const receipt = await repo.confirm(8, valid);
+    const receipt = await repo.confirm(8, valid, card);
     expect(receipt.id).toBe(12);
     expect(emails.enqueueInitial).not.toHaveBeenCalled();
   });
@@ -264,7 +281,7 @@ describe('Atomic purchase storage', () => {
     'rolls back when %s fails',
     async (fragment) => {
       overrides[fragment] = new Error('Database unavailable');
-      await expect(repo.confirm(8, valid)).rejects.toThrow(
+      await expect(repo.confirm(8, valid, card)).rejects.toThrow(
         'Database unavailable',
       );
       expect(rollback).toHaveBeenCalledTimes(1);
@@ -278,50 +295,69 @@ describe('Atomic purchase storage', () => {
       executeMany
         .mockResolvedValueOnce({ rowsAffected: 1 })
         .mockResolvedValueOnce({ rowsAffected: 0 });
-    await expect(repo.confirm(8, valid)).rejects.toThrow('Incomplete purchase');
+    await expect(repo.confirm(8, valid, card)).rejects.toThrow(
+      'Incomplete purchase',
+    );
     expect(rollback).toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();
   });
   it('rejects inactive accounts and unavailable functions before inserting', async () => {
     overrides['SELECT STATUS,EMAIL'] = { rows: [{ STATUS: 'INACTIVE' }] };
-    await expect(repo.confirm(8, valid)).rejects.toThrow('Tu sesión');
+    await expect(repo.confirm(8, valid, card)).rejects.toThrow('Tu sesión');
     delete overrides['SELECT STATUS,EMAIL'];
     catalog.getFunction.mockResolvedValue({ ...context, available: false });
-    await expect(repo.confirm(8, valid)).rejects.toThrow('La función');
+    await expect(repo.confirm(8, valid, card)).rejects.toThrow('La función');
     expect(executeMany).not.toHaveBeenCalled();
+  });
+  // SCRUM-437: a function whose movie is outside its sale window reads as unavailable.
+  it('rejects a guest confirmation of a function that is not on sale', async () => {
+    catalog.getFunction.mockResolvedValue({ ...context, available: false });
+    await expect(
+      repo.confirmGuest('guest@example.com', valid, card),
+    ).rejects.toMatchObject({
+      response: { code: 'FUNCTION_UNAVAILABLE' },
+    });
+    expect(executeMany).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
   });
   it('rejects missing functions and invalid selections without partial purchases', async () => {
     overrides['SELECT MOVIE_FUNCTION_ID'] = { rows: [] };
-    await expect(repo.confirm(8, valid)).rejects.toThrow(
+    await expect(repo.confirm(8, valid, card)).rejects.toThrow(
       'La función no existe',
     );
     await expect(
-      repo.confirm(8, {
-        ...valid,
-        seats: { GENERAL: [], CHILD: [], SENIOR: [] },
-      }),
+      repo.confirm(
+        8,
+        {
+          ...valid,
+          seats: { GENERAL: [], CHILD: [], SENIOR: [] },
+        },
+        card,
+      ),
     ).rejects.toThrow('Selecciona');
     expect(executeMany).not.toHaveBeenCalled();
   });
   it('revalidates seat availability and quote changes under locks', async () => {
     overrides['FROM SEATS s'] = { rows: [{ ...seats[0], state: 'in-use' }] };
-    await expect(repo.confirm(8, valid)).rejects.toThrow('Algunos asientos');
+    await expect(repo.confirm(8, valid, card)).rejects.toThrow(
+      'Algunos asientos',
+    );
     delete overrides['FROM SEATS s'];
     await expect(
-      repo.confirm(8, { ...valid, quoteVersion: 'b'.repeat(64) }),
+      repo.confirm(8, { ...valid, quoteVersion: 'b'.repeat(64) }, card),
     ).rejects.toThrow('Los datos o el precio');
     expect(executeMany).not.toHaveBeenCalled();
   });
   it('refuses a missing pricing product and a function starting during registration', async () => {
     overrides['FROM PRODUCTS WHERE'] = { rows: [] };
-    await expect(repo.confirm(8, valid)).rejects.toThrow(
+    await expect(repo.confirm(8, valid, card)).rejects.toThrow(
       'preparar los boletos',
     );
     delete overrides['FROM PRODUCTS WHERE'];
     catalog.getFunction
       .mockResolvedValueOnce(context)
       .mockResolvedValueOnce({ ...context, available: false });
-    await expect(repo.confirm(8, valid)).rejects.toThrow('La función');
+    await expect(repo.confirm(8, valid, card)).rejects.toThrow('La función');
     expect(rollback).toHaveBeenCalledTimes(2);
     expect(commit).not.toHaveBeenCalled();
   });
@@ -330,7 +366,7 @@ describe('Atomic purchase storage', () => {
       rows: [{ id: 12, hash: selectionHash(valid) }],
     };
     catalog.getFunction.mockResolvedValue(null);
-    expect(await repo.confirm(8, valid)).toMatchObject({ id: 12 });
+    expect(await repo.confirm(8, valid, card)).toMatchObject({ id: 12 });
     expect(executeMany).not.toHaveBeenCalled();
     expect(
       execute.mock.calls.find(([sql]) =>
@@ -340,7 +376,9 @@ describe('Atomic purchase storage', () => {
   });
   it('rejects a reused key with a different selection', async () => {
     overrides['REQUEST_HASH AS'] = { rows: [{ id: 12, hash: 'other' }] };
-    await expect(repo.confirm(8, valid)).rejects.toThrow('otra selección');
+    await expect(repo.confirm(8, valid, card)).rejects.toThrow(
+      'otra selección',
+    );
     expect(executeMany).not.toHaveBeenCalled();
   });
   it.each([54, 30006, 60])(
@@ -349,7 +387,7 @@ describe('Atomic purchase storage', () => {
       overrides['SELECT MOVIE_FUNCTION_ID'] = Object.assign(new Error('lock'), {
         errorNum,
       });
-      await expect(repo.confirm(8, valid)).rejects.toMatchObject({
+      await expect(repo.confirm(8, valid, card)).rejects.toMatchObject({
         response: {
           code: 'PURCHASE_BUSY',
           message: expect.stringContaining('Otra operación'),
@@ -363,7 +401,9 @@ describe('Atomic purchase storage', () => {
     overrides['INSERT INTO INVOICES'] = Object.assign(new Error('unique'), {
       errorNum: 1,
     });
-    await expect(repo.confirm(8, valid)).rejects.toThrow('ya fue comprado');
+    await expect(repo.confirm(8, valid, card)).rejects.toThrow(
+      'ya fue comprado',
+    );
     let previousCalls = 0;
     const original = execute.getMockImplementation()!;
     execute.mockImplementation((sql: string, ...args: unknown[]) => {
@@ -376,12 +416,12 @@ describe('Atomic purchase storage', () => {
       }
       return original(sql, ...args);
     });
-    expect(await repo.confirm(8, valid)).toMatchObject({ id: 12 });
+    expect(await repo.confirm(8, valid, card)).toMatchObject({ id: 12 });
     expect(commit).not.toHaveBeenCalled();
   });
   it.each([
-    ['client', () => repo.confirm(8, valid)],
-    ['guest', () => repo.confirmGuest('guest@example.com', valid)],
+    ['client', () => repo.confirm(8, valid, card)],
+    ['guest', () => repo.confirmGuest('guest@example.com', valid, card)],
   ])(
     'stops a %s buyer who would exceed the tickets of a function',
     async (_buyer, buy) => {
@@ -405,26 +445,26 @@ describe('Atomic purchase storage', () => {
       maxGuestPurchases: 1,
     });
     overrides['COUNT(*) AS TOTAL FROM TICKETS'] = { rows: [{ TOTAL: 2 }] };
-    await expect(repo.confirm(8, valid)).rejects.toMatchObject({
+    await expect(repo.confirm(8, valid, card)).rejects.toMatchObject({
       response: { code: 'TICKET_LIMIT_REACHED' },
     });
     expect(catalog.getLimits).toHaveBeenCalledWith(connection);
     overrides['COUNT(*) AS TOTAL FROM TICKETS'] = { rows: [{ TOTAL: 0 }] };
     overrides['COUNT(*) AS TOTAL FROM INVOICES'] = { rows: [{ TOTAL: 1 }] };
     await expect(
-      repo.confirmGuest('guest@example.com', valid),
+      repo.confirmGuest('guest@example.com', valid, card),
     ).rejects.toMatchObject({ response: { code: 'GUEST_EMAIL_LIMIT' } });
   });
   it('sells nothing when the limits cannot be read', async () => {
     catalog.getLimits.mockRejectedValue(new Error('settings unavailable'));
-    await expect(repo.confirm(8, valid)).rejects.toThrow(
+    await expect(repo.confirm(8, valid, card)).rejects.toThrow(
       'settings unavailable',
     );
     expect(executeMany).not.toHaveBeenCalled();
     expect(rollback).toHaveBeenCalledTimes(1);
   });
   it('counts only paid tickets of the buyer and the function', async () => {
-    await repo.confirm(8, valid);
+    await repo.confirm(8, valid, card);
     const [sql, binds] = execute.mock.calls.find(([text]) =>
       String(text).includes('COUNT(*) AS TOTAL FROM TICKETS'),
     ) as [string, Record<string, unknown>];
@@ -440,7 +480,7 @@ describe('Atomic purchase storage', () => {
   it('stops a guest email after its purchases of the last hour', async () => {
     overrides['COUNT(*) AS TOTAL FROM INVOICES'] = { rows: [{ TOTAL: 3 }] };
     await expect(
-      repo.confirmGuest('guest@example.com', valid),
+      repo.confirmGuest('guest@example.com', valid, card),
     ).rejects.toMatchObject({ response: { code: 'GUEST_EMAIL_LIMIT' } });
     expect(executeMany).not.toHaveBeenCalled();
     const [sql, binds] = execute.mock.calls.find(([text]) =>
@@ -454,7 +494,9 @@ describe('Atomic purchase storage', () => {
       rows: [{ id: 12, hash: selectionHash(valid) }],
     };
     overrides['COUNT(*) AS TOTAL FROM TICKETS'] = { rows: [{ TOTAL: 10 }] };
-    await expect(repo.confirm(8, valid)).resolves.toMatchObject({ id: 12 });
+    await expect(repo.confirm(8, valid, card)).resolves.toMatchObject({
+      id: 12,
+    });
     expect(
       execute.mock.calls.some(([sql]) =>
         String(sql).includes('COUNT(*) AS TOTAL FROM TICKETS'),
@@ -464,7 +506,7 @@ describe('Atomic purchase storage', () => {
   it('uses parameterized batches for large selections', async () => {
     const { large, data } = prepareLargeSelection(1001);
     overrides['FROM SEATS s'] = { rows: large };
-    await repo.confirm(8, data);
+    await repo.confirm(8, data, { ...card, amount: 300300000 });
     expect(
       execute.mock.calls.filter(([sql]) =>
         String(sql).includes('FROM SEATS s'),
@@ -490,7 +532,7 @@ describe('Atomic purchase storage', () => {
       return Promise.resolve({ rows: large.slice(1000) });
     });
 
-    const result = repo.confirm(8, data);
+    const result = repo.confirm(8, data, { ...card, amount: 300300000 });
     await reached;
     expect(batches).toBe(1);
     expect(executeMany).not.toHaveBeenCalled();
@@ -534,7 +576,9 @@ describe('Atomic purchase storage', () => {
         });
       });
 
-      await expect(repo.confirm(8, data)).rejects.toBe(failure);
+      await expect(
+        repo.confirm(8, data, { ...card, amount: 300300000 }),
+      ).rejects.toBe(failure);
       expect(batches).toBe(failedBatch);
       expect(executeMany).not.toHaveBeenCalled();
       expect(
@@ -696,7 +740,7 @@ describe('Atomic purchase storage', () => {
     query.mockRestore();
   });
   it('stores guest invoices without an account and restricts retries to the original email', async () => {
-    const receipt = await repo.confirmGuest('guest@example.com', valid);
+    const receipt = await repo.confirmGuest('guest@example.com', valid, card);
     expect(receipt.accessCode).toBe(guestPurchaseCode(12, valid.requestKey));
     expect(
       execute.mock.calls.find(([sql]) =>
@@ -726,7 +770,7 @@ describe('Atomic purchase storage', () => {
       rows: [{ status: 'ACTIVE', verificationPending: 0 }],
     };
     await expect(
-      repo.confirmGuest('client@example.com', valid),
+      repo.confirmGuest('client@example.com', valid, card),
     ).rejects.toMatchObject({ response: { code: 'CLIENT_LOGIN_REQUIRED' } });
     expect(executeMany).not.toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();
@@ -742,7 +786,7 @@ describe('Atomic purchase storage', () => {
         rows: [{ status, verificationPending }],
       };
       await expect(
-        repo.confirmGuest('guest@example.com', valid),
+        repo.confirmGuest('guest@example.com', valid, card),
       ).rejects.toMatchObject({ response: { code } });
       expect(executeMany).not.toHaveBeenCalled();
       expect(commit).not.toHaveBeenCalled();
@@ -760,8 +804,8 @@ describe('Atomic purchase storage', () => {
       overrides['SELECT MOVIE_FUNCTION_ID'] = { rows: [] };
       const pending =
         buyer === 'client'
-          ? repo.confirm(8, valid)
-          : repo.confirmGuest('guest@example.com', valid);
+          ? repo.confirm(8, valid, card)
+          : repo.confirmGuest('guest@example.com', valid, card);
       await expect(pending).rejects.toMatchObject({ status: 404 });
       const queries = execute.mock.calls.map(([sql]) => sql as string);
       expect(
@@ -782,7 +826,7 @@ describe('Atomic purchase storage', () => {
       rows: [{ status: 'ACTIVE', verificationPending: 0 }],
     };
     await expect(
-      repo.confirmGuest('guest@example.com', valid),
+      repo.confirmGuest('guest@example.com', valid, card),
     ).resolves.toMatchObject({
       id: 12,
       accessCode: guestPurchaseCode(12, valid.requestKey),
@@ -803,7 +847,7 @@ describe('Atomic purchase storage', () => {
           .mockResolvedValueOnce({ rowsAffected: 1 })
           .mockResolvedValueOnce({ rowsAffected: 0 });
       await expect(
-        repo.confirmGuest('guest@example.com', valid),
+        repo.confirmGuest('guest@example.com', valid, card),
       ).rejects.toThrow('Incomplete purchase');
       expect(commit).not.toHaveBeenCalled();
       expect(rollback).toHaveBeenCalledTimes(1);
@@ -823,7 +867,7 @@ describe('Atomic purchase storage', () => {
       return original(sql, ...args);
     });
     await expect(
-      repo.confirmGuest('guest@example.com', valid),
+      repo.confirmGuest('guest@example.com', valid, card),
     ).resolves.toMatchObject({
       accessCode: guestPurchaseCode(12, valid.requestKey),
     });
@@ -930,13 +974,16 @@ describe('Atomic purchase storage', () => {
         emails as unknown as TicketEmailRepository,
       );
       const results = await Promise.allSettled([
-        concurrent.confirm(8, valid),
+        concurrent.confirm(8, valid, card),
         (buyer === 'client'
           ? concurrent.confirm.bind(concurrent, 9)
-          : concurrent.confirmGuest.bind(concurrent, 'guest@example.com'))({
-          ...valid,
-          requestKey: 'ed36cbe4-3e88-4968-9950-66fbb8d567ff',
-        }),
+          : concurrent.confirmGuest.bind(concurrent, 'guest@example.com'))(
+          {
+            ...valid,
+            requestKey: 'ed36cbe4-3e88-4968-9950-66fbb8d567ff',
+          },
+          card,
+        ),
       ]);
       expect(results.map((result) => result.status).sort()).toEqual([
         'fulfilled',
@@ -1008,8 +1055,8 @@ describe('Atomic purchase storage', () => {
       },
     });
     const receipts = await Promise.all([
-      repo.confirmGuest('guest@example.com', valid),
-      repo.confirmGuest('guest@example.com', valid),
+      repo.confirmGuest('guest@example.com', valid, card),
+      repo.confirmGuest('guest@example.com', valid, card),
     ]);
     expect(receipts.map((receipt) => receipt.accessCode)).toEqual([
       guestPurchaseCode(12, valid.requestKey),

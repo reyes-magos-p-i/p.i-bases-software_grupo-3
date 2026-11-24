@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { MoviesService } from './movies.service';
 import { MoviesRepository } from './movies.repository';
@@ -25,6 +25,8 @@ describe('MoviesService', () => {
     runningTime: 169,
     releaseYear: 2014,
     posterImage: null,
+    releaseDate: null as string | null,
+    presaleStart: null as string | null,
     classification: { id: 1, name: 'TP' },
     languages: [{ id: 1, name: 'English' }],
     genres: [{ id: 3, name: 'Adventure' }],
@@ -92,6 +94,82 @@ describe('MoviesService', () => {
 
     expect(await service.create(dto)).toBe(24);
     expect(repository.create).toHaveBeenCalledWith(dto);
+  });
+
+  describe('release and presale dates', () => {
+    const dto = {
+      title: 'Interstellar',
+      synopsis: 'A team travels through space.',
+      posterImage: 'default-poster',
+      runningTime: 169,
+      releaseYear: 2014,
+      classificationId: 1,
+      languageIds: [1],
+      genreIds: [3],
+    };
+
+    it('creates a movie whose presale starts before the release', async () => {
+      repository.create.mockResolvedValue(24);
+
+      await service.create({
+        ...dto,
+        releaseDate: '2026-12-04',
+        presaleStart: '2026-11-15',
+      });
+
+      expect(repository.create).toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        { presaleStart: '2026-11-15' },
+        'Indica la fecha de estreno para programar la preventa.',
+      ],
+      [
+        { releaseDate: '2026-12-04', presaleStart: '2026-12-04' },
+        'La preventa debe empezar antes de la fecha de estreno.',
+      ],
+      [
+        { releaseDate: '2026-12-04', presaleStart: '2026-12-10' },
+        'La preventa debe empezar antes de la fecha de estreno.',
+      ],
+    ])('rejects the dates %o on create', async (dates, message) => {
+      await expect(service.create({ ...dto, ...dates })).rejects.toThrow(
+        new BadRequestException(message),
+      );
+      expect(repository.create).not.toHaveBeenCalled();
+    });
+
+    it('checks an update against the dates already stored', async () => {
+      repository.findOne.mockResolvedValue({
+        ...movieDetail,
+        releaseDate: '2026-12-04',
+        presaleStart: '2026-11-15',
+      });
+
+      await expect(
+        service.update(24, { presaleStart: '2026-12-10' }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(service.update(24, { releaseDate: null })).rejects.toThrow(
+        'Indica la fecha de estreno para programar la preventa.',
+      );
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('lets an update clear both dates together', async () => {
+      repository.findOne.mockResolvedValue({
+        ...movieDetail,
+        releaseDate: '2026-12-04',
+        presaleStart: '2026-11-15',
+      });
+
+      await service.update(24, { releaseDate: null, presaleStart: null });
+
+      expect(repository.update).toHaveBeenCalledWith(24, {
+        releaseDate: null,
+        presaleStart: null,
+      });
+    });
   });
 
   it('returns classifications', async () => {

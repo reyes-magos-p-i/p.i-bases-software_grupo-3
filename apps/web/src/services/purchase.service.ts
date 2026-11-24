@@ -3,10 +3,12 @@ import { clientRequestOptions } from './authService'
 import { clientProfileError } from './client-profile.service'
 import {
   PurchaseResponseError,
+  readCardIntent,
   readPurchaseReceipt,
   readTicketEmailStatus,
 } from '@/utils/purchase-response'
 import type {
+  CardIntent,
   PurchaseList,
   PurchaseListQuery,
   PurchaseMovie,
@@ -39,8 +41,27 @@ export async function quotePurchase(data: PurchaseSelection, signal?: AbortSigna
     })
   ).data
 }
-export async function confirmPurchase(
+export async function createCardPaymentIntent(
   data: PurchaseSelection & { requestKey: string; quoteVersion: string },
+  signal?: AbortSignal,
+): Promise<CardIntent> {
+  return readCardIntent(
+    (
+      await getApi().post<unknown>('/purchases/payment-intents', data, {
+        ...clientRequestOptions(),
+        signal,
+        timeout: 30000,
+      })
+    ).data,
+  )
+}
+export async function confirmPurchase(
+  data: PurchaseSelection & {
+    requestKey: string
+    quoteVersion: string
+    paymentMethod?: 'CARD'
+    paymentIntentId?: string
+  },
   signal?: AbortSignal,
 ) {
   return readPurchaseReceipt(

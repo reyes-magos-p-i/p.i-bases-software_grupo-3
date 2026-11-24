@@ -7,6 +7,9 @@ export interface CreateMoviePayload {
   runningTime: number
   posterImage?: string | null
   releaseYear: number
+  /** YYYY-MM-DD; null clears it on an update (SCRUM-437). */
+  releaseDate?: string | null
+  presaleStart?: string | null
   classificationId: number
   languageIds: number[]
   genreIds: number[]

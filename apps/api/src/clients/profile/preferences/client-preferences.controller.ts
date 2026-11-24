@@ -38,6 +38,12 @@ export class ClientPreferencesController {
     return this.preferences.save(request.user.id, data);
   }
 
+  @Get('recommendations')
+  @Header('Cache-Control', 'no-store')
+  getRecommendations(@Req() request: ClientRequest) {
+    return this.preferences.getRecommendations(request.user.id);
+  }
+
   @Get('portal')
   @Header('Cache-Control', 'no-store')
   getPortal(@Req() request: ClientRequest) {

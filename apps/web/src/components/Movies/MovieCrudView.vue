@@ -56,6 +56,11 @@ function optionList(values: MovieOption[] | null | undefined) {
   return names.length > 0 ? names.join(', ') : 'Sin registrar'
 }
 
+// YYYY-MM-DD to DD/MM/YYYY, like the other dates of the dashboard.
+function formatDate(value: string) {
+  return value.split('-').reverse().join('/')
+}
+
 function duration(minutes: number | null | undefined) {
   if (minutes == null) return 'Sin registrar'
 
@@ -93,6 +98,14 @@ const groups = computed(() => {
         {
           label: 'Año de estreno',
           value: detail.releaseYear ?? 'Sin registrar',
+        },
+        {
+          label: 'Fecha de estreno',
+          value: detail.releaseDate ? formatDate(detail.releaseDate) : 'En cartelera',
+        },
+        {
+          label: 'Inicio de preventa',
+          value: detail.presaleStart ? formatDate(detail.presaleStart) : 'Sin preventa',
         },
       ],
     },

@@ -11,6 +11,10 @@ import { redirectClientWhenPasswordBlocked, requireClientSession } from './clien
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
 
+  // Footer links jump to a portal section (#cartelera, #preventas, #estrenos).
+  scrollBehavior: (to, _from, savedPosition) =>
+    to.hash ? { el: to.hash, behavior: 'smooth' } : (savedPosition ?? undefined),
+
   routes: [
     {
       path: '/account/profile',

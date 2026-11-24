@@ -4,6 +4,7 @@ import type {
   ClientPreferenceSelection,
   ClientPreferenceSettings,
 } from '@/types/client-preferences'
+import type { PortalRecommendations } from '@/types/portal'
 
 export async function getClientPreferenceSettings(
   signal?: AbortSignal,
@@ -25,5 +26,17 @@ export async function saveClientPreferences(
       selected,
       clientRequestOptions(),
     )
+  ).data
+}
+
+// SCRUM-439: recommendations of the portal for the signed-in client.
+export async function getPortalRecommendations(
+  signal?: AbortSignal,
+): Promise<PortalRecommendations> {
+  return (
+    await getApi().get<PortalRecommendations>('/clients/me/preferences/recommendations', {
+      ...clientRequestOptions(),
+      signal,
+    })
   ).data
 }

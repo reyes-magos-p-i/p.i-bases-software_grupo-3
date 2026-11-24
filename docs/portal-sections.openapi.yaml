@@ -1,0 +1,105 @@
+openapi: 3.0.3
+info:
+  title: Secciones del portal
+  version: 1.0.0
+  description: >-
+    Películas de cada sección del portal principal (SCRUM-437): Cartelera, Preventas y Estrenos.
+    Cada película aparece en una sola sección. Público y de solo lectura; igual para visitantes y
+    clientes. Reglas en docs/portal-sections.md.
+servers:
+  - url: /api
+paths:
+  /movie-fuctions/sections/{section}:
+    get:
+      summary: Listar las películas de una sección del portal
+      description: >-
+        cartelera: ya estrenada (sin fecha de estreno o con fecha hasta hoy) y con funciones a la
+        venta, ordenada por la próxima función. preventas: preventa abierta (inicio de preventa
+        hasta hoy) y estreno posterior a hoy, con funciones a la venta, ordenada por la próxima
+        función. estrenos: estreno posterior a hoy y preventa todavía no abierta, disponible en
+        alguna sucursal activa, ordenada por fecha de estreno. "Hoy" es la fecha de Costa Rica.
+      security: []
+      parameters:
+        - name: section
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [cartelera, preventas, estrenos]
+      responses:
+        '200':
+          description: Películas de la sección; lista vacía si no hay ninguna.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PortalSectionMovie'
+              example:
+                - id: 42
+                  title: The Odyssey
+                  posterImage: /uploads/posters/odyssey.webp
+                  synopsis: Ulises vuelve a casa después de la guerra.
+                  classification: TP
+                  runningTime: 170
+                  genres: [Acción, Aventura]
+                  releaseDate: null
+                  presaleStart: null
+        '400':
+          description: La sección no existe.
+          content:
+            application/json:
+              example:
+                statusCode: 400
+                message: ['La sección debe ser cartelera, preventas o estrenos.']
+                error: Bad Request
+components:
+  schemas:
+    PortalSectionMovie:
+      type: object
+      required:
+        - id
+        - title
+        - posterImage
+        - synopsis
+        - classification
+        - runningTime
+        - genres
+        - releaseDate
+        - presaleStart
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        posterImage:
+          type: string
+          nullable: true
+        synopsis:
+          type: string
+        classification:
+          type: string
+          nullable: true
+        runningTime:
+          type: integer
+          description: Minutos.
+        genres:
+          type: array
+          items:
+            type: string
+          description: Nombres ordenados alfabéticamente.
+        releaseDate:
+          type: string
+          format: date
+          nullable: true
+          description: AAAA-MM-DD; null si ya estrenó.
+        presaleStart:
+          type: string
+          format: date
+          nullable: true
+          description: AAAA-MM-DD; null si no tiene preventa.
