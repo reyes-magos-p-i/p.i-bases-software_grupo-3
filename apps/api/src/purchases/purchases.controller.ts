@@ -40,6 +40,11 @@ export class PurchasesController {
   seats(@Param('id', ParseDecimalIdPipe) id: string) {
     return this.service.seats(Number(id));
   }
+  @Get('functions/:id/promotions')
+  @Header('Cache-Control', 'no-store')
+  promotions(@Param('id', ParseDecimalIdPipe) id: string) {
+    return this.service.availablePromotions(Number(id));
+  }
   @Post('quote')
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')

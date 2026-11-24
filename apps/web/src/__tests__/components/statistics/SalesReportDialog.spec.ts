@@ -15,7 +15,7 @@ const initialPeriod = { dateFrom: '2026-11-01', dateTo: '2026-11-21' }
 const originalShow = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal')
 const originalClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close')
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] }).setSystemTime(new Date('2026-11-24T02:00:00Z'))
+  vi.useFakeTimers({ toFake: ['Date'] }).setSystemTime(new Date('2026-11-23T12:00:00-06:00'))
   Object.defineProperties(HTMLDialogElement.prototype, {
     showModal: {
       configurable: true,

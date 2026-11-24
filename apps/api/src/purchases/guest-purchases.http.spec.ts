@@ -19,6 +19,7 @@ import { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import { PurchaseThrottlerGuard } from './purchase-throttler.guard';
 import { guestPurchaseCode } from './guest-purchase-access';
 import { TicketEmailService } from './ticket-email.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { CardPaymentGateway } from './payments/card-payment.gateway';
 
 const PURCHASE_KEY = randomUUID();
@@ -101,6 +102,13 @@ describe('Guest purchase HTTP with mocked persistence', () => {
         PurchasesService,
         SessionOriginGuard,
         PurchaseThrottlerGuard,
+        {
+          provide: PromotionsService,
+          useValue: {
+            findApplicableToMovieFunction: jest.fn().mockResolvedValue([]),
+            resolveForPurchase: jest.fn().mockResolvedValue(undefined),
+          },
+        },
         {
           provide: EmployeeSessionService,
           useValue: { allowedOrigin: origin },

@@ -616,4 +616,74 @@ describe('PromotionsRepository', () => {
   });
 });
 
+  describe('findApplicableToMovieFunction', () => {
+    const applicable = Object.fromEntries(Object.entries(detail).filter(([key]) => !['weekdays', 'branchIds'].includes(key)));
+    it('returns every eligible scalar record without leaking the function context ID', async () => {
+      const matches = [applicable, { ...applicable, promotionId: 43, promotionType: 'fixed' as const, promotionAmount: 500 }];
+      connection.execute.mockResolvedValueOnce({ rows: matches.map((promotion) => ({ ...promotion, movieFunctionId: 7 })) });
+      await expect(repository.findApplicableToMovieFunction(7)).resolves.toEqual(matches);
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenCalledWith(expect.any(String), { movieFunctionId: 7 }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+      expect(connection.executeMany).not.toHaveBeenCalled();
+    });
+    it('returns [] for the retained function row when no promotion matches', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [{ movieFunctionId: 7, promotionId: null }] });
+      await expect(repository.findApplicableToMovieFunction(7)).resolves.toEqual([]);
+    });
+    it.each([{ rows: [] }, {}])('returns null for a missing function: %p', async (result) => {
+      connection.execute.mockResolvedValueOnce(result);
+      await expect(repository.findApplicableToMovieFunction(999)).resolves.toBeNull();
+    });
+    it('binds the ID and includes each eligibility restriction in the SQL', async () => {
+      connection.execute.mockResolvedValueOnce({ rows: [{ movieFunctionId: 7, promotionId: null }] });
+      await repository.findApplicableToMovieFunction(7);
+      const sql = (connection.execute.mock.calls[0][0] as string).replace(/\s+/g, ' ');
+      expect(sql).toContain('JOIN Theaters t ON t.theater_id = mf.theater_id');
+      expect(sql).toContain('WHERE mf.movie_function_id = :movieFunctionId');
+      expect(sql).toContain('LEFT JOIN promotions p ON');
+      expect(sql).toContain('f.function_date BETWEEN TRUNC(p.begin_date) AND TRUNC(p.end_date)');
+      expect(sql).toContain('p.begin_hour IS NULL AND p.end_hour IS NULL');
+      expect(sql).toContain('p.begin_hour IS NOT NULL AND p.end_hour IS NOT NULL');
+      expect(sql).toContain('f.start_offset >= p.begin_hour');
+      expect(sql).toContain('f.start_offset < p.end_hour');
+      expect(sql).toContain('p.projection_format IS NULL OR p.projection_format = f.projection_format');
+      expect(sql).toContain('p.technology IS NULL OR p.technology = f.technology');
+      expect(sql).toContain('pc.branch_id = f.branch_id');
+      expect(sql).toContain('NOT EXISTS ( SELECT 1 FROM promotion_weekdays');
+      expect(sql).toContain('pw.day_of_week = f.weekday');
+      expect(sql).toContain("TRUNC(CAST(mf.start_time AS DATE), 'IW') + 1 AS weekday");
+      expect(sql).toContain('mf.start_time - CAST(TRUNC(CAST(mf.start_time AS DATE)) AS TIMESTAMP) AS start_offset');
+      expect(sql).toContain('ORDER BY p.promotion_id DESC');
+      expect(sql).not.toMatch(/SYSDATE|SYSTIMESTAMP|TO_CHAR\([^)]*,\s*'D'/i);
+    });
+    it('preserves interval boundaries and null restrictions in returned data', async () => {
+      const unrestricted = { ...applicable, beginHour: '00:00', endHour: '24:00', projectionFormat: null, technology: null, conditions: null, posterPath: null };
+      connection.execute.mockResolvedValueOnce({ rows: [{ ...unrestricted, movieFunctionId: 7 }] });
+      await expect(repository.findApplicableToMovieFunction(7)).resolves.toEqual([unrestricted]);
+    });
+    it('does not mutate rows returned by the driver', async () => {
+      const row = Object.freeze({ ...applicable, movieFunctionId: 7 });
+      connection.execute.mockResolvedValueOnce({ rows: [row] });
+      await repository.findApplicableToMovieFunction(7);
+      expect(row.movieFunctionId).toBe(7);
+    });
+    it('propagates database failures', async () => {
+      const error = new Error('Database unavailable');
+      connection.execute.mockRejectedValueOnce(error);
+      await expect(repository.findApplicableToMovieFunction(7)).rejects.toBe(error);
+    });
+  });
+
+});
+
+describe('purchase transaction connection', () => {
+  it('uses the supplied connection without opening or committing a nested transaction', async () => {
+    const db = { transaction: jest.fn() };
+    const connection = { execute: jest.fn().mockResolvedValue({ rows: [{ movieFunctionId: 4, promotionId: null }] }) };
+    const repository = new PromotionsRepository(db as never);
+    expect(await repository.findApplicableToMovieFunction(4, connection as never)).toEqual([]);
+    expect(connection.execute).toHaveBeenCalledTimes(1);
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
 });

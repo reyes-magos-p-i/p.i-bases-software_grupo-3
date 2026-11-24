@@ -26,6 +26,9 @@ const flow = useTicketPurchase(() => {
   void router.replace({ path: '/', query: { login: 'client', reason: 'expired' } })
 })
 const {
+  promotions,
+  promotionId,
+  promotionError,
   guest,
   guestBuyer,
   guestReceipt,
@@ -129,7 +132,16 @@ watch(
           Recuperamos un intento de compra pendiente. Reintenta el pago para comprobar su resultado
           sin duplicarlo.
         </p>
-        <PurchaseSummary :purchase="quote" :buyer-email="guestBuyer?.email" />
+        <PurchaseSummary
+          :purchase="quote"
+          :buyer-email="guestBuyer?.email"
+          :promotions="promotions"
+          :promotion-id="promotionId"
+          :show-promotions="!guest"
+          :promotion-disabled="busy || uncertain"
+          :promotion-error="promotionError"
+          @promotion-change="flow.selectPromotion"
+        />
         <div class="actions">
           <button
             type="button"

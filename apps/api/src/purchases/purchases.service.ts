@@ -13,6 +13,8 @@ import type {
 import { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import { PurchasesRepository } from './purchases.repository';
 import { TicketEmailService } from './ticket-email.service';
+import { PromotionsService } from '../promotions/promotions.service';
+import type { ApplicablePromotion } from '../promotions/promotion-response.types';
 import {
   purchaseQuote,
   requireAvailableFunction,
@@ -30,6 +32,7 @@ import type {
 const REFUNDABLE_CODES = new Set([
   'SEATS_UNAVAILABLE',
   'QUOTE_CHANGED',
+  'PROMOTION_UNAVAILABLE',
   'PAYMENT_MISMATCH',
   'FUNCTION_UNAVAILABLE',
   'TICKET_LIMIT_REACHED',
@@ -49,6 +52,7 @@ export class PurchasesService {
     private readonly catalog: PurchaseCatalogRepository,
     private readonly purchases: PurchasesRepository,
     private readonly emails: TicketEmailService,
+    private readonly promotions: PromotionsService,
     private readonly payments: CardPaymentGateway,
   ) {}
   async movieFunctions(movieId: number) {
@@ -61,6 +65,16 @@ export class PurchasesService {
     requireAvailableFunction(context);
     return this.catalog.getSeats(context);
   }
+  async availablePromotions(
+    functionId: number,
+  ): Promise<ApplicablePromotion[]> {
+    if (!Number.isSafeInteger(functionId) || functionId < 1) {
+      throw new BadRequestException('Selecciona una función válida.');
+    }
+    const context = await this.catalog.getFunction(functionId);
+    requireAvailableFunction(context);
+    return this.promotions.findApplicableToMovieFunction(functionId);
+  }
   async quote(data: PurchaseSelectionDto) {
     const result = await this.seats(data.functionId);
     requireTicketAllowance(
@@ -68,7 +82,15 @@ export class PurchasesService {
       selectionPositions(data).length,
       result.maxTickets,
     );
-    return purchaseQuote(result.function, result.seats, data);
+    return purchaseQuote(
+      result.function,
+      result.seats,
+      data,
+      await this.promotions.resolveForPurchase(
+        data.functionId,
+        data.promotionId,
+      ),
+    );
   }
   // Creates the card payment for a quoted selection. The amount comes from the
   // server-side quote, never from the client.
@@ -93,7 +115,9 @@ export class PurchasesService {
   async cardSettlement(data: ConfirmPurchaseDto): Promise<CardSettlement> {
     const settlement = await this.payments.settled(data.paymentIntentId);
     if (
-      settlement?.currency !== 'crc' ||
+      !settlement ||
+      settlement.intentId !== data.paymentIntentId ||
+      settlement.currency !== 'crc' ||
       settlement.requestKey !== data.requestKey
     )
       throw new BadRequestException(

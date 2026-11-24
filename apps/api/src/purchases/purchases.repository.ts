@@ -1,3 +1,4 @@
+import { PromotionsService } from '../promotions/promotions.service';
 import {
   ConflictException,
   Injectable,
@@ -66,6 +67,7 @@ export class PurchasesRepository {
     private readonly db: DatabaseService,
     private readonly catalog: PurchaseCatalogRepository,
     private readonly ticketEmails: TicketEmailRepository,
+    private readonly promotions: PromotionsService,
   ) {}
   private query<T>(
     sql: string,
@@ -197,6 +199,11 @@ export class PurchasesRepository {
       context,
       await this.lockSeats(connection, context, positions),
       data,
+      await this.promotions.resolveForPurchase(
+        data.functionId,
+        data.promotionId,
+        connection,
+      ),
     );
     if (quote.version !== data.quoteVersion)
       throw new ConflictException({
@@ -205,7 +212,10 @@ export class PurchasesRepository {
           'Los datos o el precio de la función cambiaron. Revisa el resumen actualizado antes de pagar.',
       });
     // The intent was created from this same quote, so a mismatch means the captured amount is not ours to ticket.
-    if (settlement.amount !== quote.total * 100)
+    if (
+      !Number.isSafeInteger(settlement.amount) ||
+      settlement.amount !== Math.round(quote.total * 100)
+    )
       throw new ConflictException({
         code: 'PAYMENT_MISMATCH',
         message:
@@ -293,7 +303,7 @@ export class PurchasesRepository {
         message: 'Uno de los asientos ya fue comprado. Actualiza tu selección.',
       });
     }
-    if ([54, 30006, 60].includes(failure?.errorNum ?? 0))
+    if ([54, 30006, 60, 12860].includes(failure?.errorNum ?? 0))
       throw new ConflictException({
         code: 'PURCHASE_BUSY',
         message:
@@ -367,7 +377,11 @@ export class PurchasesRepository {
         hash,
         email: buyerEmail,
         context: {
-          val: JSON.stringify({ function: context, lines: quote.lines }),
+          val: JSON.stringify({
+            function: context,
+            lines: quote.lines,
+            ...(quote.discount ? { discount: quote.discount } : {}),
+          }),
           type: oracle.CLOB,
         },
         intentId: settlement.intentId,
@@ -515,6 +529,7 @@ export class PurchasesRepository {
       ? (JSON.parse(row.contextJson) as {
           function: PurchaseReceipt['function'];
           lines: PurchaseLine[];
+          discount?: PurchaseReceipt['discount'];
         })
       : null;
     const context =
@@ -563,6 +578,7 @@ export class PurchasesRepository {
       cardBrand: row.cardBrand,
       cardLast4: row.cardLast4,
       total: row.total,
+      ...(snapshot?.discount ? { discount: snapshot.discount } : {}),
       function: context,
       lines,
       tickets: tickets.rows ?? [],

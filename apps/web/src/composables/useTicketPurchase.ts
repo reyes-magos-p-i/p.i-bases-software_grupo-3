@@ -1,5 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  getPurchasePromotions,
   getPurchaseFunctions,
   getPurchaseSeats,
   quotePurchase,
@@ -31,6 +32,7 @@ import { validEmail } from '@/utils/user-validation'
 import { registeredSeatMap } from '@/utils/seat-layout'
 import type { Seat } from '@/types/seats'
 import type {
+  PurchasePromotion,
   CardIntent,
   GuestBuyer,
   GuestPurchaseReceipt,
@@ -51,6 +53,7 @@ const ACCOUNT_CONFLICTS = new Set([
 ])
 const DEFINITIVE_CONFLICTS = new Set([
   'QUOTE_CHANGED',
+  'PROMOTION_UNAVAILABLE',
   'SEATS_UNAVAILABLE',
   'FUNCTION_UNAVAILABLE',
   'TICKET_LIMIT_REACHED',
@@ -68,6 +71,9 @@ export function useTicketPurchase(onExpired: () => void) {
     categories = ref<Record<number, TicketCategory>>({}),
     quote = ref<PurchaseQuote | null>(null),
     receipt = ref<PurchaseReceipt | null>(null)
+  const promotions = ref<PurchasePromotion[]>([])
+  const promotionId = ref<number | null>(null)
+  const promotionError = ref('')
   const step = ref(1),
     loading = ref(false),
     busy = ref(false),
@@ -121,7 +127,11 @@ export function useTicketPurchase(onExpired: () => void) {
         const position = (seat.rowNumber - 1) * context.columns + seat.columnNumber
         seats[categories.value[position] ?? 'GENERAL'].push(position)
       }
-    return { functionId: context?.id ?? 0, seats }
+    return {
+      functionId: context?.id ?? 0,
+      seats,
+      ...(!guest.value && promotionId.value !== null ? { promotionId: promotionId.value } : {}),
+    }
   })
   const locked = () => paymentSerial !== null || uncertain.value || attempt !== null
   const canRestart = computed(
@@ -191,6 +201,8 @@ export function useTicketPurchase(onExpired: () => void) {
         saved.buyer.kind === 'guest'
           ? { email: saved.buyer.email, confirmEmail: saved.buyer.confirmEmail }
           : null
+      promotionId.value = saved.selection.promotionId ?? null
+      promotions.value = saved.quote.discount ? [saved.quote.discount.promotion] : []
       quote.value = saved.quote
       requestKey = saved.requestKey
       currentMovieId = saved.quote.function.movieId
@@ -236,6 +248,9 @@ export function useTicketPurchase(onExpired: () => void) {
     functions.value = []
     availability.value = null
     selected.value = []
+    promotions.value = []
+    promotionId.value = null
+    promotionError.value = ''
     receipt.value = null
     step.value = 1
     guestBuyer.value = null
@@ -263,6 +278,9 @@ export function useTicketPurchase(onExpired: () => void) {
     error.value = ''
     availability.value = null
     selected.value = []
+    promotions.value = []
+    promotionId.value = null
+    promotionError.value = ''
     categories.value = {}
     invalidate()
     try {
@@ -288,6 +306,9 @@ export function useTicketPurchase(onExpired: () => void) {
     functions.value = functions.value.filter((item) => item.id !== id)
     availability.value = null
     selected.value = []
+    promotions.value = []
+    promotionId.value = null
+    promotionError.value = ''
     categories.value = {}
     invalidate()
     step.value = 1
@@ -395,13 +416,45 @@ export function useTicketPurchase(onExpired: () => void) {
     }
     if (accepted) await review()
   }
-  async function review() {
+  async function selectPromotion(id: number | null) {
+    if (
+      busy.value ||
+      locked() ||
+      guest.value ||
+      !quote.value ||
+      (id !== null && !promotions.value.some((item) => item.promotionId === id))
+    )
+      return
+    promotionId.value = id
+    promotionError.value = ''
+    // Keep the summary mounted while requoting, but never pay using its stale total.
+    requestKey = ''
+    await review(true)
+  }
+  async function review(changingPromotion = false) {
     const operation = beginRead()
     busy.value = true
     error.value = ''
     try {
+      if (!guest.value) {
+        const options = await getPurchasePromotions(
+          selection.value.functionId,
+          operation.controller.signal,
+        )
+        if (!operation.active()) return
+        promotions.value = options
+        if (
+          promotionId.value !== null &&
+          !options.some((item) => item.promotionId === promotionId.value)
+        ) {
+          promotionId.value = null
+          notice.value =
+            'La promoción anterior ya no está disponible. Revisa el total sin promoción.'
+        }
+      }
       const result = await api().quote(selection.value, operation.controller.signal)
       if (operation.active()) {
+        promotionError.value = ''
         quote.value = result
         requestKey = crypto.randomUUID()
         step.value = summaryStep.value
@@ -409,7 +462,8 @@ export function useTicketPurchase(onExpired: () => void) {
     } catch (error_) {
       if (operation.active()) {
         failed(error_)
-        step.value = 2
+        if (changingPromotion) promotionError.value = error.value
+        else step.value = 2
       }
     } finally {
       if (operation.serial === generation) busy.value = false
@@ -553,6 +607,7 @@ export function useTicketPurchase(onExpired: () => void) {
       step.value = 3
       invalidate()
     } else if (status === 409) {
+      if (code === 'PROMOTION_UNAVAILABLE') promotionId.value = null
       invalidate()
       step.value = 2
       busy.value = false
@@ -619,6 +674,9 @@ export function useTicketPurchase(onExpired: () => void) {
     functions.value = []
     availability.value = null
     selected.value = []
+    promotions.value = []
+    promotionId.value = null
+    promotionError.value = ''
     invalidate()
     receipt.value = null
     restartable.value = false
@@ -657,6 +715,10 @@ export function useTicketPurchase(onExpired: () => void) {
     stop()
   })
   return {
+    promotions,
+    promotionId,
+    promotionError,
+    selectPromotion,
     guest,
     guestBuyer,
     buyerError,

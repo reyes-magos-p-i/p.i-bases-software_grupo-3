@@ -190,3 +190,41 @@ describe('Purchase rules', () => {
     });
   });
 });
+
+describe('per-ticket promotions', () => {
+  const promotion = { promotionId: 9, promotionTitle: 'Oferta', promotionType: 'fixed' as const, promotionAmount: 500 };
+  const data = { ...selection, promotionId: 9 };
+  it('subtracts fixed discounts from EACH ticket, including mixed categories and VIP', () => {
+    const result = purchaseQuote(context, seats, data, promotion);
+    expect(result.total).toBe(18000);
+    expect(result.lines.map((line) => line.unitPrice)).toEqual([4500, 5500, 4000, 4000]);
+    expect(result.discount).toMatchObject({ originalTotal: 20000, discountTotal: 2000 });
+    expect(result.lines.every((line) => line.base + line.modifiers.reduce((sum, item) => sum + item.amount, 0) === line.unitPrice)).toBe(true);
+  });
+  it('applies percentages to the final per-ticket price including surcharges', () => {
+    expect(purchaseQuote(context, seats, data, { ...promotion, promotionType: 'percentage', promotionAmount: 25 }).total).toBe(15000);
+  });
+  it('never produces negative prices and accepts a 100% promotion', () => {
+    const cheap = { ...context, format: '2D' as const, technology: 'STANDARD' as const, isPremiere: false };
+    expect(purchaseQuote(cheap, seats, data, { ...promotion, promotionAmount: 4000 }).total).toBe(0);
+    expect(purchaseQuote(context, seats, data, { ...promotion, promotionType: 'percentage', promotionAmount: 100 }).total).toBe(0);
+  });
+  it('rounds per ticket to cents before multiplying quantities', () => {
+    const result = purchaseQuote(context, seats, data, { ...promotion, promotionType: 'percentage', promotionAmount: 33.33 });
+    expect(result.total).toBe(13334);
+  });
+  it('binds idempotency to promotion selection while preserving legacy no-promotion hashes', () => {
+    expect(selectionHash(data)).not.toBe(selectionHash(selection));
+    expect(selectionHash({ ...selection, promotionId: null })).toBe(selectionHash(selection));
+    expect(selectionHash({ ...data, promotionId: 10 })).not.toBe(selectionHash(data));
+  });
+  it('changes quote version when the promotion changes and does not mutate input', () => {
+    const before = JSON.stringify({ seats, promotion });
+    expect(purchaseQuote(context, seats, data, promotion).version).not.toBe(purchaseQuote(context, seats, data, { ...promotion, promotionAmount: 501 }).version);
+    expect(JSON.stringify({ seats, promotion })).toBe(before);
+  });
+  it('rejects an unresolved selected promotion', () => {
+    expect(() => purchaseQuote(context, seats, data)).toThrow();
+    expect(() => purchaseQuote(context, seats, selection, promotion)).toThrow();
+  });
+});

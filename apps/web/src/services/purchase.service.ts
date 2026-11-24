@@ -8,6 +8,7 @@ import {
   readTicketEmailStatus,
 } from '@/utils/purchase-response'
 import type {
+  PurchasePromotion,
   CardIntent,
   PurchaseList,
   PurchaseListQuery,
@@ -118,4 +119,16 @@ export async function resendPurchaseTickets(id: number, signal?: AbortSignal) {
       )
     ).data,
   )
+}
+
+export async function getPurchasePromotions(
+  functionId: number,
+  signal?: AbortSignal,
+): Promise<PurchasePromotion[]> {
+  return (
+    await getApi().get<PurchasePromotion[]>(`/purchases/functions/${functionId}/promotions`, {
+      ...clientRequestOptions(),
+      signal,
+    })
+  ).data
 }

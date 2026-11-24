@@ -1,4 +1,8 @@
+import type { PromotionsService } from '../promotions/promotions.service';
+import type { ApplicablePromotion } from '../promotions/promotion-response.types';
 import {
+  NotFoundException,
+  BadRequestException,
   ConflictException,
   Logger,
   ServiceUnavailableException,
@@ -17,6 +21,10 @@ describe('PurchasesService', () => {
       getSeats: jest.fn(),
     },
     purchases = { confirm: jest.fn(), list: jest.fn(), findOne: jest.fn() };
+  const promotions = {
+    findApplicableToMovieFunction: jest.fn(),
+    resolveForPurchase: jest.fn(),
+  };
   const emails = { status: jest.fn(), request: jest.fn() };
   const payments = {
     createIntent: jest.fn(),
@@ -27,9 +35,11 @@ describe('PurchasesService', () => {
     catalog as unknown as PurchaseCatalogRepository,
     purchases as unknown as PurchasesRepository,
     emails as unknown as TicketEmailService,
+    promotions as unknown as PromotionsService,
     payments as unknown as CardPaymentGateway,
   );
   beforeEach(() => jest.resetAllMocks());
+  afterEach(() => jest.restoreAllMocks());
   it('checks ownership before querying or requesting a ticket email', async () => {
     const receipt = { id: 5 };
     purchases.findOne.mockResolvedValue(receipt);
@@ -108,7 +118,11 @@ describe('PurchasesService', () => {
       paymentMethod: 'CARD',
       paymentIntentId: 'pi_1',
     } as never;
-    payments.settled.mockResolvedValue({ currency: 'crc', requestKey });
+    payments.settled.mockResolvedValue({
+      intentId: 'pi_1',
+      currency: 'crc',
+      requestKey,
+    });
     purchases.confirm.mockResolvedValue({ id: 5 });
     purchases.list.mockResolvedValue({ items: [] });
     purchases.findOne.mockResolvedValue({ id: 5 });
@@ -119,6 +133,101 @@ describe('PurchasesService', () => {
     expect(purchases.list).toHaveBeenCalledWith(8, { page: 2 });
     expect(purchases.findOne).toHaveBeenCalledWith(5, 8);
   });
+  describe('availablePromotions', () => {
+    const matching: ApplicablePromotion = {
+      promotionId: 42,
+      promotionTitle: 'Oferta',
+      promotionType: 'percentage',
+      promotionAmount: 25,
+      description: 'Descuento',
+      conditions: null,
+      posterPath: null,
+      beginDate: '2026-01-01',
+      endDate: '2026-12-31',
+      beginHour: null,
+      endHour: null,
+      projectionFormat: null,
+      technology: null,
+    };
+    it('checks function availability before returning all eligible promotions unchanged', async () => {
+      const rows = [
+        matching,
+        {
+          ...matching,
+          promotionId: 43,
+          promotionType: 'fixed' as const,
+          promotionAmount: 500,
+        },
+      ];
+      catalog.getFunction.mockResolvedValueOnce({ id: 4, available: true });
+      promotions.findApplicableToMovieFunction.mockResolvedValueOnce(rows);
+      await expect(service.availablePromotions(4)).resolves.toBe(rows);
+      expect(catalog.getFunction).toHaveBeenCalledWith(4);
+      expect(promotions.findApplicableToMovieFunction).toHaveBeenCalledTimes(1);
+      expect(promotions.findApplicableToMovieFunction).toHaveBeenCalledWith(4);
+      expect(catalog.getFunction.mock.invocationCallOrder[0]).toBeLessThan(
+        promotions.findApplicableToMovieFunction.mock.invocationCallOrder[0],
+      );
+      expect(catalog.getSeats).not.toHaveBeenCalled();
+      expect(purchases.confirm).not.toHaveBeenCalled();
+    });
+    it('returns an empty list when no promotions match an available function', async () => {
+      catalog.getFunction.mockResolvedValueOnce({ id: 4, available: true });
+      promotions.findApplicableToMovieFunction.mockResolvedValueOnce([]);
+      await expect(service.availablePromotions(4)).resolves.toEqual([]);
+    });
+    it.each([null, { id: 4, available: false }])(
+      'uses the existing unavailable-function rule for %p',
+      async (context) => {
+        catalog.getFunction.mockResolvedValueOnce(context);
+        await expect(service.availablePromotions(4)).rejects.toBeInstanceOf(
+          ConflictException,
+        );
+        expect(promotions.findApplicableToMovieFunction).not.toHaveBeenCalled();
+      },
+    );
+    it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects invalid function ID %s before reading',
+      async (id) => {
+        await expect(service.availablePromotions(id)).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+        expect(catalog.getFunction).not.toHaveBeenCalled();
+        expect(promotions.findApplicableToMovieFunction).not.toHaveBeenCalled();
+      },
+    );
+    it('waits for the availability lookup before querying promotions', async () => {
+      let resolve!: (value: { id: number; available: boolean }) => void;
+      catalog.getFunction.mockReturnValueOnce(
+        new Promise((done) => {
+          resolve = done;
+        }),
+      );
+      promotions.findApplicableToMovieFunction.mockResolvedValueOnce([]);
+      const pending = service.availablePromotions(4);
+      expect(promotions.findApplicableToMovieFunction).not.toHaveBeenCalled();
+      resolve({ id: 4, available: true });
+      await expect(pending).resolves.toEqual([]);
+    });
+    it('preserves a catalog failure and skips the promotion lookup', async () => {
+      const error = new Error('Catalog unavailable');
+      catalog.getFunction.mockRejectedValueOnce(error);
+      await expect(service.availablePromotions(4)).rejects.toBe(error);
+      expect(promotions.findApplicableToMovieFunction).not.toHaveBeenCalled();
+    });
+    it.each([
+      new Error('Promotion database unavailable'),
+      new NotFoundException('Movie function not found.'),
+    ])(
+      'preserves promotion lookup errors instead of returning []: %p',
+      async (error) => {
+        catalog.getFunction.mockResolvedValueOnce({ id: 4, available: true });
+        promotions.findApplicableToMovieFunction.mockRejectedValueOnce(error);
+        await expect(service.availablePromotions(4)).rejects.toBe(error);
+      },
+    );
+  });
+
   describe('card payments', () => {
     const requestKey = '6f1f1a52-9c7e-4a51-9f57-1e2a2c3d4e5f';
     const paymentIntentId = 'pi_123ABC';
@@ -196,16 +305,16 @@ describe('PurchasesService', () => {
       it.each([
         'SEATS_UNAVAILABLE',
         'QUOTE_CHANGED',
+        'PROMOTION_UNAVAILABLE',
         'PAYMENT_MISMATCH',
         'FUNCTION_UNAVAILABLE',
         'TICKET_LIMIT_REACHED',
       ])('refunds the intent on %s', async (code) => {
         payments.settled.mockResolvedValue(settlement);
-        purchases.confirm.mockRejectedValue(conflict(code));
+        const failure = conflict(code);
+        purchases.confirm.mockRejectedValue(failure);
 
-        await expect(service.confirm(8, confirmation)).rejects.toMatchObject({
-          response: { code },
-        });
+        await expect(service.confirm(8, confirmation)).rejects.toBe(failure);
         expect(payments.refund).toHaveBeenCalledWith(paymentIntentId);
       });
 
@@ -304,5 +413,67 @@ describe('PurchasesService', () => {
         }),
       ).rejects.toMatchObject({ status: 400 });
     });
+  });
+  it('rejects a gateway settlement for a different intent without saving or refunding it', async () => {
+    const data = {
+      paymentIntentId: 'pi_requested',
+      requestKey: 'request',
+    } as never;
+    payments.settled.mockResolvedValue({
+      intentId: 'pi_other',
+      currency: 'crc',
+      requestKey: 'request',
+    });
+    await expect(service.confirm(8, data)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(purchases.confirm).not.toHaveBeenCalled();
+    expect(payments.refund).not.toHaveBeenCalled();
+  });
+  it('preserves gateway errors without saving or attempting a refund', async () => {
+    const failure = new Error('Gateway unavailable');
+    payments.settled.mockRejectedValueOnce(failure);
+    await expect(service.confirm(8, {} as never)).rejects.toBe(failure);
+    expect(purchases.confirm).not.toHaveBeenCalled();
+    expect(payments.refund).not.toHaveBeenCalled();
+  });
+  it('creates a payment using the real discounted quote rather than the full price', async () => {
+    const context = {
+      id: 4,
+      available: true,
+      format: '2D',
+      technology: 'STANDARD',
+      isPremiere: false,
+    };
+    catalog.getFunction.mockResolvedValue(context);
+    catalog.getSeats.mockResolvedValue({
+      function: context,
+      seats: [{ positionId: 1, state: 'free', type: 'normal' }],
+      maxTickets: 10,
+    });
+    promotions.resolveForPurchase.mockResolvedValue({
+      promotionId: 9,
+      promotionTitle: 'Oferta',
+      promotionType: 'fixed',
+      promotionAmount: 500,
+    });
+    const selection = {
+      functionId: 4,
+      seats: { GENERAL: [1], CHILD: [], SENIOR: [] },
+      promotionId: 9,
+    };
+    const quote = await service.quote(selection);
+    payments.createIntent.mockResolvedValueOnce({ intentId: 'pi_discount' });
+    await expect(
+      service.cardIntent({
+        ...selection,
+        requestKey: 'request',
+        quoteVersion: quote.version,
+      }),
+    ).resolves.toEqual({ intentId: 'pi_discount' });
+    expect(payments.createIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 2500, quoteVersion: quote.version }),
+    );
+    expect(promotions.resolveForPurchase).toHaveBeenCalledWith(4, 9);
   });
 });

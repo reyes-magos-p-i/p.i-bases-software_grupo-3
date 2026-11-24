@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  getPurchasePromotions,
   getPurchaseFunctions,
   getPurchaseSeats,
   quotePurchase,
@@ -156,6 +157,45 @@ describe('Purchase API', () => {
     const { PurchaseResponseError } = await import('@/utils/purchase-response')
     expect(purchaseError(new PurchaseResponseError())).toContain(
       'No se pudo comprobar la respuesta',
+    )
+  })
+})
+
+describe('purchase promotion API', () => {
+  beforeEach(() => vi.resetAllMocks())
+  it('loads function promotions using client credentials and an abort signal', async () => {
+    const items = [
+      { promotionId: 9, promotionType: 'fixed', promotionAmount: 500, promotionTitle: 'Oferta' },
+    ]
+    api.get.mockResolvedValueOnce({ data: items })
+    const controller = new AbortController()
+    expect(await getPurchasePromotions(4, controller.signal)).toBe(items)
+    expect(api.get).toHaveBeenCalledWith(
+      '/purchases/functions/4/promotions',
+      expect.objectContaining({
+        signal: controller.signal,
+        headers: { Authorization: 'Bearer client-token' },
+      }),
+    )
+  })
+  it('propagates promotion loading errors', async () => {
+    const failure = new Error('Network')
+    api.get.mockRejectedValueOnce(failure)
+    await expect(getPurchasePromotions(4)).rejects.toBe(failure)
+  })
+  it('sends only the chosen ID in quote and confirmation requests', async () => {
+    const data = { functionId: 4, seats: { GENERAL: [1], CHILD: [], SENIOR: [] }, promotionId: 9 }
+    api.post
+      .mockResolvedValueOnce({ data: { total: 2500 } })
+      .mockResolvedValueOnce({ data: receipt })
+    await quotePurchase(data)
+    await confirmPurchase({ ...data, requestKey: 'key', quoteVersion: 'hash' })
+    expect(api.post).toHaveBeenNthCalledWith(1, '/purchases/quote', data, expect.any(Object))
+    expect(api.post).toHaveBeenNthCalledWith(
+      2,
+      '/purchases',
+      expect.objectContaining({ promotionId: 9 }),
+      expect.any(Object),
     )
   })
 })

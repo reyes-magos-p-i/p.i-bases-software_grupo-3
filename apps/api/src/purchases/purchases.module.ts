@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PromotionsModule } from '../promotions/promotions.module';
 import { AuthModule } from '../auth/auth.module';
 import { ClientGuard } from '../clients/profile/guards/client.guard';
 import { PurchasesController } from './purchases.controller';
@@ -16,7 +17,7 @@ import { SmtpTicketEmailSender } from './notifications/smtp-ticket-email-sender'
 import { CardPaymentGateway } from './payments/card-payment.gateway';
 import { StripeCardPaymentGateway } from './payments/stripe-card-payment.gateway';
 @Module({
-  imports: [AuthModule, ClientsModule],
+  imports: [AuthModule, ClientsModule, PromotionsModule],
   controllers: [PurchasesController, GuestPurchasesController],
   providers: [
     ClientGuard,

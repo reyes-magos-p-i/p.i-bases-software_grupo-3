@@ -19,5 +19,6 @@ import { SmtpPromotionalEmailSender } from './promotional-email/smtp-promotional
     SmtpPromotionalEmailSender,
     PromotionalEmailService,
   ],
+  exports: [PromotionsService],
 })
 export class PromotionsModule {}
