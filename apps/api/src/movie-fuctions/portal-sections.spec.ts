@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { DatabaseService } from '../database/database.service';
+import { MOVIE_ON_SALE } from '../purchases/purchase-catalog.repository';
 import { PortalSectionParamsDto } from './dto/portal-section-params.dto';
 import { MovieFuctionsController } from './movie-fuctions.controller';
 import { MovieFuctionsService } from './movie-fuctions.service';
@@ -86,11 +87,13 @@ describe('Portal sections', () => {
         const sql = await sqlFor(section);
         expect(sql).toContain("mf.status = 'ACTIVE'");
         expect(sql).toContain("s.SEAT_STATE='libre'");
+        // The same sale window that checkout enforces.
+        expect(sql).toContain(`AND ${MOVIE_ON_SALE}`);
       }
     });
   });
 
-  // SCRUM-439: Cartelera and Preventas movies with a favorite genre of the client.
+  // SCRUM-439: Cartelera and Preventas ranked by the SCRUM-417 recommendation system.
   describe('recommendations', () => {
     const query = jest.fn();
     const repository = new MovieFunctionsRepository({
@@ -99,32 +102,57 @@ describe('Portal sections', () => {
 
     beforeEach(() => query.mockReset());
 
-    it('matches the client favorite genres in Cartelera and Preventas only', async () => {
-      const recommended = { ...row, section: 'cartelera', matchedGenre: 'Aventura' };
-      query.mockResolvedValue({ rows: [recommended] });
+    it('reads the cards of every Cartelera and Preventas movie with its section', async () => {
+      const onSale = { ...row, section: 'cartelera' };
+      query.mockResolvedValue({ rows: [onSale] });
 
-      await expect(repository.getRecommendedMovies(7)).resolves.toEqual([
-        { ...recommended, genres: ['Acción', 'Aventura'] },
+      await expect(repository.getOnSaleMovies()).resolves.toEqual([
+        { ...onSale, genres: ['Acción', 'Aventura'] },
       ]);
-      const [sql, binds] = query.mock.calls[0] as [string, object];
-      const text = sql.replace(/\s+/g, ' ');
-      expect(binds).toEqual({ clientId: 7 });
-      expect(text).toContain('WHERE p.client_id = :clientId');
-      expect(text).toContain('JOIN upcoming u ON u.movie_id = m.movie_id JOIN liked l');
+      const text = String(query.mock.calls[0][0]).replace(/\s+/g, ' ');
+      expect(text).toContain('JOIN upcoming u ON u.movie_id = m.movie_id');
       expect(text).toContain('((m.RELEASE_DATE IS NULL OR m.RELEASE_DATE <=');
       expect(text).toContain(') OR (m.PRESALE_START <=');
       expect(text).toContain("THEN 'preventas' ELSE 'cartelera' END AS \"section\"");
-      expect(text).toContain('ORDER BY l.matches DESC, u.next_start, m.movie_id');
+      expect(text).toContain('ORDER BY u.next_start, m.movie_id');
     });
 
-    it('the service asks the repository for the client', async () => {
-      const getRecommendedMovies = jest.fn().mockResolvedValue([]);
-      const service = new MovieFuctionsService({
-        getRecommendedMovies,
-      } as unknown as MovieFunctionsRepository);
+    it('ranks by preferences and purchases and leaves out the movies without a match', async () => {
+      const candidate = (id: number, genreIds: number[], languageIds: number[]) => ({
+        id,
+        title: `Película ${id}`,
+        posterImage: '',
+        genreIds,
+        languageIds,
+      });
+      const repo = {
+        getCatalogCandidates: jest.fn().mockResolvedValue([
+          candidate(1, [], []),
+          candidate(2, [], [3]),
+          candidate(3, [5], []),
+          candidate(4, [2], []),
+        ]),
+        getPurchaseHistory: jest.fn().mockResolvedValue({
+          purchasedMovieIds: [],
+          genres: [{ id: 5, purchaseCount: 10 }],
+          languages: [],
+        }),
+        getOnSaleMovies: jest
+          .fn()
+          .mockResolvedValue([1, 2, 3].map((id) => ({ ...row, id }))),
+      };
+      const service = new MovieFuctionsService(
+        repo as unknown as MovieFunctionsRepository,
+      );
 
-      await expect(service.findRecommendations(7)).resolves.toEqual([]);
-      expect(getRecommendedMovies).toHaveBeenCalledWith(7);
+      const movies = await service.findRecommendations(7, {
+        genreIds: [2],
+        languageIds: [3],
+      });
+
+      // 3 wins by purchases, 2 matches a language and 4 has no card any more.
+      expect(movies.map((movie) => movie.id)).toEqual([3, 2]);
+      expect(repo.getPurchaseHistory).toHaveBeenCalledWith(7);
     });
   });
 

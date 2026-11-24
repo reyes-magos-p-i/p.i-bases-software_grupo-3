@@ -34,20 +34,29 @@ export class ClientPreferencesService {
     return this.preferences.savePreferences(id, data);
   }
 
-  /** SCRUM-439: without favorite genres there is nothing to recommend, so it skips the query. */
+  /**
+   * SCRUM-439: Cartelera and Preventas ranked by the SCRUM-417 system, so favorite genres,
+   * favorite languages and purchases all count. matchedGenre is the first favorite genre of the
+   * movie by name.
+   */
   async getRecommendations(id: number): Promise<PortalRecommendations> {
-    const { genreIds } = await this.preferences.getPreferences(id);
-    if (!genreIds.length) return { genres: [], movies: [] };
-    const [genres, movies] = await Promise.all([
+    const preferences = await this.preferences.getPreferences(id);
+    const [genres, languages, movies] = await Promise.all([
       this.movies.findGenres(),
-      this.portal.findRecommendations(id),
+      this.movies.findLanguages(),
+      this.portal.findRecommendations(id, preferences),
     ]);
-    const favorite = new Set(genreIds);
+    const names = (options: { id: number; name: string }[], ids: number[]) =>
+      options.filter((option) => ids.includes(option.id)).map(({ name }) => name);
+    const favoriteGenres = names(genres, preferences.genreIds);
     return {
-      genres: genres
-        .filter((genre) => favorite.has(genre.id))
-        .map((genre) => genre.name),
-      movies,
+      genres: favoriteGenres,
+      languages: names(languages, preferences.languageIds),
+      movies: movies.map((movie) => ({
+        ...movie,
+        matchedGenre:
+          movie.genres.find((genre) => favoriteGenres.includes(genre)) ?? null,
+      })),
     };
   }
 

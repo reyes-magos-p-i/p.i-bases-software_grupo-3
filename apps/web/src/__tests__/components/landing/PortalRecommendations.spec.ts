@@ -75,12 +75,12 @@ describe('Portal recommendations', () => {
 
   it('recommends the movies of the favorite genres first, with the reason (UT-046)', async () => {
     signIn()
-    answer({ genres: ['Aventura'], movies: [odyssey] })
+    answer({ genres: ['Aventura'], languages: [], movies: [odyssey] })
 
     const wrapper = await mountHome()
 
     expect(section(wrapper).get('h2').text()).toBe('Recomendaciones para ti')
-    expect(section(wrapper).text()).toContain('Según tus géneros favoritos: Aventura')
+    expect(section(wrapper).text()).toContain('Según tus preferencias (Aventura) y tus compras')
     expect(titles(wrapper)).toEqual(['The Odyssey'])
     expect(section(wrapper).get('.reason').text()).toBe('Te gusta Aventura')
     expect(wrapper.find('section').attributes('id')).toBe('recomendaciones')
@@ -92,7 +92,7 @@ describe('Portal recommendations', () => {
 
   it('sells a recommended presale with its badge', async () => {
     signIn()
-    answer({ genres: ['Drama'], movies: [volcano] })
+    answer({ genres: ['Drama'], languages: [], movies: [volcano] })
 
     const wrapper = await mountHome()
 
@@ -103,7 +103,7 @@ describe('Portal recommendations', () => {
 
   it('invites a client without preferences to set them in Mi perfil (UT-047)', async () => {
     signIn()
-    answer({ genres: [], movies: [] })
+    answer({ genres: [], languages: [], movies: [] })
 
     const wrapper = await mountHome()
 
@@ -113,6 +113,34 @@ describe('Portal recommendations', () => {
     const link = section(wrapper).getComponent(RouterLinkStub)
     expect(link.text()).toBe('Configurar preferencias')
     expect(link.props('to')).toEqual(PREFERENCES_LINK)
+  })
+
+  // The SCRUM-417 system also recommends by favorite language and by purchases.
+  it('recommends by language or purchases without a genre tag', async () => {
+    signIn()
+    answer({
+      genres: [],
+      languages: ['Español'],
+      movies: [{ ...odyssey, matchedGenre: null }],
+    })
+
+    const wrapper = await mountHome()
+
+    expect(section(wrapper).text()).toContain('Según tus preferencias (Español) y tus compras')
+    expect(titles(wrapper)).toEqual(['The Odyssey'])
+    expect(section(wrapper).find('.reason').exists()).toBe(false)
+  })
+
+  it('does not ask a client with favorite languages to set preferences', async () => {
+    signIn()
+    answer({ genres: [], languages: ['Español'], movies: [] })
+
+    const wrapper = await mountHome()
+
+    expect(section(wrapper).get('[role="status"]').text()).toBe(
+      'No hay recomendaciones para ti por ahora.',
+    )
+    expect(section(wrapper).findComponent(RouterLinkStub).exists()).toBe(false)
   })
 
   it('hides the section from a visitor and does not ask for it (UT-048)', async () => {
@@ -132,7 +160,7 @@ describe('Portal recommendations', () => {
 
   it('removes the section when the client signs out (UT-049)', async () => {
     signIn()
-    answer({ genres: ['Aventura'], movies: [odyssey] })
+    answer({ genres: ['Aventura'], languages: [], movies: [odyssey] })
     const wrapper = await mountHome()
     expect(titles(wrapper)).toEqual(['The Odyssey'])
 
@@ -144,7 +172,7 @@ describe('Portal recommendations', () => {
 
   it('says there are no recommendations when nothing matches (UT-050)', async () => {
     signIn()
-    answer({ genres: ['Terror'], movies: [] })
+    answer({ genres: ['Terror'], languages: [], movies: [] })
 
     const wrapper = await mountHome()
 
@@ -158,12 +186,12 @@ describe('Portal recommendations', () => {
 
   it('asks again on every visit, so changed preferences show up (UT-051)', async () => {
     signIn()
-    answer({ genres: ['Aventura'], movies: [odyssey] })
+    answer({ genres: ['Aventura'], languages: [], movies: [odyssey] })
     const first = await mountHome()
     expect(titles(first)).toEqual(['The Odyssey'])
     mounted.pop()!.unmount()
 
-    answer({ genres: ['Drama'], movies: [volcano] })
+    answer({ genres: ['Drama'], languages: [], movies: [volcano] })
     const back = await mountHome()
 
     expect(titles(back)).toEqual(['Ecos del Volcán'])
@@ -173,7 +201,7 @@ describe('Portal recommendations', () => {
   it('shows its own error and retries only the recommendations', async () => {
     signIn()
     vi.mocked(getPortalRecommendations).mockRejectedValueOnce(new Error('offline'))
-    answer({ genres: ['Aventura'], movies: [odyssey] })
+    answer({ genres: ['Aventura'], languages: [], movies: [odyssey] })
     const wrapper = await mountHome()
 
     expect(section(wrapper).get('[role="alert"]').text()).toContain(
@@ -197,7 +225,7 @@ describe('Portal recommendations', () => {
     const wrapper = await mountHome()
 
     clearClientSession()
-    finish({ genres: ['Aventura'], movies: [odyssey] })
+    finish({ genres: ['Aventura'], languages: [], movies: [odyssey] })
     await flushPromises()
     signIn()
     vi.mocked(getPortalRecommendations).mockRejectedValue(new Error('offline'))

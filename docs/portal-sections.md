@@ -23,7 +23,15 @@ Se usan dos fechas nuevas de la película, en hora de Costa Rica:
 - función `ACTIVE` que todavía no empieza;
 - sala y sucursal activas;
 - la película disponible en esa sucursal;
+- la película ya estrenó o su preventa ya empezó (`RELEASE_DATE` vacía o ≤ hoy, o
+  `PRESALE_START` ≤ hoy);
 - al menos un asiento libre.
+
+La compra aplica la misma regla, compartida en `MOVIE_ON_SALE`
+(`purchase-catalog.repository.ts`): al listar las funciones, al cotizar y otra vez al confirmar
+dentro de la transacción, con o sin sesión. Una película de Estrenos no se puede comprar ni
+entrando directo a `/buy-tickets?movieId=<id>`: no muestra funciones y una confirmación responde
+`FUNCTION_UNAVAILABLE`.
 
 Una película de Estrenos también debe estar disponible en alguna sucursal activa.
 
@@ -97,28 +105,31 @@ de `variables.css`.
 
 ## Recomendaciones para ti (SCRUM-439)
 
-Fila que solo ve un cliente con sesión, arriba de Cartelera. Muestra las películas de **Cartelera**
-y **Preventas** que tienen alguno de sus **géneros favoritos** (Mi perfil › Preferencias). Primero
-van las que coinciden con más géneros y después por próxima función. Estrenos no entra porque
-todavía no se puede comprar.
+Fila que solo ve un cliente con sesión, arriba de Cartelera. Ordena las películas de **Cartelera**
+y **Preventas** con el sistema de recomendación de SCRUM-417 ([client-preferences.md](client-preferences.md)):
+`scoreMoviesForClient` suma sus **géneros e idiomas favoritos** (Mi perfil › Preferencias) y su
+**historial de compras**. Solo entran las películas con puntuación; a igual puntuación, por próxima
+función. Estrenos no entra porque todavía no se puede comprar.
 
-- Subtítulo: "Según tus géneros favoritos: Aventura, Drama". En lugar de **Ver todas**, el enlace
-  **Editar preferencias** abre Mi perfil en *Preferencias*.
-- Cada tarjeta dice **Te gusta <género>** (el primer género favorito que coincide, por nombre) y se
+- Un cliente con solo idiomas favoritos, o solo compras, también recibe recomendaciones, y una
+  compra nueva cambia el orden al volver al portal.
+- Subtítulo: "Según tus preferencias (Aventura, Español) y tus compras". En lugar de **Ver todas**,
+  el enlace **Editar preferencias** abre Mi perfil en *Preferencias*.
+- Si la película coincide con un género favorito, la tarjeta dice **Te gusta <género>** (el primero
+  que coincide, por nombre). Las recomendadas por idioma o por compras no llevan etiqueta. Se
   compra igual que en su sección; una preventa conserva su insignia.
-- Se vuelve a pedir cada vez que se entra al portal, así que los cambios de preferencias se ven al
-  volver, sin recargar. Al cerrar sesión la fila desaparece.
+- Se vuelve a pedir cada vez que se entra al portal, así que los cambios de preferencias y las
+  compras nuevas se ven al volver, sin recargar. Al cerrar sesión la fila desaparece.
 
 | Estado | Mensaje |
 | --- | --- |
-| Sin géneros favoritos | Configura tus preferencias en Mi perfil para recibir recomendaciones. (botón **Configurar preferencias**) |
+| Sin géneros ni idiomas favoritos, y nada por compras | Configura tus preferencias en Mi perfil para recibir recomendaciones. (botón **Configurar preferencias**) |
 | Ninguna película coincide | No hay recomendaciones para ti por ahora. |
 | Error (con **Reintentar**) | No se pudieron cargar tus recomendaciones. |
 
 API: `GET /api/clients/me/preferences/recommendations` (sesión de cliente, `Cache-Control: no-store`)
-devuelve `{ genres, movies }`. Sin géneros favoritos responde listas vacías sin consultar películas.
-Contrato en [`client-profile.openapi.yaml`](client-profile.openapi.yaml). No necesita cambios en la
-base de datos.
+devuelve `{ genres, languages, movies }`. Contrato en
+[`client-profile.openapi.yaml`](client-profile.openapi.yaml). No necesita cambios en la base de datos.
 
 ## Base de datos
 

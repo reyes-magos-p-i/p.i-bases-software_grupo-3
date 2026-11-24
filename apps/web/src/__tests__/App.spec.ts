@@ -23,7 +23,7 @@ vi.mock('@/services/movieFunctions', async (original) => ({
 }))
 
 vi.mock('@/services/client-preferences.service', () => ({
-  getPortalRecommendations: vi.fn().mockResolvedValue({ genres: [], movies: [] }),
+  getPortalRecommendations: vi.fn().mockResolvedValue({ genres: [], languages: [], movies: [] }),
 }))
 
 function movie(id: number, title: string): PortalSectionMovie {
