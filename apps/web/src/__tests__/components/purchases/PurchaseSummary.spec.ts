@@ -1,4 +1,4 @@
-import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
+
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import QrCode from '@/components/common/QrCode.vue'
@@ -208,19 +208,22 @@ describe('summary promotions', () => {
     promotionType: 'fixed' as const,
     promotionAmount: 500,
   }
-  it('offers one promotion or none and forwards numeric selection', async () => {
+ it('offers one promotion or none and forwards numeric selection', async () => {
     const wrapper = mount(PurchaseSummary, {
       props: { purchase: quote, showPromotions: true, promotions: [promotion] },
     })
-    expect(wrapper.getComponent(SimpleDropdown).props('options')).toEqual([
+    const dropdown = wrapper.getComponent({ name: 'SimpleDropdown' })
+    expect(dropdown.props('options')).toEqual([
       { id: 9, name: expect.stringContaining('por boleto') },
     ])
     await wrapper.get('select').setValue('9')
-    expect(wrapper.emitted('promotion-change')?.at(-1)).toEqual([9])
+    const selectedEvents = wrapper.emitted('promotion-change') ?? []
+    expect(selectedEvents[selectedEvents.length - 1]).toEqual([9])
     const select = wrapper.get('select')
     ;(select.element as HTMLSelectElement).selectedIndex = 0
     await select.trigger('change')
-    expect(wrapper.emitted('promotion-change')?.at(-1)).toEqual([null])
+    const clearedEvents = wrapper.emitted('promotion-change') ?? []
+    expect(clearedEvents[clearedEvents.length - 1]).toEqual([null])
     wrapper.unmount()
   })
   it('disables changes during payment and shows errors', () => {
