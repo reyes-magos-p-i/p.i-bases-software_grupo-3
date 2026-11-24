@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import DataChart from '@/components/common/DataChart.vue'
 import InfoPopover from '@/components/common/InfoPopover.vue'
@@ -9,7 +9,16 @@ import SalesPeriodFilter from './SalesPeriodFilter.vue'
 import { getSalesStatistics } from '@/services/sales-statistics.service'
 import { invalidateEmployeeSession } from '@/services/employee-session.service'
 import { authErrorMessage, authErrorStatus } from '@/utils/auth-errors'
-import { displayText } from '@/utils/display-text'
+import {
+  SALES_AUDIENCES,
+  SALES_METRICS,
+  SALES_NOTES,
+  SALES_RANKINGS,
+  rankedSalesPoints,
+  salesDate,
+  salesPoints,
+  salesValue,
+} from '@/utils/sales-statistics-presentation'
 import {
   statisticsAgeError,
   statisticsPeriod,
@@ -18,11 +27,14 @@ import {
 import type { SalesGroup, SalesMetric, SalesStatistics } from '@/types/sales-statistics'
 
 const router = useRouter()
+const SalesReportDialog = defineAsyncComponent(() => import('./SalesReportDialog.vue'))
+const reportOpen = ref(false)
 const data = ref<SalesStatistics | null>(null)
 const query = ref(statisticsPeriod('last30days'))
 const loading = ref(false)
 const error = ref('')
 const notice = ref('')
+const noticeType = ref<'error' | 'success'>('error')
 const metric = ref<SalesMetric>('revenue')
 const ranking = ref<'movies' | 'genres' | 'languages' | 'branches'>('movies')
 const audience = ref<'ages' | 'ageRanges' | 'genders'>('ageRanges')
@@ -34,32 +46,10 @@ const appliedAgeFilter = ref<{ min: number; max: number } | null>(null)
 let request: AbortController | undefined
 let revision = 0
 let disposed = false
-const count = new Intl.NumberFormat('es-CR', { maximumFractionDigits: 2 })
-const currency = new Intl.NumberFormat('es-CR', {
-  style: 'currency',
-  currency: 'CRC',
-  maximumFractionDigits: 2,
-})
-const formatValue = computed(
-  () => (value: number) =>
-    metric.value === 'revenue' ? currency.format(value) : count.format(value),
-)
-const metrics: { value: SalesMetric; label: string }[] = [
-  { value: 'revenue', label: 'Ingresos' },
-  { value: 'tickets', label: 'Boletos vendidos' },
-  { value: 'purchases', label: 'Compras realizadas' },
-]
-const rankings = {
-  movies: 'Películas más vendidas',
-  genres: 'Géneros más vendidos',
-  languages: 'Idiomas más vendidos',
-  branches: 'Sucursales con más ventas',
-}
-const audiences = {
-  ages: 'Edades del comprador',
-  ageRanges: 'Rangos de edad',
-  genders: 'Género del comprador',
-}
+const formatValue = computed(() => (value: number) => salesValue(value, metric.value))
+const metrics = SALES_METRICS
+const rankings = SALES_RANKINGS
+const audiences = SALES_AUDIENCES
 const agePresets = [
   { value: 'all', label: 'Todas las edades' },
   { value: '0-17', label: 'Menores de 18' },
@@ -71,9 +61,8 @@ const agePresets = [
   { value: '65-9999', label: '65 años o más' },
   { value: 'custom', label: 'Rango personalizado' },
 ]
-const formatDate = (value: string) => value.split('-').reverse().join('/')
 const periodLabel = computed(
-  () => `${formatDate(query.value.dateFrom)} — ${formatDate(query.value.dateTo)}`,
+  () => `${salesDate(query.value.dateFrom)} — ${salesDate(query.value.dateTo)}`,
 )
 const periodCaption = computed(() =>
   statisticsPeriodCaption(query.value.dateFrom, query.value.dateTo),
@@ -86,38 +75,32 @@ const cards = computed(() =>
     ? [
         {
           label: 'Ingresos por ventas',
-          value: currency.format(data.value.summary.revenue),
+          value: salesValue(data.value.summary.revenue, 'revenue'),
           icon: 'bi-cash-stack',
         },
         {
           label: 'Boletos vendidos',
-          value: count.format(data.value.summary.tickets),
+          value: salesValue(data.value.summary.tickets, 'tickets'),
           icon: 'bi-ticket-perforated',
         },
         {
           label: 'Compras realizadas',
-          value: count.format(data.value.summary.purchases),
+          value: salesValue(data.value.summary.purchases, 'purchases'),
           icon: 'bi-bag-check',
         },
         {
           label: 'Promedio por compra',
-          value: currency.format(data.value.summary.averagePurchase),
+          value: salesValue(data.value.summary.averagePurchase, 'revenue'),
           icon: 'bi-graph-up-arrow',
         },
       ]
     : [],
 )
 function points(groups: SalesGroup[]) {
-  return groups.map((group) => ({
-    key: group.key,
-    label: displayText(group.label),
-    value: group[metric.value],
-  }))
+  return salesPoints(groups, metric.value)
 }
 function ranked(groups: SalesGroup[], numeric = false) {
-  return points(groups)
-    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'es', { numeric }))
-    .slice(0, 10)
+  return rankedSalesPoints(groups, metric.value, numeric)
 }
 const rankingPoints = computed(() => ranked(data.value?.rankings[ranking.value] ?? []))
 const rankingCaption = computed(() => {
@@ -126,7 +109,7 @@ const rankingCaption = computed(() => {
   return total === 1 ? 'La categoría con más ventas' : `Las ${total} categorías con más ventas`
 })
 const series = computed(() =>
-  points(data.value?.series ?? []).map((point) => ({ ...point, label: formatDate(point.key) })),
+  points(data.value?.series ?? []).map((point) => ({ ...point, label: salesDate(point.key) })),
 )
 const provincePoints = computed(() =>
   points(data.value?.rankings.provinces ?? []).sort(
@@ -176,6 +159,7 @@ async function load() {
   data.value = null
   error.value = ''
   notice.value = ''
+  noticeType.value = 'error'
   try {
     const result = await getSalesStatistics({ ...query.value }, controller.signal)
     if (disposed || current !== revision) return
@@ -183,8 +167,7 @@ async function load() {
   } catch (error_) {
     if (disposed || current !== revision || controller.signal.aborted) return
     if (authErrorStatus(error_) === 401) {
-      invalidateEmployeeSession()
-      void router.replace({ path: '/', query: { login: 'employee', reason: 'expired' } })
+      expireSession()
       return
     }
     error.value = authErrorMessage(
@@ -195,6 +178,14 @@ async function load() {
   } finally {
     if (!disposed && current === revision) loading.value = false
   }
+}
+function expireSession() {
+  invalidateEmployeeSession()
+  void router.replace({ path: '/', query: { login: 'employee', reason: 'expired' } })
+}
+function reportDownloaded() {
+  noticeType.value = 'success'
+  notice.value = 'El reporte se generó correctamente. La descarga se ha iniciado.'
 }
 function applyPeriod(period: { dateFrom: string; dateTo: string }) {
   query.value = { ...query.value, ...period }
@@ -229,13 +220,8 @@ onBeforeUnmount(() => {
   <section class="sales-statistics surface-theme--dark" aria-label="Estadísticas de ventas">
     <header class="statistics-heading">
       <h1>Estadísticas de ventas</h1>
-      <button
-        type="button"
-        class="report-button"
-        disabled
-        title="Disponible en una próxima actualización"
-      >
-        <i class="bi bi-download" aria-hidden="true" /> Descargar reporte
+      <button type="button" class="report-button" @click="reportOpen = true">
+        <i class="bi bi-download" aria-hidden="true" /> Generar reporte
       </button>
     </header>
     <div class="filters-card">
@@ -267,11 +253,7 @@ onBeforeUnmount(() => {
           </select></label
         >
         <InfoPopover title="Información de las estadísticas" surface="dark">
-          <p>Se incluyen las compras pagadas de clientes e invitados.</p>
-          <p>
-            Los importes se muestran en colones costarricenses y las fechas usan la hora de Costa
-            Rica.
-          </p>
+          <p v-for="note in SALES_NOTES.general" :key="note">{{ note }}</p>
           <p>
             La opción «Mostrar» cambia la medida de los gráficos. Los indicadores superiores
             conservan sus totales del periodo.
@@ -308,8 +290,7 @@ onBeforeUnmount(() => {
             <header>
               <h3>{{ sectionTitle('Ventas por provincia') }}</h3>
               <InfoPopover title="Información sobre las provincias" surface="dark">
-                <p>Se usa la provincia registrada actualmente en el perfil del comprador.</p>
-                <p>Los invitados y los datos faltantes se muestran como «Sin información».</p>
+                <p v-for="note in SALES_NOTES.provinces" :key="note">{{ note }}</p>
               </InfoPopover>
             </header>
             <DataChart
@@ -329,10 +310,7 @@ onBeforeUnmount(() => {
                     title="Información sobre las categorías"
                     surface="dark"
                   >
-                    <p>
-                      Una película puede tener varios géneros o idiomas. Sus ventas se incluyen en
-                      cada categoría correspondiente.
-                    </p>
+                    <p v-for="note in SALES_NOTES.categories" :key="note">{{ note }}</p>
                   </InfoPopover>
                 </div>
                 <p>{{ rankingCaption }}</p>
@@ -357,12 +335,7 @@ onBeforeUnmount(() => {
             <header>
               <h3>{{ sectionTitle(audiences[audience]) }}</h3>
               <InfoPopover title="Información sobre los compradores" surface="dark">
-                <p>Estos datos corresponden al comprador, no a todos los asistentes.</p>
-                <p>
-                  La edad actual se calcula a partir de la fecha de nacimiento. El género usa los
-                  datos registrados actualmente.
-                </p>
-                <p>Los invitados y los datos faltantes se muestran como «Sin información».</p>
+                <p v-for="note in SALES_NOTES.audience" :key="note">{{ note }}</p>
                 <p>
                   El rango de edad solo se aplica a los gráficos de edades y rangos; no modifica las
                   demás estadísticas.
@@ -442,10 +415,17 @@ onBeforeUnmount(() => {
     </template>
     <NotificationPopup
       v-if="notice"
-      type="error"
+      :type="noticeType"
       :message="notice"
       placement="bottom-right"
       @close="notice = ''"
+    />
+    <SalesReportDialog
+      v-if="reportOpen"
+      :initial-period="query"
+      @close="reportOpen = false"
+      @downloaded="reportDownloaded"
+      @session-expired="expireSession"
     />
   </section>
 </template>
@@ -488,10 +468,13 @@ input {
   width: 100%;
 }
 .report-button {
-  color: var(--text-on-dark-secondary);
-  background: transparent;
-  opacity: 0.6;
-  cursor: not-allowed;
+  color: var(--button-text);
+  background: var(--button-background);
+  font-weight: 700;
+  cursor: pointer;
+}
+.report-button:hover {
+  background: var(--button-hover-background);
 }
 .report-button i {
   margin-right: 8px;

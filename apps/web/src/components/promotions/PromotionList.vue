@@ -12,7 +12,12 @@ const props = withDefaults(defineProps<{
   loading?: boolean
   error?: string
 }>(), { loading: false, error: '' })
-const emit = defineEmits<{ view: [id: number]; retry: [] }>()
+const emit = defineEmits<{
+  view: [id: number];
+  edit: [id: number];
+  delete: [id: number];
+  retry: []
+}>()
 
 type SortColumn = keyof PromotionListItem
 type Direction = 'asc' | 'desc'
@@ -188,6 +193,14 @@ function reset() {
           <button type="button" class="view-button" :aria-label="`Ver promoción ${row.promotionId}`" title="Ver"
             @click="emit('view', Number(row.promotionId))">
             <i class="bi bi-eye" aria-hidden="true" />
+          </button>
+          <button type="button" class="view-button" :aria-label="`Editar promoción ${row.promotionId}`" title="Modificar"
+            @click="emit('edit', Number(row.promotionId))">
+            <i class="bi bi-pencil-square" aria-hidden="true" />
+          </button>
+          <button type="button" class="view-button" :aria-label="`Eliminar promoción ${row.promotionId}`" title="Eliminar"
+            @click="emit('delete', Number(row.promotionId))">
+            <i class="bi bi-trash" aria-hidden="true" />
           </button>
         </template>
       </CrudTable>
