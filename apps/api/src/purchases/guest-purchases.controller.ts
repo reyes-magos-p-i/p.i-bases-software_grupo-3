@@ -12,7 +12,7 @@ import { Throttle } from '@nestjs/throttler';
 import { SessionOriginGuard } from '../auth/guards/session-origin.guard';
 import { ParseDecimalIdPipe } from '../common/pipes/parse-decimal-id.pipe';
 import { PurchaseThrottlerGuard } from './purchase-throttler.guard';
-import { PurchaseSelectionDto } from './purchase.dto';
+import { PurchaseIntentDto, PurchaseSelectionDto } from './purchase.dto';
 import {
   ConfirmGuestPurchaseDto,
   GuestBuyerDto,
@@ -44,6 +44,15 @@ export class GuestPurchasesController {
   @UseGuards(SessionOriginGuard)
   quote(@Body() data: PurchaseSelectionDto) {
     return this.service.purchases.quote(data);
+  }
+
+  @Post('payment-intents')
+  @Header('Cache-Control', 'no-store')
+  @HttpCode(200)
+  @UseGuards(SessionOriginGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  cardIntent(@Body() data: PurchaseIntentDto) {
+    return this.service.cardIntent(data);
   }
 
   @Post('buyer')

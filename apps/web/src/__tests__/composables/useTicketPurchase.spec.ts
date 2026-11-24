@@ -8,6 +8,7 @@ import {
   getPurchaseSeats,
   quotePurchase,
   confirmPurchase,
+  createCardPaymentIntent,
 } from '@/services/purchase.service'
 import type {
   PurchaseFunction,
@@ -29,6 +30,7 @@ vi.mock('@/services/guest-purchase.service', () => ({
   getGuestPurchaseSeats: vi.fn(),
   quoteGuestPurchase: vi.fn(),
   confirmGuestPurchase: vi.fn(),
+  createGuestCardPaymentIntent: vi.fn(),
   identifyGuestBuyer: vi.fn(),
 }))
 vi.mock('@/facebook-auth', () => ({ fbAuth: { status: 'unknown' }, logoutFromFacebook: vi.fn() }))
@@ -37,6 +39,7 @@ vi.mock('@/services/purchase.service', () => ({
   getPurchaseSeats: vi.fn(),
   quotePurchase: vi.fn(),
   confirmPurchase: vi.fn(),
+  createCardPaymentIntent: vi.fn(),
   purchaseError: () => 'No se pudo completar la compra.',
 }))
 const context: PurchaseFunction = {
@@ -223,7 +226,7 @@ describe('Ticket purchase coordination', () => {
   it('uses public availability for guests and requires matching email before review', async () => {
     await guestReady()
     expect(flow.guest.value).toBe(true)
-    expect(flow.labels.value).toHaveLength(5)
+    expect(flow.labels.value).toHaveLength(6)
     expect(flow.step.value).toBe(3)
     expect(quoteGuestPurchase).not.toHaveBeenCalled()
     await flow.identify({ email: 'bad', confirmEmail: 'other' })
@@ -239,7 +242,7 @@ describe('Ticket purchase coordination', () => {
     )
     expect(confirmPurchase).not.toHaveBeenCalled()
     expect(flow.guestReceipt.value?.accessCode).toBe('private')
-    expect(flow.step.value).toBe(5)
+    expect(flow.step.value).toBe(6)
     expect(expired).not.toHaveBeenCalled()
   })
   it('preserves a guest attempt through a timeout and a lock conflict without falling back to account history', async () => {
@@ -377,7 +380,7 @@ describe('Ticket purchase coordination', () => {
     expect(flow.step.value).toBe(3)
     await flow.pay()
     expect(flow.receipt.value?.id).toBe(12)
-    expect(flow.step.value).toBe(4)
+    expect(flow.step.value).toBe(5)
     expect(confirmPurchase).toHaveBeenCalledWith(
       expect.objectContaining({
         functionId: 4,
@@ -385,6 +388,83 @@ describe('Ticket purchase coordination', () => {
         quoteVersion: 'a'.repeat(64),
       }),
     )
+  })
+  it('opens the card step for the quoted total and cancels without contacting the payment API', async () => {
+    await ready()
+    vi.mocked(createCardPaymentIntent).mockResolvedValue({
+      intentId: 'pi_1',
+      clientSecret: 'secret',
+      publishableKey: 'pk_test',
+    })
+    await flow.continuePayment()
+    expect(createCardPaymentIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionId: 4,
+        requestKey: expect.any(String),
+        quoteVersion: 'a'.repeat(64),
+      }),
+      expect.any(AbortSignal),
+    )
+    expect(flow.cardIntent.value?.intentId).toBe('pi_1')
+    expect(flow.step.value).toBe(flow.paymentStep.value)
+    flow.cancelCardPayment()
+    expect(flow.cardIntent.value).toBeNull()
+    expect(flow.step.value).toBe(flow.summaryStep.value)
+    expect(confirmPurchase).not.toHaveBeenCalled()
+    expect(loadPurchaseAttempt()).toBeNull()
+  })
+  it('confirms the purchase with the intent only after Stripe reports the payment', async () => {
+    await ready()
+    vi.mocked(createCardPaymentIntent).mockResolvedValue({
+      intentId: 'pi_1',
+      clientSecret: 'secret',
+      publishableKey: 'pk_test',
+    })
+    await flow.continuePayment()
+    await flow.pay('pi_1')
+    expect(confirmPurchase).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethod: 'CARD', paymentIntentId: 'pi_1' }),
+    )
+    expect(flow.receipt.value?.id).toBe(12)
+    expect(flow.cardIntent.value).toBeNull()
+    expect(flow.step.value).toBe(flow.finalStep.value)
+  })
+  it('retries an uncertain card payment with the same intent instead of creating another', async () => {
+    await ready()
+    vi.mocked(createCardPaymentIntent).mockResolvedValue({
+      intentId: 'pi_1',
+      clientSecret: 'secret',
+      publishableKey: 'pk_test',
+    })
+    await flow.continuePayment()
+    vi.mocked(confirmPurchase).mockRejectedValueOnce(new Error('offline'))
+    await flow.pay('pi_1')
+    expect(flow.uncertain.value).toBe(true)
+    expect(flow.step.value).toBe(flow.summaryStep.value)
+    await flow.continuePayment()
+    expect(createCardPaymentIntent).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(
+      expect.objectContaining({ paymentMethod: 'CARD', paymentIntentId: 'pi_1' }),
+    )
+    expect(flow.receipt.value?.id).toBe(12)
+  })
+  it('returns to the summary after a definitive payment rejection so a new intent can be created', async () => {
+    await ready()
+    vi.mocked(createCardPaymentIntent).mockResolvedValue({
+      intentId: 'pi_1',
+      clientSecret: 'secret',
+      publishableKey: 'pk_test',
+    })
+    await flow.continuePayment()
+    vi.mocked(confirmPurchase).mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { status: 400, data: { message: 'El pago no fue aprobado.' } },
+    })
+    await flow.pay('pi_1')
+    expect(flow.uncertain.value).toBe(false)
+    expect(flow.cardIntent.value).toBeNull()
+    expect(flow.step.value).toBe(flow.summaryStep.value)
+    expect(loadPurchaseAttempt()).toBeNull()
   })
   it('keeps the same idempotency key after a network failure and freezes the selection until retry', async () => {
     await ready()
@@ -438,7 +518,7 @@ describe('Ticket purchase coordination', () => {
       await flow.pay()
       expect(vi.mocked(confirmPurchase).mock.calls[2]![0]).toEqual(original)
       expect(flow.receipt.value?.id).toBe(12)
-      expect(flow.step.value).toBe(4)
+      expect(flow.step.value).toBe(5)
       expect(flow.uncertain.value).toBe(false)
     },
   )
@@ -723,7 +803,7 @@ describe('Ticket purchase coordination', () => {
     resolve({ id: 12, accessCode: 'private' } as never)
     await pending
     expect(flow.guest.value).toBe(true)
-    expect(flow.step.value).toBe(5)
+    expect(flow.step.value).toBe(6)
     expect(flow.guestReceipt.value?.accessCode).toBe('private')
     expect(quotePurchase).not.toHaveBeenCalled()
   })

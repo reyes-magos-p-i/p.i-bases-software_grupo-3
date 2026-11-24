@@ -9,6 +9,7 @@ import { validEmail } from '@/utils/user-validation'
 
 const STORAGE_KEY = 'cinetadel.pending-purchase'
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu
+const INTENT_ID = /^pi_\w{1,250}$/u
 const categories = ['GENERAL', 'CHILD', 'SENIOR']
 
 export class PurchaseAttemptStorageError extends Error {
@@ -102,7 +103,9 @@ function validAttempt(value: unknown): value is PendingPurchaseAttempt {
     UUID.test(value.requestKey) &&
     validBuyer(value.buyer) &&
     validQuote(value.quote) &&
-    matchingSelection(value.selection, value.quote)
+    matchingSelection(value.selection, value.quote) &&
+    (value.paymentIntentId === undefined ||
+      (typeof value.paymentIntentId === 'string' && INTENT_ID.test(value.paymentIntentId)))
   )
 }
 function matchingSelection(value: unknown, quote: PurchaseQuote): boolean {

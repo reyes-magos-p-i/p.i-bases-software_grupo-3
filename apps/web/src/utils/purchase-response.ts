@@ -1,4 +1,9 @@
-import type { GuestPurchaseReceipt, PurchaseReceipt, TicketEmailStatus } from '@/types/purchase'
+import type {
+  CardIntent,
+  GuestPurchaseReceipt,
+  PurchaseReceipt,
+  TicketEmailStatus,
+} from '@/types/purchase'
 import { validEmail } from './user-validation'
 import { validGuestPurchaseCode } from './guest-purchase-code'
 
@@ -115,4 +120,19 @@ export function readTicketEmailStatus(value: unknown): TicketEmailStatus {
     throw new PurchaseResponseError()
   }
   return value as unknown as TicketEmailStatus
+}
+
+export function readCardIntent(value: unknown): CardIntent {
+  const intent = value as Partial<CardIntent> | null
+  if (
+    typeof intent?.intentId !== 'string' ||
+    typeof intent.clientSecret !== 'string' ||
+    typeof intent.publishableKey !== 'string'
+  )
+    throw new Error('Invalid card payment intent.')
+  return {
+    intentId: intent.intentId,
+    clientSecret: intent.clientSecret,
+    publishableKey: intent.publishableKey,
+  }
 }
