@@ -107,24 +107,30 @@ export class PromotionalEmailService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    let failed = 0;
-    for (const recipient of recipients) {
-      try {
-        await this.sender.send({
-          clientName: recipient.name,
-          email: recipient.email,
-          promotions,
-          billboardUrl,
-          preferencesUrl,
-        });
-      } catch (error) {
-        failed++;
-        this.logger.error(
-          `Promotional email failed for client ${recipient.clientId}`,
-          error instanceof Error ? error.stack : String(error),
-        );
-      }
-    }
+    // One message at a time: the transport does not pool connections, so parallel
+    // sends would open one SMTP connection per client.
+    const failed = await recipients.reduce<Promise<number>>(
+      async (previous, recipient) => {
+        const count = await previous;
+        try {
+          await this.sender.send({
+            clientName: recipient.name,
+            email: recipient.email,
+            promotions,
+            billboardUrl,
+            preferencesUrl,
+          });
+          return count;
+        } catch (error) {
+          this.logger.error(
+            `Promotional email failed for client ${recipient.clientId}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+          return count + 1;
+        }
+      },
+      Promise.resolve(0),
+    );
     this.logger.log(
       `Monthly promotional email sent to ${recipients.length - failed} of ${recipients.length} clients.`,
     );
