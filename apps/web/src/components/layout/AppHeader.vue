@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import logo from '@/assets/logos/cinetadel-logo.png'
 import RegisterModal from '@/components/auth/RegisterModal.vue'
 import LoginModal from '@/components/auth/LoginModal.vue'
 import AccountMenu from '@/components/common/AccountMenu.vue'
+import SectionNavigation from '@/components/common/SectionNavigation.vue'
+import { CLIENT_PROFILE_SECTIONS } from '@/types/client-profile'
 import {
   EmployeeAuthError,
   getClientPasswordStatus,
@@ -24,6 +26,7 @@ import {
   clearClientSession,
 } from '@/services/client-session.service'
 import { authErrorMessage, authErrorStatus } from '@/utils/auth-errors'
+import { safeRedirectTarget } from '@/utils/safe-redirect'
 import {
   announcePasswordExpiry,
   dismissPasswordExpiry,
@@ -32,7 +35,7 @@ import {
 import type { EmployeeLoginRequest } from '@/types/employee-auth'
 import type { ClientIdentity } from '@/types/client-auth'
 
-defineProps<{ overlay?: boolean }>()
+defineProps<{ overlay?: boolean; accountNavigationDisabled?: boolean }>()
 
 const PASSWORD_PATH = '/account/password'
 const activeModal = ref<'register' | 'login' | null>(null)
@@ -40,6 +43,12 @@ const clientUser = clientSession.user
 const loginMode = ref<'client' | 'employee'>('client')
 const router = useRouter()
 const route = useRoute()
+const accountSection = computed(() =>
+  route.path === '/account/profile'
+    ? (CLIENT_PROFILE_SECTIONS.find((section) => section.id === route.query.section)?.id ??
+      'personal')
+    : '',
+)
 const sessionUser = employeeSession.user
 const submitting = ref(false)
 const loginError = ref('')
@@ -65,6 +74,7 @@ async function enforceClientPasswordStatus() {
   if (
     !user ||
     !hasClientSession() ||
+    route.meta.publicLegal === true ||
     route.path === PASSWORD_PATH ||
     route.path === '/recover-password' ||
     route.path === '/account/confirm-email'
@@ -73,13 +83,24 @@ async function enforceClientPasswordStatus() {
 
   try {
     const expiry = await getClientPasswordStatus()
-    if (disposed || clientUser.value !== user || !hasClientSession()) return
-    announcePasswordExpiry(expiry)
+    if (
+      disposed ||
+      clientUser.value !== user ||
+      !hasClientSession() ||
+      route.meta.publicLegal === true
+    )
+      return
+    announcePasswordExpiry(expiry, 'client')
     if (expiry.status !== 'valid') {
       await router.replace({ path: PASSWORD_PATH, query: { reason: expiry.status } })
     }
   } catch (error) {
-    if (!disposed && clientUser.value === user && hasClientSession()) {
+    if (
+      !disposed &&
+      clientUser.value === user &&
+      hasClientSession() &&
+      route.meta.publicLegal !== true
+    ) {
       if (authErrorStatus(error) === 401) {
         clearClientSession()
         await router.replace({ path: '/', query: { login: 'client', reason: 'expired' } })
@@ -93,27 +114,46 @@ async function enforceClientPasswordStatus() {
   }
 }
 
-async function recoverSession() {
+async function openEmployeeDashboard() {
+  await router.replace('/dashboard')
+  if (route.path !== '/dashboard') {
+    throw new EmployeeAuthError(
+      employeeSession.error.value ||
+        'No se pudo abrir el panel del personal. Inténtalo nuevamente.',
+    )
+  }
+  if (!disposed) activeModal.value = null
+}
+
+async function recoverSession(force = false) {
   if (recovering.value) return
   recovering.value = true
   recoveryError.value = ''
   const results = await Promise.allSettled([
-    restoreEmployeeSession(true),
+    restoreEmployeeSession(force),
     restoreClientSession(getClientSession),
   ])
-  if (results[1]?.status === 'fulfilled' && !disposed) {
+  if (disposed) return
+  const employee = results[0]
+  if (employee.status === 'fulfilled' && employee.value) {
+    if (route.path === '/' && !submitting.value) {
+      await openEmployeeDashboard().catch((error_: unknown) => {
+        if (!disposed)
+          recoveryError.value = authErrorMessage(
+            error_,
+            'No se pudo abrir el panel del personal. Inténtalo nuevamente.',
+          )
+      })
+    }
+  } else if (results[1]?.status === 'fulfilled') {
     await enforceClientPasswordStatus()
   }
   const failure = results.find((result) => result.status === 'rejected')
-  if (failure?.status === 'rejected') {
-    if (!disposed)
-      recoveryError.value =
-        failure.reason instanceof EmployeeAuthError
-          ? failure.reason.message
-          : authErrorMessage(
-              failure.reason,
-              'No se pudo comprobar tu sesión. Puedes volver a intentarlo.',
-            )
+  if (failure?.status === 'rejected' && !disposed) {
+    recoveryError.value = authErrorMessage(
+      failure.reason,
+      'No se pudo comprobar tu sesión. Puedes volver a intentarlo.',
+    )
   }
   if (!disposed) recovering.value = false
 }
@@ -136,10 +176,9 @@ async function submitLogin(credentials: EmployeeLoginRequest) {
     } else {
       const identity = await authenticateEmployee(credentials)
       if (disposed || !identity) return
-      activeModal.value = null
       // The dashboard checks the password status when it opens.
       expectPasswordExpiryNotice()
-      await router.push('/dashboard')
+      await openEmployeeDashboard()
     }
   } catch (error) {
     if (disposed) return
@@ -163,6 +202,11 @@ function changeLoginMode(mode: 'client' | 'employee') {
 }
 
 async function returnAfterClientLogin() {
+  const destination = safeRedirectTarget(route.query.redirect)
+  if (destination) {
+    await router.push(destination)
+    return
+  }
   if (route.path !== '/buy-tickets') {
     await router.push('/')
     return
@@ -181,6 +225,7 @@ function closeLogin() {
     const query = { ...route.query }
     delete query.login
     delete query.reason
+    delete query.redirect
     void router.replace({ path: route.path, query })
   }
 }
@@ -247,25 +292,35 @@ async function logoutClient() {
   }
 }
 
-function goToChangePassword() {
-  void router.push('/account/password')
+function goToProfileSection(section: string) {
+  void router.push({ path: '/account/profile', query: { section } })
 }
 </script>
 
 <template>
   <header class="site-header" :class="{ 'site-header-overlay': overlay }">
-    <nav class="landing-container navbar-content">
+    <div class="landing-container navbar-content">
       <RouterLink to="/" class="brand" aria-label="Ir a la página principal de Cinetadel">
         <img :src="logo" alt="Cinetadel" class="brand-logo" />
       </RouterLink>
       <div class="navbar-actions">
-        <AccountMenu
-          v-if="clientUser"
-          :user="clientUser"
-          @logout="logoutClient"
-          @change-password="goToChangePassword"
-          @profile="router.push('/account/profile')"
-        />
+        <AccountMenu v-if="clientUser" :user="clientUser" @logout="logoutClient">
+          <template #navigation="{ close }">
+            <SectionNavigation
+              :items="CLIENT_PROFILE_SECTIONS"
+              :selected="accountSection"
+              :disabled="accountNavigationDisabled"
+              appearance="menu"
+              label="Secciones de mi perfil"
+              @select="
+                (section) => {
+                  close()
+                  goToProfileSection(section)
+                }
+              "
+            />
+          </template>
+        </AccountMenu>
         <RouterLink v-else-if="sessionUser" to="/dashboard" class="login-button dashboard-link"
           >Ir al dashboard</RouterLink
         >
@@ -296,10 +351,10 @@ function goToChangePassword() {
           @submit="submitLogin"
         />
       </div>
-    </nav>
+    </div>
     <p v-if="recoveryError" class="landing-container session-feedback" role="status">
       {{ recoveryError }}
-      <button type="button" :disabled="recovering" @click="recoverSession">
+      <button type="button" :disabled="recovering" @click="recoverSession(true)">
         {{ recovering ? 'Comprobando…' : 'Reintentar' }}
       </button>
     </p>
@@ -401,6 +456,70 @@ function goToChangePassword() {
 .login-button:focus-visible {
   outline: 2px solid var(--focus-on-dark);
   outline-offset: -4px;
+}
+
+/* SCRUM-438: portal header, kept to the logo and the account (option A without section links). */
+.site-header-overlay .navbar-content {
+  min-height: 88px;
+  align-items: center;
+  gap: 12px;
+}
+
+.site-header-overlay .brand-logo {
+  width: 56px;
+  height: 56px;
+}
+
+.site-header-overlay .navbar-actions {
+  align-items: center;
+  gap: 8px;
+}
+
+.site-header-overlay .login-button,
+.site-header-overlay .register-button {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.site-header-overlay .login-button {
+  border: 1px solid var(--text-on-dark);
+  background: color-mix(in srgb, var(--page-background) 40%, transparent);
+}
+
+.site-header-overlay .register-button::before {
+  display: none;
+}
+
+.site-header-overlay .login-button:hover,
+.site-header-overlay .register-button:hover {
+  background: var(--surface-on-dark-hover);
+}
+
+.site-header-overlay .login-button:focus-visible,
+.site-header-overlay .register-button:focus-visible {
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .site-header-overlay .navbar-content {
+    min-height: 68px;
+  }
+
+  .site-header-overlay .brand-logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .site-header-overlay .login-button,
+  .site-header-overlay .register-button {
+    padding: 0 12px;
+  }
+
+  .site-header-overlay :deep(.account-name) {
+    display: none;
+  }
 }
 
 @media (max-width: 576px) {

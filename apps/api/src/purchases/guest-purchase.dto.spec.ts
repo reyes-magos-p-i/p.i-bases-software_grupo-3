@@ -18,6 +18,8 @@ describe('Guest purchase input', () => {
       functionId: 4,
       seats: { GENERAL: [1], CHILD: [], SENIOR: [] },
       requestKey: randomUUID(),
+      paymentMethod: 'CARD',
+      paymentIntentId: 'pi_123',
       quoteVersion: 'a'.repeat(64),
     });
     expect(await validate(dto)).toEqual([]);
@@ -37,7 +39,7 @@ describe('Guest purchase input', () => {
       (await validate(plainToInstance(GuestBuyerDto, data))).length,
     ).toBeGreaterThan(0);
   });
-  it('accepts only a complete consultation code, trimmed without exposing it in URLs', async () => {
+  it('accepts a complete private link credential in the request body', async () => {
     const code = guestPurchaseCode(12, randomUUID());
     const dto = plainToInstance(GuestPurchaseLookupDto, {
       accessCode: ' ' + code + ' ',
@@ -52,6 +54,20 @@ describe('Guest purchase input', () => {
       ).length,
     ).toBeGreaterThan(0);
   });
+  it.each([undefined, null, 12, '', 'ORD-000012', 'A'.repeat(86)])(
+    'rejects invalid link credentials with a clear message: %s',
+    async (accessCode) => {
+      const errors = await validate(
+        plainToInstance(GuestPurchaseLookupDto, { accessCode }),
+      );
+      expect(errors.length).toBeGreaterThan(0);
+      expect(
+        errors.flatMap((error) => Object.values(error.constraints ?? {})),
+      ).toContain(
+        'El enlace de esta compra no es válido. Comprueba que esté completo.',
+      );
+    },
+  );
   it.each([' INV-12-' + 'a'.repeat(64) + ' ', '12.0' + 'l'.repeat(25)])(
     'accepts and normalizes both consultation formats: %s',
     async (accessCode) => {

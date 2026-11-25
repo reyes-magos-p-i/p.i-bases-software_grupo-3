@@ -104,6 +104,7 @@ describe('Projections HTTP contracts', () => {
     users.findEmployeeIdentityById.mockResolvedValue({
       id: 21,
       role: 'ADMINISTRATOR',
+      email: 'admin@example.com',
     });
     users.findEmployeeCredentialsStatus.mockResolvedValue({
       setAt: new Date(),
@@ -320,6 +321,7 @@ describe('Projections HTTP contracts', () => {
       request(app.getHttpServer())
         .patch(`/api/projections${path}/cancel`)
         .set('Origin', origin_)
+        .send({ email: 'admin@example.com' })
         .set('Cookie', session());
 
     it('cancels a projection and returns its detail', async () => {

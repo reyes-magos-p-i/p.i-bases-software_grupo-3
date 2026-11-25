@@ -9,12 +9,14 @@ import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import GuestBuyerStep from '@/components/purchases/GuestBuyerStep.vue'
 import GuestPurchaseAccess from '@/components/purchases/GuestPurchaseAccess.vue'
 import PurchaseEmailStatus from '@/components/purchases/PurchaseEmailStatus.vue'
+import CardPaymentStep from '@/components/purchases/CardPaymentStep.vue'
 import {
   getGuestPurchaseFunctions,
   getGuestPurchaseSeats,
   identifyGuestBuyer,
   quoteGuestPurchase,
   confirmGuestPurchase,
+  createGuestCardPaymentIntent,
   getGuestTicketEmailStatus,
   resendGuestPurchaseTickets,
 } from '@/services/guest-purchase.service'
@@ -24,15 +26,18 @@ vi.mock('@/services/guest-purchase.service', () => ({
   identifyGuestBuyer: vi.fn(),
   quoteGuestPurchase: vi.fn(),
   confirmGuestPurchase: vi.fn(),
+  createGuestCardPaymentIntent: vi.fn(),
   getGuestTicketEmailStatus: vi.fn(),
   resendGuestPurchaseTickets: vi.fn(),
 }))
 import { establishClientSession, clearClientSession } from '@/services/client-session.service'
 import {
+  getPurchasePromotions,
   getPurchaseFunctions,
   getPurchaseSeats,
   quotePurchase,
   confirmPurchase,
+  createCardPaymentIntent,
   getTicketEmailStatus,
   resendPurchaseTickets,
 } from '@/services/purchase.service'
@@ -41,12 +46,15 @@ const navigation = vi.hoisted(() => ({
   route: { path: '/buy-tickets', query: { movieId: '2' } },
 }))
 vi.mock('vue-router', () => ({ useRoute: () => navigation.route, useRouter: () => navigation }))
+vi.mock('@stripe/stripe-js', () => ({ loadStripe: vi.fn().mockResolvedValue(null) }))
 vi.mock('@/facebook-auth', () => ({ fbAuth: { status: 'unknown' }, logoutFromFacebook: vi.fn() }))
 vi.mock('@/services/purchase.service', () => ({
+  getPurchasePromotions: vi.fn(),
   getPurchaseFunctions: vi.fn(),
   getPurchaseSeats: vi.fn(),
   quotePurchase: vi.fn(),
   confirmPurchase: vi.fn(),
+  createCardPaymentIntent: vi.fn(),
   getTicketEmailStatus: vi.fn(),
   resendPurchaseTickets: vi.fn(),
   purchaseError: () => 'No se pudo completar.',
@@ -95,6 +103,7 @@ function render() {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(getPurchasePromotions).mockResolvedValue([])
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.mocked(getTicketEmailStatus).mockResolvedValue({
     status: 'SENT',
@@ -154,6 +163,13 @@ beforeEach(() => {
     total: 3000,
     reference: 'ORD-000012',
   } as never)
+  const intent = {
+    intentId: 'pi_test123',
+    clientSecret: 'pi_test123_secret',
+    publishableKey: 'pk_test',
+  }
+  vi.mocked(createCardPaymentIntent).mockResolvedValue(intent)
+  vi.mocked(createGuestCardPaymentIntent).mockResolvedValue(intent)
 })
 afterEach(() => {
   wrapper?.unmount()
@@ -163,6 +179,34 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 describe('TicketPurchaseView', () => {
+  it.each([false, true])(
+    'scrolls on entry before the functions load (guest: %s)',
+    async (guest) => {
+      if (guest) clearClientSession()
+      let finishLoading!: () => void
+      const pending = new Promise<Awaited<ReturnType<typeof getPurchaseFunctions>>>((resolve) => {
+        finishLoading = () => resolve({ movie: { id: 2 }, functions: [context] } as never)
+      })
+      vi.mocked(guest ? getGuestPurchaseFunctions : getPurchaseFunctions).mockReturnValueOnce(
+        pending,
+      )
+      render()
+
+      expect(wrapper.findComponent({ name: 'LoadingState' }).exists()).toBe(true)
+      expect(wrapper.findComponent(FunctionSelectionStep).exists()).toBe(false)
+      expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
+        top: 0,
+        left: 0,
+        behavior: 'instant',
+      })
+
+      finishLoading()
+      await flushPromises()
+      expect(wrapper.findComponent(FunctionSelectionStep).exists()).toBe(true)
+      expect(window.scrollTo).toHaveBeenCalledTimes(1)
+    },
+  )
+
   it('adds buyer identification and displays the consultation code only for completed guest purchases', async () => {
     clearClientSession()
     vi.mocked(getGuestPurchaseFunctions).mockResolvedValue({
@@ -193,7 +237,12 @@ describe('TicketPurchaseView', () => {
     } as never)
     render()
     await flushPromises()
-    expect(window.scrollTo).not.toHaveBeenCalled()
+    expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
+      top: 0,
+      left: 0,
+      behavior: 'instant',
+    })
+    vi.mocked(window.scrollTo).mockClear()
     wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
     await flushPromises()
     expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
@@ -221,8 +270,10 @@ describe('TicketPurchaseView', () => {
     expect(wrapper.text()).toContain('Volver al correo')
     await wrapper.get('.actions .primary').trigger('click')
     await flushPromises()
+    wrapper.getComponent(CardPaymentStep).vm.$emit('paid', 'pi_test123')
+    await flushPromises()
     expect(wrapper.text()).toContain('Tu compra como invitado quedó registrada')
-    expect(window.scrollTo).toHaveBeenCalledTimes(4)
+    expect(window.scrollTo).toHaveBeenCalledTimes(5)
     expect(wrapper.getComponent(GuestPurchaseAccess).props('accessCode')).toBe('private')
     expect(wrapper.text()).toContain('Enviamos tus boletos a guest@example.com')
     wrapper.getComponent(PurchaseEmailStatus).vm.$emit('resend')
@@ -232,12 +283,17 @@ describe('TicketPurchaseView', () => {
       type: 'success',
       placement: 'bottom-right',
     })
-    expect(window.scrollTo).toHaveBeenCalledTimes(4)
+    expect(window.scrollTo).toHaveBeenCalledTimes(5)
   })
   it('completes function, seat, review and simulated payment through reusable steps', async () => {
     render()
     await flushPromises()
-    expect(window.scrollTo).not.toHaveBeenCalled()
+    expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
+      top: 0,
+      left: 0,
+      behavior: 'instant',
+    })
+    vi.mocked(window.scrollTo).mockClear()
     wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
     await flushPromises()
     expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
@@ -273,8 +329,10 @@ describe('TicketPurchaseView', () => {
       .find((button) => button.text() === 'Pagar')!
       .trigger('click')
     await flushPromises()
+    wrapper.getComponent(CardPaymentStep).vm.$emit('paid', 'pi_test123')
+    await flushPromises()
     expect(wrapper.text()).toContain('¡Compra exitosa!')
-    expect(window.scrollTo).toHaveBeenCalledTimes(5)
+    expect(window.scrollTo).toHaveBeenCalledTimes(6)
     expect(wrapper.text()).not.toContain('pago simulado')
     expect(confirmPurchase).toHaveBeenCalledWith(
       expect.objectContaining({ seats: { GENERAL: [], CHILD: [1], SENIOR: [] } }),
@@ -332,6 +390,8 @@ describe('TicketPurchaseView', () => {
     vi.mocked(window.scrollTo).mockClear()
     await wrapper.get('.purchase-action.primary').trigger('click')
     await flushPromises()
+    wrapper.getComponent(CardPaymentStep).vm.$emit('paid', 'pi_test123')
+    await flushPromises()
     const original = vi.mocked(confirmPurchase).mock.calls[0]![0]
     await wrapper.get('.purchase-action.primary').trigger('click')
     await flushPromises()
@@ -347,14 +407,16 @@ describe('TicketPurchaseView', () => {
       duration: 0,
       placement: 'bottom-right',
     })
-    expect(window.scrollTo).not.toHaveBeenCalled()
+    expect(window.scrollTo).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain('Historial de compras')
     expect(getPurchaseSeats).toHaveBeenCalledTimes(1)
     expect(vi.mocked(confirmPurchase).mock.calls[1]![0]).toEqual(original)
     await wrapper.get('.purchase-action.primary').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('¡Compra exitosa!')
-    expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith({
+    // Payment step, summary after the timeout, then the receipt.
+    expect(window.scrollTo).toHaveBeenCalledTimes(3)
+    expect(window.scrollTo).toHaveBeenLastCalledWith({
       top: 0,
       left: 0,
       behavior: 'instant',
@@ -372,6 +434,8 @@ describe('TicketPurchaseView', () => {
     wrapper.getComponent(SeatSelectionStep).vm.$emit('continue')
     await flushPromises()
     await wrapper.get('.purchase-action.primary').trigger('click')
+    await flushPromises()
+    wrapper.getComponent(CardPaymentStep).vm.$emit('paid', 'pi_test123')
     await flushPromises()
     const original = vi.mocked(confirmPurchase).mock.calls[0]![0]
     wrapper.unmount()
@@ -416,6 +480,8 @@ describe('TicketPurchaseView', () => {
     await flushPromises()
     await wrapper.get('.purchase-action.primary').trigger('click')
     await flushPromises()
+    wrapper.getComponent(CardPaymentStep).vm.$emit('paid', 'pi_test123')
+    await flushPromises()
     await wrapper.get('.purchase-action.primary').trigger('click')
     await flushPromises()
     expect(wrapper.getComponent(FunctionSelectionStep).props('functions')).toEqual([context])
@@ -431,14 +497,15 @@ describe('TicketPurchaseView', () => {
 
   it('scrolls after the new step renders and keeps the position when review fails', async () => {
     let seatStepVisibleDuringScroll = false
+    vi.mocked(quotePurchase).mockRejectedValueOnce(new Error('offline'))
+    render()
+    await flushPromises()
+    vi.mocked(window.scrollTo).mockClear()
     vi.mocked(window.scrollTo).mockImplementation(() => {
       seatStepVisibleDuringScroll =
         wrapper.findComponent(SeatSelectionStep).exists() &&
         wrapper.getComponent(SeatSelectionStep).isVisible()
     })
-    vi.mocked(quotePurchase).mockRejectedValueOnce(new Error('offline'))
-    render()
-    await flushPromises()
     wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
     await flushPromises()
     expect(seatStepVisibleDuringScroll).toBe(true)
@@ -456,5 +523,34 @@ describe('TicketPurchaseView', () => {
       left: 0,
       behavior: 'instant',
     })
+  })
+})
+
+describe('summary promotion wiring', () => {
+  it('passes options to the summary and forwards selection into a new quote', async () => {
+    const promotion = {
+      promotionId: 9,
+      promotionTitle: 'Oferta',
+      promotionType: 'fixed' as const,
+      promotionAmount: 500,
+    }
+    vi.mocked(getPurchasePromotions).mockResolvedValue([promotion])
+    render()
+    await flushPromises()
+    wrapper.getComponent(FunctionSelectionStep).vm.$emit('select', 4)
+    await flushPromises()
+    wrapper.getComponent(SeatSelectionStep).vm.$emit('selection', [seat])
+    wrapper.getComponent(SeatSelectionStep).vm.$emit('continue')
+    await flushPromises()
+    const summary = wrapper.getComponent(PurchaseSummary)
+    expect(summary.props('promotions')).toEqual([promotion])
+    expect(summary.props('showPromotions')).toBe(true)
+    summary.vm.$emit('promotion-change', 9)
+    await flushPromises()
+    expect(quotePurchase).toHaveBeenLastCalledWith(
+      expect.objectContaining({ promotionId: 9 }),
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.getComponent(PurchaseSummary).props('promotionId')).toBe(9)
   })
 })

@@ -1,3 +1,15 @@
+.cinema-dialog,
+.app-modal-card {
+  --primary-color: var(--dialog-accent-color);
+  --button-confirm-background: var(--dialog-accent-color);
+  --button-confirm-hover-background: var(--dialog-action-hover-background);
+  --focus-color: var(--dialog-accent-color);
+  --focus-shadow: var(--dialog-focus-shadow);
+  --surface-hover: var(--dialog-hover-background);
+  --info-background: var(--dialog-hover-background);
+  --color-primary: var(--dialog-accent-color);
+}
+
 .cinema-dialog {
   color: var(--text-primary);
   background: var(--dialog-background);

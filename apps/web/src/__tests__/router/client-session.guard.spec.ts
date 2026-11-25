@@ -14,8 +14,10 @@ vi.mock('@/services/authService', () => ({
   getClientSession: vi.fn(),
 }))
 
-function route(path: string, requiresClient = false) {
-  return { path, meta: { requiresClient } } as unknown as Parameters<typeof requireClientSession>[0]
+function route(path: string, requiresClient = false, publicLegal = false) {
+  return { path, meta: { requiresClient, publicLegal } } as unknown as Parameters<
+    typeof requireClientSession
+  >[0]
 }
 
 const expiry = (
@@ -41,6 +43,17 @@ describe('requireClientSession', () => {
     expect(result).toEqual({ path: '/', query: { login: 'client', reason: 'required' } })
   })
 
+  it('leaves staff routes to the employee guard even with an expired client session stored', async () => {
+    clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
+    vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))
+    const dashboard = route('/dashboard')
+    dashboard.meta.requiresEmployee = true
+    await expect(requireClientSession(dashboard, route('/'), vi.fn())).resolves.toBe(true)
+    expect(getClientSession).not.toHaveBeenCalled()
+    expect(getClientPasswordStatus).not.toHaveBeenCalled()
+    expect(localStorage.getItem('accessToken')).toBe('saved-token')
+  })
+
   it('keeps recovery accessible even when an existing session has an expired password', async () => {
     clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
     vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))
@@ -59,10 +72,29 @@ describe('requireClientSession', () => {
     const identity = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
     vi.mocked(getClientSession).mockResolvedValueOnce(identity)
     vi.mocked(getClientPasswordStatus).mockResolvedValueOnce(expiry('expired'))
-    const result = await requireClientSession(route('/privacy-policy'), route('/', false), vi.fn())
+    const result = await requireClientSession(route('/'), route('/', false), vi.fn())
     expect(getClientSession).toHaveBeenCalledWith('saved-token')
     expect(result).toEqual({ path: '/account/password', query: { reason: 'expired' } })
   })
+
+  it.each(['/terms-and-conditions', '/refund-policy', '/privacy-policy'])(
+    'keeps %s public without checking or clearing a stored client session',
+    async (path) => {
+      const identity = { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: '' }
+      clientSession.user.value = identity
+      vi.mocked(getClientSession).mockRejectedValue(new Error('offline'))
+      vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))
+
+      await expect(
+        requireClientSession(route(path, false, true), route('/'), vi.fn()),
+      ).resolves.toBe(true)
+
+      expect(getClientSession).not.toHaveBeenCalled()
+      expect(getClientPasswordStatus).not.toHaveBeenCalled()
+      expect(clientSession.user.value).toEqual(identity)
+      expect(localStorage.getItem('accessToken')).toBe('saved-token')
+    },
+  )
 
   it('forces a redirect to /account/password when the password is expired', async () => {
     clientSession.user.value = { id: 1, email: 'a@a.com', firstName: 'A', lastName: 'B' }
@@ -174,8 +206,11 @@ describe('redirectClientWhenPasswordBlocked', () => {
     isAxiosError: true,
     response: { status: 403, data: { code } },
   })
-  const fakeRouter = (path: string) =>
-    ({ currentRoute: { value: { path } }, replace: vi.fn() }) as unknown as Router & {
+  const fakeRouter = (path: string, publicLegal = false) =>
+    ({
+      currentRoute: { value: { path, meta: { publicLegal } } },
+      replace: vi.fn(),
+    }) as unknown as Router & {
       replace: ReturnType<typeof vi.fn>
     }
 
@@ -203,4 +238,18 @@ describe('redirectClientWhenPasswordBlocked', () => {
     stop()
     expect(router.replace).not.toHaveBeenCalled()
   })
+
+  it.each(['/terms-and-conditions', '/refund-policy', '/privacy-policy'])(
+    'does not interrupt reading %s when an earlier request reports an expired password',
+    (path) => {
+      localStorage.setItem('accessToken', 'saved-token')
+      const router = fakeRouter(path, true)
+      const stop = redirectClientWhenPasswordBlocked(router)
+      notifyPasswordBlocked(blocked('PASSWORD_EXPIRED'))
+      stop()
+
+      expect(router.replace).not.toHaveBeenCalled()
+      expect(localStorage.getItem('accessToken')).toBe('saved-token')
+    },
+  )
 })

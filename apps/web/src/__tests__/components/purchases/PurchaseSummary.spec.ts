@@ -1,9 +1,12 @@
+
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import QrCode from '@/components/common/QrCode.vue'
 import MoviePoster from '@/components/common/MoviePoster.vue'
 import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
 import type { PurchaseQuote, PurchaseReceipt } from '@/types/purchase'
+import summarySource from '@/components/purchases/PurchaseSummary.vue?raw'
+import { contrastRatio, cssValue } from '../../helpers/contrast'
 const quote = {
   function: {
     id: 4,
@@ -180,11 +183,71 @@ describe('PurchaseSummary', () => {
     } as never
     const cancelled = mount(PurchaseSummary, { props: { purchase } })
     expect(cancelled.text()).toContain('Esta función fue cancelada.')
+    expect(cancelled.find('.function-cancelled').attributes('role')).toBe('status')
     cancelled.unmount()
     const active = mount(PurchaseSummary, {
       props: { purchase: { ...(purchase as object), functionCancelled: false } as never },
     })
     expect(active.text()).not.toContain('fue cancelada')
+    expect(active.find('.function-cancelled').exists()).toBe(false)
     active.unmount()
+  })
+  it('shows the cancelled-function warning in red with at least 4.5:1', () => {
+    const color = cssValue(summarySource, '.function-cancelled', 'color')
+    const background = cssValue(summarySource, '.function-cancelled', 'background')
+    expect(color).toBe('var(--error-text)')
+    expect(background).toBe('var(--error-background)')
+    expect(contrastRatio(color, background)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('summary promotions', () => {
+  const promotion = {
+    promotionId: 9,
+    promotionTitle: 'Oferta',
+    promotionType: 'fixed' as const,
+    promotionAmount: 500,
+  }
+ it('offers one promotion or none and forwards numeric selection', async () => {
+    const wrapper = mount(PurchaseSummary, {
+      props: { purchase: quote, showPromotions: true, promotions: [promotion] },
+    })
+    const dropdown = wrapper.getComponent({ name: 'SimpleDropdown' })
+    expect(dropdown.props('options')).toEqual([
+      { id: 9, name: expect.stringContaining('por boleto') },
+    ])
+    await wrapper.get('select').setValue('9')
+    const selectedEvents = wrapper.emitted('promotion-change') ?? []
+    expect(selectedEvents[selectedEvents.length - 1]).toEqual([9])
+    const select = wrapper.get('select')
+    ;(select.element as HTMLSelectElement).selectedIndex = 0
+    await select.trigger('change')
+    const clearedEvents = wrapper.emitted('promotion-change') ?? []
+    expect(clearedEvents[clearedEvents.length - 1]).toEqual([null])
+    wrapper.unmount()
+  })
+  it('disables changes during payment and shows errors', () => {
+    const wrapper = mount(PurchaseSummary, {
+      props: {
+        purchase: quote,
+        showPromotions: true,
+        promotionDisabled: true,
+        promotionError: 'No disponible',
+      },
+    })
+    expect(wrapper.get('select').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('No disponible')
+    wrapper.unmount()
+  })
+  it('shows the server discount snapshot and keeps the selector out of receipts', () => {
+    const purchase = {
+      ...quote,
+      discount: { promotion, originalTotal: 3500, discountTotal: 500 },
+      total: 3000,
+    }
+    const wrapper = mount(PurchaseSummary, { props: { purchase } })
+    expect(wrapper.text()).toContain('Promoción aplicada: Oferta')
+    expect(wrapper.find('select').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

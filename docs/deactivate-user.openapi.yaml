@@ -18,7 +18,7 @@ paths:
         - $ref: "#/components/parameters/UserId"
         - $ref: "#/components/parameters/Origin"
       requestBody:
-        $ref: "#/components/requestBodies/Empty"
+        $ref: "sensitive-actions.openapi.yaml#/components/requestBodies/EmailConfirmation"
       responses:
         "204":
           description: Usuario desactivado. Sin cuerpo.
@@ -47,7 +47,7 @@ paths:
         - $ref: "#/components/parameters/UserId"
         - $ref: "#/components/parameters/Origin"
       requestBody:
-        $ref: "#/components/requestBodies/Empty"
+        $ref: "sensitive-actions.openapi.yaml#/components/requestBodies/EmailConfirmation"
       responses:
         "204":
           description: Usuario desactivado. Sin cuerpo.

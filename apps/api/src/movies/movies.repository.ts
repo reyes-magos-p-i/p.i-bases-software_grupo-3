@@ -50,6 +50,8 @@ import * as oracledb from 'oracledb';
       m.RUNNING_TIME,
       m.RELEASE_YEAR,
       m.POSTER_IMAGE,
+      TO_CHAR(m.RELEASE_DATE, 'YYYY-MM-DD') AS RELEASE_DATE,
+      TO_CHAR(m.PRESALE_START, 'YYYY-MM-DD') AS PRESALE_START,
       c.CLASSIFICATION_ID,
       c.CLASSIFICATION_NAME AS CLASSIFICATION,
 
@@ -96,6 +98,8 @@ import * as oracledb from 'oracledb';
       runningTime: first.RUNNING_TIME,
       releaseYear: first.RELEASE_YEAR,
       posterImage: first.POSTER_IMAGE ?? null,
+      releaseDate: first.RELEASE_DATE ?? null,
+      presaleStart: first.PRESALE_START ?? null,
       classification: {
         id: first.CLASSIFICATION_ID,
         name: first.CLASSIFICATION,
@@ -141,7 +145,9 @@ import * as oracledb from 'oracledb';
         RELEASE_YEAR,
         SYNOPSIS,
         POSTER_IMAGE,
-        CLASSIFICATION_ID
+        CLASSIFICATION_ID,
+        RELEASE_DATE,
+        PRESALE_START
       )
       VALUES (
         :title,
@@ -149,7 +155,9 @@ import * as oracledb from 'oracledb';
         :releaseYear,
         :synopsis,
         :posterImage,
-        :classificationId
+        :classificationId,
+        TO_DATE(:releaseDate, 'YYYY-MM-DD'),
+        TO_DATE(:presaleStart, 'YYYY-MM-DD')
       )
       RETURNING MOVIE_ID INTO :movieId
       `,
@@ -160,6 +168,8 @@ import * as oracledb from 'oracledb';
         synopsis: dto.synopsis,
         posterImage: dto.posterImage,
         classificationId: dto.classificationId,
+        releaseDate: dto.releaseDate ?? null,
+        presaleStart: dto.presaleStart ?? null,
 
         movieId: {
           dir: oracledb.BIND_OUT,
@@ -266,7 +276,12 @@ import * as oracledb from 'oracledb';
           RUNNING_TIME = COALESCE(:runningTime, RUNNING_TIME),
           RELEASE_YEAR = COALESCE(:releaseYear, RELEASE_YEAR),
           CLASSIFICATION_ID =
-            COALESCE(:classificationId, CLASSIFICATION_ID)
+            COALESCE(:classificationId, CLASSIFICATION_ID),
+          -- Dates can be cleared: absent keeps them, null clears them.
+          RELEASE_DATE = CASE WHEN :releaseDateSent = 1
+            THEN TO_DATE(:releaseDate, 'YYYY-MM-DD') ELSE RELEASE_DATE END,
+          PRESALE_START = CASE WHEN :presaleStartSent = 1
+            THEN TO_DATE(:presaleStart, 'YYYY-MM-DD') ELSE PRESALE_START END
         WHERE MOVIE_ID = :id
         `,
         {
@@ -277,6 +292,10 @@ import * as oracledb from 'oracledb';
           runningTime: dto.runningTime ?? null,
           releaseYear: dto.releaseYear ?? null,
           classificationId: dto.classificationId ?? null,
+          releaseDateSent: dto.releaseDate === undefined ? 0 : 1,
+          releaseDate: dto.releaseDate ?? null,
+          presaleStartSent: dto.presaleStart === undefined ? 0 : 1,
+          presaleStart: dto.presaleStart ?? null,
         },
         { autoCommit: false },
       );

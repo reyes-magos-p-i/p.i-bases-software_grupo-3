@@ -1,5 +1,6 @@
 import type { MovieOption } from '@/types/movie'
 import { characterCount, validText } from '@/utils/user-validation'
+import { validDate } from '@/utils/date-only'
 
 export const MOVIE_TITLE_LIMIT = 100
 export const MOVIE_SYNOPSIS_LIMIT = 1000
@@ -9,6 +10,9 @@ export interface MovieDraft {
   synopsis: string
   runningTime: number | null
   releaseYear: number | null
+  /** YYYY-MM-DD, or empty when there is none (SCRUM-437). */
+  releaseDate: string
+  presaleStart: string
   classificationId: number | null
   languageIds: number[]
   genreIds: number[]
@@ -66,6 +70,14 @@ export function validateMovie(
   ) {
     errors.releaseYear = 'Escribe un año entre 1888 y 2077, sin decimales.'
   }
+  if (form.releaseDate && !validDate(form.releaseDate))
+    errors.releaseDate = 'Selecciona una fecha de estreno válida.'
+  if (form.presaleStart && !validDate(form.presaleStart))
+    errors.presaleStart = 'Selecciona una fecha de inicio de preventa válida.'
+  else if (form.presaleStart && !form.releaseDate)
+    errors.presaleStart = 'Indica la fecha de estreno para programar la preventa.'
+  else if (form.presaleStart && form.releaseDate && form.presaleStart >= form.releaseDate)
+    errors.presaleStart = 'La preventa debe empezar antes de la fecha de estreno.'
   if (!catalogs.classifications.some((option) => option.id === form.classificationId)) {
     errors.classificationId = 'Selecciona una clasificación disponible.'
   }
@@ -83,6 +95,9 @@ export function movieErrorsFromApi(value: unknown): MovieErrors {
       /duración|runningTime/iu,
       'Escribe una duración entre 1 y 999 minutos, sin decimales.',
     ],
+    // Checked before the release date: a presale message also names the release date.
+    ['presaleStart', /preventa|presaleStart/iu, 'La preventa debe empezar antes de la fecha de estreno.'],
+    ['releaseDate', /fecha de estreno|releaseDate/iu, 'Selecciona una fecha de estreno válida.'],
     ['releaseYear', /año|releaseYear/iu, 'Escribe un año entre 1888 y 2077, sin decimales.'],
     [
       'classificationId',

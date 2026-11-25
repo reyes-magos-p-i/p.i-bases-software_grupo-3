@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
+import SectionNavigation from '@/components/common/SectionNavigation.vue'
 import AccountMenu from '@/components/common/AccountMenu.vue'
+import { CLIENT_PROFILE_SECTIONS } from '@/types/client-profile'
 import { establishClientSession } from '@/services/client-session.service'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import { requireClientSession } from '@/router/client-session.guard'
@@ -91,6 +93,11 @@ describe('AppHeader authentication navigation', () => {
         },
         { path: '/account/confirm-email', component: { template: '<p>Confirmar correo</p>' } },
         { path: '/account/password', component: { template: '<p>Cambiar contraseña</p>' } },
+        ...['/terms-and-conditions', '/refund-policy', '/privacy-policy'].map((path) => ({
+          path,
+          meta: { publicLegal: true },
+          component: { template: '<p>Información legal</p>' },
+        })),
       ],
     })
     await router.push('/')
@@ -126,6 +133,83 @@ describe('AppHeader authentication navigation', () => {
       else Reflect.deleteProperty(prototype, key)
     }
     vi.restoreAllMocks()
+  })
+
+  it.each(['/terms-and-conditions', '/refund-policy', '/privacy-policy'])(
+    'restores the account menu on %s without enforcing a password change',
+    async (path) => {
+      await flushPromises()
+      wrapper.unmount()
+      const identity = { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' }
+      establishClientSession(identity, 'client-token')
+      vi.mocked(getClientSession).mockResolvedValue(identity)
+      vi.mocked(getClientPasswordStatus).mockResolvedValue(expiry('expired'))
+      await router.push(path)
+      wrapper = renderHeader()
+      await flushPromises()
+
+      expect(router.currentRoute.value.path).toBe(path)
+      expect(wrapper.getComponent(AccountMenu).props('user')).toEqual(identity)
+      expect(getClientPasswordStatus).not.toHaveBeenCalled()
+      expect(localStorage.getItem('accessToken')).toBe('client-token')
+    },
+  )
+
+  it.each(['expired', 'unauthorized'] as const)(
+    'ignores a late %s password result after navigating to a legal page',
+    async (outcome) => {
+      await flushPromises()
+      wrapper.unmount()
+      const identity = { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' }
+      establishClientSession(identity, 'client-token')
+      vi.mocked(getClientSession).mockResolvedValue(identity)
+      let resolveStatus!: (value: PasswordExpiry) => void
+      let rejectStatus!: (error: Error) => void
+      vi.mocked(getClientPasswordStatus).mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            resolveStatus = resolve
+            rejectStatus = reject
+          }),
+      )
+      wrapper = renderHeader()
+      await flushPromises()
+      expect(getClientPasswordStatus).toHaveBeenCalledTimes(1)
+
+      await router.push('/privacy-policy')
+      if (outcome === 'expired') resolveStatus(expiry('expired'))
+      else rejectStatus(new ClientAuthError('Sesión no disponible', 401))
+      await flushPromises()
+
+      expect(router.currentRoute.value.path).toBe('/privacy-policy')
+      expect(localStorage.getItem('accessToken')).toBe('client-token')
+      expect(wrapper.getComponent(AccountMenu).props('user')).toEqual(identity)
+      expect(wrapper.text()).not.toContain('Sesión no disponible')
+    },
+  )
+
+  // SCRUM-438: the portal header stays clean, with only the logo and the account.
+  it('keeps the portal header to the logo and the account', async () => {
+    wrapper.unmount()
+    wrapper = mount(AppHeader, {
+      props: { overlay: true },
+      attachTo: document.body,
+      global: { plugins: [router] },
+    })
+    const sectionLinks = () =>
+      wrapper.findAll('a').filter((link) => link.attributes('href')?.startsWith('/#'))
+
+    expect(wrapper.find('nav').exists()).toBe(false)
+    expect(sectionLinks()).toHaveLength(0)
+
+    establishClientSession(
+      { id: 7, email: 'ana@example.com', firstName: 'Ana', lastName: 'Rojas' },
+      'client-token',
+    )
+    await flushPromises()
+
+    expect(sectionLinks()).toHaveLength(0)
+    expect(wrapper.text()).not.toContain('Para ti')
   })
 
   it('navigates from the portal through both login modes and restores focus on close', async () => {
@@ -205,8 +289,11 @@ describe('AppHeader authentication navigation', () => {
     await wrapper.get('.account-avatar').trigger('click')
     expect(wrapper.get('.account-dropdown').text()).toContain('ana@example.com')
     expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
-      'Mi perfil',
-      'Cambiar contraseña',
+      'Mis datos',
+      'Seguridad',
+      'Historial de compras',
+      'Preferencias',
+      'Desactivar cuenta',
       'Cerrar sesión',
     ])
 
@@ -273,7 +360,10 @@ describe('AppHeader authentication navigation', () => {
     await flushPromises()
 
     expect(router.currentRoute.value.fullPath).toBe('/')
-    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(3))
+    expect(passwordExpiryNotice.message.value).toBe(passwordExpiryMessage(3, 'client'))
+    expect(passwordExpiryNotice.message.value).toContain(
+      'Cámbiala en Seguridad en el menú de tu perfil.',
+    )
 
     // Logging out removes a warning that is still on screen.
     if (!wrapper.find('.account-dropdown').exists())
@@ -415,6 +505,41 @@ describe('AppHeader authentication navigation', () => {
     expect(page.findAll('dialog[open]')).toHaveLength(0)
   })
 
+  it('keeps staff login open and busy until dashboard navigation has completed', async () => {
+    let finish!: (allowed: boolean) => void
+    router.beforeEach((to) =>
+      to.path === '/dashboard'
+        ? new Promise<boolean>((resolve) => {
+            finish = resolve
+          })
+        : true,
+    )
+    await employeeForm()
+    await page.get('form').trigger('submit')
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    expect(page.findAll('dialog[open]')).toHaveLength(1)
+    expect(page.get<HTMLButtonElement>('.app-modal-close').element.disabled).toBe(true)
+    finish(true)
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+    expect(page.findAll('dialog[open]')).toHaveLength(0)
+  })
+
+  it('keeps a cancelled staff navigation recoverable in the login dialog', async () => {
+    const remove = router.beforeEach((to) => to.path !== '/dashboard')
+    await employeeForm()
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(page.findAll('dialog[open]')).toHaveLength(1)
+    expect(page.get('[role="alert"]').text()).toContain('No se pudo abrir el panel del personal')
+    expect(page.get<HTMLButtonElement>('.login-submit').element.disabled).toBe(false)
+    remove()
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+  })
+
   it('blocks closing, switching and repeated submission while login is pending', async () => {
     let resolve!: (value: null) => void
     vi.mocked(authenticateEmployee).mockReturnValueOnce(
@@ -488,11 +613,58 @@ describe('AppHeader authentication navigation', () => {
     expect(router.currentRoute.value.query.login).toBeUndefined()
   })
 
-  it('offers the dashboard when a session is recovered', async () => {
+  it('keeps a dashboard link available on legal pages for recovered staff', async () => {
+    await router.push('/privacy-policy')
     Object.assign(employeeSession.user, { value: { id: 21, role: 'EMPLOYEE', firstName: 'Ana' } })
     await nextTick()
     expect(wrapper.get('.dashboard-link').text()).toBe('Ir al dashboard')
     expect(wrapper.find('.login-button[type="button"]').exists()).toBe(false)
+  })
+
+  it.each(['ADMINISTRATOR', 'EMPLOYEE'] as const)(
+    'redirects a recovered %s from the portal automatically',
+    async (role) => {
+      wrapper.unmount()
+      vi.mocked(restoreEmployeeSession).mockResolvedValueOnce({ id: 21, role, firstName: 'Ana' })
+      wrapper = renderHeader()
+      await flushPromises()
+      expect(router.currentRoute.value.path).toBe('/dashboard')
+      expect(restoreEmployeeSession).toHaveBeenLastCalledWith(false)
+    },
+  )
+
+  it('does not let an older recovery start a second navigation after staff login', async () => {
+    wrapper.unmount()
+    let finish!: (identity: { id: number; role: 'EMPLOYEE'; firstName: string }) => void
+    vi.mocked(restoreEmployeeSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    wrapper = renderHeader()
+    const replace = vi.spyOn(router, 'replace')
+    await employeeForm()
+    await page.get('form').trigger('submit')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+    finish({ id: 21, role: 'EMPLOYEE', firstName: 'Ana' })
+    await flushPromises()
+    expect(replace).toHaveBeenCalledExactlyOnceWith('/dashboard')
+  })
+
+  it('ignores session recovery after the header is unmounted', async () => {
+    wrapper.unmount()
+    let finish!: (identity: { id: number; role: 'EMPLOYEE'; firstName: string }) => void
+    vi.mocked(restoreEmployeeSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    wrapper = renderHeader()
+    wrapper.unmount()
+    finish({ id: 21, role: 'EMPLOYEE', firstName: 'Ana' })
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/')
   })
 
   it('allows retrying session recovery without showing a false login failure', async () => {
@@ -501,9 +673,11 @@ describe('AppHeader authentication navigation', () => {
     wrapper = renderHeader()
     await flushPromises()
     expect(wrapper.get('.session-feedback').text()).toContain('No se pudo comprobar')
+    expect(restoreEmployeeSession).toHaveBeenLastCalledWith(false)
     await wrapper.get('.session-feedback button').trigger('click')
     await flushPromises()
     expect(wrapper.find('.session-feedback').exists()).toBe(false)
+    expect(restoreEmployeeSession).toHaveBeenLastCalledWith(true)
   })
   it('does not force a password-status redirect away from the recovery link', async () => {
     wrapper.unmount()
@@ -581,16 +755,75 @@ describe('AppHeader authentication navigation', () => {
     expect(page.get('[role="alert"]').text()).toContain('Tu sesión terminó')
     expect(page.get('[role="alert"]').text()).not.toContain('401')
   })
-  it('navigates to the profile from the existing account menu', async () => {
+  it.each(['/', '/buy-tickets', '/account/password'])(
+    'offers every client section with direct navigation from %s',
+    async (path) => {
+      await flushPromises()
+      establishClientSession(
+        { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: 'Rojas' },
+        'token',
+      )
+      for (const section of CLIENT_PROFILE_SECTIONS) {
+        await router.push(path)
+        await flushPromises()
+        await wrapper.get('.account-avatar').trigger('click')
+        expect(wrapper.findAll('.account-actions button').map((button) => button.text())).toEqual([
+          'Mis datos',
+          'Seguridad',
+          'Historial de compras',
+          'Preferencias',
+          'Desactivar cuenta',
+          'Cerrar sesión',
+        ])
+        const options = wrapper.getComponent(SectionNavigation).findAll('button')
+        await options.find((button) => button.text() === section.label)!.trigger('click')
+        await flushPromises()
+        expect(wrapper.find('.account-dropdown').exists()).toBe(false)
+        expect(router.currentRoute.value.path).toBe('/account/profile')
+        expect(router.currentRoute.value.query).toEqual({ section: section.id })
+        await wrapper.get('.account-avatar').trigger('click')
+        expect(wrapper.get('button[aria-current="page"]').text()).toBe(section.label)
+        await wrapper.get('.account-avatar').trigger('click')
+      }
+    },
+  )
+  it('blocks section changes during pending operations while keeping the options visible', async () => {
     await flushPromises()
     establishClientSession(
-      { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: '' },
+      { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: 'Rojas' },
       'token',
     )
-    await nextTick()
-    wrapper.getComponent(AccountMenu).vm.$emit('profile')
+    await wrapper.setProps({ accountNavigationDisabled: true })
+    await wrapper.get('.account-avatar').trigger('click')
+    const options = wrapper.getComponent(SectionNavigation).findAll('button')
+    expect(options).toHaveLength(5)
+    expect(options.every((button) => button.attributes('disabled') !== undefined)).toBe(true)
+    await options[0]!.trigger('click')
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(wrapper.find('.account-dropdown').exists()).toBe(true)
+    await wrapper.setProps({ accountNavigationDisabled: false })
+    await options[0]!.trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/account/profile')
+    expect(router.currentRoute.value.query.section).toBe('personal')
+  })
+  it('tracks the selected section through browser back and forward navigation', async () => {
+    await flushPromises()
+    establishClientSession(
+      { id: 7, email: 'a@example.com', firstName: 'Ana', lastName: 'Rojas' },
+      'token',
+    )
+    await router.push('/account/profile?section=security')
+    await router.push('/account/profile?section=preferences')
+    await wrapper.get('.account-avatar').trigger('click')
+    expect(wrapper.get('button[aria-current="page"]').text()).toBe('Preferencias')
+    router.back()
+    await flushPromises()
+    expect(wrapper.get('button[aria-current="page"]').text()).toBe('Seguridad')
+    router.forward()
+    await flushPromises()
+    expect(wrapper.get('button[aria-current="page"]').text()).toBe('Preferencias')
+    await router.push('/account/profile?section=invalid')
+    expect(wrapper.get('button[aria-current="page"]').text()).toBe('Mis datos')
   })
   it('does not enforce password status while confirming a new email', async () => {
     await flushPromises()

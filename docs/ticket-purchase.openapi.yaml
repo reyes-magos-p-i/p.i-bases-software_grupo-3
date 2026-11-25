@@ -113,8 +113,8 @@ paths:
   /guest-purchases/lookup:
     post:
       security: []
-      summary: Consulta privada de una compra de invitado mediante su código
-      description: Exige Origin permitido. Máximo 10 solicitudes por minuto. Código en el cuerpo, sin caché. No acepta un correo o número de factura como autorización ni consulta facturas de cuentas registradas.
+      summary: Abre una compra de invitado mediante la credencial de su enlace privado
+      description: La interfaz abre /guest-purchases/receipt#<credencial> y envía su fragmento en accessCode dentro del cuerpo. No existe un formulario público de consulta. Exige Origin permitido. Máximo 10 solicitudes por minuto, sin caché. No acepta un correo o número de factura como autorización ni consulta facturas de cuentas registradas.
       requestBody:
         required: true
         content:
@@ -129,7 +129,7 @@ paths:
                     type: string,
                     maxLength: 85,
                     pattern: '^(?:INV-[1-9][0-9]{0,15}-[A-F0-9]{64}|[1-9][0-9]{0,15}\.[0-7][0-9A-HJKMNP-TV-Z]{25})$',
-                    description: Formato normalizado; acepta códigos largos anteriores y compactos. Convierte a mayúsculas y admite espacios o guiones y O/0 e I/L/1 en el secreto compacto,
+                    description: Credencial extraída del fragmento del enlace privado. Conserva compatibilidad con formatos largos anteriores y compactos y su normalización,
                   }
       responses:
         "200":
@@ -137,11 +137,14 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/GuestReceipt" }
-        "400": { description: Código incompleto o con formato inválido }
+        "400":
+          {
+            description: Credencial del enlace incompleta o con formato inválido,
+          }
         "403": { description: Origen no autorizado }
         "404":
           {
-            description: No se encontró una compra con ese código; no expone datos personales,
+            description: No se encontró una compra con este enlace; no expone datos personales,
           }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /purchases/movies/{id}/functions:
@@ -360,8 +363,8 @@ paths:
   /guest-purchases/email-status:
     post:
       security: []
-      summary: Consulta el estado de envío mediante el código privado del invitado
-      description: Exige Origin permitido. El código se envía en el cuerpo, nunca en la URL. Máximo 60 solicitudes por minuto. Cache-Control no-store.
+      summary: Consulta el estado de envío con la credencial privada del invitado
+      description: Exige Origin permitido. La credencial del enlace se envía en el cuerpo, nunca en la URL de la API. Máximo 60 solicitudes por minuto. Cache-Control no-store.
       requestBody:
         required: true
         content:
@@ -375,23 +378,26 @@ paths:
       responses:
         "200":
           $ref: "#/paths/~1purchases~1me~1{id}~1email-status/get/responses/200"
-        "400": { description: Código inválido }
+        "400": { description: Credencial del enlace inválida }
         "403": { description: Origen no autorizado }
-        "404": { description: Código no encontrado }
+        "404": { description: No se encontró una compra con este enlace }
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /guest-purchases/resend-tickets:
     post:
       security: []
       summary: Reenvía los boletos al correo original de la compra de invitado
-      description: Exige código privado y Origin permitido. No acepta otro destinatario. Máximo 5 solicitudes por minuto y un intervalo de 60 segundos por compra. Cache-Control no-store.
+      description: Exige la credencial privada del enlace y Origin permitido. No acepta otro destinatario. El correo incluye el enlace privado de la compra y su QR original. Máximo 5 solicitudes por minuto y un intervalo de 60 segundos por compra. Cache-Control no-store.
       requestBody:
         $ref: "#/paths/~1guest-purchases~1email-status/post/requestBody"
       responses:
         "202":
           $ref: "#/paths/~1purchases~1me~1{id}~1resend-tickets/post/responses/202"
-        "400": { description: Código inválido o compra sin boletos disponibles }
+        "400":
+          {
+            description: Credencial del enlace inválida o compra sin boletos disponibles,
+          }
         "403": { description: Origen no autorizado }
-        "404": { description: Código no encontrado }
+        "404": { description: No se encontró una compra con este enlace }
         "409":
           {
             description: Envío en curso o intervalo entre solicitudes no cumplido,
@@ -473,7 +479,7 @@ components:
             accessCode:
               {
                 type: string,
-                description: Código privado compacto de consulta; debe guardarse y no se incorpora al QR. Los códigos largos anteriores siguen siendo válidos para consultar,
+                description: Credencial privada interna que la interfaz incorpora al fragmento del enlace para abrir la compra. No se muestra como código independiente ni se incorpora al QR. Los formatos largos anteriores siguen siendo válidos dentro de enlaces,
                 pattern: '^[1-9][0-9]{0,15}\.[0-7][0-9A-HJKMNP-TV-Z]{25}$',
                 example: "12.4AVG75NWK52Z476W4QDMW7DYQE",
               }

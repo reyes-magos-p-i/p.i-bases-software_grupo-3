@@ -1,13 +1,17 @@
 import {
-  beginClientSessionChange,
   clearClientSession,
   establishClientSession,
 } from '@/services/client-session.service'
-import { afterEach, describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import App from '../App.vue'
 import router from '../router'
-import { getPortalMovies } from '@/services/movieFunctions'
+import { getPortalSection } from '@/services/movieFunctions'
+import { employeeSession, restoreEmployeeSession } from '@/services/employee-session.service'
+import type { EmployeeIdentity } from '@/types/employee-auth'
+import type { PortalSection, PortalSectionMovie } from '@/types/portal'
+
+vi.mock('@/views/DashboardView.vue', () => ({ default: { template: '<p>Panel del personal</p>' } }))
 
 vi.mock('@/services/employee-session.service', async () => {
   const { ref } = await import('vue')
@@ -19,39 +23,62 @@ vi.mock('@/services/employee-session.service', async () => {
 })
 vi.mock('@/services/movieFunctions', async (original) => ({
   ...(await original<typeof import('@/services/movieFunctions')>()),
-  getPortalMovies: vi.fn().mockResolvedValue([]),
+  getPortalSection: vi.fn(),
 }))
-vi.mock('@/services/employee-session.service', async () => {
-  const { ref } = await import('vue')
+
+vi.mock('@/services/client-preferences.service', () => ({
+  getPortalRecommendations: vi.fn().mockResolvedValue({ genres: [], languages: [], movies: [] }),
+}))
+
+function movie(id: number, title: string): PortalSectionMovie {
   return {
-    employeeSession: { user: ref(null), status: ref('unknown'), error: ref('') },
-    restoreEmployeeSession: vi.fn().mockResolvedValue(null),
-    authenticateEmployee: vi.fn(),
+    id,
+    title,
+    posterImage: `${id}.jpg`,
+    synopsis: '',
+    classification: 'TP',
+    runningTime: 120,
+    genres: ['Acción'],
+    releaseDate: null,
+    presaleStart: null,
   }
-})
+}
+
+const SECTIONS: Record<PortalSection, PortalSectionMovie[]> = {
+  cartelera: [movie(1, 'The Odyssey')],
+  preventas: [{ ...movie(2, 'Ecos del Volcán'), releaseDate: '2026-12-04', presaleStart: '2026-11-15' }],
+  estrenos: [{ ...movie(3, 'Marea Alta'), releaseDate: '2026-12-18', presaleStart: '2026-12-01' }],
+}
 
 describe('App', () => {
+  beforeEach(() => {
+    vi.mocked(getPortalSection).mockImplementation((section) =>
+      Promise.resolve(SECTIONS[section]),
+    )
+  })
   afterEach(() => {
     clearClientSession()
     vi.clearAllMocks()
     vi.unstubAllEnvs()
-    vi.mocked(getPortalMovies).mockResolvedValue([])
+    Object.assign(employeeSession.user, { value: null })
+    Object.assign(employeeSession.status, { value: 'unknown' })
+    vi.mocked(restoreEmployeeSession).mockReset().mockResolvedValue(null)
   })
 
   it.each(['/api', '/api/'])(
-    'loads catalog and carousel images from uploads with API base %s',
+    'loads the carousel and card posters through the API with API base %s',
     async (baseUrl) => {
       vi.stubEnv('VITE_API_BASE_URL', baseUrl)
-      vi.mocked(getPortalMovies).mockResolvedValue([
-        { id: 1, title: 'Test movie', posterImage: 'poster.png' },
-      ])
       await router.push('/')
       await router.isReady()
+
       const wrapper = mount(App, { global: { plugins: [router] } })
+
       try {
         await flushPromises()
+
         expect(
-          wrapper.findAll('img[src$="/uploads/posters/poster.png"]').length,
+          wrapper.findAll('img[src$="/api/image-handler/posters/1.jpg"]').length,
         ).toBeGreaterThanOrEqual(2)
       } finally {
         wrapper.unmount()
@@ -63,78 +90,51 @@ describe('App', () => {
     await router.push('/')
     await router.isReady()
 
-    const wrapper = mount(App, {
-      global: {
-        plugins: [router],
-      },
-    })
+    const wrapper = mount(App, { global: { plugins: [router] } })
 
     expect(wrapper.text()).toContain('Iniciar sesión')
     wrapper.unmount()
   })
-  it('shares one ordered catalog between the four-slide carousel and all movie cards after login and logout', async () => {
-    const general = Array.from({ length: 6 }, (_item, index) => ({
-      id: index + 1,
-      title: `Película ${index + 1}`,
-      posterImage: `${index + 1}.jpg`,
-    }))
-    const preferred = [general[5]!, ...general.slice(0, 5)]
-    vi.mocked(getPortalMovies).mockImplementation((personalized) =>
-      Promise.resolve(personalized ? preferred : general),
-    )
+
+  // UT-040 to UT-043: each movie in one section, the same for visitors and clients.
+  it('shows Cartelera, Preventas and Estrenos, the same with or without a session', async () => {
     await router.push('/')
     await router.isReady()
     const wrapper = mount(App, { global: { plugins: [router] } })
+    const titlesOf = (section: PortalSection) =>
+      wrapper.findAll(`#${section} .card-title`).map((title) => title.text())
     try {
       await flushPromises()
-      expect(wrapper.findAll('.movie-card')).toHaveLength(6)
-      expect(wrapper.findAll('.indicator')).toHaveLength(4)
-      expect(wrapper.get('.hero-image').attributes('alt')).toBe('Póster de Película 1')
-      expect(getPortalMovies).toHaveBeenCalledTimes(1)
+      expect(wrapper.findAll('.section-title').map((title) => title.text())).toEqual([
+        'Cartelera',
+        'Preventas',
+        'Estrenos',
+      ])
+      expect(titlesOf('cartelera')).toEqual(['The Odyssey'])
+      expect(titlesOf('preventas')).toEqual(['Ecos del Volcán'])
+      expect(titlesOf('estrenos')).toEqual(['Marea Alta'])
+
       establishClientSession(
         { id: 7, firstName: 'Ana', lastName: '', email: 'a@example.com' },
         'token',
       )
       await flushPromises()
-      expect(wrapper.get('.hero-image').attributes('alt')).toBe('Póster de Película 6')
-      expect(wrapper.get('.movie-card img').attributes('alt')).toBe('Póster de Película 6')
-      expect(wrapper.findAll('.movie-card')).toHaveLength(6)
-      clearClientSession()
-      await flushPromises()
-      expect(wrapper.get('.hero-image').attributes('alt')).toBe('Póster de Película 1')
-      expect(vi.mocked(getPortalMovies).mock.calls.map(([personalized]) => personalized)).toEqual([
-        false,
-        true,
-        false,
+
+      expect(titlesOf('cartelera')).toEqual(['The Odyssey'])
+      expect(titlesOf('preventas')).toEqual(['Ecos del Volcán'])
+      expect(getPortalSection).toHaveBeenCalledTimes(3)
+      // SCRUM-439: only the signed-in client gets the recommendations row on top.
+      expect(wrapper.findAll('.section-title').map((title) => title.text())).toEqual([
+        'Recomendaciones para ti',
+        'Cartelera',
+        'Preventas',
+        'Estrenos',
       ])
     } finally {
       wrapper.unmount()
     }
   })
-  it('renders the public catalog when an anonymous session operation finishes during loading', async () => {
-    clearClientSession()
-    let finish!: (movies: Awaited<ReturnType<typeof getPortalMovies>>) => void
-    vi.mocked(getPortalMovies).mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve
-        }),
-    )
-    await router.push('/')
-    await router.isReady()
-    const wrapper = mount(App, { global: { plugins: [router] } })
-    try {
-      beginClientSessionChange()
-      finish([{ id: 1, title: 'Cartelera pública', posterImage: 'public.jpg' }])
-      await flushPromises()
-      expect(wrapper.get('.movie-card').text()).toContain('Cartelera pública')
-      expect(wrapper.get('.hero-image').attributes('alt')).toBe('Póster de Cartelera pública')
-      expect(wrapper.text()).not.toContain('No hay películas disponibles')
-      expect(getPortalMovies).toHaveBeenCalledExactlyOnceWith(false, expect.any(AbortSignal))
-    } finally {
-      wrapper.unmount()
-    }
-  })
+
   it('opens the purchase route for a guest without requiring a client session', async () => {
     clearClientSession()
     await router.push('/buy-tickets?movieId=2')
@@ -144,4 +144,32 @@ describe('App', () => {
     expect(matched.meta.requiresClient).not.toBe(true)
     expect(matched.components!.default).toMatchObject({ __name: 'TicketPurchaseView' })
   })
+
+  it.each(['ADMINISTRATOR', 'EMPLOYEE'] as const)(
+    'never mounts the portal while restoring a %s session',
+    async (role) => {
+      await router.push('/privacy-policy')
+      let finish!: (identity: EmployeeIdentity) => void
+      const pending = new Promise<EmployeeIdentity>((resolve) => {
+        finish = resolve
+      })
+      vi.mocked(restoreEmployeeSession).mockReturnValue(pending)
+      localStorage.setItem('accessToken', 'older-client-token')
+      const navigation = router.push('/')
+      const wrapper = mount(App, { global: { plugins: [router] } })
+      try {
+        await flushPromises()
+        expect(wrapper.findComponent({ name: 'HomeView' }).exists()).toBe(false)
+        expect(getPortalSection).not.toHaveBeenCalled()
+        finish({ id: 21, role, firstName: 'Ana' })
+        await navigation
+        await flushPromises()
+        expect(router.currentRoute.value.path).toBe('/dashboard')
+        expect(wrapper.text()).toContain('Panel del personal')
+        expect(getPortalSection).not.toHaveBeenCalled()
+      } finally {
+        wrapper.unmount()
+      }
+    },
+  )
 })

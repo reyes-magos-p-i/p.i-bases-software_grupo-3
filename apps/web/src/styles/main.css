@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import './dialog.css';
 @import './crud-modal.css';
+@import './surface-theme.css';
 
 *,
 *::before,
@@ -110,6 +111,17 @@ textarea::placeholder {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+a.portal-return-link,
+a.portal-return-link:visited,
+a.portal-return-link:hover,
+a.portal-return-link:focus-visible {
+  color: var(--accent-color);
+}
+
+a.portal-return-link:focus-visible {
+  outline-color: var(--focus-on-dark);
 }
 
 img {

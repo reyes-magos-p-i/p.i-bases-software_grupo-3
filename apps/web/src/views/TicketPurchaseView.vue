@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
@@ -12,6 +12,7 @@ import PurchaseSummary from '@/components/purchases/PurchaseSummary.vue'
 import GuestBuyerStep from '@/components/purchases/GuestBuyerStep.vue'
 import GuestPurchaseAccess from '@/components/purchases/GuestPurchaseAccess.vue'
 import PurchaseEmailStatus from '@/components/purchases/PurchaseEmailStatus.vue'
+import CardPaymentStep from '@/components/purchases/CardPaymentStep.vue'
 import { usePurchaseEmail } from '@/composables/usePurchaseEmail'
 import { useTicketPurchase } from '@/composables/useTicketPurchase'
 import { clearClientSession } from '@/services/client-session.service'
@@ -25,14 +26,19 @@ const flow = useTicketPurchase(() => {
   void router.replace({ path: '/', query: { login: 'client', reason: 'expired' } })
 })
 const {
+  promotions,
+  promotionId,
+  promotionError,
   guest,
   guestBuyer,
   guestReceipt,
   buyerError,
   loginRequired,
   summaryStep,
+  paymentStep,
   finalStep,
   labels,
+  cardIntent,
   movie,
   functions,
   availability,
@@ -49,7 +55,9 @@ const {
   error,
   notice,
 } = flow
-watch(step, () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }), { flush: 'post' })
+const scrollToTop = () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+onMounted(scrollToTop)
+watch(step, scrollToTop, { flush: 'post' })
 const emailNotice = ref(false)
 const ticketEmail = usePurchaseEmail(receipt, guestReceipt, (message, failed) => {
   emailNotice.value = !failed
@@ -74,8 +82,8 @@ watch(
 </script>
 <template>
   <AppHeader />
-  <main class="purchase-flow">
-    <RouterLink to="/">← Volver al portal</RouterLink
+  <main class="purchase-flow surface-theme--dark">
+    <RouterLink to="/" class="portal-return-link">← Volver al portal</RouterLink
     ><PurchaseStepper :step="step" :labels="labels" /><NotificationPopup
       v-if="error || notice"
       :type="error ? 'error' : emailNotice ? 'success' : 'alert'"
@@ -124,7 +132,16 @@ watch(
           Recuperamos un intento de compra pendiente. Reintenta el pago para comprobar su resultado
           sin duplicarlo.
         </p>
-        <PurchaseSummary :purchase="quote" :buyer-email="guestBuyer?.email" />
+        <PurchaseSummary
+          :purchase="quote"
+          :buyer-email="guestBuyer?.email"
+          :promotions="promotions"
+          :promotion-id="promotionId"
+          :show-promotions="!guest"
+          :promotion-disabled="busy || uncertain"
+          :promotion-error="promotionError"
+          @promotion-change="flow.selectPromotion"
+        />
         <div class="actions">
           <button
             type="button"
@@ -133,11 +150,31 @@ watch(
             @click="flow.back"
           >
             {{ guest ? 'Volver al correo' : 'Volver a los asientos' }}</button
-          ><button type="button" class="purchase-action primary" :disabled="busy" @click="flow.pay">
-            {{ busy ? 'Registrando compra...' : uncertain ? 'Reintentar pago' : 'Pagar' }}
+          ><button
+            type="button"
+            class="purchase-action primary"
+            :disabled="busy"
+            @click="flow.continuePayment"
+          >
+            {{
+              busy
+                ? uncertain
+                  ? 'Registrando compra...'
+                  : 'Preparando pago...'
+                : uncertain
+                  ? 'Reintentar pago'
+                  : 'Pagar'
+            }}
           </button>
         </div>
       </section>
+      <CardPaymentStep
+        v-if="step === paymentStep && cardIntent"
+        :intent="cardIntent"
+        :disabled="busy"
+        @paid="flow.pay"
+        @cancel="flow.cancelCardPayment"
+      />
       <section v-if="receipt && step === finalStep" aria-live="polite">
         <h1>¡Compra exitosa!</h1>
         <p>
@@ -175,7 +212,6 @@ watch(
   color: var(--text-on-dark);
 }
 .purchase-flow a {
-  color: var(--text-on-dark);
   text-underline-offset: 4px;
 }
 .purchase-flow :deep(.purchase-action),
@@ -201,7 +237,7 @@ watch(
   cursor: not-allowed;
 }
 .purchase-flow :deep(.purchase-select) {
-  background: var(--content-background);
+  background: var(--input-background);
   color: var(--text-primary);
 }
 .purchase-flow :deep(.purchase-action:focus-visible) {

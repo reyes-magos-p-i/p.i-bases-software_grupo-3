@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import MovieCrudCreate from '@/components/Movies/MovieCrudCreate.vue'
+import MovieScheduleFields from '@/components/Movies/MovieScheduleFields.vue'
 import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
 import ReusableSearchDropdown from '@/components/common/ReusableSearchDropdown.vue'
@@ -101,6 +102,23 @@ describe('MovieCrudCreate', () => {
 
     expect(wrapper.emitted('saved')).toHaveLength(1)
     expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
+  it('sends the release and presale dates when they are chosen (SCRUM-437)', async () => {
+    vi.mocked(createMovie).mockResolvedValue(1)
+    const wrapper = mountForm()
+    await fillForm(wrapper)
+    const schedule = wrapper.getComponent(MovieScheduleFields)
+
+    schedule.vm.$emit('update:releaseDate', '2026-12-04')
+    schedule.vm.$emit('update:presaleStart', '2026-11-15')
+    await nextTick()
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(createMovie).toHaveBeenCalledWith(
+      expect.objectContaining({ releaseDate: '2026-12-04', presaleStart: '2026-11-15' }),
+    )
   })
 
   it('emits close when cancel is clicked', async () => {

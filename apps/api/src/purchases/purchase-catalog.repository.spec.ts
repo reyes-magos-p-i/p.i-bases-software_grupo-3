@@ -1,5 +1,6 @@
 import type oracle from 'oracledb';
 import {
+  MOVIE_ON_SALE,
   PurchaseCatalogRepository,
   seatQuery,
   toPurchaseFunction,
@@ -62,6 +63,23 @@ describe('Purchase catalog repository', () => {
     expect(db.query.mock.calls[0][0]).toContain(
       's.COLUMN_NUMBER BETWEEN 1 AND t.DIMENSION_Y',
     );
+  });
+  // SCRUM-437: before its presale opens a movie is not sold, even through the direct checkout.
+  it('sells a function only once its movie is released or its presale opens', async () => {
+    const today =
+      "TRUNC(CAST(SYSTIMESTAMP AT TIME ZONE 'America/Costa_Rica' AS DATE))";
+    expect(MOVIE_ON_SALE).toBe(
+      `(m.RELEASE_DATE IS NULL OR m.RELEASE_DATE <= ${today} OR m.PRESALE_START <= ${today})`,
+    );
+    db.query.mockResolvedValue({ rows: [] });
+    connection.execute.mockResolvedValue({ rows: [] });
+    await repo.getFunctions(2);
+    await repo.getFunction(4);
+    await repo.getFunction(4, connection as never);
+    const available = `AND ${MOVIE_ON_SALE} THEN 1 ELSE 0 END AS "available"`;
+    expect(db.query.mock.calls[0][0]).toContain(available);
+    expect(db.query.mock.calls[1][0]).toContain(available);
+    expect(connection.execute.mock.calls[0][0]).toContain(available);
   });
   it('handles empty results and reads through an existing transaction', async () => {
     db.query.mockResolvedValue({});

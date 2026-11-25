@@ -1,3 +1,14 @@
+export interface PurchasePromotion {
+  promotionId: number
+  promotionTitle: string
+  promotionType: 'percentage' | 'fixed'
+  promotionAmount: number
+}
+export interface PurchaseDiscount {
+  promotion: PurchasePromotion
+  originalTotal: number
+  discountTotal: number
+}
 import type { TransactionStatus } from './transaction'
 import type { Seat } from './seats'
 import type { PortalMovie } from './movie'
@@ -28,6 +39,7 @@ export type SeatSelection = Record<TicketCategory, number[]>
 export interface PurchaseSelection {
   functionId: number
   seats: SeatSelection
+  promotionId?: number | null
 }
 export interface PurchaseLine {
   code: string
@@ -41,6 +53,7 @@ export interface PurchaseLine {
   subtotal: number
 }
 export interface PurchaseQuote {
+  discount?: PurchaseDiscount
   function: PurchaseFunction
   seats: (PurchaseSeat & { category: TicketCategory })[]
   lines: PurchaseLine[]
@@ -85,12 +98,19 @@ export interface TicketEmailStatus {
   sentAt: string | null
   retryAfter: number
 }
+export interface CardIntent {
+  intentId: string
+  clientSecret: string
+  publishableKey: string
+}
+
 export interface PendingPurchaseAttempt {
   version: 1
   requestKey: string
   quote: PurchaseQuote
   selection: PurchaseSelection
   buyer: { kind: 'client'; clientId: number } | ({ kind: 'guest' } & GuestBuyer)
+  paymentIntentId?: string
 }
 export interface PurchaseCategory {
   code: TicketCategory

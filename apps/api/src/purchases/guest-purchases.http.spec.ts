@@ -19,7 +19,20 @@ import { PurchaseCatalogRepository } from './purchase-catalog.repository';
 import { PurchaseThrottlerGuard } from './purchase-throttler.guard';
 import { guestPurchaseCode } from './guest-purchase-access';
 import { TicketEmailService } from './ticket-email.service';
+import { PromotionsService } from '../promotions/promotions.service';
+import { CardPaymentGateway } from './payments/card-payment.gateway';
 
+const PURCHASE_KEY = randomUUID();
+const settlement = {
+  intentId: 'pi_123',
+  livemode: false,
+  amount: 300000,
+  currency: 'crc',
+  requestKey: PURCHASE_KEY,
+  brand: 'visa',
+  last4: '4242',
+};
+const payments = { createIntent: jest.fn(), settled: jest.fn() };
 describe('Guest purchase HTTP with mocked persistence', () => {
   let app: INestApplication, server: Server;
   const origin = 'https://cinema.example';
@@ -47,7 +60,9 @@ describe('Guest purchase HTTP with mocked persistence', () => {
   const body = () => ({
     ...selection,
     buyer,
-    requestKey: randomUUID(),
+    paymentMethod: 'CARD',
+    paymentIntentId: 'pi_123',
+    requestKey: PURCHASE_KEY,
     quoteVersion: 'a'.repeat(64),
   });
   const post = (path: string, data: object) =>
@@ -57,6 +72,7 @@ describe('Guest purchase HTTP with mocked persistence', () => {
       .send(data);
   beforeEach(async () => {
     jest.resetAllMocks();
+    payments.settled.mockResolvedValue(settlement);
     const context = {
       id: 4,
       available: true,
@@ -87,6 +103,13 @@ describe('Guest purchase HTTP with mocked persistence', () => {
         SessionOriginGuard,
         PurchaseThrottlerGuard,
         {
+          provide: PromotionsService,
+          useValue: {
+            findApplicableToMovieFunction: jest.fn().mockResolvedValue([]),
+            resolveForPurchase: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
           provide: EmployeeSessionService,
           useValue: { allowedOrigin: origin },
         },
@@ -94,6 +117,10 @@ describe('Guest purchase HTTP with mocked persistence', () => {
         { provide: PurchasesRepository, useValue: repository },
         { provide: PurchaseCatalogRepository, useValue: catalog },
         { provide: TicketEmailService, useValue: emails },
+        {
+          provide: CardPaymentGateway,
+          useValue: payments,
+        },
       ],
     }).compile();
     app = module.createNestApplication({ logger: false });
@@ -165,6 +192,7 @@ describe('Guest purchase HTTP with mocked persistence', () => {
     expect(repository.confirmGuest).toHaveBeenCalledWith(
       buyer.email,
       expect.objectContaining(data),
+      settlement,
     );
     const code = guestPurchaseCode(12, data.requestKey);
     const lookup = await post('/lookup', { accessCode: code });
@@ -241,9 +269,7 @@ describe('Guest purchase HTTP with mocked persistence', () => {
   });
   it('does not expose a receipt for an unknown or altered code', async () => {
     repository.findGuest.mockRejectedValue(
-      new NotFoundException(
-        'No se encontró una compra con ese código de consulta.',
-      ),
+      new NotFoundException('No se encontró una compra con este enlace.'),
     );
     const result = await post('/lookup', {
       accessCode: guestPurchaseCode(12, randomUUID()),

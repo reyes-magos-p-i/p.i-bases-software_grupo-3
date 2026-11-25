@@ -31,6 +31,15 @@ describe('MovieCrudDelete', () => {
   beforeEach(() => {
     vi.resetAllMocks()
   })
+  it('does not delete without a written confirmation email', async () => {
+    const wrapper = mountModal()
+    await wrapper.get('button.danger').trigger('click')
+    expect(deleteMovie).not.toHaveBeenCalled()
+    expect(wrapper.get('.field-error').text()).toContain('Escribe el correo')
+    await wrapper.get('button.secondary').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+  })
 
   it('displays the movie title', () => {
     const wrapper = mountModal()
@@ -53,10 +62,12 @@ describe('MovieCrudDelete', () => {
 
     const wrapper = mountModal()
 
+    const email = wrapper.find('input[type="email"]')
+    if (email.exists()) await email.setValue('admin@example.com')
     await wrapper.find('button.danger').trigger('click')
     await flushPromises()
 
-    expect(deleteMovie).toHaveBeenCalledWith(24)
+    expect(deleteMovie).toHaveBeenCalledWith(24, 'admin@example.com')
     expect(wrapper.emitted('deleted')).toHaveLength(1)
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
@@ -66,6 +77,8 @@ describe('MovieCrudDelete', () => {
 
     const wrapper = mountModal()
 
+    const email = wrapper.find('input[type="email"]')
+    if (email.exists()) await email.setValue('admin@example.com')
     await wrapper.find('button.danger').trigger('click')
     await flushPromises()
 
@@ -90,6 +103,8 @@ describe('MovieCrudDelete', () => {
 
     const wrapper = mountModal()
 
+    const email = wrapper.find('input[type="email"]')
+    if (email.exists()) await email.setValue('admin@example.com')
     await wrapper.find('button.danger').trigger('click')
     await flushPromises()
 

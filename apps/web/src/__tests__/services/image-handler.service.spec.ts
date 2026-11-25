@@ -1,87 +1,235 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getApi } from '@/services/api'
-import { getPosterUrl, uploadPoster } from '@/services/image-handler.service'
+import { getPosterUrl, getPromotionPosterUrl, uploadPoster, uploadPromotionPoster } from '@/services/image-handler.service'
 
 vi.mock('@/services/api', () => ({ getApi: vi.fn() }))
 
 const post = vi.fn()
+const api = { post, defaults: { baseURL: '/api' } }
 
 beforeEach(() => {
-  vi.resetAllMocks()
-  vi.mocked(getApi).mockReturnValue({ post } as unknown as ReturnType<typeof getApi>)
-  vi.stubEnv('VITE_API_BASE_URL', 'https://cinema.example.com/api')
+  post.mockReset()
+  api.defaults.baseURL = '/api'
+  vi.mocked(getApi).mockReset().mockReturnValue(
+    api as unknown as ReturnType<typeof getApi>,
+  )
 })
 
-afterEach(() => {
-  vi.unstubAllEnvs()
+afterEach(() => { vi.unstubAllEnvs() })
+
+describe('uploadPromotionPoster', () => {
+  it('uploads the file as multipart data using the image field and credentials', async () => {
+    const file = new File(['image'], 'banner.png', { type: 'image/png' })
+    post.mockResolvedValue({ data: {
+      filename: 'banner.webp', path: '/uploads/promotions/banner.webp',
+    } })
+
+    await uploadPromotionPoster(file)
+
+    expect(getApi).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledWith(
+      '/image-handler/promotions',
+      expect.any(FormData),
+      { withCredentials: true },
+    )
+    const data = post.mock.calls[0]![1] as FormData
+    expect([...data.keys()]).toEqual(['image'])
+    expect(data.getAll('image')).toHaveLength(1)
+    const uploaded = data.get('image') as File
+    expect(uploaded).toBeInstanceOf(File)
+    expect(uploaded.name).toBe(file.name)
+    expect(uploaded.type).toBe(file.type)
+    expect(uploaded.size).toBe(file.size)
+  })
+
+  it('returns the filename and path from response.data', async () => {
+    const data = { filename: 'new.webp', path: '/uploads/promotions/new.webp' }
+    post.mockResolvedValue({ data, status: 201 })
+
+    const result = await uploadPromotionPoster(new File(['image'], 'banner.png'))
+
+    expect(result).toBe(data)
+  })
+
+  it.each([400, 401, 403, 413, 415, 500])('propagates HTTP %s failures', async (status) => {
+    const error = Object.assign(new Error(`HTTP ${status}`), {
+      isAxiosError: true, response: { status },
+    })
+    post.mockRejectedValue(error)
+
+    await expect(uploadPromotionPoster(new File(['image'], 'banner.png'))).rejects.toBe(error)
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it('propagates network errors without retrying the upload', async () => {
+    const error = new Error('Network Error')
+    post.mockRejectedValue(error)
+
+    await expect(uploadPromotionPoster(new File(['image'], 'banner.png'))).rejects.toBe(error)
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it('propagates API configuration errors before sending the upload', async () => {
+    const error = new Error('Falta configurar VITE_API_BASE_URL para conectar con el backend.')
+    vi.mocked(getApi).mockImplementation(() => { throw error })
+
+    await expect(uploadPromotionPoster(new File(['image'], 'banner.png'))).rejects.toBe(error)
+    expect(post).not.toHaveBeenCalled()
+  })
+})
+
+describe('getPromotionPosterUrl', () => {
+  it.each([undefined, null, '', '/uploads/promotions/'])(
+    'returns null for missing filenames: %p', (stored) => {
+      expect(getPromotionPosterUrl(stored)).toBeNull()
+      expect(getApi).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    { stored: 'banner.webp' },
+    { stored: '/uploads/promotions/banner.webp' },
+    { stored: 'uploads/promotions/banner.webp' },
+  ])('extracts the filename from $stored', ({ stored }) => {
+    expect(getPromotionPosterUrl(stored)).toBe('/api/image-handler/promotions/banner.webp')
+  })
+
+  it.each(['/api', '/api/', '/api///'])(
+    'normalizes trailing slashes for %s', (baseURL) => {
+      api.defaults.baseURL = baseURL
+      expect(getPromotionPosterUrl('banner.webp')).toBe('/api/image-handler/promotions/banner.webp')
+    },
+  )
+
+  it('supports an absolute backend base URL', () => {
+    api.defaults.baseURL = 'https://cinema.example/api/'
+    expect(getPromotionPosterUrl('/uploads/promotions/banner.webp'))
+      .toBe('https://cinema.example/api/image-handler/promotions/banner.webp')
+  })
+
+  it('encodes special characters in filenames', () => {
+    expect(getPromotionPosterUrl('/uploads/promotions/oferta verano #1.webp'))
+      .toBe('/api/image-handler/promotions/oferta%20verano%20%231.webp')
+  })
+
+  it('propagates missing API configuration when a filename is present', () => {
+    const error = new Error('Falta configurar VITE_API_BASE_URL para conectar con el backend.')
+    vi.mocked(getApi).mockImplementation(() => { throw error })
+    expect(() => getPromotionPosterUrl('banner.webp')).toThrow(error)
+  })
 })
 
 describe('uploadPoster', () => {
-  it('uploads the file under the image field and returns the response data', async () => {
-    const file = new File(['poster'], 'poster.jpg', { type: 'image/jpeg' })
-    const response = { filename: 'saved.jpg', path: '/uploads/posters/saved.jpg' }
-    post.mockResolvedValue({ data: response })
+  it('posts the movie poster as multipart data using the image field', async () => {
+    const file = new File(['movie poster'], 'movie.jpg', { type: 'image/jpeg' })
+    const data = { filename: 'movie.webp', path: '/uploads/posters/movie.webp' }
+    post.mockResolvedValue({ data, status: 201 })
 
     const result = await uploadPoster(file)
 
-    expect(getApi).toHaveBeenCalledOnce()
-    expect(post).toHaveBeenCalledExactlyOnceWith('/image-handler/posters', expect.any(FormData))
-    const data = post.mock.calls[0]![1] as FormData
-    expect(data.get('image')).toBe(file)
-    expect(result).toEqual(response)
+    expect(getApi).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledTimes(1)
+    // This implementation does not pass a third Axios config argument.
+    expect(post).toHaveBeenCalledWith('/image-handler/posters', expect.any(FormData))
+    const body = post.mock.calls[0]![1] as FormData
+    expect([...body.keys()]).toEqual(['image'])
+    expect(body.getAll('image')).toHaveLength(1)
+    const uploaded = body.get('image') as File
+    expect(uploaded.name).toBe('movie.jpg')
+    expect(uploaded.type).toBe('image/jpeg')
+    expect(uploaded.size).toBe(file.size)
+    expect(result).toBe(data)
   })
 
-  it('propagates API errors', async () => {
-    const error = new Error('Upload failed')
+  it.each([400, 401, 403, 413, 415, 500])('propagates HTTP %s errors', async (status) => {
+    const error = Object.assign(new Error(`HTTP ${status}`), { response: { status } })
     post.mockRejectedValue(error)
+    await expect(uploadPoster(new File(['image'], 'movie.png'))).rejects.toBe(error)
+    expect(post).toHaveBeenCalledTimes(1)
+  })
 
-    await expect(uploadPoster(new File(['poster'], 'poster.jpg'))).rejects.toBe(error)
+  it('propagates network errors without retrying', async () => {
+    const error = new Error('Network Error')
+    post.mockRejectedValue(error)
+    await expect(uploadPoster(new File(['image'], 'movie.png'))).rejects.toBe(error)
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  it('propagates a getApi configuration failure without sending a request', async () => {
+    const error = new Error('API configuration missing')
+    vi.mocked(getApi).mockImplementation(() => { throw error })
+    await expect(uploadPoster(new File(['image'], 'movie.png'))).rejects.toBe(error)
+    expect(post).not.toHaveBeenCalled()
   })
 })
 
 describe('getPosterUrl', () => {
-  it('resolves legacy posters under the configured API path', () => {
-    expect(getPosterUrl('/uploads/posters/old.jpg', true)).toBe(
-      'https://cinema.example.com/api/image/old.jpg',
-    )
+  it.each([undefined, null, '', '/uploads/posters/'])(
+    'returns null without requiring configuration for %p', (stored) => {
+      vi.stubEnv('VITE_API_BASE_URL', '')
+      expect(getPosterUrl(stored)).toBeNull()
+      expect(getApi).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(['', '   '])('rejects missing or blank base URL: %p', (baseURL) => {
+    vi.stubEnv('VITE_API_BASE_URL', baseURL)
+    expect(() => getPosterUrl('movie.webp')).toThrow('Falta configurar VITE_API_BASE_URL.')
   })
 
-  it.each([undefined, null, '', '/uploads/posters/'])('returns null for %s', (value) => {
-    expect(getPosterUrl(value)).toBeNull()
+  it.each([
+    { baseURL: '/api', path: '/api/image-handler/posters/movie.webp' },
+    { baseURL: '/api/', path: '/api/image-handler/posters/movie.webp' },
+    { baseURL: '  /api  ', path: '/api/image-handler/posters/movie.webp' },
+    { baseURL: '/', path: '/api/image-handler/posters/movie.webp' },
+    { baseURL: '/backend/api', path: '/backend/api/image-handler/posters/movie.webp' },
+  ])('resolves relative base $baseURL against the browser origin', ({ baseURL, path }) => {
+    vi.stubEnv('VITE_API_BASE_URL', baseURL)
+    expect(getPosterUrl('/uploads/posters/movie.webp')).toBe(`${window.location.origin}${path}`)
   })
 
-  it.each(['poster.jpg', '/uploads/posters/poster.jpg'])('builds a URL from %s', (value) => {
-    expect(getPosterUrl(value)).toBe('https://cinema.example.com/uploads/posters/poster.jpg')
+  it.each([
+    { baseURL: 'http://localhost:3000', expected: 'http://localhost:3000/api/image-handler/posters/movie.webp' },
+    { baseURL: 'http://localhost:3000/', expected: 'http://localhost:3000/api/image-handler/posters/movie.webp' },
+    { baseURL: 'https://cinema.example/api', expected: 'https://cinema.example/api/image-handler/posters/movie.webp' },
+    { baseURL: 'https://cinema.example/backend/api/', expected: 'https://cinema.example/backend/api/image-handler/posters/movie.webp' },
+  ])('builds a movie URL using $baseURL', ({ baseURL, expected }) => {
+    vi.stubEnv('VITE_API_BASE_URL', baseURL)
+    expect(getPosterUrl('movie.webp')).toBe(expected)
   })
 
-  it('encodes special characters in the filename', () => {
-    expect(getPosterUrl('my poster #1.jpg')).toBe(
-      'https://cinema.example.com/uploads/posters/my%20poster%20%231.jpg',
-    )
-  })
+  it.each(['movie.webp', 'uploads/posters/movie.webp', '/uploads/posters/movie.webp'])(
+    'extracts only the filename from %s', (stored) => {
+      vi.stubEnv('VITE_API_BASE_URL', '/api')
+      expect(getPosterUrl(stored)).toBe(`${window.location.origin}/api/image-handler/posters/movie.webp`)
+    },
+  )
 
-  it('trims whitespace from the configured API URL', () => {
-    vi.stubEnv('VITE_API_BASE_URL', '  https://cinema.example.com/api  ')
-
-    expect(getPosterUrl('poster.jpg')).toBe('https://cinema.example.com/uploads/posters/poster.jpg')
-  })
-
-  it.each([undefined, '', '   '])('throws when the API URL is missing or blank (%s)', (value) => {
-    vi.stubEnv('VITE_API_BASE_URL', value)
-
-    expect(() => getPosterUrl('poster.jpg')).toThrow('Falta configurar VITE_API_BASE_URL.')
-  })
-
-  it('returns null for an empty value even when the API URL is missing', () => {
-    vi.stubEnv('VITE_API_BASE_URL', undefined)
-
-    expect(getPosterUrl(null)).toBeNull()
-  })
-
-  it('uses the frontend origin when the API base URL is relative', () => {
+  it('uses the legacy image endpoint when requested', () => {
     vi.stubEnv('VITE_API_BASE_URL', '/api')
+    expect(getPosterUrl('/uploads/legacy/movie.webp', true))
+      .toBe(`${window.location.origin}/api/image/movie.webp`)
+  })
 
-    expect(getPosterUrl('poster.jpg')).toBe(`${window.location.origin}/uploads/posters/poster.jpg`)
+  it('adds /api for a legacy URL with a root-only backend base', () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://cinema.example')
+    expect(getPosterUrl('movie.webp', true)).toBe('https://cinema.example/api/image/movie.webp')
+  })
+
+  it('encodes special filename characters for modern and legacy endpoints', () => {
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    const stored = '/uploads/posters/película verano #1.webp'
+    const filename = encodeURIComponent('película verano #1.webp')
+    expect(getPosterUrl(stored)).toBe(`${window.location.origin}/api/image-handler/posters/${filename}`)
+    expect(getPosterUrl(stored, true)).toBe(`${window.location.origin}/api/image/${filename}`)
+  })
+
+  it('does not require the shared API client to generate a movie URL', () => {
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+    vi.mocked(getApi).mockImplementation(() => { throw new Error('Must not be called') })
+    expect(getPosterUrl('movie.webp')).toBe(`${window.location.origin}/api/image-handler/posters/movie.webp`)
+    expect(getApi).not.toHaveBeenCalled()
   })
 })

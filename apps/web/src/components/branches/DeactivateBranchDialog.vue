@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, useTemplateRef, watch } from 'vue'
+import EmailConfirmationField from '@/components/common/EmailConfirmationField.vue'
+import { employeeSession } from '@/services/employee-session.service'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { formatBranchId } from '@/services/branch.service'
 import type { BranchListItem } from '@/types/branch'
@@ -14,7 +16,8 @@ const props = withDefaults(
   }>(),
   { saving: false, error: '', blocked: false },
 )
-const emit = defineEmits<{ close: []; confirm: [] }>()
+const emit = defineEmits<{ close: []; confirm: [email: string] }>()
+const confirmation = useTemplateRef<InstanceType<typeof EmailConfirmationField>>('confirmation')
 const feedback = useTemplateRef<HTMLElement>('feedback')
 const label = computed(() =>
   props.branch ? (props.branch.name ?? formatBranchId(props.branch.id)) : '',
@@ -31,6 +34,11 @@ watch(
 
 function close() {
   if (!props.saving) emit('close')
+}
+function confirm() {
+  if (props.saving || props.blocked || !props.branch) return
+  const email = confirmation.value?.validate()
+  if (email) emit('confirm', email)
 }
 </script>
 
@@ -51,17 +59,18 @@ function close() {
           listado y no podrá volver a activarse.</span
         >
       </p>
+      <EmailConfirmationField
+        :key="branch.id"
+        ref="confirmation"
+        :expected-email="employeeSession.user.value?.email"
+        :disabled="saving"
+      />
       <p v-if="error" ref="feedback" class="deactivation-error" role="alert" tabindex="-1">
         {{ error }}
       </p>
       <footer>
         <button type="button" class="secondary" :disabled="saving" @click="close">Cancelar</button>
-        <button
-          type="button"
-          class="primary"
-          :disabled="saving || blocked"
-          @click="emit('confirm')"
-        >
+        <button type="button" class="primary" :disabled="saving || blocked" @click="confirm">
           {{ saving ? 'Desactivando…' : 'Confirmar' }}
         </button>
       </footer>

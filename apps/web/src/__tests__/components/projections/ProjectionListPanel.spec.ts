@@ -6,6 +6,8 @@ import LoadingState from '@/components/common/LoadingState.vue'
 import DatePicker from '@/components/common/DatePicker.vue'
 import type { ListedProjection, ProjectionList } from '@/types/projection'
 import { formatPrice } from '@/utils/projection-format'
+import panelSource from '@/components/projections/ProjectionListPanel.vue?raw'
+import { contrastRatio, cssValue } from '../../helpers/contrast'
 
 const { getProjections, getProjectionFilterOptions } = vi.hoisted(() => ({
   getProjections: vi.fn(),
@@ -257,6 +259,14 @@ describe('ProjectionListPanel', () => {
     expect(wrapper!.get('.empty-state h2').text()).toBe(
       'No se encontraron proyecciones con estos criterios',
     )
+    // A filter without matches keeps the same count element, so it keeps the same contrast.
+    expect(wrapper!.get('.result-count').text()).toBe('0 proyecciones')
+  })
+
+  it('shows the result count with at least 4.5:1 on the dark dashboard background', () => {
+    const color = cssValue(panelSource, '.result-count', 'color')
+    expect(color).toBe('var(--text-on-dark-secondary)')
+    expect(contrastRatio(color, 'var(--page-background)')).toBeGreaterThanOrEqual(4.5)
   })
 
   it('pages with the shared arrows, ten results and no page-size selector', async () => {

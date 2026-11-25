@@ -1,4 +1,9 @@
-import type { GuestPurchaseReceipt, PurchaseReceipt, TicketEmailStatus } from '@/types/purchase'
+import type {
+  CardIntent,
+  GuestPurchaseReceipt,
+  PurchaseReceipt,
+  TicketEmailStatus,
+} from '@/types/purchase'
 import { validEmail } from './user-validation'
 import { validGuestPurchaseCode } from './guest-purchase-code'
 
@@ -72,10 +77,38 @@ function validHeader(value: Record<string, unknown>) {
     money(value.total)
   )
 }
+export function validPurchaseDiscount(value: unknown, total: unknown): boolean {
+  if (value === undefined) return true // Historical receipts have no snapshot.
+  if (
+    !isRecord(value) ||
+    !isRecord(value.promotion) ||
+    !money(total) ||
+    !money(value.originalTotal) ||
+    !money(value.discountTotal)
+  )
+    return false
+  const promotion = value.promotion
+  if (
+    !positiveId(promotion.promotionId) ||
+    typeof promotion.promotionTitle !== 'string' ||
+    !promotion.promotionTitle.trim() ||
+    !['percentage', 'fixed'].includes(String(promotion.promotionType)) ||
+    !money(promotion.promotionAmount) ||
+    Number(promotion.promotionAmount) < 0.01 ||
+    Number(promotion.promotionAmount) > (promotion.promotionType === 'percentage' ? 100 : 4000)
+  )
+    return false
+  return (
+    Math.round(Number(value.originalTotal) * 100) -
+      Math.round(Number(value.discountTotal) * 100) ===
+    Math.round(Number(total) * 100)
+  )
+}
 export function readPurchaseReceipt(value: unknown, requireTickets = false): PurchaseReceipt {
   if (
     !isRecord(value) ||
     !validHeader(value) ||
+    !validPurchaseDiscount(value.discount, value.total) ||
     !validPurchaseFunction(value.function) ||
     !validPurchaseLines(value.lines) ||
     !Array.isArray(value.tickets) ||
@@ -115,4 +148,19 @@ export function readTicketEmailStatus(value: unknown): TicketEmailStatus {
     throw new PurchaseResponseError()
   }
   return value as unknown as TicketEmailStatus
+}
+
+export function readCardIntent(value: unknown): CardIntent {
+  const intent = value as Partial<CardIntent> | null
+  if (
+    typeof intent?.intentId !== 'string' ||
+    typeof intent.clientSecret !== 'string' ||
+    typeof intent.publishableKey !== 'string'
+  )
+    throw new Error('Invalid card payment intent.')
+  return {
+    intentId: intent.intentId,
+    clientSecret: intent.clientSecret,
+    publishableKey: intent.publishableKey,
+  }
 }

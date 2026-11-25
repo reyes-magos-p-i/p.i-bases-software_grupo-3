@@ -5,6 +5,7 @@ import {
   TICKET_POLICY,
   ticketPrice,
   ticketProductCode,
+  type TicketCategory,
 } from '../common/pricing/ticket-pricing';
 import type {
   PurchaseFunction,
@@ -12,6 +13,7 @@ import type {
   PurchaseSelection,
   PurchaseQuote,
   PurchaseLine,
+  PurchasePromotion,
 } from './purchase.types';
 import type { UserStatus } from '../users/types/user-status.type';
 
@@ -82,6 +84,7 @@ export function selectionHash(selection: PurchaseSelection) {
     .update(
       JSON.stringify({
         functionId: selection.functionId,
+        ...(selection.promotionId == null ? {} : { promotionId: selection.promotionId }),
         seats: TICKET_CATEGORIES.map((category) => [
           category,
           [...selection.seats[category]].sort((a, b) => a - b),
@@ -100,12 +103,43 @@ export function requireAvailableFunction(
         'La función ya comenzó o dejó de estar disponible. Selecciona otra función.',
     });
 }
+// The promotion must be the one the client selected and have a valid amount.
+function requireValidPromotion(
+  selection: PurchaseSelection,
+  promotion?: PurchasePromotion,
+): void {
+  if ((selection.promotionId ?? null) !== (promotion?.promotionId ?? null))
+    throw new ConflictException({ code: 'PROMOTION_UNAVAILABLE', message: 'Actualiza la promoción seleccionada.' });
+  if (promotion && (!Number.isFinite(promotion.promotionAmount) || promotion.promotionAmount < 0.01 ||
+      !['fixed', 'percentage'].includes(promotion.promotionType) ||
+      promotion.promotionAmount > (promotion.promotionType === 'percentage' ? 100 : 4000)))
+    throw new ConflictException('La promoción tiene un monto inválido.');
+}
+// Ticket rate for one category, with the promotion discount applied if any.
+function promotedRate(
+  context: PurchaseFunction,
+  category: TicketCategory,
+  vip: boolean,
+  promotion?: PurchasePromotion,
+) {
+  const rate = ticketPrice(context, category, vip);
+  if (!promotion) return rate;
+  const cents = Math.round(rate.unitPrice * 100);
+  const amountCents = Math.round(promotion.promotionAmount * 100);
+  const discount = Math.min(cents, promotion.promotionType === 'fixed'
+    ? amountCents : Math.round(cents * amountCents / 10000));
+  rate.unitPrice = (cents - discount) / 100;
+  rate.modifiers.push({ label: `Promoción: ${promotion.promotionTitle}`, amount: -discount / 100 });
+  return rate;
+}
 export function purchaseQuote(
   context: PurchaseFunction,
   seats: PurchaseSeat[],
   selection: PurchaseSelection,
+  promotion?: PurchasePromotion,
 ): PurchaseQuote {
   requireAvailableFunction(context);
+  requireValidPromotion(selection, promotion);
   const positions = selectionPositions(selection);
   const byPosition = new Map(seats.map((seat) => [seat.positionId, seat]));
   const unavailable = positions.filter(
@@ -124,12 +158,14 @@ export function purchaseQuote(
       .map((position) => ({ ...byPosition.get(position)!, category })),
   );
   const grouped = new Map<string, PurchaseLine>();
+  let originalCents = 0;
   for (const seat of chosen) {
     const vip = seat.type === 'vip';
     const code = ticketProductCode(seat.category, vip);
+    originalCents += Math.round(ticketPrice(context, seat.category, vip).unitPrice * 100);
     let line = grouped.get(code);
     if (!line) {
-      const rate = ticketPrice(context, seat.category, vip);
+      const rate = promotedRate(context, seat.category, vip, promotion);
       line = {
         code,
         category: seat.category,
@@ -142,13 +178,14 @@ export function purchaseQuote(
       grouped.set(code, line);
     }
     line.quantity++;
-    line.subtotal += line.unitPrice;
+    line.subtotal = Math.round(line.unitPrice * 100) * line.quantity / 100;
   }
   const lines = [...grouped.values()];
   const version = createHash('sha256')
     .update(
       JSON.stringify({
         selection: selectionHash(selection),
+        ...(promotion ? { promotion: [promotion.promotionId, promotion.promotionTitle, promotion.promotionType, promotion.promotionAmount] } : {}),
         context: [
           context.id,
           context.movieId,
@@ -170,11 +207,18 @@ export function purchaseQuote(
       }),
     )
     .digest('hex');
+  const totalCents = lines.reduce((total, line) => total + Math.round(line.subtotal * 100), 0);
   return {
+    ...(promotion ? { discount: {
+      promotion: { promotionId: promotion.promotionId, promotionTitle: promotion.promotionTitle,
+        promotionType: promotion.promotionType, promotionAmount: promotion.promotionAmount },
+      originalTotal: originalCents / 100,
+      discountTotal: (originalCents - totalCents) / 100,
+    } } : {}),
     function: context,
     seats: chosen,
     lines,
-    total: lines.reduce((total, line) => total + line.subtotal, 0),
+    total: totalCents / 100,
     quantity: chosen.length,
     version,
   };

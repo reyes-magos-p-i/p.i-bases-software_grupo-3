@@ -12,6 +12,7 @@ import ReusableSearchDropdown from '../common/ReusableSearchDropdown.vue'
 import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
 import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
+import MovieScheduleFields from './MovieScheduleFields.vue'
 import ImageUpload from '../image/ImageUpload.vue'
 import { uploadPoster, getPosterUrl } from '@/services/image-handler.service'
 
@@ -45,6 +46,8 @@ const form = reactive({
   synopsis: '',
   runningTime: null as number | null,
   releaseYear: null as number | null,
+  releaseDate: '',
+  presaleStart: '',
   classificationId: null as number | null,
   languageIds: [] as number[],
   genreIds: [] as number[],
@@ -72,6 +75,8 @@ const hasChanges = computed(() => {
     form.synopsis !== original.synopsis ||
     form.runningTime !== original.runningTime ||
     form.releaseYear !== original.releaseYear ||
+    form.releaseDate !== (original.releaseDate ?? '') ||
+    form.presaleStart !== (original.presaleStart ?? '') ||
     form.classificationId !== (original.classification?.id ?? null) ||
     !sameIds(
       form.languageIds,
@@ -182,6 +187,8 @@ async function load() {
       synopsis: detail.synopsis ?? '',
       runningTime: detail.runningTime ?? null,
       releaseYear: detail.releaseYear ?? null,
+      releaseDate: detail.releaseDate ?? '',
+      presaleStart: detail.presaleStart ?? '',
       classificationId: detail.classification?.id ?? null,
       languageIds: detail.languages?.map((language) => language.id) ?? [],
       genreIds: detail.genres?.map((genre) => genre.id) ?? [],
@@ -241,6 +248,9 @@ async function save() {
         synopsis: form.synopsis.trim(),
         runningTime: Number(form.runningTime),
         releaseYear: Number(form.releaseYear),
+        // An empty date clears it (null), so a presale can be removed.
+        releaseDate: form.releaseDate || null,
+        presaleStart: form.presaleStart || null,
         classificationId: form.classificationId ?? undefined,
         languageIds: [...form.languageIds],
         genreIds: [...form.genreIds],
@@ -359,6 +369,15 @@ onBeforeUnmount(() => {
                     required
                   />
                 </div>
+                <MovieScheduleFields
+                  class="schedule"
+                  v-model:release-date="form.releaseDate"
+                  v-model:presale-start="form.presaleStart"
+                  :release-date-error="fieldErrors.releaseDate"
+                  :presale-start-error="fieldErrors.presaleStart"
+                  :disabled="saving"
+                  @clear-error="delete fieldErrors[$event]"
+                />
               </DialogSection>
               <DialogSection title="Idiomas y géneros" :number="2">
                 <div class="option-grid">
@@ -471,6 +490,10 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 16px;
 }
+.schedule {
+  margin-top: 16px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
