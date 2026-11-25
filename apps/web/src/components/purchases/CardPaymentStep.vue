@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { loadStripe } from '@stripe/stripe-js'
-import type { Stripe, StripeElements, StripePaymentElement, StripeError } from '@stripe/stripe-js'
+import type {
+  Appearance,
+  Stripe,
+  StripeElements,
+  StripePaymentElement,
+  StripeError,
+} from '@stripe/stripe-js'
 import type { CardIntent } from '@/types/purchase'
 
 const props = defineProps<{ intent: CardIntent; disabled?: boolean }>()
@@ -12,16 +18,47 @@ const ready = ref(false)
 const confirming = ref(false)
 const error = ref('')
 
+// Stripe renders inside an iframe, so it needs literal colors instead of CSS variables.
+// Values come from the site palette and fall back to the same dark theme when unreadable.
+const PALETTE_FALLBACK = {
+  background: '#0f172a',
+  text: '#f8f9fa',
+  textSecondary: '#cbd5e1',
+  primary: '#ffd700',
+  danger: '#ffb4b4',
+}
+const HEX = /^#[0-9a-f]{6}$/i
+
+function paletteColor(token: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim()
+  return HEX.test(value) ? value : fallback
+}
+
+function stripeAppearance(): Appearance {
+  return {
+    theme: 'night',
+    variables: {
+      colorBackground: paletteColor('--surface-background', PALETTE_FALLBACK.background),
+      colorText: paletteColor('--text-on-dark', PALETTE_FALLBACK.text),
+      colorTextSecondary: PALETTE_FALLBACK.textSecondary,
+      colorPrimary: paletteColor('--accent-color', PALETTE_FALLBACK.primary),
+      colorDanger: PALETTE_FALLBACK.danger,
+    },
+    // Stripe's default field labels are too small to read comfortably.
+    rules: {
+      '.Label': { fontSize: '18px', fontWeight: '600' },
+    },
+  }
+}
+
 let stripe: Stripe | null = null
 let elements: StripeElements | null = null
 let element: StripePaymentElement | null = null
 
-function declineMessage(failure: StripeError) {
-  if (failure.code === 'card_declined' && failure.decline_code === 'insufficient_funds')
-    return 'Fondos insuficientes en la tarjeta. Intenta con otra tarjeta.'
-  if (failure.type === 'card_error')
-    return 'La tarjeta no es válida o fue rechazada. Revisa los datos o usa otra tarjeta.'
-  if (failure.type === 'validation_error' && failure.message) return failure.message
+// Card and validation errors are already shown inside the payment form by Stripe,
+// so only failures outside the form get a message here, avoiding a duplicate.
+function ownMessage(failure: StripeError): string | null {
+  if (failure.type === 'card_error' || failure.type === 'validation_error') return null
   return 'No se pudo confirmar el pago. Intenta nuevamente.'
 }
 
@@ -29,7 +66,11 @@ onMounted(async () => {
   try {
     stripe = await loadStripe(props.intent.publishableKey)
     if (!stripe) throw new Error('Stripe.js did not load.')
-    elements = stripe.elements({ clientSecret: props.intent.clientSecret, locale: 'es' })
+    elements = stripe.elements({
+      clientSecret: props.intent.clientSecret,
+      locale: 'es',
+      appearance: stripeAppearance(),
+    })
     element = elements.create('payment', { layout: 'tabs', wallets: { link: 'never' } })
     element.on('ready', () => (ready.value = true))
     element.mount(container.value!)
@@ -53,7 +94,7 @@ async function pay() {
       redirect: 'if_required',
     })
     if (failure) {
-      error.value = declineMessage(failure)
+      error.value = ownMessage(failure) ?? ''
       return
     }
     if (paymentIntent?.status === 'succeeded') emit('paid', paymentIntent.id)
@@ -69,10 +110,6 @@ async function pay() {
 <template>
   <section aria-labelledby="card-payment-title" class="card-payment">
     <h1 id="card-payment-title">Pago con tarjeta</h1>
-    <p>
-      Los datos de la tarjeta se envían directamente a Stripe. Cinetadel solo guarda la referencia
-      del pago, la marca y los últimos cuatro dígitos.
-    </p>
     <div ref="container" class="card-payment__element" />
     <p v-if="error" class="card-payment__error" role="alert">{{ error }}</p>
     <div class="card-payment__actions">
