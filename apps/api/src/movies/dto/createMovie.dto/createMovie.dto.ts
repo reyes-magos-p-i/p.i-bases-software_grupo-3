@@ -80,4 +80,13 @@ export class CreateMovieDto {
   @IsInt({ each: true, message: 'Selecciona únicamente géneros disponibles.' })
   @Min(1, { each: true, message: 'Selecciona únicamente géneros disponibles.' })
   genreIds: number[];
+
+  // Active branches where the movie can be scheduled and shown in the portal (CINEMA_MOVIES).
+  // Optional: a movie without branches stays out of projections and the portal.
+  @IsOptional()
+  @IsArray({ message: 'Selecciona las sucursales de la película.' })
+  @ArrayUnique({ message: 'No repitas sucursales.' })
+  @IsInt({ each: true, message: 'Selecciona únicamente sucursales activas.' })
+  @Min(1, { each: true, message: 'Selecciona únicamente sucursales activas.' })
+  branchIds?: number[];
 }

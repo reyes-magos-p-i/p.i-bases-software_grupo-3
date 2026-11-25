@@ -16,6 +16,7 @@ describe('MoviesController', () => {
     findClassifications: jest.fn(),
     findGenres: jest.fn(),
     findLanguages: jest.fn(),
+    findBranches: jest.fn(),
     findOne: jest.fn(),
     update: jest.fn(),
     remove: jest.fn(),
@@ -76,6 +77,14 @@ describe('MoviesController', () => {
 
     expect(await controller.findLanguages()).toEqual(result);
     expect(service.findLanguages).toHaveBeenCalledWith();
+  });
+
+  it('returns active branches', async () => {
+    const result = [{ id: 1, name: 'Cinetadel Multiplaza del Este' }];
+    service.findBranches.mockResolvedValue(result);
+
+    expect(await controller.findBranches()).toEqual(result);
+    expect(service.findBranches).toHaveBeenCalledWith();
   });
 
   it('returns the requested movie', async () => {

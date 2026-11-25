@@ -23,6 +23,10 @@ describe('MovieCrudCreate', () => {
     classifications: [{ id: 1, name: 'TP' }],
     languages: [{ id: 1, name: 'Español' }],
     genres: [{ id: 2, name: 'Ciencia ficción' }],
+    branches: [
+      { id: 1, name: 'Cinetadel Multiplaza del Este' },
+      { id: 27, name: 'Cinetadel Multiplaza Escazú' },
+    ],
   }
 
   function mountForm() {
@@ -67,6 +71,7 @@ describe('MovieCrudCreate', () => {
     expect(wrapper.findAll('.dialog-section-title').map((heading) => heading.text())).toEqual([
       'Información general',
       'Idiomas y géneros',
+      'Sucursales',
       'Sinopsis',
       'Póster',
     ])
@@ -97,6 +102,7 @@ describe('MovieCrudCreate', () => {
       classificationId: 1,
       languageIds: [1],
       genreIds: [2],
+      branchIds: [],
       posterImage: null,
     })
 
