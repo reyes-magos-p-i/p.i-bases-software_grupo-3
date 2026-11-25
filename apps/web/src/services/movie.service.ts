@@ -13,6 +13,8 @@ export interface CreateMoviePayload {
   classificationId: number
   languageIds: number[]
   genreIds: number[]
+  /** Active branches where the movie can be scheduled and shown in the portal. */
+  branchIds?: number[]
 }
 
 export type UpdateMoviePayload = Partial<CreateMoviePayload>
@@ -64,5 +66,10 @@ export async function getGenres(): Promise<MovieOption[]> {
 
 export async function getLanguages(): Promise<MovieOption[]> {
   const response = await getApi().get<MovieOption[]>('/movies/languages')
+  return response.data
+}
+
+export async function getBranches(): Promise<MovieOption[]> {
+  const response = await getApi().get<MovieOption[]>('/movies/branches')
   return response.data
 }

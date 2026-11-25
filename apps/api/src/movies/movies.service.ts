@@ -16,6 +16,7 @@ export class MoviesService {
 
   async create(dto: CreateMovieDto) {
     assertPresaleBeforeRelease(dto.releaseDate ?? null, dto.presaleStart ?? null);
+    await this.assertActiveBranches(dto.branchIds);
     return this.moviesRepository.create(dto);
   }
 
@@ -49,6 +50,7 @@ export class MoviesService {
       dto.releaseDate === undefined ? movie.releaseDate : dto.releaseDate,
       dto.presaleStart === undefined ? movie.presaleStart : dto.presaleStart,
     );
+    await this.assertActiveBranches(dto.branchIds);
 
     await this.moviesRepository.update(id, dto);
 
@@ -81,6 +83,20 @@ export class MoviesService {
 
   findLanguages() {
     return this.moviesRepository.findLanguages();
+  }
+
+  findBranches() {
+    return this.moviesRepository.findBranches();
+  }
+
+  // Only active branches can offer a movie; an unknown or inactive id is a client error.
+  private async assertActiveBranches(branchIds: number[] | undefined) {
+    if (!branchIds?.length) return;
+    const active = new Set(
+      (await this.moviesRepository.findBranches()).map((branch) => branch.id),
+    );
+    if (branchIds.some((id) => !active.has(id)))
+      throw new BadRequestException('Selecciona únicamente sucursales activas.');
   }
 }
 

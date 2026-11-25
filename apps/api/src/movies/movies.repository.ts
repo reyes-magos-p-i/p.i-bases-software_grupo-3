@@ -91,6 +91,18 @@ import * as oracledb from 'oracledb';
 
     const first = rows[0];
 
+    // Separate query so the branches don't multiply the language and genre rows.
+    const branches = await this.db.query<{ id: number; name: string }>(
+      `
+      SELECT c.BRANCH_ID AS "id", TRIM(c.NAME) AS "name"
+      FROM CINEMA_MOVIES cm
+      JOIN CINEMAS c ON c.BRANCH_ID = cm.BRANCH_ID
+      WHERE cm.MOVIE_ID = :id AND cm.IS_AVAILABLE = 1 AND c.STATUS = 'ACTIVE'
+      ORDER BY c.NAME
+      `,
+      { id },
+    );
+
     return {
       id: first.MOVIE_ID,
       title: first.TITLE,
@@ -132,6 +144,8 @@ import * as oracledb from 'oracledb';
             ]),
         ).values(),
       ],
+
+      branches: branches.rows ?? [],
     };
   }
 
@@ -226,6 +240,16 @@ import * as oracledb from 'oracledb';
       );
     }
 
+    if (dto.branchIds?.length) {
+      await conn.executeMany(
+        `
+        INSERT INTO CINEMA_MOVIES (BRANCH_ID, MOVIE_ID, IS_AVAILABLE)
+        VALUES (:branchId, :movieId, 1)
+        `,
+        dto.branchIds.map((branchId) => ({ branchId, movieId })),
+      );
+    }
+
     return movieId;
   });
 }
@@ -245,6 +269,14 @@ import * as oracledb from 'oracledb';
     await conn.execute(
       `
       DELETE FROM MOVIE_LANGUAGES
+      WHERE MOVIE_ID = :id
+      `,
+      { id },
+    );
+
+    await conn.execute(
+      `
+      DELETE FROM CINEMA_MOVIES
       WHERE MOVIE_ID = :id
       `,
       { id },
@@ -357,6 +389,40 @@ import * as oracledb from 'oracledb';
           );
         }
       }
+
+      if (dto.branchIds !== undefined) {
+        // Availability is a flag, not a row: unselected active branches are turned off
+        // (inactive branches keep their value) and selected ones are turned on or added.
+        await conn.execute(
+          `
+          UPDATE CINEMA_MOVIES cm
+          SET IS_AVAILABLE = 0
+          WHERE cm.MOVIE_ID = :id AND cm.IS_AVAILABLE = 1
+            AND EXISTS (SELECT 1 FROM CINEMAS c
+                        WHERE c.BRANCH_ID = cm.BRANCH_ID AND c.STATUS = 'ACTIVE')
+          `,
+          { id },
+          { autoCommit: false },
+        );
+
+        const branchIds = [...new Set(dto.branchIds)];
+
+        if (branchIds.length > 0) {
+          await conn.executeMany(
+            `
+            MERGE INTO CINEMA_MOVIES cm
+            USING (SELECT :branchId AS BRANCH_ID, :id AS MOVIE_ID FROM DUAL) s
+            ON (cm.BRANCH_ID = s.BRANCH_ID AND cm.MOVIE_ID = s.MOVIE_ID)
+            WHEN MATCHED THEN UPDATE SET cm.IS_AVAILABLE = 1
+            WHEN NOT MATCHED THEN
+              INSERT (BRANCH_ID, MOVIE_ID, IS_AVAILABLE)
+              VALUES (s.BRANCH_ID, s.MOVIE_ID, 1)
+            `,
+            branchIds.map((branchId) => ({ id, branchId })),
+            { autoCommit: false },
+          );
+        }
+      }
     });
   }
 
@@ -399,6 +465,22 @@ import * as oracledb from 'oracledb';
         LANGUAGE_ID AS "id",
         NAME AS "name"
       FROM LANGUAGES
+      ORDER BY NAME
+    `);
+
+    return result.rows ?? [];
+  }
+
+  async findBranches() {
+    const result = await this.db.query<{
+      id: number;
+      name: string;
+    }>(`
+      SELECT
+        BRANCH_ID AS "id",
+        TRIM(NAME) AS "name"
+      FROM CINEMAS
+      WHERE STATUS = 'ACTIVE'
       ORDER BY NAME
     `);
 

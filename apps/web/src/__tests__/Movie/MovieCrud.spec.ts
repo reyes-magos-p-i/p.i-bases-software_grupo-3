@@ -18,6 +18,7 @@ import {
   getClassifications,
   getGenres,
   getLanguages,
+  getBranches,
 } from '@/services/movie.service'
 
 vi.mock('@/services/movie.service', () => ({
@@ -26,6 +27,7 @@ vi.mock('@/services/movie.service', () => ({
   getClassifications: vi.fn(),
   getGenres: vi.fn(),
   getLanguages: vi.fn(),
+  getBranches: vi.fn(),
 }))
 
 const testMovie: MovieAll = {
@@ -46,6 +48,7 @@ describe('MovieCrud', () => {
     vi.mocked(getClassifications).mockResolvedValue([{ id: 1, name: 'TP' }])
     vi.mocked(getGenres).mockResolvedValue([{ id: 3, name: 'Drama' }])
     vi.mocked(getLanguages).mockResolvedValue([{ id: 1, name: 'English' }])
+    vi.mocked(getBranches).mockResolvedValue([{ id: 1, name: 'Cinetadel Multiplaza del Este' }])
   })
 
   it('uses the same floating success notification after creation, modification and deletion', async () => {
