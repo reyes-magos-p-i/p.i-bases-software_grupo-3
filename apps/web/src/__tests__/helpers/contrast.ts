@@ -12,12 +12,16 @@ type Rgb = [number, number, number]
 
 function declarations(css: string) {
   const values = new Map<string, string>()
-  // No \s* after the colon: [^;]+ already takes those spaces and the value is trimmed below.
-  const pattern = /(--[\w-]+)\s*:([^;]+);/g
-  for (let match = pattern.exec(css); match; match = pattern.exec(css)) {
+  // Each declaration ends with ";", so its name is the first "--" of the chunk before it.
+  for (const chunk of css.split(';')) {
+    const start = chunk.indexOf('--')
+    const colon = chunk.indexOf(':', start)
+    if (start < 0 || colon < 0) continue
+    const name = chunk.slice(start, colon).trim()
+    if (!/^--[\w-]+$/.test(name)) continue
     // Multi-line color-mix() declarations are folded to "color-mix(in srgb, a 85%, b)".
-    const value = match[2]!.replace(/\s+/g, ' ').replace(/\(\s/g, '(').replace(/\s\)/g, ')')
-    values.set(match[1]!, value.trim())
+    const value = chunk.slice(colon + 1).replace(/\s+/g, ' ').replace(/\(\s/g, '(').replace(/\s\)/g, ')')
+    values.set(name, value.trim())
   }
   return values
 }

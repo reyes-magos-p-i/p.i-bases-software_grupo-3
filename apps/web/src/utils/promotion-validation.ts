@@ -24,12 +24,7 @@ export function parseAmount(value: string): number | null {
   return Number.isFinite(amount) ? amount : null
 }
 
-export function validatePromotion(
-  form: PromotionForm,
-  cinemas: readonly CinemaOption[],
-  poster: File | null = null,
-): PromotionErrors {
-  const errors: PromotionErrors = {}
+function validateText(form: PromotionForm, errors: PromotionErrors) {
   if (!form.promotionTitle.trim()) errors.promotionTitle = 'Este campo es obligatorio.'
   else if (form.promotionTitle.length > PROMOTION_TITLE_LIMIT)
     errors.promotionTitle = `El título no puede superar ${PROMOTION_TITLE_LIMIT} caracteres.`
@@ -38,6 +33,9 @@ export function validatePromotion(
     errors.description = `La descripción no puede superar ${PROMOTION_TEXT_LIMIT} caracteres.`
   if (form.conditions.length > PROMOTION_TEXT_LIMIT)
     errors.conditions = `Las condiciones no pueden superar ${PROMOTION_TEXT_LIMIT} caracteres.`
+}
+
+function validateAmount(form: PromotionForm, errors: PromotionErrors) {
   if (!['percentage', 'fixed'].includes(form.promotionType))
     errors.promotionType = 'Selecciona el tipo de promoción.'
 
@@ -45,7 +43,9 @@ export function validatePromotion(
   const max = form.promotionType === 'percentage' ? 100 : 4000
   if (amount === null || amount < 0.01 || amount > max)
     errors.amount = `Ingresa un monto entre 0,01 y ${max}, con máximo dos decimales.`
+}
 
+function validateSchedule(form: PromotionForm, errors: PromotionErrors) {
   if (!isValidDate(form.beginDate)) errors.beginDate = 'Selecciona una fecha válida.'
   if (!isValidDate(form.endDate)) errors.endDate = 'Selecciona una fecha válida.'
   else if (!errors.beginDate && form.endDate < form.beginDate)
@@ -59,7 +59,13 @@ export function validatePromotion(
     if (!errors.beginHour && !errors.endHour && form.endHour <= form.beginHour)
       errors.endHour = 'La hora final debe ser posterior a la inicial; no puede cruzar medianoche.'
   }
+}
 
+function validateTargets(
+  form: PromotionForm,
+  cinemas: readonly CinemaOption[],
+  errors: PromotionErrors,
+) {
   const ids = new Set(cinemas.map((cinema) => cinema.id))
   if (!form.branchIds.length) errors.branchIds = 'Selecciona al menos una sucursal.'
   else if (new Set(form.branchIds).size !== form.branchIds.length
@@ -74,6 +80,9 @@ export function validatePromotion(
     errors.technology = 'Selecciona una tecnología válida.'
   if (form.technology === '70MM' && form.projectionFormat === '3D')
     errors.technology = 'La tecnología 70MM no es compatible con 3D.'
+}
+
+function validatePoster(form: PromotionForm, poster: File | null, errors: PromotionErrors) {
   if (form.posterPath && form.posterPath.length > PROMOTION_POSTER_PATH_LIMIT)
     errors.poster = `La ruta del póster no puede superar ${PROMOTION_POSTER_PATH_LIMIT} caracteres.`
   if (poster) {
@@ -82,6 +91,19 @@ export function validatePromotion(
     else if (poster.size > MAX_POSTER_SIZE)
       errors.poster = 'La imagen no puede superar 5 MB.'
   }
+}
+
+export function validatePromotion(
+  form: PromotionForm,
+  cinemas: readonly CinemaOption[],
+  poster: File | null = null,
+): PromotionErrors {
+  const errors: PromotionErrors = {}
+  validateText(form, errors)
+  validateAmount(form, errors)
+  validateSchedule(form, errors)
+  validateTargets(form, cinemas, errors)
+  validatePoster(form, poster, errors)
   return errors
 }
 

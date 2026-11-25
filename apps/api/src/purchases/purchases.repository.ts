@@ -529,7 +529,7 @@ export class PurchasesRepository {
       ? (JSON.parse(row.contextJson) as {
           function: PurchaseReceipt['function'];
           lines: PurchaseLine[];
-          discount?: PurchaseReceipt['discount'];
+          discount?: NonNullable<PurchaseReceipt['discount']>;
         })
       : null;
     const context =
