@@ -486,3 +486,7 @@ STRIPE_PUBLISHABLE_KEY=pk_test_...
 - Sin ellas, crear el intento de pago o confirmar una compra responde `503`, y no se pueden comprar boletos.
 - Los despliegues del espejo de desarrollo se actualizan al integrar en `dev`: añadir las claves al `.env` del servidor antes de fusionar.
 - Con claves de prueba, la tarjeta `4242 4242 4242 4242` (cualquier fecha futura y CVC) aprueba el pago.
+
+## Herramientas de desarrollo de Vue
+
+Vue DevTools agrega un panel flotante a todas las páginas de `vite dev`, incluida la pantalla de pago con tarjeta. Por eso está desactivado por defecto. Para activarlo en tu equipo, define `VITE_VUE_DEVTOOLS=true` antes de iniciar el frontend.
