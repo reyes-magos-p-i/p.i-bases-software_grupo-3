@@ -66,7 +66,8 @@ export function getPromotionPosterUrl(
   const filename = stored.split('/').pop()
   if (!filename) return null
 
-  const baseURL = getApi().defaults.baseURL!.replace(/\/+$/, '')
+  let baseURL = getApi().defaults.baseURL!
+  while (baseURL.endsWith('/')) baseURL = baseURL.slice(0, -1)
 
   return `${baseURL}/image-handler/promotions/${encodeURIComponent(filename)}`
 }
