@@ -9,6 +9,7 @@ import {
   getClassifications,
   getGenres,
   getLanguages,
+  getBranches,
 } from '@/services/movie.service'
 
 // Mock the API methods
@@ -117,6 +118,14 @@ describe('Movie Service', () => {
 
     expect(api.get).toHaveBeenCalledWith('/movies/languages')
     expect(result).toEqual(languages)
+  })
+
+  it('gets the active branches', async () => {
+    const branches = [{ id: 1, name: 'Cinetadel Multiplaza del Este' }]
+    api.get.mockResolvedValue({ data: branches })
+
+    expect(await getBranches()).toEqual(branches)
+    expect(api.get).toHaveBeenCalledWith('/movies/branches')
   })
 
   it('passes the abort signal to API requests', async () => {

@@ -24,4 +24,5 @@ export interface MovieDetail {
 
   languages: MovieOption[]
   genres: MovieOption[]
+  branches: MovieOption[]
 }

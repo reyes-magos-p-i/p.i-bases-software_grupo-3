@@ -131,6 +131,10 @@ const groups = computed(() => {
           label: 'Géneros',
           value: optionList(detail.genres),
         },
+        {
+          label: 'Sucursales',
+          value: detail.branches?.length ? optionList(detail.branches) : 'Ninguna',
+        },
       ],
     },
 
