@@ -32,6 +32,8 @@ export interface MovieDetail {
   classification: MovieOption
   languages: MovieOption[]
   genres: MovieOption[]
+  /** Active branches where the movie is available. */
+  branches?: MovieOption[]
 }
 
 export type UpdateMoviePayload = {

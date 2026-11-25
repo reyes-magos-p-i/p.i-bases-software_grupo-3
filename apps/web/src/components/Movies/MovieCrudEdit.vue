@@ -13,6 +13,7 @@ import LimitedTextInput from '@/components/common/LimitedTextInput.vue'
 import PositiveNumberInput from '@/components/common/PositiveNumberInput.vue'
 import SimpleDropdown from '@/components/common/SimpleDropdown.vue'
 import MovieScheduleFields from './MovieScheduleFields.vue'
+import MovieBranchesField from './MovieBranchesField.vue'
 import ImageUpload from '../image/ImageUpload.vue'
 import { uploadPoster, getPosterUrl } from '@/services/image-handler.service'
 
@@ -21,6 +22,7 @@ const props = defineProps<{
   classifications: MovieOption[]
   languages: MovieOption[]
   genres: MovieOption[]
+  branches: MovieOption[]
 }>()
 
 const emit = defineEmits<{
@@ -51,6 +53,7 @@ const form = reactive({
   classificationId: null as number | null,
   languageIds: [] as number[],
   genreIds: [] as number[],
+  branchIds: [] as number[],
   posterImage: null as string | null,
 })
 
@@ -85,6 +88,10 @@ const hasChanges = computed(() => {
     !sameIds(
       form.genreIds,
       original.genres.map((g) => g.id),
+    ) ||
+    !sameIds(
+      form.branchIds,
+      (original.branches ?? []).map((b) => b.id),
     )
   )
 })
@@ -192,6 +199,7 @@ async function load() {
       classificationId: detail.classification?.id ?? null,
       languageIds: detail.languages?.map((language) => language.id) ?? [],
       genreIds: detail.genres?.map((genre) => genre.id) ?? [],
+      branchIds: detail.branches?.map((branch) => branch.id) ?? [],
     })
   } catch (failure) {
     if (!current.signal.aborted) {
@@ -254,6 +262,7 @@ async function save() {
         classificationId: form.classificationId ?? undefined,
         languageIds: [...form.languageIds],
         genreIds: [...form.genreIds],
+        branchIds: [...form.branchIds],
       },
       current.signal,
     )
@@ -399,7 +408,16 @@ onBeforeUnmount(() => {
                   />
                 </div>
               </DialogSection>
-              <DialogSection title="Sinopsis" :number="3">
+              <DialogSection title="Sucursales" :number="3">
+                <MovieBranchesField
+                  v-model="form.branchIds"
+                  :branches="branches"
+                  :error="fieldErrors.branchIds"
+                  :disabled="saving"
+                  @clear-error="delete fieldErrors.branchIds"
+                />
+              </DialogSection>
+              <DialogSection title="Sinopsis" :number="4">
                 <LimitedTextInput
                   v-model="form.synopsis"
                   label="Sinopsis"
@@ -414,7 +432,7 @@ onBeforeUnmount(() => {
               </DialogSection>
             </div>
             <aside class="poster-column">
-              <DialogSection title="Póster" :number="4">
+              <DialogSection title="Póster" :number="5">
                 <ImageUpload
                   v-model="selectedPoster"
                   label="Póster de la película"

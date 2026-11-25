@@ -15,7 +15,8 @@ Aplicar una sola vez, conectado como `PRODUCTION`:
 
 - Solo `ADMINISTRATOR`; `POST` exige además el origen del frontend.
 - La película debe estar disponible en la sucursal de la sala
-  (`CINEMA_MOVIES.IS_AVAILABLE = 1`) y la sala activa (`THEATERS.IS_ACTIVE = 1`).
+  (`CINEMA_MOVIES.IS_AVAILABLE = 1`) y la sala activa (`THEATERS.IS_ACTIVE = 1`). La disponibilidad
+  por sucursal se elige al crear o modificar la película ([movie-branches.md](movie-branches.md)).
 - Hora fin sugerida = inicio + anuncios + duración de la película + limpieza.
   El administrador puede ampliarla, nunca reducirla por debajo de esa suma.
   Si la hora fin no es posterior a la de inicio, termina al día siguiente.

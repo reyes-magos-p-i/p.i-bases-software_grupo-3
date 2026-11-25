@@ -10,6 +10,7 @@ const options = {
   classifications: [{ id: 1, name: 'TP' }],
   languages: [{ id: 2, name: 'Español' }],
   genres: [{ id: 3, name: 'Drama' }],
+  branches: [{ id: 1, name: 'Cinetadel Multiplaza del Este' }],
 }
 const valid: MovieDraft = {
   title: 'Película',
@@ -90,6 +91,15 @@ describe('shared movie validation', () => {
     })
   })
 
+  it('treats branches as optional but only accepts active, unrepeated ones', () => {
+    expect(validateMovie({ ...valid, branchIds: [] }, options)).toEqual({})
+    expect(validateMovie({ ...valid, branchIds: [1] }, options)).toEqual({})
+    expect(validateMovie({ ...valid, branchIds: [99] }, options)).toHaveProperty('branchIds')
+    expect(validateMovie({ ...valid, branchIds: [1, 1] }, options)).toHaveProperty('branchIds')
+    const withoutBranches = { ...options, branches: undefined }
+    expect(validateMovie({ ...valid, branchIds: [1] }, withoutBranches)).toHaveProperty('branchIds')
+  })
+
   it('preserves the existing ability to clear associations when modifying a movie', () => {
     expect(validateMovie({ ...valid, languageIds: [], genreIds: [] }, options, false)).toEqual({})
   })
@@ -102,6 +112,7 @@ describe('shared movie validation', () => {
     ['clasificación', 'classificationId'],
     ['idiomas', 'languageIds'],
     ['géneros', 'genreIds'],
+    ['Selecciona únicamente sucursales activas.', 'branchIds'],
   ])('maps server validation for %s to a readable field message', (message, field) => {
     const errors = movieErrorsFromApi([message, null])
     expect(Object.keys(errors)).toEqual([field])
