@@ -267,17 +267,39 @@ function scrollRow(direction: 1 | -1) {
   outline-offset: 3px;
 }
 
+/* The cards are sized from the row width so a whole number of them fits. A fixed 224px column
+   made 5 cards (1200px) wider than the 1180px container and clipped the right border of the
+   last visible card. The 4px padding keeps room for focus outlines; scroll-padding keeps it
+   after snapping. */
 .movie-row {
+  --cards-per-view: 5;
+  --row-gap: 20px;
+
   display: grid;
-  grid-auto-columns: 224px;
+  grid-auto-columns: calc(
+    (100% - (var(--cards-per-view) - 1) * var(--row-gap)) / var(--cards-per-view)
+  );
   grid-auto-flow: column;
-  gap: 20px;
+  gap: var(--row-gap);
   margin: 0 -4px;
   padding: 6px 4px 16px;
   overflow-x: auto;
   list-style: none;
+  scroll-padding-inline: 4px;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
+}
+
+@media (width <= 1024px) {
+  .movie-row {
+    --cards-per-view: 4;
+  }
+}
+
+@media (width <= 820px) {
+  .movie-row {
+    --cards-per-view: 3;
+  }
 }
 
 .movie-row::-webkit-scrollbar {
