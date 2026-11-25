@@ -22,12 +22,14 @@ import type { MovieOption } from '@/types/movie'
 
 import ImageUpload from '../image/ImageUpload.vue'
 import MovieScheduleFields from './MovieScheduleFields.vue'
+import MovieBranchesField from './MovieBranchesField.vue'
 import { uploadPoster, getPosterUrl } from '@/services/image-handler.service.ts'
 
 const props = defineProps<{
   classifications: MovieOption[]
   languages: MovieOption[]
   genres: MovieOption[]
+  branches: MovieOption[]
 }>()
 
 const emit = defineEmits<{
@@ -47,6 +49,7 @@ const form = reactive({
   classificationId: null as number | null,
   languageIds: [] as number[],
   genreIds: [] as number[],
+  branchIds: [] as number[],
   posterImage: null as string | null,
 })
 
@@ -112,6 +115,7 @@ async function save() {
       classificationId,
       languageIds: [...form.languageIds],
       genreIds: [...form.genreIds],
+      branchIds: [...form.branchIds],
       posterImage: form.posterImage,
     })
 
@@ -220,6 +224,15 @@ async function save() {
                     @update:model-value="delete fieldErrors.genreIds"
                   />
                 </div>
+              </DialogSection>
+              <DialogSection title="Sucursales">
+                <MovieBranchesField
+                  v-model="form.branchIds"
+                  :branches="branches"
+                  :error="fieldErrors.branchIds"
+                  :disabled="saving"
+                  @clear-error="delete fieldErrors.branchIds"
+                />
               </DialogSection>
               <DialogSection title="Sinopsis">
                 <LimitedTextInput

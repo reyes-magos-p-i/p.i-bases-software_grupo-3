@@ -90,13 +90,15 @@ describe('MoviesRepository', () => {
         GENRE: 'Aventura'
       };
 
-      query.mockResolvedValue({
-        rows: [
-          row,
-          { ...row, GENRE_ID: 4, GENRE: 'Drama' },
-          { ...row, LANGUAGE_ID: 2, LANGUAGE: 'Inglés' }
-        ]
-      });
+      query
+        .mockResolvedValueOnce({
+          rows: [
+            row,
+            { ...row, GENRE_ID: 4, GENRE: 'Drama' },
+            { ...row, LANGUAGE_ID: 2, LANGUAGE: 'Inglés' }
+          ]
+        })
+        .mockResolvedValueOnce({ rows: [{ id: 27, name: 'Cinetadel Multiplaza Escazú' }] });
 
       const result = await repository.findOne(24);
 
@@ -104,6 +106,8 @@ describe('MoviesRepository', () => {
         expect.any(String),
         { id: 24 }
       );
+      expect(query.mock.calls[1][0]).toContain('FROM CINEMA_MOVIES cm');
+      expect(query.mock.calls[1][0]).toContain("c.STATUS = 'ACTIVE'");
 
       expect(result).toEqual({
         id: 24,
@@ -122,8 +126,17 @@ describe('MoviesRepository', () => {
         genres: [
           { id: 3, name: 'Aventura' },
           { id: 4, name: 'Drama' }
-        ]
+        ],
+        branches: [{ id: 27, name: 'Cinetadel Multiplaza Escazú' }]
       });
+    });
+
+    it('returns no branches when the branch query has no rows', async () => {
+      query
+        .mockResolvedValueOnce({ rows: [{ MOVIE_ID: 24, CLASSIFICATION_ID: 1 }] })
+        .mockResolvedValueOnce({});
+
+      expect((await repository.findOne(24))?.branches).toEqual([]);
     });
 
     it('returns the release and presale dates as YYYY-MM-DD', async () => {
@@ -216,6 +229,21 @@ describe('MoviesRepository', () => {
       });
     });
 
+    it('makes the movie available in the selected branches', async () => {
+      execute.mockResolvedValue({ outBinds: { movieId: [24] } });
+
+      await repository.create({ ...createDto, branchIds: [1, 27] });
+
+      expect(executeMany).toHaveBeenNthCalledWith(
+        3,
+        expect.stringContaining('INSERT INTO CINEMA_MOVIES'),
+        [
+          { branchId: 1, movieId: 24 },
+          { branchId: 27, movieId: 24 }
+        ]
+      );
+    });
+
     it('creates a movie without relationships', async () => {
       execute.mockResolvedValue({
         outBinds: { movieId: [24] }
@@ -239,7 +267,7 @@ describe('MoviesRepository', () => {
       await repository.remove(24);
 
       expect(transaction).toHaveBeenCalledTimes(1);
-      expect(execute).toHaveBeenCalledTimes(4);
+      expect(execute).toHaveBeenCalledTimes(5);
 
       expect(execute).toHaveBeenNthCalledWith(
         1,
@@ -260,6 +288,12 @@ describe('MoviesRepository', () => {
 
       expect(execute).toHaveBeenNthCalledWith(
         4,
+        expect.stringContaining('DELETE FROM CINEMA_MOVIES'),
+        { id: 24 }
+      );
+
+      expect(execute).toHaveBeenNthCalledWith(
+        5,
         expect.stringContaining('FROM MOVIES'),
         { id: 24 }
       );
@@ -369,6 +403,45 @@ describe('MoviesRepository', () => {
       expect(executeMany).not.toHaveBeenCalled();
     });
 
+    it('turns off unselected active branches and turns on or adds the selected ones', async () => {
+      await repository.update(24, { branchIds: [27, 1, 27] });
+
+      expect(execute).toHaveBeenCalledWith(
+        expect.stringMatching(/UPDATE CINEMA_MOVIES cm\s+SET IS_AVAILABLE = 0[\s\S]*c\.STATUS = 'ACTIVE'/),
+        { id: 24 },
+        { autoCommit: false }
+      );
+      expect(executeMany).toHaveBeenCalledWith(
+        expect.stringContaining('MERGE INTO CINEMA_MOVIES'),
+        [
+          { id: 24, branchId: 27 },
+          { id: 24, branchId: 1 }
+        ],
+        { autoCommit: false }
+      );
+    });
+
+    it('turns off every active branch when the list is empty', async () => {
+      await repository.update(24, { branchIds: [] });
+
+      expect(execute).toHaveBeenCalledWith(
+        expect.stringContaining('SET IS_AVAILABLE = 0'),
+        { id: 24 },
+        { autoCommit: false }
+      );
+      expect(executeMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps branch availability when branchIds is absent', async () => {
+      await repository.update(24, { title: 'Updated' });
+
+      expect(execute).not.toHaveBeenCalledWith(
+        expect.stringContaining('CINEMA_MOVIES'),
+        expect.anything(),
+        expect.anything()
+      );
+    });
+
     it('throws NotFoundException when the movie does not exist', async () => {
       execute
         .mockResolvedValueOnce({})
@@ -390,7 +463,12 @@ describe('MoviesRepository', () => {
       expect(await repository.findClassifications()).toEqual(options);
       expect(await repository.findGenres()).toEqual(options);
       expect(await repository.findLanguages()).toEqual(options);
+      expect(await repository.findBranches()).toEqual(options);
 
+      expect(query).toHaveBeenNthCalledWith(
+        4,
+        expect.stringMatching(/FROM CINEMAS\s+WHERE STATUS = 'ACTIVE'/)
+      );
       expect(query).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining('FROM CLASSIFICATIONS')
@@ -411,6 +489,7 @@ describe('MoviesRepository', () => {
       expect(await repository.findClassifications()).toEqual([]);
       expect(await repository.findGenres()).toEqual([]);
       expect(await repository.findLanguages()).toEqual([]);
+      expect(await repository.findBranches()).toEqual([]);
     });
   });
 });

@@ -29,6 +29,9 @@ describe('Movie synopsis length', () => {
     ['genreIds', []],
     ['languageIds', [1, 1]],
     ['genreIds', [-1]],
+    ['branchIds', 'todas'],
+    ['branchIds', [1, 1]],
+    ['branchIds', [0]],
     ['synopsis', ' '],
     ['synopsis', '\uD800'],
   ])(
@@ -58,7 +61,7 @@ describe('Movie synopsis length', () => {
   it('allows partial updates and cleared associations without accepting null required fields', async () => {
     expect(
       await validate(
-        plainToInstance(UpdateMovieDto, { genreIds: [], languageIds: [] }),
+        plainToInstance(UpdateMovieDto, { genreIds: [], languageIds: [], branchIds: [] }),
       ),
     ).toEqual([]);
     const errors = await validate(

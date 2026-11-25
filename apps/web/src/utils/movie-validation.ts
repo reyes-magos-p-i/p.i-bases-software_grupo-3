@@ -16,6 +16,8 @@ export interface MovieDraft {
   classificationId: number | null
   languageIds: number[]
   genreIds: number[]
+  /** Optional: a movie without branches cannot be scheduled or shown in the portal. */
+  branchIds?: number[]
 }
 export type MovieField = keyof MovieDraft
 export type MovieErrors = Partial<Record<MovieField, string>>
@@ -23,6 +25,7 @@ interface Catalogs {
   classifications: readonly MovieOption[]
   languages: readonly MovieOption[]
   genres: readonly MovieOption[]
+  branches?: readonly MovieOption[]
 }
 
 function textError(value: string, limit: number, storageLimit: number): string | undefined {
@@ -83,6 +86,8 @@ export function validateMovie(
   }
   errors.languageIds = selectionError(form.languageIds, catalogs.languages, requireSelections)
   errors.genreIds = selectionError(form.genreIds, catalogs.genres, requireSelections)
+  if (form.branchIds?.length)
+    errors.branchIds = selectionError(form.branchIds, catalogs.branches ?? [], false)
   return Object.fromEntries(Object.entries(errors).filter(([, message]) => message))
 }
 
@@ -110,6 +115,11 @@ export function movieErrorsFromApi(value: unknown): MovieErrors {
       'Selecciona únicamente idiomas disponibles, sin repetirlos.',
     ],
     ['genreIds', /género|genreIds/iu, 'Selecciona únicamente géneros disponibles, sin repetirlos.'],
+    [
+      'branchIds',
+      /sucursal|branchIds/iu,
+      'Selecciona únicamente sucursales activas, sin repetirlas.',
+    ],
   ]
   const errors: MovieErrors = {}
   for (const message of Array.isArray(value) ? value : [value]) {

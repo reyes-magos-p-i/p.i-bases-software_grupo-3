@@ -30,6 +30,7 @@ describe('MoviesService', () => {
     classification: { id: 1, name: 'TP' },
     languages: [{ id: 1, name: 'English' }],
     genres: [{ id: 3, name: 'Adventure' }],
+    branches: [{ id: 1, name: 'Cinetadel Multiplaza del Este' }],
   };
 
   beforeEach(async () => {
@@ -47,6 +48,7 @@ describe('MoviesService', () => {
             findClassifications: jest.fn(),
             findGenres: jest.fn(),
             findLanguages: jest.fn(),
+            findBranches: jest.fn(),
           },
         },
       ],
@@ -169,6 +171,63 @@ describe('MoviesService', () => {
         releaseDate: null,
         presaleStart: null,
       });
+    });
+  });
+
+  describe('branches', () => {
+    const dto = {
+      title: 'Interstellar',
+      synopsis: 'A team travels through space.',
+      posterImage: 'default-poster',
+      runningTime: 169,
+      releaseYear: 2014,
+      classificationId: 1,
+      languageIds: [1],
+      genreIds: [3],
+    };
+
+    beforeEach(() => {
+      repository.findBranches.mockResolvedValue([
+        { id: 1, name: 'Cinetadel Multiplaza del Este' },
+        { id: 27, name: 'Cinetadel Multiplaza Escazú' },
+      ]);
+    });
+
+    it('creates a movie available in active branches', async () => {
+      repository.create.mockResolvedValue(24);
+
+      await service.create({ ...dto, branchIds: [1, 27] });
+
+      expect(repository.create).toHaveBeenCalledWith({ ...dto, branchIds: [1, 27] });
+    });
+
+    it('skips the branch check when no branches are sent', async () => {
+      await service.create(dto);
+      await service.create({ ...dto, branchIds: [] });
+
+      expect(repository.findBranches).not.toHaveBeenCalled();
+    });
+
+    it('rejects inactive or unknown branches on create and update', async () => {
+      repository.findOne.mockResolvedValue(movieDetail);
+      const error = new BadRequestException('Selecciona únicamente sucursales activas.');
+
+      await expect(service.create({ ...dto, branchIds: [1, 99] })).rejects.toThrow(error);
+      await expect(service.update(24, { branchIds: [99] })).rejects.toThrow(error);
+      expect(repository.create).not.toHaveBeenCalled();
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('updates the branches of a movie', async () => {
+      repository.findOne.mockResolvedValue(movieDetail);
+
+      await service.update(24, { branchIds: [27] });
+
+      expect(repository.update).toHaveBeenCalledWith(24, { branchIds: [27] });
+    });
+
+    it('returns the active branches', async () => {
+      expect(await service.findBranches()).toHaveLength(2);
     });
   });
 

@@ -7,7 +7,13 @@ import CrudTable from '@/components/crudTable/CrudTable.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import NotificationPopup from '@/components/common/NotificationPopup.vue'
 import { displayText } from '@/utils/display-text'
-import { getMovies, getClassifications, getGenres, getLanguages } from '@/services/movie.service'
+import {
+  getMovies,
+  getClassifications,
+  getGenres,
+  getLanguages,
+  getBranches,
+} from '@/services/movie.service'
 import type { MovieAll, MovieOption } from '@/types/movie'
 import MovieCrudEdit from './MovieCrudEdit.vue'
 import MovieCrudCreate from './MovieCrudCreate.vue'
@@ -25,6 +31,7 @@ const notice = ref('')
 const classifications = ref<MovieOption[]>([])
 const languages = ref<MovieOption[]>([])
 const genres = ref<MovieOption[]>([])
+const branches = ref<MovieOption[]>([])
 const catalogsError = ref('')
 
 let request: AbortController | undefined
@@ -86,15 +93,17 @@ async function loadCatalogs() {
   catalogsError.value = ''
 
   try {
-    const [classificationOptions, genreOptions, languageOptions] = await Promise.all([
+    const [classificationOptions, genreOptions, languageOptions, branchOptions] = await Promise.all([
       getClassifications(),
       getGenres(),
       getLanguages(),
+      getBranches(),
     ])
 
     classifications.value = classificationOptions
     genres.value = genreOptions
     languages.value = languageOptions
+    branches.value = branchOptions
   } catch {
     catalogsError.value = 'No se pudieron cargar las opciones de películas.'
   }
@@ -216,6 +225,7 @@ defineExpose({ refresh })
       :classifications="classifications"
       :languages="languages"
       :genres="genres"
+      :branches="branches"
       @close="closeCreate"
       @saved="completed('created')"
       @session-expired="emit('session-expired')"
@@ -227,6 +237,7 @@ defineExpose({ refresh })
       :classifications="classifications"
       :languages="languages"
       :genres="genres"
+      :branches="branches"
       @close="editingMovieId = null"
       @saved="completed('updated')"
       @session-expired="emit('session-expired')"

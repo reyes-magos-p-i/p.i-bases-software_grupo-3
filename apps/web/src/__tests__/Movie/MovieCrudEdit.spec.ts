@@ -178,6 +178,10 @@ function mountModal(movieId: number | null = 24) {
         { id: 3, name: 'Science fiction' },
         { id: 4, name: 'Drama' },
       ],
+      branches: [
+        { id: 1, name: 'Cinetadel Multiplaza del Este' },
+        { id: 27, name: 'Cinetadel Multiplaza Escazú' },
+      ],
     },
     global: {
       stubs: {
@@ -239,8 +243,9 @@ describe('MovieCrudEdit', () => {
     expect(wrapper.findAll('.dialog-section-title').map((heading) => heading.text())).toEqual([
       '1 Información general',
       '2 Idiomas y géneros',
-      '3 Sinopsis',
-      '4 Póster',
+      '3 Sucursales',
+      '4 Sinopsis',
+      '5 Póster',
     ])
 
     expect(getMovieMock).toHaveBeenCalledWith(24, expect.any(AbortSignal))
@@ -455,6 +460,33 @@ describe('MovieCrudEdit', () => {
       expect.any(AbortSignal),
     )
     expect(wrapper.emitted('saved')).toHaveLength(1)
+
+    wrapper.unmount()
+  })
+
+  it('loads the movie branches and saves branch changes', async () => {
+    getMovieMock.mockResolvedValueOnce({
+      ...movie,
+      branches: [{ id: 1, name: 'Cinetadel Multiplaza del Este' }],
+    })
+    const wrapper = mountModal()
+    await flushPromises()
+
+    const escazu = wrapper.get<HTMLInputElement>('[data-test="Sucursales"] input[value="27"]')
+    expect(
+      wrapper.get<HTMLInputElement>('[data-test="Sucursales"] input[value="1"]').element.checked,
+    ).toBe(true)
+    expect(escazu.element.checked).toBe(false)
+
+    await escazu.setValue(true)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(updateMovieMock).toHaveBeenCalledWith(
+      24,
+      expect.objectContaining({ branchIds: [1, 27] }),
+      expect.any(AbortSignal),
+    )
 
     wrapper.unmount()
   })

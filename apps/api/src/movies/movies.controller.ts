@@ -53,6 +53,11 @@ export class MoviesController {
     return this.moviesService.findLanguages();
   }
 
+  @Get('branches')
+  findBranches() {
+    return this.moviesService.findBranches();
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.moviesService.findOne(id);

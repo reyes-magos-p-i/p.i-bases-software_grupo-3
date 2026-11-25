@@ -204,6 +204,24 @@ describe('MovieCrudView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Sin registrar')
+    expect(wrapper.text()).toContain('Ninguna')
+  })
+
+  it('lists the branches where the movie is available', async () => {
+    vi.mocked(getMovie).mockResolvedValue({
+      ...movieDetail,
+      branches: [
+        { id: 1, name: 'Cinetadel Multiplaza del Este' },
+        { id: 27, name: 'Cinetadel Multiplaza Escazú' },
+      ],
+    })
+
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Sucursales')
+    expect(wrapper.text()).toContain('Cinetadel Multiplaza del Este')
+    expect(wrapper.text()).toContain('Cinetadel Multiplaza Escazú')
   })
 
   it('loads another movie when movieId changes', async () => {
