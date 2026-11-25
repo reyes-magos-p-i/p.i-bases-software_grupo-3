@@ -44,6 +44,10 @@ function stripeAppearance(): Appearance {
       colorPrimary: paletteColor('--accent-color', PALETTE_FALLBACK.primary),
       colorDanger: PALETTE_FALLBACK.danger,
     },
+    // Stripe's default field labels are too small to read comfortably.
+    rules: {
+      '.Label': { fontSize: '18px', fontWeight: '600' },
+    },
   }
 }
 
