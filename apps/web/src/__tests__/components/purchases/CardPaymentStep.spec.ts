@@ -59,7 +59,7 @@ describe('CardPaymentStep', () => {
     expect(wrapper.emitted('paid')).toEqual([['pi_1']])
   })
 
-  it('explains insufficient funds without reporting a payment', async () => {
+  it('leaves card declines to Stripe so the message appears once', async () => {
     confirmPayment.mockResolvedValue({
       error: { type: 'card_error', code: 'card_declined', decline_code: 'insufficient_funds' },
     })
@@ -71,11 +71,11 @@ describe('CardPaymentStep', () => {
       .trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text()).toContain('Fondos insuficientes')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect(wrapper.emitted('paid')).toBeUndefined()
   })
 
-  it('explains an invalid card without reporting a payment', async () => {
+  it('leaves invalid card details to Stripe so the message appears once', async () => {
     confirmPayment.mockResolvedValue({
       error: { type: 'card_error', code: 'incorrect_number' },
     })
@@ -87,11 +87,11 @@ describe('CardPaymentStep', () => {
       .trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text()).toContain('no es válida')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect(wrapper.emitted('paid')).toBeUndefined()
   })
 
-  it('shows Stripe validation messages instead of a generic error', async () => {
+  it('leaves Stripe validation messages to the payment form', async () => {
     confirmPayment.mockResolvedValue({
       error: {
         type: 'validation_error',
@@ -107,8 +107,47 @@ describe('CardPaymentStep', () => {
       .trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text()).toBe('El código postal no es válido.')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect(wrapper.emitted('paid')).toBeUndefined()
+  })
+
+  it('shows one retryable message when the payment fails outside the form', async () => {
+    confirmPayment.mockResolvedValue({ error: { type: 'api_error', message: 'boom' } })
+    const wrapper = await mounted()
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Pagar')!
+      .trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      'No se pudo confirmar el pago. Intenta nuevamente.',
+    )
+    expect(wrapper.emitted('paid')).toBeUndefined()
+  })
+
+  it('does not repeat the payment intro text', async () => {
+    const wrapper = await mounted()
+
+    expect(wrapper.text()).not.toContain('se envían directamente a Stripe')
+  })
+
+  it('styles the payment form for the dark purchase page', async () => {
+    await mounted()
+
+    expect(stripe.elements).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appearance: expect.objectContaining({
+          theme: 'night',
+          variables: expect.objectContaining({
+            colorBackground: '#0f172a',
+            colorText: '#f8f9fa',
+          }),
+        }),
+      }),
+    )
   })
 
   it('cancels locally without asking Stripe to confirm anything', async () => {
